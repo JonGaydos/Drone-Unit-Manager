@@ -33,9 +33,11 @@ def seed_defaults():
     try:
         # Create default admin if no users exist
         if db.query(User).count() == 0:
+            import os
+            default_password = os.environ.get("ADMIN_DEFAULT_PASSWORD", "admin")
             admin = User(
                 username="admin",
-                password_hash=hash_password("admin"),
+                password_hash=hash_password(default_password),
                 display_name="Administrator",
                 role="admin",
             )
