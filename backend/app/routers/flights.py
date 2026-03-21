@@ -268,29 +268,79 @@ def refresh_flight_from_api(flight_id: int, db: Session = Depends(get_db), admin
     telemetry_points = 0
     if telemetry_data and isinstance(telemetry_data, list) and len(telemetry_data) > 0:
         from app.models.telemetry import TelemetryPoint
-        from app.database import TelemetrySession
+        from app.database import TelemetrySessionLocal
+        import math
 
-        tdb = TelemetrySession()
+        tdb = TelemetrySessionLocal()
         try:
-            # Clear existing telemetry for this flight
             tdb.query(TelemetryPoint).filter(TelemetryPoint.flight_id == flight.id).delete()
+
+            max_alt = 0
+            max_speed = 0
+
             for point in telemetry_data:
+                if not isinstance(point, dict):
+                    continue
+
+                # Parse timestamp — Skydio uses ISO string, we need ms
+                ts = point.get("timestamp")
+                timestamp_ms = 0
+                if isinstance(ts, str):
+                    try:
+                        from datetime import datetime as dt
+                        parsed = dt.fromisoformat(ts.replace("Z", "+00:00"))
+                        timestamp_ms = int(parsed.timestamp() * 1000)
+                    except (ValueError, AttributeError):
+                        pass
+                elif isinstance(ts, (int, float)):
+                    timestamp_ms = int(ts)
+
+                # Skydio field names → our model
+                alt = point.get("height_above_takeoff") or point.get("hybrid_altitude") or point.get("gps_altitude") or 0
+                lat = point.get("gps_latitude") or point.get("lat")
+                lon = point.get("gps_longitude") or point.get("lon")
+                battery = point.get("battery_percentage")
+                if battery and battery <= 1.0:
+                    battery = battery * 100  # Convert 0-1 to percentage
+
+                # Calculate speed from gps_velocity [vx, vy, vz]
+                velocity = point.get("gps_velocity")
+                speed = 0
+                if isinstance(velocity, list) and len(velocity) >= 2:
+                    speed = math.sqrt(sum(v**2 for v in velocity[:3]))
+
+                if alt > max_alt:
+                    max_alt = alt
+                if speed > max_speed:
+                    max_speed = speed
+
                 tp = TelemetryPoint(
                     flight_id=flight.id,
-                    timestamp_ms=point.get("timestamp_ms") or point.get("timestamp", 0),
-                    lat=point.get("lat") or point.get("latitude"),
-                    lon=point.get("lon") or point.get("longitude"),
-                    altitude_m=point.get("altitude_m") or point.get("altitude"),
-                    speed_mps=point.get("speed_mps") or point.get("speed"),
-                    heading_deg=point.get("heading_deg") or point.get("heading"),
-                    battery_pct=point.get("battery_pct") or point.get("battery_percent"),
+                    timestamp_ms=timestamp_ms,
+                    lat=lat,
+                    lon=lon,
+                    altitude_m=round(alt, 2),
+                    speed_mps=round(speed, 2),
+                    heading_deg=None,
+                    battery_pct=round(battery, 1) if battery else None,
                 )
                 tdb.add(tp)
+
             tdb.commit()
             telemetry_points = len(telemetry_data)
             updated_fields.append(f"telemetry({telemetry_points}pts)")
+
+            # Update flight with max altitude/speed from telemetry
+            if max_alt > 0:
+                flight.max_altitude_m = round(max_alt, 2)
+                updated_fields.append("max_altitude")
+            if max_speed > 0:
+                flight.max_speed_mps = round(max_speed, 2)
+                updated_fields.append("max_speed")
+
         except Exception as exc:
             logger.error("Telemetry save failed: %s", exc)
+            print(f"[TELEMETRY] Save error: {exc}", flush=True)
             tdb.rollback()
         finally:
             tdb.close()
