@@ -438,6 +438,21 @@ class SkydioProvider(DroneProvider):
             logger.error("Failed to sync Skydio controllers: %s", exc)
             return []
 
+    def get_flight_detail(self, creds: ProviderCredentials, flight_id: str) -> dict | None:
+        """Fetch full details for a single flight by ID."""
+        try:
+            resp = self._request("GET", f"{BASE_URL}/flight/{flight_id}", creds, timeout=15)
+            body = resp.json()
+            # The response might be the flight directly or wrapped in "data"
+            flight = body if not isinstance(body, dict) or "flight_id" in body or "uuid" in body else body.get("data", body)
+            if isinstance(flight, dict):
+                logger.info("Flight detail for %s: keys=%s", flight_id, list(flight.keys())[:15])
+                return flight
+            return None
+        except Exception as exc:
+            logger.warning("Failed to get flight detail for %s: %s", flight_id, exc)
+            return None
+
     def get_flight_telemetry(self, creds: ProviderCredentials, flight_id: str) -> list[dict]:
         """Fetch telemetry data for a specific flight."""
         try:

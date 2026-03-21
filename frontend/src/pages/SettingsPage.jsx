@@ -355,6 +355,27 @@ export default function SettingsPage() {
             {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
             Deep Sync
           </button>
+          <button
+            onClick={async () => {
+              setSyncing(true)
+              setTestResult(null)
+              try {
+                const result = await api.post('/sync/enrich', {})
+                const msg = `Enriched: ${result.flights_new || 0} flights updated, ${result.flights_skipped || 0} empty flights removed`
+                setTestResult({ ok: true, message: msg })
+              } catch (err) {
+                setTestResult({ ok: false, message: err.message })
+              } finally {
+                setSyncing(false)
+              }
+            }}
+            disabled={syncing || !isAdmin}
+            className="flex items-center gap-2 px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90 disabled:opacity-50"
+            title="Fetch full details for flights with missing data. Removes flights that cannot be enriched."
+          >
+            {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            Enrich Flights
+          </button>
         </div>
       </div>
 
