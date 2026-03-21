@@ -280,6 +280,123 @@ class SkydioProvider(DroneProvider):
             logger.error("Failed to sync Skydio flights: %s", exc)
             return []
 
+    def sync_flights_deep(self, creds: ProviderCredentials) -> list[dict]:
+        """Fetch ALL historical flights by paging backwards through date windows."""
+        all_raw = []
+        date_to = None
+        batch = 0
+        seen_ids = set()
+
+        while True:
+            batch += 1
+            if batch > 50:
+                logger.warning("Deep sync safety limit: 50 batches")
+                break
+
+            params = {"per_page": 200}
+            if date_to:
+                params["date_to"] = date_to
+
+            logger.info("Deep sync batch %d (date_to=%s)", batch, date_to)
+            raw = self._paginate(f"{BASE_URL}/flights", creds, params=params)
+
+            if not raw:
+                logger.info("Deep sync: empty batch, stopping")
+                break
+
+            # Deduplicate within the deep sync itself
+            new_in_batch = 0
+            for f in raw:
+                fid = f.get("flight_id") or f.get("uuid") or f.get("id")
+                if fid and fid not in seen_ids:
+                    seen_ids.add(fid)
+                    all_raw.append(f)
+                    new_in_batch += 1
+
+            logger.info("Deep sync batch %d: %d raw, %d new, %d total unique",
+                        batch, len(raw), new_in_batch, len(all_raw))
+
+            if new_in_batch == 0:
+                logger.info("Deep sync: no new flights in batch, stopping")
+                break
+
+            # Find oldest takeoff time in this batch to set next window
+            dates = []
+            for f in raw:
+                dt = f.get("takeoff_time") or f.get("start_time") or f.get("created_at")
+                if dt:
+                    dates.append(dt)
+
+            if not dates:
+                logger.info("Deep sync: no dates found in batch, stopping")
+                break
+
+            oldest = min(dates)
+            next_date_to = oldest[:10] if len(oldest) > 10 else oldest
+
+            if next_date_to == date_to:
+                logger.info("Deep sync: date_to unchanged (%s), stopping", date_to)
+                break
+
+            date_to = next_date_to
+
+        logger.info("Deep sync complete: %d total unique flights across %d batches", len(all_raw), batch)
+
+        # Map using the same logic as sync_flights
+        flights = []
+        for f in all_raw:
+            takeoff_time = None
+            landing_time = None
+            flight_date = None
+
+            takeoff_str = f.get("takeoff_time") or f.get("start_time")
+            landing_str = f.get("landing_time") or f.get("end_time")
+
+            if takeoff_str:
+                try:
+                    takeoff_time = datetime.fromisoformat(takeoff_str.replace("Z", "+00:00"))
+                    flight_date = takeoff_time.date().isoformat()
+                except (ValueError, AttributeError):
+                    pass
+
+            if landing_str:
+                try:
+                    landing_time = datetime.fromisoformat(landing_str.replace("Z", "+00:00"))
+                except (ValueError, AttributeError):
+                    pass
+
+            duration = f.get("duration_seconds") or f.get("duration")
+            if duration is None and takeoff_time and landing_time:
+                duration = int((landing_time - takeoff_time).total_seconds())
+
+            flights.append({
+                "external_id": f.get("flight_id") or f.get("uuid") or f.get("id"),
+                "api_provider": "skydio",
+                "date": flight_date or f.get("date"),
+                "takeoff_time": takeoff_time,
+                "landing_time": landing_time,
+                "duration_seconds": duration,
+                "takeoff_lat": f.get("takeoff_latitude") or f.get("takeoff_lat"),
+                "takeoff_lon": f.get("takeoff_longitude") or f.get("takeoff_lon"),
+                "landing_lat": f.get("landing_latitude") or f.get("landing_lat"),
+                "landing_lon": f.get("landing_longitude") or f.get("landing_lon"),
+                "takeoff_address": f.get("takeoff_address") or f.get("location"),
+                "pilot_name": f.get("pilot_name") or f.get("operator_name"),
+                "vehicle_serial": f.get("vehicle_serial") or f.get("serial_number"),
+                "max_altitude_m": f.get("max_altitude_m") or f.get("max_altitude"),
+                "max_speed_mps": f.get("max_speed_mps") or f.get("max_speed"),
+                "distance_m": f.get("distance_m") or f.get("total_distance"),
+                "battery_serial": f.get("battery_serial") or f.get("battery"),
+                "sensor_package": f.get("sensor_package"),
+                "attachment_top": f.get("attachment_top"),
+                "attachment_bottom": f.get("attachment_bottom"),
+                "attachment_left": f.get("attachment_left"),
+                "attachment_right": f.get("attachment_right"),
+                "carrier": f.get("carrier") or f.get("carriers"),
+            })
+
+        return flights
+
     def sync_batteries(self, creds: ProviderCredentials) -> list[dict]:
         """Fetch batteries from Skydio Cloud."""
         try:

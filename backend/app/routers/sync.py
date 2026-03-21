@@ -62,6 +62,16 @@ def sync_now(
     return SyncResultResponse(**asdict(result))
 
 
+@router.post("/deep", response_model=SyncResultResponse)
+def sync_deep(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    logger.info("Deep sync triggered by admin")
+    result = SyncManager.sync_all_deep("skydio", db)
+    return SyncResultResponse(**asdict(result))
+
+
 @router.get("/status", response_model=SyncStatusResponse)
 def sync_status(
     db: Session = Depends(get_db),

@@ -58,6 +58,84 @@ def _build_creds(db: Session, provider_name: str) -> ProviderCredentials:
     return ProviderCredentials(api_token=api_token, token_id=token_id)
 
 
+def _upsert_flights(flights_data: list[dict], skydio_users: list[dict], db: Session, result: SyncResult):
+    """Shared flight upsert logic used by both sync_all and sync_all_deep."""
+    for f_data in flights_data:
+        ext_id = str(f_data.get("external_id", ""))
+        if not ext_id:
+            continue
+
+        # Check if flight already exists
+        existing = db.query(Flight).filter(
+            Flight.external_id == ext_id,
+            Flight.api_provider == "skydio",
+        ).first()
+
+        if existing:
+            result.flights_skipped += 1
+            continue
+
+        # Try to match vehicle
+        vehicle_id = None
+        vehicle_serial = f_data.get("vehicle_serial")
+        if vehicle_serial:
+            vehicle = db.query(Vehicle).filter(
+                Vehicle.skydio_vehicle_serial == vehicle_serial
+            ).first()
+            if vehicle:
+                vehicle_id = vehicle.id
+
+        # Try to match pilot by Skydio user name
+        pilot_id = None
+        pilot_name = f_data.get("pilot_name")
+        if pilot_name and skydio_users:
+            pilot_id = _match_pilot(db, pilot_name)
+
+        # Parse date
+        flight_date = None
+        date_val = f_data.get("date")
+        if date_val:
+            if isinstance(date_val, str):
+                try:
+                    flight_date = date.fromisoformat(date_val)
+                except ValueError:
+                    pass
+            elif isinstance(date_val, date):
+                flight_date = date_val
+
+        flight = Flight(
+            external_id=ext_id,
+            api_provider="skydio",
+            pilot_id=pilot_id,
+            vehicle_id=vehicle_id,
+            date=flight_date,
+            takeoff_time=f_data.get("takeoff_time"),
+            landing_time=f_data.get("landing_time"),
+            duration_seconds=f_data.get("duration_seconds"),
+            takeoff_lat=f_data.get("takeoff_lat"),
+            takeoff_lon=f_data.get("takeoff_lon"),
+            landing_lat=f_data.get("landing_lat"),
+            landing_lon=f_data.get("landing_lon"),
+            takeoff_address=f_data.get("takeoff_address"),
+            max_altitude_m=f_data.get("max_altitude_m"),
+            max_speed_mps=f_data.get("max_speed_mps"),
+            distance_m=f_data.get("distance_m"),
+            battery_serial=f_data.get("battery_serial"),
+            sensor_package=f_data.get("sensor_package"),
+            attachment_top=f_data.get("attachment_top"),
+            attachment_bottom=f_data.get("attachment_bottom"),
+            attachment_left=f_data.get("attachment_left"),
+            attachment_right=f_data.get("attachment_right"),
+            carrier=f_data.get("carrier"),
+            review_status="needs_review",
+            pilot_confirmed=False,
+        )
+        db.add(flight)
+        result.flights_new += 1
+
+    db.flush()
+
+
 class SyncManager:
 
     @staticmethod
@@ -159,80 +237,7 @@ class SyncManager:
         # --- Sync flights ---
         try:
             flights_data = provider.sync_flights(creds, since=since)
-            for f_data in flights_data:
-                ext_id = str(f_data.get("external_id", ""))
-                if not ext_id:
-                    continue
-
-                # Check if flight already exists
-                existing = db.query(Flight).filter(
-                    Flight.external_id == ext_id,
-                    Flight.api_provider == "skydio",
-                ).first()
-
-                if existing:
-                    result.flights_skipped += 1
-                    continue
-
-                # Try to match vehicle
-                vehicle_id = None
-                vehicle_serial = f_data.get("vehicle_serial")
-                if vehicle_serial:
-                    vehicle = db.query(Vehicle).filter(
-                        Vehicle.skydio_vehicle_serial == vehicle_serial
-                    ).first()
-                    if vehicle:
-                        vehicle_id = vehicle.id
-
-                # Try to match pilot by Skydio user name
-                pilot_id = None
-                pilot_name = f_data.get("pilot_name")
-                if pilot_name and skydio_users:
-                    pilot_id = _match_pilot(db, pilot_name)
-
-                # Parse date
-                flight_date = None
-                date_val = f_data.get("date")
-                if date_val:
-                    if isinstance(date_val, str):
-                        try:
-                            flight_date = date.fromisoformat(date_val)
-                        except ValueError:
-                            pass
-                    elif isinstance(date_val, date):
-                        flight_date = date_val
-
-                flight = Flight(
-                    external_id=ext_id,
-                    api_provider="skydio",
-                    pilot_id=pilot_id,
-                    vehicle_id=vehicle_id,
-                    date=flight_date,
-                    takeoff_time=f_data.get("takeoff_time"),
-                    landing_time=f_data.get("landing_time"),
-                    duration_seconds=f_data.get("duration_seconds"),
-                    takeoff_lat=f_data.get("takeoff_lat"),
-                    takeoff_lon=f_data.get("takeoff_lon"),
-                    landing_lat=f_data.get("landing_lat"),
-                    landing_lon=f_data.get("landing_lon"),
-                    takeoff_address=f_data.get("takeoff_address"),
-                    max_altitude_m=f_data.get("max_altitude_m"),
-                    max_speed_mps=f_data.get("max_speed_mps"),
-                    distance_m=f_data.get("distance_m"),
-                    battery_serial=f_data.get("battery_serial"),
-                    sensor_package=f_data.get("sensor_package"),
-                    attachment_top=f_data.get("attachment_top"),
-                    attachment_bottom=f_data.get("attachment_bottom"),
-                    attachment_left=f_data.get("attachment_left"),
-                    attachment_right=f_data.get("attachment_right"),
-                    carrier=f_data.get("carrier"),
-                    review_status="needs_review",
-                    pilot_confirmed=False,
-                )
-                db.add(flight)
-                result.flights_new += 1
-
-            db.flush()
+            _upsert_flights(flights_data, skydio_users, db, result)
         except Exception as exc:
             result.errors.append(f"Flights sync error: {exc}")
             logger.error("Flights sync error: %s", exc)
@@ -482,6 +487,97 @@ class SyncManager:
             "Sync complete: %d vehicles, %d new flights (%d skipped), %d batteries, %d errors",
             result.vehicles_synced, result.flights_new, result.flights_skipped,
             result.batteries_synced, len(result.errors),
+        )
+
+        return result
+
+    @staticmethod
+    def sync_all_deep(provider_name: str, db: Session) -> SyncResult:
+        """Deep sync: fetches ALL historical flights via windowed date pagination."""
+        result = SyncResult()
+
+        try:
+            creds = _build_creds(db, provider_name)
+            if not creds.api_token:
+                result.errors.append("API token not configured")
+                return result
+            provider = get_provider(provider_name)
+        except Exception as exc:
+            result.errors.append(f"Setup error: {exc}")
+            return result
+
+        # --- Sync users first (needed for pilot matching) ---
+        skydio_users = []
+        try:
+            skydio_users = provider.sync_users(creds)
+            result.users_synced = len(skydio_users)
+            logger.info("Deep sync users: got %d users", len(skydio_users))
+        except Exception as exc:
+            result.errors.append(f"Users sync error: {exc}")
+            logger.error("Deep sync users error: %s", exc, exc_info=True)
+
+        # --- Sync vehicles (needed for flight vehicle matching) ---
+        try:
+            vehicles_data = provider.sync_vehicles(creds)
+            for v_data in vehicles_data:
+                serial = v_data.get("skydio_vehicle_serial") or v_data.get("serial_number", "")
+                if not serial:
+                    continue
+
+                existing = db.query(Vehicle).filter(
+                    (Vehicle.skydio_vehicle_serial == serial) |
+                    (Vehicle.serial_number == serial)
+                ).first()
+
+                if existing:
+                    existing.manufacturer = v_data.get("manufacturer", existing.manufacturer)
+                    existing.model = v_data.get("model", existing.model)
+                    existing.api_provider = v_data.get("api_provider", "skydio")
+                    if v_data.get("nickname") and not existing.nickname:
+                        existing.nickname = v_data["nickname"]
+                else:
+                    vehicle = Vehicle(
+                        serial_number=v_data.get("serial_number", serial),
+                        manufacturer=v_data.get("manufacturer", "Skydio"),
+                        model=v_data.get("model", "Unknown"),
+                        skydio_vehicle_serial=serial,
+                        api_provider=v_data.get("api_provider", "skydio"),
+                        nickname=v_data.get("nickname"),
+                    )
+                    db.add(vehicle)
+
+                result.vehicles_synced += 1
+
+            db.flush()
+        except Exception as exc:
+            result.errors.append(f"Vehicles sync error: {exc}")
+            logger.error("Deep sync vehicles error: %s", exc)
+            db.rollback()
+
+        # --- Deep flight sync ---
+        try:
+            flights_data = provider.sync_flights_deep(creds)
+            logger.info("Deep sync returned %d flights", len(flights_data))
+            _upsert_flights(flights_data, skydio_users, db, result)
+        except Exception as exc:
+            result.errors.append(f"Deep flight sync error: {exc}")
+            logger.error("Deep flight sync error: %s", exc, exc_info=True)
+            db.rollback()
+
+        # --- Commit and update last sync timestamp ---
+        try:
+            _set_setting(db, "last_sync_timestamp", datetime.utcnow().isoformat())
+            _set_setting(db, "last_sync_provider", provider_name)
+            db.commit()
+        except Exception as exc:
+            result.errors.append(f"Commit error: {exc}")
+            logger.error("Deep sync commit error: %s", exc)
+            db.rollback()
+
+        logger.info(
+            "Deep sync complete: %d vehicles, %d new flights (%d skipped), %d errors",
+            result.vehicles_synced, result.flights_new, result.flights_skipped,
+            len(result.errors),
         )
 
         return result

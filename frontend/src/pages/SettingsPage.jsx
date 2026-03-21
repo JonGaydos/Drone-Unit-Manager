@@ -325,6 +325,36 @@ export default function SettingsPage() {
             {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
             Full Sync
           </button>
+          <button
+            onClick={async () => {
+              setSyncing(true)
+              setTestResult(null)
+              try {
+                const result = await api.post('/sync/deep', {})
+                const parts = [
+                  `${result.flights_new || 0} new flights`,
+                  `${result.flights_skipped || 0} skipped`,
+                  `${result.vehicles_synced || 0} vehicles`,
+                  `${result.users_synced || 0} users`,
+                ]
+                let msg = `Deep Sync: ${parts.join(', ')}`
+                if (result.errors?.length > 0) {
+                  msg += `\n\nErrors:\n${result.errors.join('\n')}`
+                }
+                setTestResult({ ok: result.errors?.length === 0, message: msg })
+              } catch (err) {
+                setTestResult({ ok: false, message: err.message })
+              } finally {
+                setSyncing(false)
+              }
+            }}
+            disabled={syncing || !isAdmin}
+            className="flex items-center gap-2 px-4 py-2 border border-primary text-primary rounded-lg text-sm hover:bg-primary/10 disabled:opacity-50"
+            title="Fetches ALL historical flights by paging through date windows. May take several minutes."
+          >
+            {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            Deep Sync
+          </button>
         </div>
       </div>
 
