@@ -72,11 +72,13 @@ class SkydioProvider(DroneProvider):
         url: str,
         creds: ProviderCredentials,
         params: dict | None = None,
+        default_per_page: int | None = 200,
     ) -> list[dict]:
         """Fetch all pages from a paginated Skydio endpoint."""
         all_data = []
         params = dict(params or {})
-        params.setdefault("per_page", 200)
+        if default_per_page is not None:
+            params.setdefault("per_page", default_per_page)
         page = 0
 
         while True:
@@ -356,8 +358,8 @@ class SkydioProvider(DroneProvider):
     def sync_media(self, creds: ProviderCredentials, since: str | None = None) -> list[dict]:
         """Fetch media files from Skydio Cloud."""
         try:
-            # Note: Skydio media endpoint doesn't support date_from filtering
-            raw = self._paginate(f"{BASE_URL}/media/files", creds)
+            # Note: Skydio media endpoint returns 400 with per_page, so skip it
+            raw = self._paginate(f"{BASE_URL}/media/files", creds, default_per_page=None)
             media = []
             for m in raw:
                 captured_time = None

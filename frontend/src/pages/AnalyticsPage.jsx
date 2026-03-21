@@ -407,9 +407,7 @@ export default function AnalyticsPage() {
                   let fillColor = baseColor
                   if (hasActiveFilter) {
                     const hasFilteredFlights = filteredByPilot && (filteredByPilot[entry.pilot_name] || 0) > 0
-                    if (!hasFilteredFlights && !filters.pilot) {
-                      fillColor = withOpacity(baseColor, DIM_OPACITY)
-                    } else if (filters.pilot && filters.pilot !== entry.pilot_name) {
+                    if (!hasFilteredFlights) {
                       fillColor = withOpacity(baseColor, DIM_OPACITY)
                     }
                   }
@@ -537,7 +535,8 @@ export default function AnalyticsPage() {
               <tbody>
                 {pilotHours.map((p, i) => {
                   const isSelected = filters.pilot === p.pilot_name
-                  const isDimmed = hasActiveFilter && filters.pilot && !isSelected
+                  const hasFilteredData = filteredPilotHours && filteredPilotHours[p.pilot_name]
+                  const isDimmed = hasActiveFilter && !isSelected && !hasFilteredData
                   return (
                     <tr
                       key={i}
