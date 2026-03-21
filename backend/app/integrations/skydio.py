@@ -76,10 +76,17 @@ class SkydioProvider(DroneProvider):
         """Fetch all pages from a paginated Skydio endpoint."""
         all_data = []
         params = dict(params or {})
+        page = 0
 
         while True:
+            page += 1
             resp = self._request("GET", url, creds, params=params)
             body = resp.json()
+
+            logger.info("Paginate %s (page %d): status=%d, type=%s, keys=%s",
+                url.split("/")[-1], page, resp.status_code,
+                type(body).__name__,
+                list(body.keys()) if isinstance(body, dict) else f"list[{len(body)}]")
 
             # Skydio API may return data in "data", "results", or as top-level list
             if isinstance(body, list):
@@ -87,7 +94,11 @@ class SkydioProvider(DroneProvider):
                 break
             elif isinstance(body, dict):
                 items = body.get("data") or body.get("results") or []
+                if not isinstance(items, list):
+                    logger.warning("Expected list but got %s for 'data'/'results'", type(items).__name__)
+                    break
                 all_data.extend(items)
+                logger.info("  Got %d items this page, %d total", len(items), len(all_data))
 
                 # Check for next page cursor/URL
                 next_cursor = body.get("next") or body.get("next_cursor")
@@ -103,6 +114,7 @@ class SkydioProvider(DroneProvider):
             else:
                 break
 
+        logger.info("Paginate complete: %d total items", len(all_data))
         return all_data
 
     # ---- Provider interface implementation ----
@@ -131,6 +143,9 @@ class SkydioProvider(DroneProvider):
         """Fetch all vehicles from Skydio Cloud."""
         try:
             raw = self._paginate(f"{BASE_URL}/vehicles", creds)
+            logger.info("Skydio vehicles raw response: %d items", len(raw))
+            if raw:
+                logger.info("First vehicle keys: %s", list(raw[0].keys()) if raw else "empty")
             vehicles = []
             for v in raw:
                 vehicles.append({
@@ -144,7 +159,7 @@ class SkydioProvider(DroneProvider):
             logger.info("Fetched %d vehicles from Skydio", len(vehicles))
             return vehicles
         except Exception as exc:
-            logger.error("Failed to sync Skydio vehicles: %s", exc)
+            logger.error("Failed to sync Skydio vehicles: %s", exc, exc_info=True)
             return []
 
     def sync_flights(self, creds: ProviderCredentials, since: str | None = None) -> list[dict]:

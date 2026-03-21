@@ -137,8 +137,19 @@ export default function SettingsPage() {
     setTestResult(null)
     try {
       const result = await api.post('/sync/now', {})
-      const msg = `Synced: ${result.flights_new || 0} new flights, ${result.vehicles_synced || 0} vehicles, ${result.batteries_synced || 0} batteries`
-      setTestResult({ ok: true, message: msg })
+      const parts = [
+        `${result.flights_new || 0} new flights`,
+        `${result.flights_skipped || 0} skipped`,
+        `${result.vehicles_synced || 0} vehicles`,
+        `${result.batteries_synced || 0} batteries`,
+        `${result.controllers_synced || 0} controllers`,
+        `${result.users_synced || 0} users`,
+      ]
+      let msg = `Synced: ${parts.join(', ')}`
+      if (result.errors?.length > 0) {
+        msg += `\n\nErrors:\n${result.errors.join('\n')}`
+      }
+      setTestResult({ ok: result.errors?.length === 0, message: msg })
     } catch (err) {
       setTestResult({ ok: false, message: err.message })
     } finally {

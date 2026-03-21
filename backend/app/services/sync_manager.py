@@ -109,9 +109,10 @@ class SyncManager:
         try:
             skydio_users = provider.sync_users(creds)
             result.users_synced = len(skydio_users)
+            logger.info("Users sync: got %d users", len(skydio_users))
         except Exception as exc:
             result.errors.append(f"Users sync error: {exc}")
-            logger.error("Users sync error: %s", exc)
+            logger.error("Users sync error: %s", exc, exc_info=True)
 
         # --- Sync vehicles ---
         try:
