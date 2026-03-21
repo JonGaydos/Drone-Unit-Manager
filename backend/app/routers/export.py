@@ -1,4 +1,3 @@
-"""CSV/JSON export and Excel/CSV import endpoints."""
 import csv
 import io
 import json
@@ -6,7 +5,7 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app.models.flight import Flight
@@ -31,7 +30,7 @@ def export_flights_csv(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    q = db.query(Flight)
+    q = db.query(Flight).options(joinedload(Flight.pilot), joinedload(Flight.vehicle))
     if date_from:
         q = q.filter(Flight.date >= date_from)
     if date_to:
@@ -46,11 +45,9 @@ def export_flights_csv(
         "Distance (m)", "Case Number", "Review Status", "Notes",
     ])
     for f in flights:
-        pilot = db.query(Pilot).filter(Pilot.id == f.pilot_id).first() if f.pilot_id else None
-        vehicle = db.query(Vehicle).filter(Vehicle.id == f.vehicle_id).first() if f.vehicle_id else None
         writer.writerow([
-            f.date, pilot.full_name if pilot else "",
-            f"{vehicle.manufacturer} {vehicle.model}" if vehicle else "",
+            f.date, f.pilot.full_name if f.pilot else "",
+            f"{f.vehicle.manufacturer} {f.vehicle.model}" if f.vehicle else "",
             f.purpose or "", f.duration_seconds or "", f.takeoff_address or "",
             f.takeoff_lat or "", f.takeoff_lon or "",
             f.max_altitude_m or "", f.max_speed_mps or "",
@@ -291,7 +288,6 @@ async def import_flights_csv(
                 review_status="reviewed",
                 pilot_confirmed=True,
             )
-            # Try to match pilot by name
             pilot_name = row.get("Pilot", "").strip()
             if pilot_name:
                 parts = pilot_name.split(" ", 1)

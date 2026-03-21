@@ -1,18 +1,14 @@
 import { useState, useEffect } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/contexts/ToastContext'
 import { normalizeDateValue } from '@/lib/utils'
-import { Plus, Search, X, ChevronDown, ChevronUp, Trash2, Download } from 'lucide-react'
+import { MISSION_STATUS_COLORS } from '@/lib/constants'
+import { sortByName, sortVehicles, formatStatusText } from '@/lib/formatters'
+import { Plus, Search, X, ChevronDown, ChevronUp, Trash2, Download, Loader2 } from 'lucide-react'
 
 const STATUS_OPTIONS = ['planned', 'in_progress', 'completed', 'cancelled']
 const ROLE_OPTIONS = ['PIC', 'Observer', 'Spotter', 'Visual Observer', 'Support']
-
-const statusColors = {
-  planned: 'bg-blue-500/15 text-blue-400',
-  in_progress: 'bg-amber-500/15 text-amber-400',
-  completed: 'bg-emerald-500/15 text-emerald-400',
-  cancelled: 'bg-red-500/15 text-red-400',
-}
 
 function MissionModal({ pilots, vehicles, onSave, onClose, initial }) {
   const [form, setForm] = useState(initial || {
@@ -33,7 +29,8 @@ function MissionModal({ pilots, vehicles, onSave, onClose, initial }) {
     setPilotEntries(updated)
   }
 
-  const handleSubmit = (e) => {
+  const [saving, setSaving] = useState(false)
+  const handleSubmit = async (e) => {
     e.preventDefault()
     const data = { ...form }
     if (data.vehicle_id) data.vehicle_id = parseInt(data.vehicle_id)
@@ -44,7 +41,8 @@ function MissionModal({ pilots, vehicles, onSave, onClose, initial }) {
     data.pilots = pilotEntries
       .filter(p => p.pilot_id)
       .map(p => ({ pilot_id: parseInt(p.pilot_id), role: p.role || null, hours: parseFloat(p.hours) || 0 }))
-    onSave(data)
+    setSaving(true)
+    try { await onSave(data) } finally { setSaving(false) }
   }
 
   return (
@@ -63,7 +61,7 @@ function MissionModal({ pilots, vehicles, onSave, onClose, initial }) {
               <label className="block text-sm font-medium text-foreground mb-1">Status</label>
               <select value={form.status} onChange={e => setForm({...form, status: e.target.value})}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
-                {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</option>)}
+                {STATUS_OPTIONS.map(s => <option key={s} value={s}>{formatStatusText(s)}</option>)}
               </select>
             </div>
           </div>
@@ -111,7 +109,7 @@ function MissionModal({ pilots, vehicles, onSave, onClose, initial }) {
             <select value={form.vehicle_id} onChange={e => setForm({...form, vehicle_id: e.target.value})}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
               <option value="">Select vehicle...</option>
-              {[...vehicles].sort((a, b) => `${a.manufacturer} ${a.model}`.localeCompare(`${b.manufacturer} ${b.model}`)).map(v => <option key={v.id} value={v.id}>{v.manufacturer} {v.model}{v.nickname ? ` (${v.nickname})` : ''}</option>)}
+              {sortVehicles(vehicles).map(v => <option key={v.id} value={v.id}>{v.manufacturer} {v.model}{v.nickname ? ` (${v.nickname})` : ''}</option>)}
             </select>
           </div>
           <div>
@@ -137,7 +135,7 @@ function MissionModal({ pilots, vehicles, onSave, onClose, initial }) {
                 <select value={pe.pilot_id} onChange={e => updatePilotEntry(i, 'pilot_id', e.target.value)}
                   className="flex-1 px-2 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm">
                   <option value="">Select pilot...</option>
-                  {[...pilots].sort((a, b) => (a.full_name || '').localeCompare(b.full_name || '')).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+                  {sortByName(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
                 </select>
                 <select value={pe.role} onChange={e => updatePilotEntry(i, 'role', e.target.value)}
                   className="w-32 px-2 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm">
@@ -155,8 +153,8 @@ function MissionModal({ pilots, vehicles, onSave, onClose, initial }) {
           </div>
 
           <div className="flex gap-2 pt-2">
-            <button type="submit" className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
-              {initial ? 'Save Changes' : 'Add Mission'}
+            <button type="submit" disabled={saving} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : (initial ? 'Save Changes' : 'Add Mission')}
             </button>
             <button type="button" onClick={onClose} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm">Cancel</button>
           </div>
@@ -175,10 +173,12 @@ export default function MissionLogPage() {
   const [editMission, setEditMission] = useState(null)
   const [expanded, setExpanded] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [filterPilot, setFilterPilot] = useState('')
   const { isAdmin } = useAuth()
+  const toast = useToast()
 
   const load = () => {
     const params = new URLSearchParams()
@@ -192,7 +192,7 @@ export default function MissionLogPage() {
       api.get('/vehicles'),
     ]).then(([m, p, v]) => {
       setMissions(m); setPilots(p); setVehicles(v)
-    }).catch(console.error).finally(() => setLoading(false))
+    }).catch(err => setError(err.message)).finally(() => setLoading(false))
   }
 
   useEffect(() => { load() }, [dateFrom, dateTo, filterPilot])
@@ -207,7 +207,7 @@ export default function MissionLogPage() {
       setModal(false)
       setEditMission(null)
       load()
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast.error(err.message) }
   }
 
   const handleDelete = async (id) => {
@@ -215,7 +215,7 @@ export default function MissionLogPage() {
     try {
       await api.delete(`/mission-logs/${id}`)
       load()
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast.error(err.message) }
   }
 
   const handleEdit = (mission) => {
@@ -232,6 +232,7 @@ export default function MissionLogPage() {
 
   return (
     <div className="space-y-4">
+      {error && <div className="bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg p-4 mb-4">{error}</div>}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-4 flex-wrap">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -248,7 +249,7 @@ export default function MissionLogPage() {
           <select value={filterPilot} onChange={e => setFilterPilot(e.target.value)}
             className="px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
             <option value="">All Pilots</option>
-            {[...pilots].sort((a, b) => (a.full_name || '').localeCompare(b.full_name || '')).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+            {sortByName(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
           </select>
           <button
             onClick={() => api.download('/export/mission-logs/csv')}
@@ -299,8 +300,8 @@ export default function MissionLogPage() {
                   </td>
                   <td className="px-4 py-3 text-right text-foreground hidden md:table-cell">{m.man_hours || 0}</td>
                   <td className="px-4 py-3">
-                    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[m.status] || 'bg-gray-500/15 text-gray-400'}`}>
-                      {m.status?.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${MISSION_STATUS_COLORS[m.status] || 'bg-gray-500/15 text-gray-400'}`}>
+                      {formatStatusText(m.status)}
                     </span>
                   </td>
                   {isAdmin && (

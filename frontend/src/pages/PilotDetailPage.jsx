@@ -2,24 +2,16 @@ import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/contexts/ToastContext'
 import { formatHours, formatDuration } from '@/lib/utils'
+import { CERT_STATUS_COLORS } from '@/lib/constants'
 import { ArrowLeft, Plane, Clock, Calendar, ShieldCheck, FileText, Edit, Save, X, Camera } from 'lucide-react'
 import DocumentUpload from '@/components/DocumentUpload'
-
-const STATUS_COLORS = {
-  not_issued: 'bg-zinc-500/15 text-zinc-400',
-  not_eligible: 'bg-zinc-500/15 text-zinc-400',
-  not_started: 'bg-zinc-500/15 text-zinc-400',
-  in_progress: 'bg-blue-500/15 text-blue-400',
-  pending: 'bg-amber-500/15 text-amber-400',
-  complete: 'bg-emerald-500/15 text-emerald-400',
-  active: 'bg-emerald-500/15 text-emerald-400',
-  expired: 'bg-red-500/15 text-red-400',
-}
 
 export default function PilotDetailPage() {
   const { id } = useParams()
   const { isAdmin } = useAuth()
+  const toast = useToast()
   const [pilot, setPilot] = useState(null)
   const [stats, setStats] = useState(null)
   const [flights, setFlights] = useState([])
@@ -69,7 +61,7 @@ export default function PilotDetailPage() {
       setPilot(updated)
       setEditing(false)
     } catch (err) {
-      alert(err.message)
+      toast.error(err.message)
     } finally {
       setSaving(false)
     }
@@ -104,17 +96,10 @@ export default function PilotDetailPage() {
                   if (!file) return
                   const formData = new FormData()
                   formData.append('file', file)
-                  const token = localStorage.getItem('token')
                   try {
-                    const res = await fetch(`/api/pilots/${id}/photo`, {
-                      method: 'POST',
-                      headers: { Authorization: `Bearer ${token}` },
-                      body: formData,
-                    })
-                    if (!res.ok) throw new Error('Upload failed')
-                    const result = await res.json()
+                    const result = await api.upload(`/pilots/${id}/photo`, formData)
                     setPilot({ ...pilot, photo_url: result.photo_url + '?t=' + Date.now() })
-                  } catch (err) { alert(err.message) }
+                  } catch (err) { toast.error(err.message) }
                   e.target.value = ''
                 }} />
               </label>
@@ -295,7 +280,7 @@ export default function PilotDetailPage() {
               <tr key={c.id} className="border-b border-border/50 hover:bg-accent/30">
                 <td className="px-4 py-2 text-foreground font-medium">{c.cert_type_name}</td>
                 <td className="px-4 py-2">
-                  <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[c.status] || STATUS_COLORS.not_started}`}>
+                  <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${CERT_STATUS_COLORS[c.status] || CERT_STATUS_COLORS.not_started}`}>
                     {(c.status || 'not_started').replace(/_/g, ' ')}
                   </span>
                 </td>

@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
-import { Plus, Edit, Trash2, Search, Plane, Battery, Gamepad2, Warehouse, Cpu, Paperclip, ChevronUp, ChevronDown, Download } from 'lucide-react'
+import { useToast } from '@/contexts/ToastContext'
+import { Plus, Edit, Trash2, Search, Plane, Battery, Gamepad2, Warehouse, Cpu, Paperclip, ChevronUp, ChevronDown, Download, Loader2 } from 'lucide-react'
 
 // ─── Generic Equipment Modal ────────────────────────────────────────────────
 
@@ -10,15 +11,17 @@ function EquipmentModal({ title, record, fields, onSave, onClose, vehicleModels 
   const defaults = {}
   fields.forEach(f => { defaults[f.key] = '' })
   const [form, setForm] = useState(record || defaults)
+  const [saving, setSaving] = useState(false)
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     const data = { ...form }
     fields.forEach(f => {
       if (f.type === 'number' && data[f.key]) data[f.key] = parseFloat(data[f.key])
       if (data[f.key] === '') delete data[f.key]
     })
-    onSave(data)
+    setSaving(true)
+    try { await onSave(data) } finally { setSaving(false) }
   }
 
   return (
@@ -72,8 +75,8 @@ function EquipmentModal({ title, record, fields, onSave, onClose, vehicleModels 
             )
           })}
           <div className="flex gap-2 pt-2">
-            <button type="submit" className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
-              {record?.id ? 'Update' : `Add ${title}`}
+            <button type="submit" disabled={saving} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : (record?.id ? 'Update' : `Add ${title}`)}
             </button>
             <button type="button" onClick={onClose} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90">
               Cancel
@@ -350,10 +353,12 @@ export default function FleetPage() {
   const [search, setSearch] = useState('')
   const [modal, setModal] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   const [sortKey, setSortKey] = useState('name')
   const [sortDir, setSortDir] = useState('asc')
   const [vehicleModels, setVehicleModels] = useState([])
   const { isAdmin } = useAuth()
+  const toast = useToast()
 
   // Fetch unique vehicle models for combobox
   useEffect(() => {
@@ -387,7 +392,7 @@ export default function FleetPage() {
       } else {
         setItems(data)
       }
-    } catch (err) { console.error(err) }
+    } catch (err) { setError(err.message) }
     finally { setLoading(false) }
   }
 
@@ -409,7 +414,7 @@ export default function FleetPage() {
       setModal(null)
       load()
     } catch (err) {
-      alert(err.message)
+      toast.error(err.message)
     }
   }
 
@@ -419,7 +424,7 @@ export default function FleetPage() {
       await api.delete(`${config.endpoint}/${id}`)
       load()
     } catch (err) {
-      alert(err.message)
+      toast.error(err.message)
     }
   }
 
@@ -452,6 +457,7 @@ export default function FleetPage() {
 
   return (
     <div className="space-y-4">
+      {error && <div className="bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg p-4 mb-4">{error}</div>}
       {/* Tabs */}
       <div className="flex items-center gap-1 border-b border-border pb-2 overflow-x-auto">
         {Object.entries(TAB_CONFIGS).map(([key, cfg]) => {

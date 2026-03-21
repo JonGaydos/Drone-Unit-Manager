@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/contexts/ToastContext'
 import { formatDuration, normalizeDateValue } from '@/lib/utils'
+import { sortByName, sortVehicles } from '@/lib/formatters'
 import { ArrowLeft, MapPin, Clock, Gauge, Battery, Plane, Save } from 'lucide-react'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -14,6 +16,7 @@ const tooltipStyle = {
 
 export default function FlightDetailPage() {
   const { id } = useParams()
+  const toast = useToast()
   const [flight, setFlight] = useState(null)
   const [telemetry, setTelemetry] = useState([])
   const [pilots, setPilots] = useState([])
@@ -78,14 +81,14 @@ export default function FlightDetailPage() {
       const updated = await api.patch(`/flights/${id}`, data)
       setFlight(updated)
       setEditing(false)
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast.error(err.message) }
   }
 
   const handleApprove = async () => {
     try {
       const updated = await api.patch(`/flights/${id}`, { review_status: 'reviewed', pilot_confirmed: true })
       setFlight(updated)
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast.error(err.message) }
   }
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>
@@ -137,7 +140,7 @@ export default function FlightDetailPage() {
                 <select value={editForm.pilot_id} onChange={e => setEditForm({...editForm, pilot_id: e.target.value})}
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                   <option value="">Unassigned</option>
-                  {[...pilots].sort((a, b) => (a.full_name || '').localeCompare(b.full_name || '')).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+                  {sortByName(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
                 </select>
               </div>
               <div>
@@ -145,7 +148,7 @@ export default function FlightDetailPage() {
                 <select value={editForm.vehicle_id} onChange={e => setEditForm({...editForm, vehicle_id: e.target.value})}
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                   <option value="">Unassigned</option>
-                  {[...vehicles].sort((a, b) => `${a.manufacturer} ${a.model}`.localeCompare(`${b.manufacturer} ${b.model}`)).map(v => <option key={v.id} value={v.id}>{v.manufacturer} {v.model}</option>)}
+                  {sortVehicles(vehicles).map(v => <option key={v.id} value={v.id}>{v.manufacturer} {v.model}</option>)}
                 </select>
               </div>
             </div>
@@ -155,7 +158,7 @@ export default function FlightDetailPage() {
                 <select value={editForm.purpose} onChange={e => setEditForm({...editForm, purpose: e.target.value})}
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                   <option value="">None</option>
-                  {[...purposes].sort((a, b) => (a.name || '').localeCompare(b.name || '')).map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                  {sortByName(purposes, 'name').map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
                 </select>
               </div>
               <div>

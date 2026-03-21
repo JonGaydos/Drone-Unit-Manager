@@ -2,7 +2,10 @@ import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/contexts/ToastContext'
 import { normalizeDateValue } from '@/lib/utils'
+import { FREQUENCY_COLORS } from '@/lib/constants'
+import { sortByName } from '@/lib/formatters'
 import { Plus, Trash2, Search, Wrench, CalendarClock, History, Download, Edit, CheckCircle, Clock } from 'lucide-react'
 
 // Map entity_type to API endpoint
@@ -111,7 +114,7 @@ function MaintenanceModal({ record, onSave, onClose, entityLists, pilots }) {
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
               >
                 <option value="">Select pilot...</option>
-                {[...pilots].sort((a, b) => (a.full_name || '').localeCompare(b.full_name || '')).map(p => (
+                {sortByName(pilots).map(p => (
                   <option key={p.id} value={p.full_name}>{p.full_name}</option>
                 ))}
               </select>
@@ -263,7 +266,7 @@ function ScheduleModal({ schedule, onSave, onClose }) {
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
               >
                 <option value="">Unassigned</option>
-                {[...pilots].sort((a, b) => (a.full_name || '').localeCompare(b.full_name || '')).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+                {sortByName(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
               </select>
             </div>
           </div>
@@ -314,6 +317,7 @@ export default function MaintenancePage() {
   const [scheduleModal, setScheduleModal] = useState(null)
   const [loading, setLoading] = useState(true)
   const { isAdmin } = useAuth()
+  const toast = useToast()
 
   // Entity lists for name resolution and dropdowns
   const [entityLists, setEntityLists] = useState({ vehicle: [], battery: [], controller: [], dock: [] })
@@ -355,7 +359,7 @@ export default function MaintenancePage() {
       setModal(null)
       load()
     } catch (err) {
-      alert(err.message)
+      toast.error(err.message)
     }
   }
 
@@ -365,7 +369,7 @@ export default function MaintenancePage() {
       await api.delete(`/maintenance/${id}`)
       load()
     } catch (err) {
-      alert(err.message)
+      toast.error(err.message)
     }
   }
 
@@ -379,7 +383,7 @@ export default function MaintenancePage() {
       setScheduleModal(null)
       load()
     } catch (err) {
-      alert(err.message)
+      toast.error(err.message)
     }
   }
 
@@ -389,7 +393,7 @@ export default function MaintenancePage() {
       await api.delete(`/maintenance/schedules/${id}`)
       load()
     } catch (err) {
-      alert(err.message)
+      toast.error(err.message)
     }
   }
 
@@ -398,7 +402,7 @@ export default function MaintenancePage() {
       await api.post(`/maintenance/schedules/${id}/complete`)
       load()
     } catch (err) {
-      alert(err.message)
+      toast.error(err.message)
     }
   }
 
@@ -416,12 +420,6 @@ export default function MaintenancePage() {
     scheduled: 'bg-blue-500/15 text-blue-400',
     unscheduled: 'bg-amber-500/15 text-amber-400',
     inspection: 'bg-emerald-500/15 text-emerald-400',
-  }
-
-  const FREQ_COLORS = {
-    monthly: 'bg-blue-500/15 text-blue-400',
-    quarterly: 'bg-violet-500/15 text-violet-400',
-    yearly: 'bg-amber-500/15 text-amber-400',
   }
 
   if (loading) {
@@ -591,7 +589,7 @@ export default function MaintenancePage() {
                       {s.entity_type}{s.entity_id ? ` #${s.entity_id}` : ''}
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${FREQ_COLORS[s.frequency] || 'bg-zinc-500/15 text-zinc-400'}`}>
+                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${FREQUENCY_COLORS[s.frequency] || 'bg-zinc-500/15 text-zinc-400'}`}>
                         {s.frequency}
                       </span>
                     </td>

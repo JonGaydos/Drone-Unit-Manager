@@ -43,10 +43,8 @@ def _mission_to_out(mission: MissionLog, db: Session) -> MissionLogOut:
 
 
 def _sync_pilots(db: Session, mission: MissionLog, pilots_data: list[MissionLogPilotIn]):
-    # Remove existing
     db.query(MissionLogPilot).filter(MissionLogPilot.mission_log_id == mission.id).delete()
     db.flush()
-    # Add new
     for p in pilots_data:
         db.add(MissionLogPilot(
             mission_log_id=mission.id,

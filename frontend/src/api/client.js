@@ -24,7 +24,12 @@ async function request(path, options = {}) {
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new Error(error.detail || 'Request failed')
+    const sanitized = error.detail || 'An error occurred. Please try again.'
+    // Don't expose SQL errors, tracebacks, or internal paths
+    if (sanitized.includes('SQL') || sanitized.includes('Traceback') || sanitized.includes('/app/')) {
+      throw new Error('An unexpected error occurred. Please try again.')
+    }
+    throw new Error(sanitized)
   }
 
   return res.json()
@@ -84,5 +89,24 @@ export const api = {
     a.click()
     a.remove()
     URL.revokeObjectURL(url)
+  },
+  upload: async (path, formData) => {
+    const token = localStorage.getItem('token')
+    const res = await fetch(`${API_BASE}${path}`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    })
+    if (res.status === 401) {
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      window.location.href = '/login'
+      throw new Error('Unauthorized')
+    }
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      throw new Error(data.detail || 'Upload failed')
+    }
+    return res.json()
   },
 }

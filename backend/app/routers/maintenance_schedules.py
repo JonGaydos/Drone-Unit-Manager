@@ -1,4 +1,3 @@
-"""Maintenance schedule endpoints."""
 from datetime import date, timedelta
 from typing import Optional
 
@@ -16,7 +15,6 @@ from app.routers.auth import get_current_user
 router = APIRouter(prefix="/api/maintenance/schedules", tags=["maintenance-schedules"])
 
 
-# ── Pydantic Schemas ─────────────────────────────────────────────────────────
 
 class ScheduleCreate(BaseModel):
     name: str
@@ -50,7 +48,6 @@ def _calc_next_due(frequency: str, from_date: date | None = None) -> date:
     return base + timedelta(days=days)
 
 
-# ── Endpoints ────────────────────────────────────────────────────────────────
 
 @router.get("")
 def list_schedules(
@@ -60,7 +57,7 @@ def list_schedules(
 ):
     q = db.query(MaintenanceSchedule)
     if not all:
-        q = q.filter(MaintenanceSchedule.is_active == True)
+        q = q.filter(MaintenanceSchedule.is_active.is_(True))
     schedules = q.order_by(MaintenanceSchedule.next_due.asc().nullslast()).all()
     results = []
     for s in schedules:

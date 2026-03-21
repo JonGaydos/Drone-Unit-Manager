@@ -1,5 +1,3 @@
-"""Sync API endpoints for triggering and monitoring Skydio Cloud sync."""
-
 import logging
 from dataclasses import asdict
 
@@ -49,7 +47,6 @@ def test_connection(
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
-    """Test Skydio Cloud API connection with stored credentials."""
     ok, message, user_info = SyncManager.test_connection("skydio", db)
     return TestConnectionResponse(ok=ok, message=message, user_info=user_info)
 
@@ -60,7 +57,6 @@ def sync_now(
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
-    """Run a sync from Skydio Cloud. Pass ?full=true for full historical sync."""
     logger.info("Manual sync triggered by admin (full=%s)", full)
     result = SyncManager.sync_all("skydio", db, full_sync=full)
     return SyncResultResponse(**asdict(result))
@@ -71,7 +67,6 @@ def sync_status(
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
-    """Get the current sync status and configuration."""
     last_sync_setting = db.query(Setting).filter(Setting.key == "last_sync_timestamp").first()
     interval_setting = db.query(Setting).filter(Setting.key == "sync_interval").first()
     provider_setting = db.query(Setting).filter(Setting.key == "last_sync_provider").first()

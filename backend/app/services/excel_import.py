@@ -1,4 +1,3 @@
-"""Import data from the drone stats Excel spreadsheet."""
 import io
 from datetime import datetime, date
 from typing import Optional
@@ -49,9 +48,10 @@ def _parse_status(val) -> str:
     return status_map.get(s, "pending")
 
 
-def _find_or_create_pilot(db: Session, full_name: str) -> Optional[Pilot]:
+def _find_or_create_pilot(db: Session, full_name: str) -> tuple[Optional[Pilot], bool]:
+    """Returns (pilot, was_created)."""
     if not full_name or full_name.strip() == "":
-        return None
+        return None, False
     parts = full_name.strip().split(" ", 1)
     first = parts[0]
     last = parts[1] if len(parts) > 1 else ""
@@ -60,17 +60,17 @@ def _find_or_create_pilot(db: Session, full_name: str) -> Optional[Pilot]:
         pilot = Pilot(first_name=first, last_name=last, status="active")
         db.add(pilot)
         db.flush()
-    return pilot
+        return pilot, True
+    return pilot, False
 
 
-def _find_or_create_vehicle(db: Session, vehicle_str: str) -> Optional[Vehicle]:
+def _find_or_create_vehicle(db: Session, vehicle_str: str) -> tuple[Optional[Vehicle], bool]:
+    """Returns (vehicle, was_created)."""
     if not vehicle_str or vehicle_str.strip() == "":
-        return None
-    # Parse strings like "SkydioX10-bk7n" or "SkydioX2-392d"
+        return None, False
     serial = vehicle_str.strip()
     vehicle = db.query(Vehicle).filter(Vehicle.serial_number == serial).first()
     if not vehicle:
-        # Determine manufacturer and model from the string
         manufacturer = "Skydio"
         model = serial
         if "X10" in serial:
@@ -88,7 +88,8 @@ def _find_or_create_vehicle(db: Session, vehicle_str: str) -> Optional[Vehicle]:
         )
         db.add(vehicle)
         db.flush()
-    return vehicle
+        return vehicle, True
+    return vehicle, False
 
 
 def _ensure_cert_type(db: Session, name: str, category: str, has_expiration: bool = True,
@@ -114,8 +115,9 @@ def _ensure_purpose(db: Session, name: str):
 
 
 def import_excel(db: Session, file_bytes: bytes) -> dict:
-    """Import data from the drone stats Excel file. Returns summary of what was imported."""
     wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
+    pilots_created_count = 0
+    vehicles_created_count = 0
     result = {
         "pilots_created": 0,
         "vehicles_created": 0,
@@ -126,7 +128,6 @@ def import_excel(db: Session, file_bytes: bytes) -> dict:
         "errors": [],
     }
 
-    # ── Import Skydio flights ─────────────────────────────────────
     if "Skydio" in wb.sheetnames:
         ws = wb["Skydio"]
         headers = [ws.cell(1, c).value for c in range(1, ws.max_column + 1)]
@@ -138,15 +139,17 @@ def import_excel(db: Session, file_bytes: bytes) -> dict:
                 if not flight_id:
                     continue
 
-                # Skip if already imported
                 existing = db.query(Flight).filter(Flight.external_id == str(flight_id)).first()
                 if existing:
                     result["flights_skipped"] += 1
                     continue
 
-                # Pre-parse pilot, vehicle, date, duration for secondary dedup
-                pilot = _find_or_create_pilot(db, row.get("Pilot", ""))
-                vehicle = _find_or_create_vehicle(db, row.get("Vehicle", ""))
+                pilot, pilot_new = _find_or_create_pilot(db, row.get("Pilot", ""))
+                if pilot_new:
+                    pilots_created_count += 1
+                vehicle, vehicle_new = _find_or_create_vehicle(db, row.get("Vehicle", ""))
+                if vehicle_new:
+                    vehicles_created_count += 1
                 takeoff_time_raw = row.get("Takeoff") or row.get("Local Takeoff Time")
                 flight_date = takeoff_time_raw.date() if isinstance(takeoff_time_raw, datetime) else None
                 duration = row.get("Duration (seconds)")
@@ -165,16 +168,13 @@ def import_excel(db: Session, file_bytes: bytes) -> dict:
                         result["flights_skipped"] += 1
                         continue
 
-                # Parse purpose
                 purpose = row.get("Purpose", "")
                 if purpose:
                     _ensure_purpose(db, purpose)
 
-                # Parse times
                 takeoff_time = takeoff_time_raw
                 landing_time = row.get("Land")
 
-                # Parse coordinates
                 try:
                     lat = float(row.get("Takeoff Latitude")) if row.get("Takeoff Latitude") else None
                 except (ValueError, TypeError):
@@ -212,7 +212,6 @@ def import_excel(db: Session, file_bytes: bytes) -> dict:
             except Exception as e:
                 result["errors"].append(f"Skydio row {r}: {str(e)}")
 
-    # ── Import Pilot Info / Certifications ─────────────────────────
     if "Pilot Info" in wb.sheetnames:
         ws = wb["Pilot Info"]
 
@@ -221,7 +220,6 @@ def import_excel(db: Session, file_bytes: bytes) -> dict:
         #         Level 1-5, DART, GCSC, Insurance 2026, Insurance 2027, Notes,
         #         Part 107 Date, 107 Renewal Due, Renewed Date, 107 Renewal Due, Polo
 
-        # Create certification types
         cert_types = {}
         cert_defs = [
             ("Skydio X2E Academy", "equipment", False, None),
@@ -276,23 +274,22 @@ def import_excel(db: Session, file_bytes: bytes) -> dict:
                 continue
 
             try:
-                pilot = _find_or_create_pilot(db, str(name))
+                pilot, pilot_new = _find_or_create_pilot(db, str(name))
+                if pilot_new:
+                    pilots_created_count += 1
                 if not pilot:
                     continue
 
-                # Update pilot status
                 status_val = ws.cell(r, 2).value
                 if status_val:
                     pilot.status = "active" if str(status_val).lower() == "active" else "inactive"
 
-                # Assign certifications from columns
                 for col, cert_name in col_map.items():
                     val = ws.cell(r, col).value
                     ct = cert_types.get(cert_name)
                     if not ct:
                         continue
 
-                    # Check if already assigned
                     existing = db.query(PilotCertification).filter(
                         PilotCertification.pilot_id == pilot.id,
                         PilotCertification.certification_type_id == ct.id,
@@ -342,9 +339,8 @@ def import_excel(db: Session, file_bytes: bytes) -> dict:
             except Exception as e:
                 result["errors"].append(f"Pilot Info row {r}: {str(e)}")
 
-    # Count new pilots/vehicles
-    result["pilots_created"] = db.query(Pilot).count()
-    result["vehicles_created"] = db.query(Vehicle).count()
+    result["pilots_created"] = pilots_created_count
+    result["vehicles_created"] = vehicles_created_count
 
     db.commit()
     return result

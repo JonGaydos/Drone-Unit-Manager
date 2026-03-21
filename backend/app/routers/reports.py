@@ -1,4 +1,3 @@
-"""Report generation endpoints."""
 import io
 import os
 from datetime import date
@@ -56,7 +55,6 @@ def generate_report(config: ReportConfig, db: Session = Depends(get_db), user: U
 
 @router.post("/generate/pdf")
 def generate_report_pdf(config: ReportConfig, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    """Generate a professional PDF report with charts."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -69,7 +67,6 @@ def generate_report_pdf(config: ReportConfig, db: Session = Depends(get_db), use
     )
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
-    # 1. Generate report data using existing functions
     if config.report_type == "flight_summary":
         data = _flight_summary(config, db)
     elif config.report_type == "pilot_hours":
@@ -85,22 +82,18 @@ def generate_report_pdf(config: ReportConfig, db: Session = Depends(get_db), use
     else:
         data = {"title": "Unknown Report", "summary": {}, "rows": [], "columns": []}
 
-    # 2. Read org settings
     org_name_setting = db.query(Setting).filter(Setting.key == "org_name").first()
     logo_setting = db.query(Setting).filter(Setting.key == "org_logo").first()
     org_name = org_name_setting.value if org_name_setting else "Drone Unit Manager"
 
-    # Look for logo file
     logo_path = None
     if logo_setting and logo_setting.value:
-        # Check for logo file in data/uploads/org/
         for ext in ["png", "jpg", "jpeg", "gif", "webp"]:
             candidate = os.path.join("data", "uploads", "org", f"logo.{ext}")
             if os.path.exists(candidate):
                 logo_path = candidate
                 break
 
-    # 3. Build PDF
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         buffer, pagesize=letter,
@@ -110,21 +103,18 @@ def generate_report_pdf(config: ReportConfig, db: Session = Depends(get_db), use
     styles = getSampleStyleSheet()
     elements = []
 
-    # Colors
     primary = HexColor("#1e40af")
     primary_light = HexColor("#dbeafe")
     header_bg = HexColor("#1e293b")
     alt_row = HexColor("#f8fafc")
     white = colors.white
 
-    # Custom styles
     title_style = ParagraphStyle("ReportTitle", parent=styles["Title"], fontSize=20, textColor=primary, spaceAfter=4)
     subtitle_style = ParagraphStyle("ReportSubtitle", parent=styles["Normal"], fontSize=10, textColor=HexColor("#64748b"), spaceAfter=12)
     heading_style = ParagraphStyle("SectionHeading", parent=styles["Heading2"], fontSize=14, textColor=primary, spaceBefore=16, spaceAfter=8)
     cell_style = ParagraphStyle("CellStyle", parent=styles["Normal"], fontSize=8, leading=10)
     header_cell_style = ParagraphStyle("HeaderCell", parent=styles["Normal"], fontSize=8, leading=10, textColor=white)
 
-    # Header with logo
     header_items = []
     if logo_path:
         try:
@@ -145,7 +135,6 @@ def generate_report_pdf(config: ReportConfig, db: Session = Depends(get_db), use
     elements.append(Paragraph(f"Date Range: {date_range}  |  Generated: {date.today()}", subtitle_style))
     elements.append(Spacer(1, 8))
 
-    # Summary stats as a card row
     summary = data.get("summary", {})
     if summary:
         summary_data = []
@@ -173,7 +162,6 @@ def generate_report_pdf(config: ReportConfig, db: Session = Depends(get_db), use
             elements.append(summary_table)
             elements.append(Spacer(1, 16))
 
-    # Chart
     chart_buf = _generate_chart(config.report_type, data)
     if chart_buf:
         elements.append(Paragraph("Chart", heading_style))
@@ -181,19 +169,16 @@ def generate_report_pdf(config: ReportConfig, db: Session = Depends(get_db), use
         elements.append(chart_img)
         elements.append(Spacer(1, 12))
 
-    # Data table
     rows = data.get("rows", [])
     columns = data.get("columns", [])
     if rows and columns:
         elements.append(Paragraph("Data", heading_style))
 
-        # Map columns to row keys
         if rows:
             row_keys = list(rows[0].keys())
         else:
             row_keys = []
 
-        # Build table data
         table_header = [Paragraph(f"<b>{c}</b>", header_cell_style) for c in columns]
         table_data = [table_header]
 
@@ -217,7 +202,6 @@ def generate_report_pdf(config: ReportConfig, db: Session = Depends(get_db), use
             ("RIGHTPADDING", (0, 0), (-1, -1), 4),
             ("GRID", (0, 0), (-1, -1), 0.25, HexColor("#e2e8f0")),
         ]
-        # Alternating row colors
         for i in range(1, len(table_data)):
             if i % 2 == 0:
                 style_commands.append(("BACKGROUND", (0, i), (-1, i), alt_row))
@@ -236,7 +220,6 @@ def generate_report_pdf(config: ReportConfig, db: Session = Depends(get_db), use
 
 
 def _generate_chart(report_type: str, data: dict) -> io.BytesIO | None:
-    """Generate a matplotlib chart and return as BytesIO, or None if no data."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -253,7 +236,6 @@ def _generate_chart(report_type: str, data: dict) -> io.BytesIO | None:
 
     try:
         if report_type == "flight_summary":
-            # Bar chart of flights by purpose
             purposes = {}
             for r in rows:
                 p = r.get("purpose", "Unknown")
@@ -285,7 +267,6 @@ def _generate_chart(report_type: str, data: dict) -> io.BytesIO | None:
             plt.yticks(fontsize=8)
 
         elif report_type == "battery_status":
-            # Pie chart of status distribution
             status_counts = {}
             for r in rows:
                 s = r.get("status", "unknown")
@@ -311,7 +292,6 @@ def _generate_chart(report_type: str, data: dict) -> io.BytesIO | None:
                 plt.xticks(rotation=30, ha="right", fontsize=8)
 
         elif report_type == "pilot_certifications":
-            # Summary: active vs expired vs pending
             summary = data.get("summary", {})
             cats = ["Active", "Expired", "Pending"]
             vals = [summary.get("total_active", 0), summary.get("total_expired", 0), summary.get("total_pending", 0)]
@@ -574,7 +554,6 @@ def _maintenance_history(config: ReportConfig, db: Session):
             "cost": f"${cost:,.2f}" if cost else "—",
         })
 
-    # Build records-by-type summary string
     by_type_str = ", ".join(f"{k.replace('_', ' ')}: {v}" for k, v in sorted(type_counts.items()))
 
     return {

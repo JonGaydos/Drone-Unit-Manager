@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/contexts/ToastContext'
+import { sortByName } from '@/lib/formatters'
 import { Save, TestTube, Loader2, Upload, FileSpreadsheet, RefreshCw, UserPlus, Key, Trash2, Shield, ShieldCheck, Eye, Image as ImageIcon } from 'lucide-react'
 
 export default function SettingsPage() {
@@ -12,6 +14,7 @@ export default function SettingsPage() {
   const [importResult, setImportResult] = useState(null)
   const [importing, setImporting] = useState(false)
   const { isAdmin, user: currentUser } = useAuth()
+  const toast = useToast()
 
   // User management state
   const [users, setUsers] = useState([])
@@ -60,7 +63,7 @@ export default function SettingsPage() {
       setUsers([...users, created])
       setNewUser({ username: '', password: '', display_name: '', role: 'pilot', pilot_id: '' })
       setShowAddUser(false)
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast.error(err.message) }
     finally { setAddingUser(false) }
   }
 
@@ -69,31 +72,31 @@ export default function SettingsPage() {
     try {
       await api.delete(`/auth/users/${id}`)
       setUsers(users.filter(u => u.id !== id))
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast.error(err.message) }
   }
 
   const handleToggleActive = async (u) => {
     try {
       const updated = await api.patch(`/auth/users/${u.id}`, { is_active: !u.is_active })
       setUsers(users.map(x => x.id === u.id ? updated : x))
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast.error(err.message) }
   }
 
   const handleChangeRole = async (u, role) => {
     try {
       const updated = await api.patch(`/auth/users/${u.id}`, { role })
       setUsers(users.map(x => x.id === u.id ? updated : x))
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast.error(err.message) }
   }
 
   const handleResetPassword = async (userId) => {
-    if (resetPw.length < 6) { alert('Password must be at least 6 characters'); return }
+    if (resetPw.length < 6) { toast.warning('Password must be at least 6 characters'); return }
     try {
       await api.post(`/auth/users/${userId}/reset-password`, { new_password: resetPw })
       setResetUserId(null)
       setResetPw('')
-      alert('Password reset successfully')
-    } catch (err) { alert(err.message) }
+      toast.success('Password reset successfully')
+    } catch (err) { toast.error(err.message) }
   }
 
   const handleChangePassword = async (e) => {
@@ -182,17 +185,7 @@ export default function SettingsPage() {
     try {
       const formData = new FormData()
       formData.append('file', file)
-      const token = localStorage.getItem('token')
-      const res = await fetch('/api/export/excel/import', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
-        body: formData,
-      })
-      if (!res.ok) {
-        const err = await res.json()
-        throw new Error(err.detail || 'Import failed')
-      }
-      const result = await res.json()
+      const result = await api.upload('/export/excel/import', formData)
       setImportResult(result)
     } catch (err) {
       setImportResult({ error: err.message })
@@ -269,16 +262,9 @@ export default function SettingsPage() {
                     try {
                       const formData = new FormData()
                       formData.append('file', file)
-                      const token = localStorage.getItem('token')
-                      const res = await fetch('/api/settings/logo', {
-                        method: 'POST',
-                        headers: { Authorization: `Bearer ${token}` },
-                        body: formData,
-                      })
-                      if (!res.ok) throw new Error('Upload failed')
-                      const result = await res.json()
+                      const result = await api.upload('/settings/logo', formData)
                       setLogoUrl(result.logo_url + '?t=' + Date.now())
-                    } catch (err) { alert(err.message) }
+                    } catch (err) { toast.error(err.message) }
                     finally { setUploadingLogo(false) }
                     e.target.value = ''
                   }} />
@@ -508,7 +494,7 @@ export default function SettingsPage() {
                   <select value={newUser.pilot_id} onChange={e => setNewUser({...newUser, pilot_id: e.target.value})}
                     className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                     <option value="">-- No pilot linked --</option>
-                    {[...pilots].sort((a, b) => (a.full_name || '').localeCompare(b.full_name || '')).map(p => (
+                    {sortByName(pilots).map(p => (
                       <option key={p.id} value={p.id}>{p.full_name}{p.badge_number ? ` (Badge: ${p.badge_number})` : ''}</option>
                     ))}
                   </select>

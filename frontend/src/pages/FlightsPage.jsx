@@ -1,8 +1,10 @@
 import { useState, useEffect, useMemo } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/contexts/ToastContext'
 import { formatDuration, normalizeDateValue } from '@/lib/utils'
-import { Plus, Search, CheckCircle, ChevronUp, ChevronDown, Pencil, X, Check, Download } from 'lucide-react'
+import { sortByName, sortVehicles } from '@/lib/formatters'
+import { Plus, Search, CheckCircle, ChevronUp, ChevronDown, Pencil, X, Check, Download, Loader2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 function FlightModal({ pilots, vehicles, purposes, onSave, onClose }) {
@@ -10,8 +12,9 @@ function FlightModal({ pilots, vehicles, purposes, onSave, onClose }) {
     pilot_id: '', vehicle_id: '', date: '', takeoff_time: '', landing_time: '',
     duration_seconds: '', purpose: '', takeoff_address: '', case_number: '', notes: ''
   })
+  const [saving, setSaving] = useState(false)
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     const data = { ...form }
     if (data.pilot_id) data.pilot_id = parseInt(data.pilot_id)
@@ -21,7 +24,8 @@ function FlightModal({ pilots, vehicles, purposes, onSave, onClose }) {
     if (data.duration_seconds) data.duration_seconds = parseInt(data.duration_seconds)
     else delete data.duration_seconds
     Object.keys(data).forEach(k => { if (data[k] === '') delete data[k] })
-    onSave(data)
+    setSaving(true)
+    try { await onSave(data) } finally { setSaving(false) }
   }
 
   return (
@@ -35,7 +39,7 @@ function FlightModal({ pilots, vehicles, purposes, onSave, onClose }) {
               <select value={form.pilot_id} onChange={e => setForm({...form, pilot_id: e.target.value})}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                 <option value="">Select pilot...</option>
-                {[...pilots].sort((a, b) => (a.full_name || '').localeCompare(b.full_name || '')).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+                {sortByName(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
               </select>
             </div>
             <div>
@@ -43,7 +47,7 @@ function FlightModal({ pilots, vehicles, purposes, onSave, onClose }) {
               <select value={form.vehicle_id} onChange={e => setForm({...form, vehicle_id: e.target.value})}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                 <option value="">Select vehicle...</option>
-                {[...vehicles].sort((a, b) => `${a.manufacturer} ${a.model}`.localeCompare(`${b.manufacturer} ${b.model}`)).map(v => <option key={v.id} value={v.id}>{v.manufacturer} {v.model}</option>)}
+                {sortVehicles(vehicles).map(v => <option key={v.id} value={v.id}>{v.manufacturer} {v.model}</option>)}
               </select>
             </div>
           </div>
@@ -65,7 +69,7 @@ function FlightModal({ pilots, vehicles, purposes, onSave, onClose }) {
             <select value={form.purpose} onChange={e => setForm({...form, purpose: e.target.value})}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
               <option value="">Select purpose...</option>
-              {[...purposes].sort((a, b) => (a.name || '').localeCompare(b.name || '')).map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+              {sortByName(purposes, 'name').map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
             </select>
           </div>
           <div>
@@ -79,7 +83,7 @@ function FlightModal({ pilots, vehicles, purposes, onSave, onClose }) {
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
           </div>
           <div className="flex gap-2 pt-2">
-            <button type="submit" className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">Add Flight</button>
+            <button type="submit" disabled={saving} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2">{saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Add Flight'}</button>
             <button type="button" onClick={onClose} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm">Cancel</button>
           </div>
         </form>
@@ -96,9 +100,11 @@ export default function FlightsPage() {
   const [search, setSearch] = useState('')
   const [modal, setModal] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   const [sortKey, setSortKey] = useState('date')
   const [sortDir, setSortDir] = useState('desc')
   const { isAdmin } = useAuth()
+  const toast = useToast()
 
   // Status filter: 'all' | 'needs_review' | 'reviewed'
   const [statusFilter, setStatusFilter] = useState('all')
@@ -150,7 +156,7 @@ export default function FlightsPage() {
       setTotalPages(data.total_pages || 1)
       setPilots(p); setVehicles(v); setPurposes(pu)
       setReviewCount(rc.count || 0)
-    }).catch(console.error).finally(() => setLoading(false))
+    }).catch(err => setError(err.message)).finally(() => setLoading(false))
   }
 
   useEffect(() => { load() }, [filterDateFrom, filterDateTo, filterPilotId, filterVehicleId, filterPurpose, statusFilter, page])
@@ -160,7 +166,7 @@ export default function FlightsPage() {
       await api.post('/flights', data)
       setModal(false)
       load()
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast.error(err.message) }
   }
 
   const handleBulkApprove = async (ids) => {
@@ -169,7 +175,7 @@ export default function FlightsPage() {
         flight_ids: ids, review_status: 'reviewed', pilot_confirmed: true
       })
       load()
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast.error(err.message) }
   }
 
   const startEditing = (flight) => {
@@ -199,13 +205,13 @@ export default function FlightsPage() {
       setEditingId(null)
       setEditForm({})
       load()
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast.error(err.message) }
   }
 
   const handleExport = async () => {
     try {
       await api.download('/export/flights/csv')
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast.error(err.message) }
   }
 
   const filtered = useMemo(() => {
@@ -256,6 +262,7 @@ export default function FlightsPage() {
 
   return (
     <div className="space-y-4">
+      {error && <div className="bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg p-4 mb-4">{error}</div>}
       {/* Status filter toggle */}
       <div className="flex items-center gap-2">
         {['all', 'needs_review', 'reviewed'].map(s => (
@@ -286,21 +293,21 @@ export default function FlightsPage() {
           <label className="block text-xs text-muted-foreground mb-1">Pilot</label>
           <select value={filterPilotId} onChange={e => setFilterPilotId(e.target.value)} className={selectCls}>
             <option value="">All Pilots</option>
-            {[...pilots].sort((a, b) => (a.full_name || '').localeCompare(b.full_name || '')).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+            {sortByName(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
           </select>
         </div>
         <div>
           <label className="block text-xs text-muted-foreground mb-1">Vehicle</label>
           <select value={filterVehicleId} onChange={e => setFilterVehicleId(e.target.value)} className={selectCls}>
             <option value="">All Vehicles</option>
-            {[...vehicles].sort((a, b) => `${a.manufacturer} ${a.model}`.localeCompare(`${b.manufacturer} ${b.model}`)).map(v => <option key={v.id} value={v.id}>{v.manufacturer} {v.model}</option>)}
+            {sortVehicles(vehicles).map(v => <option key={v.id} value={v.id}>{v.manufacturer} {v.model}</option>)}
           </select>
         </div>
         <div>
           <label className="block text-xs text-muted-foreground mb-1">Purpose</label>
           <select value={filterPurpose} onChange={e => setFilterPurpose(e.target.value)} className={selectCls}>
             <option value="">All Purposes</option>
-            {[...purposes].sort((a, b) => (a.name || '').localeCompare(b.name || '')).map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+            {sortByName(purposes, 'name').map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
           </select>
         </div>
       </div>
@@ -374,7 +381,7 @@ export default function FlightsPage() {
                   <select value={editForm.pilot_id} onChange={e => setEditForm({...editForm, pilot_id: e.target.value})}
                     className="w-full px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm">
                     <option value="">Unassigned</option>
-                    {[...pilots].sort((a, b) => (a.full_name || '').localeCompare(b.full_name || '')).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+                    {sortByName(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
                   </select>
                 </td>
                 <td className="px-4 py-2 hidden md:table-cell text-muted-foreground">{f.vehicle_name || '—'}</td>
@@ -382,7 +389,7 @@ export default function FlightsPage() {
                   <select value={editForm.purpose} onChange={e => setEditForm({...editForm, purpose: e.target.value})}
                     className="w-full px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm">
                     <option value="">None</option>
-                    {[...purposes].sort((a, b) => (a.name || '').localeCompare(b.name || '')).map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                    {sortByName(purposes, 'name').map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
                   </select>
                 </td>
                 <td className="px-4 py-2 text-right">

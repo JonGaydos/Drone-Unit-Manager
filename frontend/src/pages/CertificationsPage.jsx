@@ -2,31 +2,25 @@ import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/contexts/ToastContext'
 import { normalizeDateValue } from '@/lib/utils'
-import { Plus, Edit, Trash2, ShieldCheck, FileText, Upload, Search, Filter, Download, ChevronLeft, ChevronRight, GripVertical } from 'lucide-react'
+import { CERT_STATUS_COLORS } from '@/lib/constants'
+import { sortByName } from '@/lib/formatters'
+import { Plus, Edit, Trash2, ShieldCheck, Search, Filter, Download, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import DocumentUpload from '@/components/DocumentUpload'
-
-const STATUS_COLORS = {
-  not_issued: 'bg-zinc-500/15 text-zinc-400',
-  not_eligible: 'bg-zinc-500/15 text-zinc-400',
-  not_started: 'bg-zinc-500/15 text-zinc-400',
-  in_progress: 'bg-blue-500/15 text-blue-400',
-  pending: 'bg-amber-500/15 text-amber-400',
-  complete: 'bg-emerald-500/15 text-emerald-400',
-  active: 'bg-emerald-500/15 text-emerald-400',
-  expired: 'bg-red-500/15 text-red-400',
-}
 
 function CertTypeModal({ certType, onSave, onClose }) {
   const [form, setForm] = useState(certType || {
     name: '', category: 'custom', has_expiration: true, renewal_period_months: '', description: '', sort_order: 0
   })
-  const handleSubmit = (e) => {
+  const [saving, setSaving] = useState(false)
+  const handleSubmit = async (e) => {
     e.preventDefault()
     const data = { ...form }
     if (data.renewal_period_months === '') data.renewal_period_months = null
     else data.renewal_period_months = parseInt(data.renewal_period_months)
-    onSave(data)
+    setSaving(true)
+    try { await onSave(data) } finally { setSaving(false) }
   }
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
@@ -70,8 +64,8 @@ function CertTypeModal({ certType, onSave, onClose }) {
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm h-16 resize-none" />
           </div>
           <div className="flex gap-2 pt-2">
-            <button type="submit" className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
-              {certType ? 'Update' : 'Add'}
+            <button type="submit" disabled={saving} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : (certType ? 'Update' : 'Add')}
             </button>
             <button type="button" onClick={onClose} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm">Cancel</button>
           </div>
@@ -95,7 +89,8 @@ function AssignCertModal({ pilots, certTypes, existingCert, onSave, onClose }) {
     pilot_id: '', certification_type_id: '', status: 'not_started', issue_date: '', expiration_date: '', certificate_number: '', nist_level: '', notes: ''
   })
   const isEditing = !!existingCert
-  const handleSubmit = (e) => {
+  const [saving, setSaving] = useState(false)
+  const handleSubmit = async (e) => {
     e.preventDefault()
     const data = { ...form }
     data.pilot_id = parseInt(data.pilot_id)
@@ -103,7 +98,8 @@ function AssignCertModal({ pilots, certTypes, existingCert, onSave, onClose }) {
     if (data.nist_level) data.nist_level = parseInt(data.nist_level)
     else data.nist_level = null
     Object.keys(data).forEach(k => { if (data[k] === '') delete data[k] })
-    onSave(data, isEditing ? existingCert.id : null)
+    setSaving(true)
+    try { await onSave(data, isEditing ? existingCert.id : null) } finally { setSaving(false) }
   }
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
@@ -116,7 +112,7 @@ function AssignCertModal({ pilots, certTypes, existingCert, onSave, onClose }) {
               disabled={isEditing}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm disabled:opacity-60">
               <option value="">Select pilot...</option>
-              {[...pilots].sort((a, b) => (a.full_name || '').localeCompare(b.full_name || '')).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+              {sortByName(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
             </select>
           </div>
           <div>
@@ -125,14 +121,14 @@ function AssignCertModal({ pilots, certTypes, existingCert, onSave, onClose }) {
               disabled={isEditing}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm disabled:opacity-60">
               <option value="">Select cert type...</option>
-              {[...certTypes].sort((a, b) => (a.name || '').localeCompare(b.name || '')).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {sortByName(certTypes, 'name').map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">Status</label>
             <select value={form.status} onChange={e => setForm({...form, status: e.target.value})}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
-              {Object.keys(STATUS_COLORS).map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+              {Object.keys(CERT_STATUS_COLORS).map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
             </select>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -155,7 +151,7 @@ function AssignCertModal({ pilots, certTypes, existingCert, onSave, onClose }) {
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
           </div>
           <div className="flex gap-2 pt-2">
-            <button type="submit" className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">{isEditing ? 'Update' : 'Assign'}</button>
+            <button type="submit" disabled={saving} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2">{saving ? <Loader2 className="w-4 h-4 animate-spin" /> : (isEditing ? 'Update' : 'Assign')}</button>
             <button type="button" onClick={onClose} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm">Cancel</button>
           </div>
         </form>
@@ -176,7 +172,9 @@ export default function CertificationsPage() {
   const [pilots, setPilots] = useState([])
   const [modal, setModal] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   const { isAdmin } = useAuth()
+  const toast = useToast()
 
   // Filter state
   const [statusFilter, setStatusFilter] = useState('all')
@@ -191,7 +189,7 @@ export default function CertificationsPage() {
       api.get('/pilots'),
     ]).then(([ct, mx, p]) => {
       setCertTypes(ct); setMatrix(mx.matrix || []); setPilots(p)
-    }).catch(console.error).finally(() => setLoading(false))
+    }).catch(err => setError(err.message)).finally(() => setLoading(false))
   }
   useEffect(() => { load() }, [])
 
@@ -236,12 +234,12 @@ export default function CertificationsPage() {
       if (data.id) await api.patch(`/certification-types/${data.id}`, data)
       else await api.post('/certification-types', data)
       setModal(null); load()
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast.error(err.message) }
   }
 
   const handleDeleteCertType = async (id) => {
     if (!confirm('Delete this certification type?')) return
-    try { await api.delete(`/certification-types/${id}`); load() } catch (err) { alert(err.message) }
+    try { await api.delete(`/certification-types/${id}`); load() } catch (err) { toast.error(err.message) }
   }
 
   const handleReorderCertType = async (ctId, direction) => {
@@ -261,7 +259,7 @@ export default function CertificationsPage() {
     try {
       await api.patch('/certification-types/reorder', { items })
       load()
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast.error(err.message) }
   }
 
   const [editCert, setEditCert] = useState(null)
@@ -274,13 +272,14 @@ export default function CertificationsPage() {
         await api.post('/pilot-certifications', data)
       }
       setModal(null); setEditCert(null); load()
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast.error(err.message) }
   }
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>
 
   return (
     <div className="space-y-4">
+      {error && <div className="bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg p-4 mb-4">{error}</div>}
       {/* Tabs */}
       <div className="flex items-center gap-4 border-b border-border pb-2 overflow-x-auto">
         <button onClick={() => setTab('matrix')} className={`text-sm font-medium pb-2 border-b-2 transition-colors whitespace-nowrap ${tab === 'matrix' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
@@ -338,7 +337,7 @@ export default function CertificationsPage() {
                 className="px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm"
               >
                 <option value="all">All Statuses</option>
-                {Object.keys(STATUS_COLORS).map(s => (
+                {Object.keys(CERT_STATUS_COLORS).map(s => (
                   <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
                 ))}
               </select>
@@ -443,7 +442,7 @@ export default function CertificationsPage() {
                               setModal('assign')
                             }
                           }}>
-                          <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[status] || STATUS_COLORS.not_started}`}>
+                          <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${CERT_STATUS_COLORS[status] || CERT_STATUS_COLORS.not_started}`}>
                             {status.replace(/_/g, ' ')}
                           </span>
                           {cert?.expiration_date && (

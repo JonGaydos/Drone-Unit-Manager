@@ -1,4 +1,3 @@
-"""CRUD routers for batteries, controllers, docks, sensors, attachments."""
 from datetime import date
 from typing import Optional
 
@@ -17,8 +16,6 @@ from app.models.user import User
 from app.routers.auth import get_current_user, require_admin
 
 router = APIRouter(prefix="/api", tags=["equipment"])
-
-# ── Batteries ────────────────────────────────────────────────────
 
 class BatteryCreate(BaseModel):
     serial_number: str
@@ -65,28 +62,36 @@ def list_batteries(db: Session = Depends(get_db), user: User = Depends(get_curre
 @router.post("/batteries", response_model=BatteryOut)
 def create_battery(data: BatteryCreate, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
     b = Battery(**data.model_dump())
-    db.add(b); db.commit(); db.refresh(b)
+    db.add(b)
+    db.commit()
+    db.refresh(b)
     return BatteryOut.model_validate(b)
 
 @router.patch("/batteries/{bid}", response_model=BatteryOut)
 def update_battery(bid: int, data: BatteryUpdate, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
     b = db.query(Battery).filter(Battery.id == bid).first()
-    if not b: raise HTTPException(404, "Battery not found")
-    for k, v in data.model_dump(exclude_unset=True).items(): setattr(b, k, v)
-    db.commit(); db.refresh(b)
+    if not b:
+        raise HTTPException(404, "Battery not found")
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(b, k, v)
+    db.commit()
+    db.refresh(b)
     return BatteryOut.model_validate(b)
 
 @router.delete("/batteries/{bid}")
 def delete_battery(bid: int, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
     b = db.query(Battery).filter(Battery.id == bid).first()
-    if not b: raise HTTPException(404, "Battery not found")
-    db.delete(b); db.commit()
+    if not b:
+        raise HTTPException(404, "Battery not found")
+    db.delete(b)
+    db.commit()
     return {"ok": True}
 
 @router.get("/batteries/{bid}", response_model=BatteryOut)
 def get_battery(bid: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     b = db.query(Battery).filter(Battery.id == bid).first()
-    if not b: raise HTTPException(404, "Battery not found")
+    if not b:
+        raise HTTPException(404, "Battery not found")
     return BatteryOut.model_validate(b)
 
 @router.get("/batteries/{bid}/stats")
@@ -99,7 +104,6 @@ def get_battery_stats(bid: int, db: Session = Depends(get_db), user: User = Depe
     total_seconds = db.query(func.coalesce(func.sum(Flight.duration_seconds), 0)).filter(Flight.battery_serial == battery.serial_number).scalar()
     return {"total_flights": flight_count, "total_hours": round(total_seconds / 3600, 2)}
 
-# ── Controllers ──────────────────────────────────────────────────
 
 class ControllerCreate(BaseModel):
     serial_number: str
@@ -137,31 +141,38 @@ def list_controllers(db: Session = Depends(get_db), user: User = Depends(get_cur
 @router.post("/controllers", response_model=ControllerOut)
 def create_controller(data: ControllerCreate, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
     c = Controller(**data.model_dump())
-    db.add(c); db.commit(); db.refresh(c)
+    db.add(c)
+    db.commit()
+    db.refresh(c)
     return ControllerOut.model_validate(c)
 
 @router.patch("/controllers/{cid}", response_model=ControllerOut)
 def update_controller(cid: int, data: ControllerUpdate, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
     c = db.query(Controller).filter(Controller.id == cid).first()
-    if not c: raise HTTPException(404, "Controller not found")
-    for k, v in data.model_dump(exclude_unset=True).items(): setattr(c, k, v)
-    db.commit(); db.refresh(c)
+    if not c:
+        raise HTTPException(404, "Controller not found")
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(c, k, v)
+    db.commit()
+    db.refresh(c)
     return ControllerOut.model_validate(c)
 
 @router.delete("/controllers/{cid}")
 def delete_controller(cid: int, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
     c = db.query(Controller).filter(Controller.id == cid).first()
-    if not c: raise HTTPException(404, "Controller not found")
-    db.delete(c); db.commit()
+    if not c:
+        raise HTTPException(404, "Controller not found")
+    db.delete(c)
+    db.commit()
     return {"ok": True}
 
 @router.get("/controllers/{cid}", response_model=ControllerOut)
 def get_controller(cid: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     c = db.query(Controller).filter(Controller.id == cid).first()
-    if not c: raise HTTPException(404, "Controller not found")
+    if not c:
+        raise HTTPException(404, "Controller not found")
     return ControllerOut.model_validate(c)
 
-# ── Docks ────────────────────────────────────────────────────────
 
 class DockCreate(BaseModel):
     serial_number: str
@@ -199,25 +210,31 @@ def list_docks(db: Session = Depends(get_db), user: User = Depends(get_current_u
 @router.post("/docks", response_model=DockOut)
 def create_dock(data: DockCreate, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
     d = Dock(**data.model_dump())
-    db.add(d); db.commit(); db.refresh(d)
+    db.add(d)
+    db.commit()
+    db.refresh(d)
     return DockOut.model_validate(d)
 
 @router.patch("/docks/{did}", response_model=DockOut)
 def update_dock(did: int, data: DockUpdate, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
     d = db.query(Dock).filter(Dock.id == did).first()
-    if not d: raise HTTPException(404, "Dock not found")
-    for k, v in data.model_dump(exclude_unset=True).items(): setattr(d, k, v)
-    db.commit(); db.refresh(d)
+    if not d:
+        raise HTTPException(404, "Dock not found")
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(d, k, v)
+    db.commit()
+    db.refresh(d)
     return DockOut.model_validate(d)
 
 @router.delete("/docks/{did}")
 def delete_dock(did: int, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
     d = db.query(Dock).filter(Dock.id == did).first()
-    if not d: raise HTTPException(404, "Dock not found")
-    db.delete(d); db.commit()
+    if not d:
+        raise HTTPException(404, "Dock not found")
+    db.delete(d)
+    db.commit()
     return {"ok": True}
 
-# ── Sensors ──────────────────────────────────────────────────────
 
 class SensorCreate(BaseModel):
     serial_number: str
@@ -255,25 +272,31 @@ def list_sensors(db: Session = Depends(get_db), user: User = Depends(get_current
 @router.post("/sensors", response_model=SensorOut)
 def create_sensor(data: SensorCreate, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
     s = SensorPackage(**data.model_dump())
-    db.add(s); db.commit(); db.refresh(s)
+    db.add(s)
+    db.commit()
+    db.refresh(s)
     return SensorOut.model_validate(s)
 
 @router.patch("/sensors/{sid}", response_model=SensorOut)
 def update_sensor(sid: int, data: SensorUpdate, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
     s = db.query(SensorPackage).filter(SensorPackage.id == sid).first()
-    if not s: raise HTTPException(404, "Sensor not found")
-    for k, v in data.model_dump(exclude_unset=True).items(): setattr(s, k, v)
-    db.commit(); db.refresh(s)
+    if not s:
+        raise HTTPException(404, "Sensor not found")
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(s, k, v)
+    db.commit()
+    db.refresh(s)
     return SensorOut.model_validate(s)
 
 @router.delete("/sensors/{sid}")
 def delete_sensor(sid: int, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
     s = db.query(SensorPackage).filter(SensorPackage.id == sid).first()
-    if not s: raise HTTPException(404, "Sensor not found")
-    db.delete(s); db.commit()
+    if not s:
+        raise HTTPException(404, "Sensor not found")
+    db.delete(s)
+    db.commit()
     return {"ok": True}
 
-# ── Attachments ──────────────────────────────────────────────────
 
 class AttachmentCreate(BaseModel):
     serial_number: str
@@ -311,20 +334,27 @@ def list_attachments(db: Session = Depends(get_db), user: User = Depends(get_cur
 @router.post("/attachments", response_model=AttachmentOut)
 def create_attachment(data: AttachmentCreate, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
     a = Attachment(**data.model_dump())
-    db.add(a); db.commit(); db.refresh(a)
+    db.add(a)
+    db.commit()
+    db.refresh(a)
     return AttachmentOut.model_validate(a)
 
 @router.patch("/attachments/{aid}", response_model=AttachmentOut)
 def update_attachment(aid: int, data: AttachmentUpdate, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
     a = db.query(Attachment).filter(Attachment.id == aid).first()
-    if not a: raise HTTPException(404, "Attachment not found")
-    for k, v in data.model_dump(exclude_unset=True).items(): setattr(a, k, v)
-    db.commit(); db.refresh(a)
+    if not a:
+        raise HTTPException(404, "Attachment not found")
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(a, k, v)
+    db.commit()
+    db.refresh(a)
     return AttachmentOut.model_validate(a)
 
 @router.delete("/attachments/{aid}")
 def delete_attachment(aid: int, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
     a = db.query(Attachment).filter(Attachment.id == aid).first()
-    if not a: raise HTTPException(404, "Attachment not found")
-    db.delete(a); db.commit()
+    if not a:
+        raise HTTPException(404, "Attachment not found")
+    db.delete(a)
+    db.commit()
     return {"ok": True}

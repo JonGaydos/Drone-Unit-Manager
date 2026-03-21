@@ -30,7 +30,7 @@ def get_stats(db: Session = Depends(get_db), user: User = Depends(get_current_us
 
     soon = date.today() + timedelta(days=90)
     expiring = db.query(func.count(PilotCertification.id)).filter(
-        PilotCertification.expiration_date != None,
+        PilotCertification.expiration_date.isnot(None),
         PilotCertification.expiration_date <= soon,
         PilotCertification.status.in_(["active", "complete"]),
     ).scalar()
@@ -69,7 +69,7 @@ def flights_by_year(db: Session = Depends(get_db), user: User = Depends(get_curr
     rows = db.query(
         extract("year", Flight.date).label("year"),
         func.count(Flight.id).label("count"),
-    ).filter(Flight.date != None).group_by("year").order_by("year").all()
+    ).filter(Flight.date.isnot(None)).group_by("year").order_by("year").all()
     return [FlightsByYear(year=int(r.year), count=r.count) for r in rows]
 
 
@@ -82,7 +82,7 @@ def flights_by_year_purpose(
         extract("year", Flight.date).label("year"),
         func.coalesce(Flight.purpose, "Unknown").label("purpose"),
         func.count(Flight.id).label("count"),
-    ).filter(Flight.date != None).group_by("year", "purpose").order_by("year", "purpose").all()
+    ).filter(Flight.date.isnot(None)).group_by("year", "purpose").order_by("year", "purpose").all()
     return [FlightsByYearPurpose(year=int(r.year), purpose=r.purpose, count=r.count) for r in rows]
 
 
@@ -119,7 +119,7 @@ def avg_duration_by_year(db: Session = Depends(get_db), user: User = Depends(get
     rows = db.query(
         extract("year", Flight.date).label("year"),
         func.avg(Flight.duration_seconds).label("avg_seconds"),
-    ).filter(Flight.date != None, Flight.duration_seconds != None).group_by("year").order_by("year").all()
+    ).filter(Flight.date.isnot(None), Flight.duration_seconds.isnot(None)).group_by("year").order_by("year").all()
     return [AvgDurationByYear(year=int(r.year), avg_seconds=float(r.avg_seconds)) for r in rows]
 
 
@@ -129,7 +129,7 @@ def monthly_flights(db: Session = Depends(get_db), user: User = Depends(get_curr
         extract("year", Flight.date).label("year"),
         extract("month", Flight.date).label("month"),
         func.count(Flight.id).label("count"),
-    ).filter(Flight.date != None).group_by("year", "month").order_by("year", "month").all()
+    ).filter(Flight.date.isnot(None)).group_by("year", "month").order_by("year", "month").all()
     return [MonthlyFlights(year=int(r.year), month=int(r.month), count=r.count) for r in rows]
 
 
@@ -180,7 +180,7 @@ def upcoming_expirations(days: int = 90, db: Session = Depends(get_db), user: Us
     ).join(Pilot, PilotCertification.pilot_id == Pilot.id
     ).join(CertificationType, PilotCertification.certification_type_id == CertificationType.id
     ).filter(
-        PilotCertification.expiration_date != None,
+        PilotCertification.expiration_date.isnot(None),
         PilotCertification.expiration_date <= cutoff,
         PilotCertification.status.in_(["active", "complete"]),
     ).order_by(PilotCertification.expiration_date).all()

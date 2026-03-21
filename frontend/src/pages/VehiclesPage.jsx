@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/contexts/ToastContext'
 import { Plus, Edit, Trash2, Search } from 'lucide-react'
 import { formatHours } from '@/lib/utils'
 
@@ -75,6 +76,7 @@ export default function VehiclesPage() {
   const [modal, setModal] = useState(null)
   const [loading, setLoading] = useState(true)
   const { isAdmin } = useAuth()
+  const toast = useToast()
 
   const load = () => api.get('/vehicles').then(setVehicles).catch(console.error).finally(() => setLoading(false))
   useEffect(() => { load() }, [])
@@ -85,12 +87,12 @@ export default function VehiclesPage() {
       else await api.post('/vehicles', data)
       setModal(null)
       load()
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast.error(err.message) }
   }
 
   const handleDelete = async (id) => {
     if (!confirm('Delete this vehicle?')) return
-    try { await api.delete(`/vehicles/${id}`); load() } catch (err) { alert(err.message) }
+    try { await api.delete(`/vehicles/${id}`); load() } catch (err) { toast.error(err.message) }
   }
 
   const filtered = vehicles.filter(v =>

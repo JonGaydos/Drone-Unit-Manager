@@ -1,18 +1,15 @@
 import { useState, useEffect } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/contexts/ToastContext'
 import { normalizeDateValue } from '@/lib/utils'
-import { Plus, Search, X, ChevronDown, ChevronUp, Trash2, Download } from 'lucide-react'
+import { OUTCOME_COLORS } from '@/lib/constants'
+import { sortByName, sortVehicles } from '@/lib/formatters'
+import { Plus, Search, X, ChevronDown, ChevronUp, Trash2, Download, Loader2 } from 'lucide-react'
 
 const TRAINING_TYPES = ['Initial', 'Recurrent', 'Proficiency', 'Special']
 const OUTCOME_OPTIONS = ['completed', 'incomplete', 'failed']
 const ROLE_OPTIONS = ['PIC', 'Observer', 'Spotter', 'Visual Observer', 'Student', 'Support']
-
-const outcomeColors = {
-  completed: 'bg-emerald-500/15 text-emerald-400',
-  incomplete: 'bg-amber-500/15 text-amber-400',
-  failed: 'bg-red-500/15 text-red-400',
-}
 
 function TrainingModal({ pilots, vehicles, onSave, onClose, initial }) {
   const [form, setForm] = useState(initial || {
@@ -33,7 +30,8 @@ function TrainingModal({ pilots, vehicles, onSave, onClose, initial }) {
     setPilotEntries(updated)
   }
 
-  const handleSubmit = (e) => {
+  const [saving, setSaving] = useState(false)
+  const handleSubmit = async (e) => {
     e.preventDefault()
     const data = { ...form }
     if (data.vehicle_id) data.vehicle_id = parseInt(data.vehicle_id)
@@ -46,7 +44,8 @@ function TrainingModal({ pilots, vehicles, onSave, onClose, initial }) {
     data.pilots = pilotEntries
       .filter(p => p.pilot_id)
       .map(p => ({ pilot_id: parseInt(p.pilot_id), role: p.role || null, hours: parseFloat(p.hours) || 0 }))
-    onSave(data)
+    setSaving(true)
+    try { await onSave(data) } finally { setSaving(false) }
   }
 
   return (
@@ -115,7 +114,7 @@ function TrainingModal({ pilots, vehicles, onSave, onClose, initial }) {
             <select value={form.vehicle_id} onChange={e => setForm({...form, vehicle_id: e.target.value})}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
               <option value="">Select vehicle...</option>
-              {[...vehicles].sort((a, b) => `${a.manufacturer} ${a.model}`.localeCompare(`${b.manufacturer} ${b.model}`)).map(v => <option key={v.id} value={v.id}>{v.manufacturer} {v.model}{v.nickname ? ` (${v.nickname})` : ''}</option>)}
+              {sortVehicles(vehicles).map(v => <option key={v.id} value={v.id}>{v.manufacturer} {v.model}{v.nickname ? ` (${v.nickname})` : ''}</option>)}
             </select>
           </div>
           <div>
@@ -146,7 +145,7 @@ function TrainingModal({ pilots, vehicles, onSave, onClose, initial }) {
                 <select value={pe.pilot_id} onChange={e => updatePilotEntry(i, 'pilot_id', e.target.value)}
                   className="flex-1 px-2 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm">
                   <option value="">Select pilot...</option>
-                  {[...pilots].sort((a, b) => (a.full_name || '').localeCompare(b.full_name || '')).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+                  {sortByName(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
                 </select>
                 <select value={pe.role} onChange={e => updatePilotEntry(i, 'role', e.target.value)}
                   className="w-32 px-2 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm">
@@ -164,8 +163,8 @@ function TrainingModal({ pilots, vehicles, onSave, onClose, initial }) {
           </div>
 
           <div className="flex gap-2 pt-2">
-            <button type="submit" className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
-              {initial ? 'Save Changes' : 'Add Training'}
+            <button type="submit" disabled={saving} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : (initial ? 'Save Changes' : 'Add Training')}
             </button>
             <button type="button" onClick={onClose} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm">Cancel</button>
           </div>
@@ -184,11 +183,13 @@ export default function TrainingLogPage() {
   const [editTraining, setEditTraining] = useState(null)
   const [expanded, setExpanded] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [filterPilot, setFilterPilot] = useState('')
   const [filterType, setFilterType] = useState('')
   const { isAdmin } = useAuth()
+  const toast = useToast()
 
   const load = () => {
     const params = new URLSearchParams()
@@ -203,7 +204,7 @@ export default function TrainingLogPage() {
       api.get('/vehicles'),
     ]).then(([t, p, v]) => {
       setTrainings(t); setPilots(p); setVehicles(v)
-    }).catch(console.error).finally(() => setLoading(false))
+    }).catch(err => setError(err.message)).finally(() => setLoading(false))
   }
 
   useEffect(() => { load() }, [dateFrom, dateTo, filterPilot, filterType])
@@ -218,7 +219,7 @@ export default function TrainingLogPage() {
       setModal(false)
       setEditTraining(null)
       load()
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast.error(err.message) }
   }
 
   const handleDelete = async (id) => {
@@ -226,7 +227,7 @@ export default function TrainingLogPage() {
     try {
       await api.delete(`/training-logs/${id}`)
       load()
-    } catch (err) { alert(err.message) }
+    } catch (err) { toast.error(err.message) }
   }
 
   const handleEdit = (training) => {
@@ -243,6 +244,7 @@ export default function TrainingLogPage() {
 
   return (
     <div className="space-y-4">
+      {error && <div className="bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg p-4 mb-4">{error}</div>}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-4 flex-wrap">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -259,7 +261,7 @@ export default function TrainingLogPage() {
           <select value={filterPilot} onChange={e => setFilterPilot(e.target.value)}
             className="px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
             <option value="">All Pilots</option>
-            {[...pilots].sort((a, b) => (a.full_name || '').localeCompare(b.full_name || '')).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+            {sortByName(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
           </select>
           <select value={filterType} onChange={e => setFilterType(e.target.value)}
             className="px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
@@ -317,7 +319,7 @@ export default function TrainingLogPage() {
                   </td>
                   <td className="px-4 py-3 text-right text-foreground hidden md:table-cell">{t.man_hours || 0}</td>
                   <td className="px-4 py-3">
-                    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${outcomeColors[t.outcome] || 'bg-gray-500/15 text-gray-400'}`}>
+                    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${OUTCOME_COLORS[t.outcome] || 'bg-gray-500/15 text-gray-400'}`}>
                       {t.outcome?.replace(/\b\w/g, l => l.toUpperCase())}
                     </span>
                   </td>

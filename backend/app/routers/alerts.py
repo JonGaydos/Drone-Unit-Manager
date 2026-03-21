@@ -36,7 +36,7 @@ def list_alerts(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    q = db.query(Alert).filter(Alert.is_dismissed == False)
+    q = db.query(Alert).filter(Alert.is_dismissed.is_(False))
     if is_read is not None:
         q = q.filter(Alert.is_read == is_read)
     if severity:
@@ -47,8 +47,8 @@ def list_alerts(
 @router.get("/count")
 def count_alerts(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     return {
-        "total": db.query(func.count(Alert.id)).filter(Alert.is_dismissed == False).scalar(),
-        "unread": db.query(func.count(Alert.id)).filter(Alert.is_dismissed == False, Alert.is_read == False).scalar(),
+        "total": db.query(func.count(Alert.id)).filter(Alert.is_dismissed.is_(False)).scalar(),
+        "unread": db.query(func.count(Alert.id)).filter(Alert.is_dismissed.is_(False), Alert.is_read.is_(False)).scalar(),
     }
 
 
@@ -74,6 +74,6 @@ def dismiss_alert(alert_id: int, db: Session = Depends(get_db), user: User = Dep
 
 @router.post("/dismiss-all")
 def dismiss_all(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    db.query(Alert).filter(Alert.is_dismissed == False).update({Alert.is_dismissed: True})
+    db.query(Alert).filter(Alert.is_dismissed.is_(False)).update({Alert.is_dismissed: True})
     db.commit()
     return {"ok": True}

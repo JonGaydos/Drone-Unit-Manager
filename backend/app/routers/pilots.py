@@ -91,7 +91,6 @@ async def upload_pilot_photo(pilot_id: int, file: UploadFile, db: Session = Depe
         raise HTTPException(404, "Pilot not found")
     upload_dir = Path(settings.UPLOAD_DIR) / "photos" / "pilots" / str(pilot_id)
     upload_dir.mkdir(parents=True, exist_ok=True)
-    # Remove old photos
     for old in upload_dir.glob("profile.*"):
         old.unlink()
     ext = Path(file.filename).suffix or ".jpg"

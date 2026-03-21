@@ -123,13 +123,14 @@ export function Sidebar({ mobileOpen, onMobileClose }) {
               <p className="text-sm font-medium text-foreground truncate">{user.display_name}</p>
               <p className="text-xs text-muted-foreground">{user.role}</p>
             </div>
-            <button onClick={logout} className="text-muted-foreground hover:text-foreground p-1">
+            <button onClick={logout} aria-label="Log out" className="text-muted-foreground hover:text-foreground p-1">
               <LogOut className="w-4 h-4" />
             </button>
           </div>
         )}
         <button
           onClick={toggleCollapsed}
+          aria-label="Toggle sidebar"
           className="hidden md:flex w-full items-center justify-center p-2 text-muted-foreground hover:text-foreground hover:bg-sidebar-accent rounded-lg transition-colors"
         >
           {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}

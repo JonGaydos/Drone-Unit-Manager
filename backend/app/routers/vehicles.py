@@ -97,7 +97,6 @@ async def upload_vehicle_photo(vehicle_id: int, file: UploadFile, db: Session = 
         raise HTTPException(404, "Vehicle not found")
     upload_dir = Path(settings.UPLOAD_DIR) / "photos" / "vehicles" / str(vehicle_id)
     upload_dir.mkdir(parents=True, exist_ok=True)
-    # Remove old photos
     for old in upload_dir.glob("profile.*"):
         old.unlink()
     ext = Path(file.filename).suffix or ".jpg"

@@ -67,7 +67,7 @@ def list_maintenance(
     if entity_id:
         q = q.filter(MaintenanceRecord.entity_id == entity_id)
     if upcoming:
-        q = q.filter(MaintenanceRecord.next_due_date != None).order_by(MaintenanceRecord.next_due_date)
+        q = q.filter(MaintenanceRecord.next_due_date.isnot(None)).order_by(MaintenanceRecord.next_due_date)
     else:
         q = q.order_by(MaintenanceRecord.performed_date.desc())
     return [MaintenanceOut.model_validate(m) for m in q.limit(200).all()]

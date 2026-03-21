@@ -27,10 +27,6 @@ class ReorderRequest(BaseModel):
 router = APIRouter(tags=["certifications"])
 
 
-# ---------------------------------------------------------------------------
-# Certification Types
-# ---------------------------------------------------------------------------
-
 @router.get("/api/certification-types", response_model=list[CertificationTypeOut])
 def list_certification_types(
     db: Session = Depends(get_db),
@@ -99,10 +95,6 @@ def delete_certification_type(
     db.commit()
     return {"ok": True}
 
-
-# ---------------------------------------------------------------------------
-# Pilot Certifications
-# ---------------------------------------------------------------------------
 
 def _pilot_cert_to_out(pc: PilotCertification, db: Session) -> PilotCertificationOut:
     out = PilotCertificationOut.model_validate(pc)
@@ -173,10 +165,6 @@ def delete_pilot_certification(
     return {"ok": True}
 
 
-# ---------------------------------------------------------------------------
-# Pilot Equipment Qualifications
-# ---------------------------------------------------------------------------
-
 @router.get("/api/pilot-equipment-quals", response_model=list[PilotEquipmentQualOut])
 def list_pilot_equipment_quals(
     pilot_id: int | None = None,
@@ -234,17 +222,13 @@ def delete_pilot_equipment_qual(
     return {"ok": True}
 
 
-# ---------------------------------------------------------------------------
-# Certification Matrix
-# ---------------------------------------------------------------------------
-
 @router.get("/api/certifications/matrix")
 def certification_matrix(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     pilots = db.query(Pilot).filter(Pilot.status == "active").order_by(Pilot.last_name, Pilot.first_name).all()
-    cert_types = db.query(CertificationType).filter(CertificationType.is_active == True).order_by(
+    cert_types = db.query(CertificationType).filter(CertificationType.is_active.is_(True)).order_by(
         CertificationType.sort_order, CertificationType.name
     ).all()
 

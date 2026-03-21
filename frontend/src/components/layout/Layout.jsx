@@ -41,7 +41,7 @@ export function Layout() {
     <div className="min-h-screen bg-background">
       {/* Mobile top bar */}
       <div className="md:hidden fixed top-0 left-0 right-0 h-14 bg-card border-b border-border flex items-center px-4 z-40">
-        <button onClick={() => setMobileOpen(!mobileOpen)} className="p-1">
+        <button onClick={() => setMobileOpen(!mobileOpen)} aria-label="Open menu" className="p-1">
           <Menu className="w-5 h-5 text-foreground" />
         </button>
         <span className="ml-3 font-semibold text-foreground">Drone Unit Manager</span>

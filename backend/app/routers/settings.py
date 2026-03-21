@@ -69,7 +69,6 @@ def set_setting(data: SettingValue, db: Session = Depends(get_db), admin: User =
 async def upload_logo(file: UploadFile, db: Session = Depends(get_db), user: User = Depends(require_admin)):
     upload_dir = Path(app_settings.UPLOAD_DIR) / "org"
     upload_dir.mkdir(parents=True, exist_ok=True)
-    # Remove old logos
     for old in upload_dir.glob("logo.*"):
         old.unlink()
     ext = Path(file.filename).suffix or ".png"
@@ -77,7 +76,6 @@ async def upload_logo(file: UploadFile, db: Session = Depends(get_db), user: Use
     with open(filepath, "wb") as f:
         content = await file.read()
         f.write(content)
-    # Save path as setting
     setting = db.query(Setting).filter(Setting.key == "org_logo").first()
     if setting:
         setting.value = "/api/settings/logo/view"

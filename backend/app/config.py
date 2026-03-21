@@ -1,10 +1,13 @@
+import os
+import secrets
 from pathlib import Path
+
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
     APP_NAME: str = "Drone Unit Manager"
-    SECRET_KEY: str = "change-me-in-production-use-a-real-secret-key"
+    SECRET_KEY: str = os.getenv("SECRET_KEY", secrets.token_hex(32))
     DATABASE_URL: str = ""
     TELEMETRY_DATABASE_URL: str = ""
     DATA_DIR: Path = Path(__file__).parent.parent / "data"

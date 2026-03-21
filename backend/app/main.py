@@ -1,6 +1,9 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+
+logger = logging.getLogger(__name__)
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
@@ -44,6 +47,8 @@ def seed_defaults():
             )
             db.add(admin)
             db.commit()
+            if default_password == "admin":
+                logger.warning("WARNING: Default admin password in use. Set ADMIN_DEFAULT_PASSWORD env var.")
 
         # Seed default flight purposes
         if db.query(FlightPurpose).count() == 0:

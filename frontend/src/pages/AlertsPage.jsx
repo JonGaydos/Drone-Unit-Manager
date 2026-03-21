@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/contexts/ToastContext'
 import { Bell, CheckCircle, X, Filter, AlertTriangle, Info, AlertOctagon } from 'lucide-react'
 
 const SEVERITY_CONFIG = {
@@ -15,6 +16,7 @@ export default function AlertsPage() {
   const [severityFilter, setSeverityFilter] = useState('')
   const [loading, setLoading] = useState(true)
   const { isAdmin } = useAuth()
+  const toast = useToast()
 
   const load = () => {
     setLoading(true)
@@ -35,7 +37,7 @@ export default function AlertsPage() {
       await api.patch(`/alerts/${id}/read`)
       load()
     } catch (err) {
-      alert(err.message)
+      toast.error(err.message)
     }
   }
 
@@ -44,7 +46,7 @@ export default function AlertsPage() {
       await api.patch(`/alerts/${id}/dismiss`)
       load()
     } catch (err) {
-      alert(err.message)
+      toast.error(err.message)
     }
   }
 
@@ -54,7 +56,7 @@ export default function AlertsPage() {
       await api.post('/alerts/dismiss-all')
       load()
     } catch (err) {
-      alert(err.message)
+      toast.error(err.message)
     }
   }
 

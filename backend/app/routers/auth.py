@@ -41,7 +41,7 @@ def get_current_user(
         user_id = int(payload["sub"])
     except (JWTError, KeyError, ValueError):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-    user = db.query(User).filter(User.id == user_id, User.is_active == True).first()
+    user = db.query(User).filter(User.id == user_id, User.is_active.is_(True)).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     return user
@@ -90,7 +90,7 @@ def update_me(data: UserUpdate, user: User = Depends(get_current_user), db: Sess
 @router.post("/users", response_model=UserOut)
 def create_user(data: UserCreate, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     if db.query(User).filter(User.username == data.username).first():
-        raise HTTPException(status_code=400, detail="Username already exists")
+        raise HTTPException(status_code=409, detail="Username already exists")
     user = User(
         username=data.username,
         password_hash=hash_password(data.password),

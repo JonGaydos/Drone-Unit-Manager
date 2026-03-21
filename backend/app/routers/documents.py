@@ -32,11 +32,9 @@ async def upload_document(
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
-    # Build storage path: data/uploads/documents/{entity_type}/{entity_id}/{filename}
     upload_dir = Path(settings.UPLOAD_DIR) / "documents" / entity_type / str(entity_id)
     upload_dir.mkdir(parents=True, exist_ok=True)
 
-    # Ensure unique filename
     filename = file.filename or "upload"
     dest = upload_dir / filename
     counter = 1
@@ -46,11 +44,9 @@ async def upload_document(
         dest = upload_dir / f"{stem}_{counter}{suffix}"
         counter += 1
 
-    # Write file to disk
     contents = await file.read()
     dest.write_bytes(contents)
 
-    # Determine FK fields based on entity_type
     pilot_id = entity_id if entity_type == "pilot" else None
     vehicle_id = entity_id if entity_type == "vehicle" else None
     certification_id = entity_id if entity_type == "certification" else None
@@ -100,6 +96,12 @@ def view_document(
     doc = db.query(Document).filter(Document.id == doc_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
+
+    # Path traversal prevention
+    resolved = Path(doc.file_path).resolve()
+    upload_root = Path(settings.UPLOAD_DIR).resolve()
+    if not str(resolved).startswith(str(upload_root)):
+        raise HTTPException(status_code=403, detail="Access denied")
 
     file_path = Path(doc.file_path)
     if not file_path.exists():
@@ -152,7 +154,6 @@ def delete_document(
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
 
-    # Delete file from disk
     file_path = Path(doc.file_path)
     if file_path.exists():
         os.remove(file_path)

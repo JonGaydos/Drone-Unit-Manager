@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/contexts/ToastContext'
 import { formatHours, formatDuration, normalizeDateValue } from '@/lib/utils'
+import { STATUS_COLORS } from '@/lib/constants'
 import {
   ArrowLeft, Plane, Clock, Calendar, Battery, Edit,
   FileText, Wrench, Gamepad2, Cpu, Paperclip, Camera,
@@ -10,17 +12,10 @@ import {
 } from 'lucide-react'
 import DocumentUpload from '@/components/DocumentUpload'
 
-const STATUS_COLORS = {
-  active: 'bg-emerald-500/15 text-emerald-400',
-  available: 'bg-emerald-500/15 text-emerald-400',
-  maintenance: 'bg-amber-500/15 text-amber-400',
-  retired: 'bg-red-500/15 text-red-400',
-  damaged: 'bg-red-500/15 text-red-400',
-}
-
 export default function VehicleDetailPage() {
   const { id } = useParams()
   const { isAdmin } = useAuth()
+  const toast = useToast()
   const [vehicle, setVehicle] = useState(null)
   const [stats, setStats] = useState(null)
   const [flights, setFlights] = useState([])
@@ -115,17 +110,10 @@ export default function VehicleDetailPage() {
                   if (!file) return
                   const formData = new FormData()
                   formData.append('file', file)
-                  const token = localStorage.getItem('token')
                   try {
-                    const res = await fetch(`/api/vehicles/${id}/photo`, {
-                      method: 'POST',
-                      headers: { Authorization: `Bearer ${token}` },
-                      body: formData,
-                    })
-                    if (!res.ok) throw new Error('Upload failed')
-                    const result = await res.json()
+                    const result = await api.upload(`/vehicles/${id}/photo`, formData)
                     setVehicle({ ...vehicle, photo_url: result.photo_url + '?t=' + Date.now() })
-                  } catch (err) { alert(err.message) }
+                  } catch (err) { toast.error(err.message) }
                   e.target.value = ''
                 }} />
               </label>
@@ -459,7 +447,7 @@ export default function VehicleDetailPage() {
                     setRegForm({ registration_number: '', registration_date: '', notes: '' })
                     setShowRegForm(false)
                     loadRegistrations()
-                  } catch (err) { alert(err.message) }
+                  } catch (err) { toast.error(err.message) }
                 }}
                 className="px-4 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:opacity-90"
               >
@@ -512,7 +500,7 @@ export default function VehicleDetailPage() {
                           try {
                             await api.delete(`/vehicle-registrations/${r.id}`)
                             loadRegistrations()
-                          } catch (err) { alert(err.message) }
+                          } catch (err) { toast.error(err.message) }
                         }} className="p-1.5 text-muted-foreground hover:text-destructive rounded hover:bg-destructive/10">
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>

@@ -51,10 +51,9 @@ def create_registration(
     if not expiry and data.registration_date:
         expiry = data.registration_date + timedelta(days=730)
 
-    # Set previous registrations to not current
     db.query(VehicleRegistration).filter(
         VehicleRegistration.vehicle_id == vehicle_id,
-        VehicleRegistration.is_current == True,
+        VehicleRegistration.is_current.is_(True),
     ).update({"is_current": False})
 
     reg = VehicleRegistration(

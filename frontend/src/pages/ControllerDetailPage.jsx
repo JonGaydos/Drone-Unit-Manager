@@ -2,17 +2,11 @@ import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
+import { STATUS_COLORS } from '@/lib/constants'
 import {
   ArrowLeft, Gamepad2, Wrench, Edit
 } from 'lucide-react'
 import DocumentUpload from '@/components/DocumentUpload'
-
-const STATUS_COLORS = {
-  active: 'bg-emerald-500/15 text-emerald-400',
-  maintenance: 'bg-amber-500/15 text-amber-400',
-  retired: 'bg-red-500/15 text-red-400',
-  damaged: 'bg-red-500/15 text-red-400',
-}
 
 export default function ControllerDetailPage() {
   const { id } = useParams()

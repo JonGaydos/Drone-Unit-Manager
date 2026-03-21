@@ -1,8 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
+import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/contexts/ToastContext'
 import { FileText, Upload, Trash2, Loader2, ExternalLink, Edit, Save, X } from 'lucide-react'
 
 export default function DocumentUpload({ entityType, entityId }) {
+  const toast = useToast()
   const [documents, setDocuments] = useState([])
   const [uploading, setUploading] = useState(false)
   const [showUpload, setShowUpload] = useState(false)
@@ -15,11 +18,7 @@ export default function DocumentUpload({ entityType, entityId }) {
   const { isAdmin } = useAuth()
 
   const fetchDocs = useCallback(() => {
-    const token = localStorage.getItem('token')
-    fetch(`/api/documents?entity_type=${entityType}&entity_id=${entityId}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
-      .then(r => r.json())
+    api.get(`/documents?entity_type=${entityType}&entity_id=${entityId}`)
       .then(setDocuments)
       .catch(console.error)
   }, [entityType, entityId])
@@ -45,23 +44,14 @@ export default function DocumentUpload({ entityType, entityId }) {
       formData.append('entity_id', entityId)
       formData.append('document_type', docType)
       formData.append('title', title || selectedFile.name)
-      const token = localStorage.getItem('token')
-      const res = await fetch('/api/documents/upload', {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: formData,
-      })
-      if (!res.ok) {
-        const err = await res.json()
-        throw new Error(err.detail || 'Upload failed')
-      }
+      await api.upload('/documents/upload', formData)
       setTitle('')
       setDocType('general')
       setSelectedFile(null)
       setShowUpload(false)
       fetchDocs()
     } catch (err) {
-      alert(err.message)
+      toast.error(err.message)
     } finally {
       setUploading(false)
     }
@@ -70,15 +60,10 @@ export default function DocumentUpload({ entityType, entityId }) {
   const handleDelete = async (docId) => {
     if (!confirm('Delete this document?')) return
     try {
-      const token = localStorage.getItem('token')
-      const res = await fetch(`/api/documents/${docId}`, {
-        method: 'DELETE',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      })
-      if (!res.ok) throw new Error('Delete failed')
+      await api.delete(`/documents/${docId}`)
       fetchDocs()
     } catch (err) {
-      alert(err.message)
+      toast.error(err.message)
     }
   }
 
@@ -95,20 +80,15 @@ export default function DocumentUpload({ entityType, entityId }) {
   const saveEditDoc = async (docId) => {
     setEditSaving(true)
     try {
-      const token = localStorage.getItem('token')
       const params = new URLSearchParams()
       if (editForm.title) params.set('title', editForm.title)
       if (editForm.document_type) params.set('document_type', editForm.document_type)
-      const res = await fetch(`/api/documents/${docId}?${params.toString()}`, {
-        method: 'PATCH',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      })
-      if (!res.ok) throw new Error('Update failed')
+      await api.patch(`/documents/${docId}?${params.toString()}`, {})
       setEditingDoc(null)
       setEditForm({ title: '', document_type: '' })
       fetchDocs()
     } catch (err) {
-      alert(err.message)
+      toast.error(err.message)
     } finally {
       setEditSaving(false)
     }

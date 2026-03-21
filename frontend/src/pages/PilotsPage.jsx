@@ -1,17 +1,20 @@
 import { useState, useEffect, useMemo } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
-import { Plus, Edit, Trash2, Search, User, ChevronUp, ChevronDown, Download } from 'lucide-react'
+import { useToast } from '@/contexts/ToastContext'
+import { Plus, Edit, Trash2, Search, ChevronUp, ChevronDown, Download, Loader2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 function PilotModal({ pilot, onSave, onClose }) {
   const [form, setForm] = useState(pilot || {
     first_name: '', last_name: '', email: '', phone: '', phone_type: 'work', badge_number: '', status: 'active', notes: ''
   })
+  const [saving, setSaving] = useState(false)
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    onSave(form)
+    setSaving(true)
+    try { await onSave(form) } finally { setSaving(false) }
   }
 
   const field = (label, key, type = 'text') => (
@@ -83,8 +86,8 @@ function PilotModal({ pilot, onSave, onClose }) {
             />
           </div>
           <div className="flex gap-2 pt-2">
-            <button type="submit" className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
-              {pilot ? 'Update' : 'Add Pilot'}
+            <button type="submit" disabled={saving} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : (pilot ? 'Update' : 'Add Pilot')}
             </button>
             <button type="button" onClick={onClose} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90">
               Cancel
@@ -101,9 +104,11 @@ export default function PilotsPage() {
   const [search, setSearch] = useState('')
   const [modal, setModal] = useState(null) // null | 'add' | pilot object
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   const [sortKey, setSortKey] = useState('last_name')
   const [sortDir, setSortDir] = useState('asc')
   const { isAdmin } = useAuth()
+  const toast = useToast()
 
   const toggleSort = (key) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -111,7 +116,7 @@ export default function PilotsPage() {
   }
 
   const loadPilots = () => {
-    api.get('/pilots').then(setPilots).catch(console.error).finally(() => setLoading(false))
+    api.get('/pilots').then(setPilots).catch(err => setError(err.message)).finally(() => setLoading(false))
   }
 
   useEffect(() => { loadPilots() }, [])
@@ -126,7 +131,7 @@ export default function PilotsPage() {
       setModal(null)
       loadPilots()
     } catch (err) {
-      alert(err.message)
+      toast.error(err.message)
     }
   }
 
@@ -136,7 +141,7 @@ export default function PilotsPage() {
       await api.delete(`/pilots/${id}`)
       loadPilots()
     } catch (err) {
-      alert(err.message)
+      toast.error(err.message)
     }
   }
 
@@ -175,6 +180,7 @@ export default function PilotsPage() {
 
   return (
     <div className="space-y-4">
+      {error && <div className="bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg p-4 mb-4">{error}</div>}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-4">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />

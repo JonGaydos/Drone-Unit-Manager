@@ -3,12 +3,10 @@ from math import ceil
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app.models.flight import Flight, FlightPurpose
-from app.models.pilot import Pilot
-from app.models.vehicle import Vehicle
 from app.models.user import User
 from app.routers.auth import get_current_user, require_admin
 from app.schemas.flight import (
@@ -20,17 +18,14 @@ from app.schemas.flight import (
 router = APIRouter(prefix="/api/flights", tags=["flights"])
 
 
-def _flight_to_out(flight: Flight, db: Session) -> FlightOut:
-    out = FlightOut.model_validate(flight)
-    if flight.pilot_id:
-        pilot = db.query(Pilot).filter(Pilot.id == flight.pilot_id).first()
-        if pilot:
-            out.pilot_name = pilot.full_name
-    if flight.vehicle_id:
-        vehicle = db.query(Vehicle).filter(Vehicle.id == flight.vehicle_id).first()
-        if vehicle:
-            out.vehicle_name = f"{vehicle.manufacturer} {vehicle.model}" + (f" ({vehicle.nickname})" if vehicle.nickname else "")
-    return out
+def _flight_to_out(flight: Flight) -> FlightOut:
+    pilot_name = None
+    if flight.pilot:
+        pilot_name = f"{flight.pilot.first_name} {flight.pilot.last_name}".strip()
+    vehicle_name = None
+    if flight.vehicle:
+        vehicle_name = flight.vehicle.nickname or f"{flight.vehicle.manufacturer} {flight.vehicle.model}"
+    return FlightOut.model_validate({**flight.__dict__, "pilot_name": pilot_name, "vehicle_name": vehicle_name})
 
 
 @router.get("")
@@ -61,11 +56,13 @@ def list_flights(
         filters.append(Flight.review_status == review_status)
     total = db.query(func.count(Flight.id)).filter(*filters).scalar()
     offset = (page - 1) * per_page
-    flights = db.query(Flight).filter(*filters).order_by(
+    flights = db.query(Flight).options(
+        joinedload(Flight.pilot), joinedload(Flight.vehicle)
+    ).filter(*filters).order_by(
         Flight.date.desc(), Flight.takeoff_time.desc()
     ).offset(offset).limit(per_page).all()
     return {
-        "flights": [_flight_to_out(f, db) for f in flights],
+        "flights": [_flight_to_out(f) for f in flights],
         "total": total,
         "page": page,
         "per_page": per_page,
@@ -90,18 +87,22 @@ def list_review_queue(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    flights = db.query(Flight).filter(
+    flights = db.query(Flight).options(
+        joinedload(Flight.pilot), joinedload(Flight.vehicle)
+    ).filter(
         Flight.review_status == "needs_review"
     ).order_by(Flight.date.desc(), Flight.takeoff_time.desc()).all()
-    return [_flight_to_out(f, db) for f in flights]
+    return [_flight_to_out(f) for f in flights]
 
 
 @router.get("/{flight_id}", response_model=FlightOut)
 def get_flight(flight_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    flight = db.query(Flight).filter(Flight.id == flight_id).first()
+    flight = db.query(Flight).options(
+        joinedload(Flight.pilot), joinedload(Flight.vehicle)
+    ).filter(Flight.id == flight_id).first()
     if not flight:
         raise HTTPException(status_code=404, detail="Flight not found")
-    return _flight_to_out(flight, db)
+    return _flight_to_out(flight)
 
 
 @router.post("", response_model=FlightOut)
@@ -110,7 +111,7 @@ def create_flight(data: FlightCreate, db: Session = Depends(get_db), admin: User
     db.add(flight)
     db.commit()
     db.refresh(flight)
-    return _flight_to_out(flight, db)
+    return _flight_to_out(flight)
 
 
 @router.patch("/{flight_id}", response_model=FlightOut)
@@ -122,7 +123,7 @@ def update_flight(flight_id: int, data: FlightUpdate, db: Session = Depends(get_
         setattr(flight, key, value)
     db.commit()
     db.refresh(flight)
-    return _flight_to_out(flight, db)
+    return _flight_to_out(flight)
 
 
 @router.post("/bulk-update")
@@ -151,7 +152,6 @@ def delete_flight(flight_id: int, db: Session = Depends(get_db), admin: User = D
     return {"ok": True}
 
 
-# Flight purposes CRUD
 @router.get("/purposes/list", response_model=list[FlightPurposeOut])
 def list_purposes(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     return [FlightPurposeOut.model_validate(p) for p in db.query(FlightPurpose).order_by(FlightPurpose.sort_order, FlightPurpose.name).all()]
