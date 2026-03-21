@@ -489,23 +489,17 @@ class SkydioProvider(DroneProvider):
             body = resp.json()
 
             # Unwrap telemetry response
-            # Skydio returns {"flight": {...}, "flight_telemetry": [...]}
+            # Skydio returns {"data": {"flight": {...}, "flight_telemetry": [...]}, "meta": ..., ...}
             raw = body
+            # Step 1: unwrap "data" wrapper if present
+            if isinstance(raw, dict) and "data" in raw and isinstance(raw["data"], dict):
+                raw = raw["data"]
+            # Step 2: extract the telemetry list
             if isinstance(raw, dict):
-                # Check for known telemetry keys first
-                for key in ("flight_telemetry", "telemetry", "data", "points"):
-                    val = raw.get(key)
-                    if isinstance(val, list):
-                        raw = val
+                for key in ("flight_telemetry", "telemetry", "points", "data"):
+                    if key in raw and isinstance(raw[key], list):
+                        raw = raw[key]
                         break
-                    elif isinstance(val, dict):
-                        # Nested: {"data": {"flight_telemetry": [...]}}
-                        for subkey in ("flight_telemetry", "telemetry", "points"):
-                            if subkey in val and isinstance(val[subkey], list):
-                                raw = val[subkey]
-                                break
-                        if isinstance(raw, list):
-                            break
             if not isinstance(raw, list):
                 logger.warning("Telemetry response not a list: type=%s, keys=%s",
                              type(raw).__name__, list(raw.keys()) if isinstance(raw, dict) else "n/a")
