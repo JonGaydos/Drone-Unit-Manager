@@ -496,14 +496,30 @@ class SkydioProvider(DroneProvider):
                 raw = raw["data"]
             # Step 2: extract the telemetry list
             if isinstance(raw, dict):
+                # Debug: print what we have
+                for k in raw:
+                    print(f"[TELEMETRY] After data unwrap: key='{k}', type={type(raw[k]).__name__}, is_list={isinstance(raw[k], list)}", flush=True)
                 for key in ("flight_telemetry", "telemetry", "points", "data"):
-                    if key in raw and isinstance(raw[key], list):
-                        raw = raw[key]
+                    val = raw.get(key)
+                    if isinstance(val, list):
+                        raw = val
+                        print(f"[TELEMETRY] Extracted '{key}' as list with {len(val)} items", flush=True)
                         break
+                    elif isinstance(val, dict):
+                        # flight_telemetry might itself be wrapped
+                        print(f"[TELEMETRY] '{key}' is a dict with keys: {list(val.keys())}", flush=True)
+                        # Check for list values inside
+                        for subkey, subval in val.items():
+                            if isinstance(subval, list):
+                                raw = subval
+                                print(f"[TELEMETRY] Extracted '{key}.{subkey}' as list with {len(subval)} items", flush=True)
+                                break
+                        if isinstance(raw, list):
+                            break
             if not isinstance(raw, list):
-                logger.warning("Telemetry response not a list: type=%s, keys=%s",
-                             type(raw).__name__, list(raw.keys()) if isinstance(raw, dict) else "n/a")
-                print(f"[TELEMETRY] Raw response: {str(raw)[:500]}", flush=True)
+                print(f"[TELEMETRY] FAILED: still not a list. type={type(raw).__name__}", flush=True)
+                if isinstance(raw, dict):
+                    print(f"[TELEMETRY] Remaining keys: {list(raw.keys())}", flush=True)
                 return []
 
             if raw:
