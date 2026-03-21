@@ -36,12 +36,8 @@ COPY --from=frontend-build /app/frontend/dist ./static
 COPY entrypoint.sh ./
 RUN chmod +x entrypoint.sh
 
-# Create non-root user
-RUN useradd -m -r appuser && \
-    mkdir -p /app/data/uploads/documents /app/data/media_cache && \
-    chown -R appuser:appuser /app
-
-USER appuser
+# Create data directories
+RUN mkdir -p /app/data/uploads/documents /app/data/media_cache
 
 ENV DATA_DIR=/app/data
 ENV DATABASE_URL=sqlite:////app/data/drone_unit_manager.db
