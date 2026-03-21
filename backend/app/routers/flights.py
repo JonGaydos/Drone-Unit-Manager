@@ -282,8 +282,11 @@ def refresh_flight_from_api(flight_id: int, db: Session = Depends(get_db), admin
                 if not isinstance(point, dict):
                     continue
 
-                # Parse timestamp — Skydio uses ISO string, we need ms
-                ts = point.get("timestamp")
+                # Data is already mapped by get_flight_telemetry()
+                # Fields: timestamp_ms, lat, lon, altitude_m, speed_mps, battery_pct, heading_deg
+
+                # Parse timestamp if it's still an ISO string
+                ts = point.get("timestamp_ms")
                 timestamp_ms = 0
                 if isinstance(ts, str):
                     try:
@@ -295,24 +298,8 @@ def refresh_flight_from_api(flight_id: int, db: Session = Depends(get_db), admin
                 elif isinstance(ts, (int, float)):
                     timestamp_ms = int(ts)
 
-                # Skydio field names → our model
-                # Use None-safe extraction (0.0 is valid, don't skip it)
-                alt_hat = point.get("height_above_takeoff")
-                alt_hyb = point.get("hybrid_altitude")
-                alt_gps = point.get("gps_altitude")
-                alt = alt_hat if alt_hat is not None else (alt_hyb if alt_hyb is not None else (alt_gps if alt_gps is not None else 0))
-
-                lat = point.get("gps_latitude") if point.get("gps_latitude") is not None else point.get("lat")
-                lon = point.get("gps_longitude") if point.get("gps_longitude") is not None else point.get("lon")
-
-                battery = point.get("battery_percentage")
-                if battery is not None and battery <= 1.0:
-                    battery = battery * 100
-
-                velocity = point.get("gps_velocity")
-                speed = 0
-                if isinstance(velocity, list) and len(velocity) >= 2:
-                    speed = math.sqrt(sum(v**2 for v in velocity[:3]))
+                alt = point.get("altitude_m") or 0
+                speed = point.get("speed_mps") or 0
 
                 if alt > max_alt:
                     max_alt = alt
@@ -322,12 +309,12 @@ def refresh_flight_from_api(flight_id: int, db: Session = Depends(get_db), admin
                 tp = TelemetryPoint(
                     flight_id=flight.id,
                     timestamp_ms=timestamp_ms,
-                    lat=lat,
-                    lon=lon,
-                    altitude_m=round(alt, 2),
-                    speed_mps=round(speed, 2),
-                    heading_deg=None,
-                    battery_pct=round(battery, 1) if battery is not None else None,
+                    lat=point.get("lat"),
+                    lon=point.get("lon"),
+                    altitude_m=alt,
+                    speed_mps=speed,
+                    heading_deg=point.get("heading_deg"),
+                    battery_pct=point.get("battery_pct"),
                 )
                 tdb.add(tp)
 

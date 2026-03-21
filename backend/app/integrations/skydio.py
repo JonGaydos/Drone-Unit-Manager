@@ -534,13 +534,31 @@ class SkydioProvider(DroneProvider):
             for p in raw:
                 if not isinstance(p, dict):
                     continue
+
+                # Battery: Skydio returns 0-1 fraction
+                battery = p.get("battery_percentage")
+                if battery is not None and battery <= 1.0:
+                    battery = round(battery * 100, 1)
+
+                # Altitude: prefer height_above_takeoff over gps_altitude
+                alt_hat = p.get("height_above_takeoff")
+                alt_gps = p.get("gps_altitude")
+                alt = alt_hat if alt_hat is not None else alt_gps
+
+                # Speed: calculate from gps_velocity [vx, vy, vz]
+                import math
+                velocity = p.get("gps_velocity")
+                speed = None
+                if isinstance(velocity, list) and len(velocity) >= 2:
+                    speed = round(math.sqrt(sum(v**2 for v in velocity[:3])), 2)
+
                 points.append({
                     "timestamp_ms": p.get("timestamp_ms") or p.get("timestamp"),
-                    "lat": p.get("lat") or p.get("latitude"),
-                    "lon": p.get("lon") or p.get("longitude"),
-                    "altitude_m": p.get("altitude_m") or p.get("altitude"),
-                    "speed_mps": p.get("speed_mps") or p.get("speed"),
-                    "battery_pct": p.get("battery_pct") or p.get("battery_percent"),
+                    "lat": p.get("gps_latitude") or p.get("lat"),
+                    "lon": p.get("gps_longitude") or p.get("lon"),
+                    "altitude_m": round(alt, 2) if alt is not None else None,
+                    "speed_mps": speed,
+                    "battery_pct": battery,
                     "battery_voltage": p.get("battery_voltage"),
                     "heading_deg": p.get("heading_deg") or p.get("heading"),
                     "pitch_deg": p.get("pitch_deg") or p.get("pitch"),
