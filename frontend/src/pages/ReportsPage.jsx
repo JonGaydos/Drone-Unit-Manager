@@ -28,14 +28,21 @@ export default function ReportsPage() {
   const [selectedPilots, setSelectedPilots] = useState([])
   const [selectedVehicles, setSelectedVehicles] = useState([])
   const [logoFile, setLogoFile] = useState(null)
+  const [orgLogoUrl, setOrgLogoUrl] = useState(null)
 
   useEffect(() => {
     Promise.all([
       api.get('/pilots'),
       api.get('/vehicles'),
-    ]).then(([p, v]) => {
+      api.get('/settings').catch(() => []),
+    ]).then(([p, v, s]) => {
       setPilots(p)
       setVehicles(v)
+      // Check if org logo exists in settings
+      const logoSetting = s.find?.(item => item.key === 'org_logo')
+      if (logoSetting?.value) {
+        setOrgLogoUrl(logoSetting.value)
+      }
     }).catch(console.error).finally(() => setLoading(false))
   }, [])
 
@@ -65,7 +72,7 @@ export default function ReportsPage() {
         vehicle_ids: selectedVehicles.length > 0 ? selectedVehicles : undefined,
       }
 
-      // If a logo is selected, convert to base64
+      // If a manual logo is selected, convert to base64; otherwise use org logo
       if (logoFile) {
         const reader = new FileReader()
         const base64 = await new Promise((resolve, reject) => {
@@ -74,6 +81,23 @@ export default function ReportsPage() {
           reader.readAsDataURL(logoFile)
         })
         config.logo_base64 = base64
+      } else if (orgLogoUrl) {
+        // Fetch org logo and convert to base64
+        try {
+          const token = localStorage.getItem('token')
+          const logoRes = await fetch(orgLogoUrl, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          })
+          if (logoRes.ok) {
+            const blob = await logoRes.blob()
+            const base64 = await new Promise((resolve) => {
+              const reader = new FileReader()
+              reader.onload = () => resolve(reader.result)
+              reader.readAsDataURL(blob)
+            })
+            config.logo_base64 = base64
+          }
+        } catch { /* ignore logo fetch errors */ }
       }
 
       const result = await api.post('/reports/generate', config)
@@ -186,10 +210,16 @@ export default function ReportsPage() {
 
               {/* Logo Upload */}
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Logo (optional)</label>
+                <label className="block text-sm font-medium text-foreground mb-1">Logo</label>
+                {orgLogoUrl && !logoFile && (
+                  <div className="flex items-center gap-2 mb-2">
+                    <img src={orgLogoUrl} alt="Org logo" className="w-8 h-8 object-contain rounded border border-border" />
+                    <span className="text-xs text-emerald-400">Using organization logo from settings</span>
+                  </div>
+                )}
                 <label className="flex items-center gap-2 px-3 py-2 bg-secondary border border-border rounded-lg text-sm cursor-pointer hover:bg-accent/30 transition-colors">
                   <Upload className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-muted-foreground truncate">{logoFile ? logoFile.name : 'Choose file...'}</span>
+                  <span className="text-muted-foreground truncate">{logoFile ? logoFile.name : 'Override with custom logo...'}</span>
                   <input
                     type="file"
                     accept="image/*"

@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
-import { Plus, Edit, Trash2, ShieldCheck, FileText, Upload, Search, Filter } from 'lucide-react'
+import { Plus, Edit, Trash2, ShieldCheck, FileText, Upload, Search, Filter, Download } from 'lucide-react'
 
 const STATUS_COLORS = {
   not_issued: 'bg-zinc-500/15 text-zinc-400',
@@ -261,6 +261,12 @@ export default function CertificationsPage() {
           Cert Types
         </button>
         <div className="flex-1" />
+        <button
+          onClick={() => api.download('/export/certifications/csv')}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90"
+        >
+          <Download className="w-4 h-4" /> Export CSV
+        </button>
         {isAdmin && tab === 'types' && (
           <button onClick={() => setModal('addType')} className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
             <Plus className="w-4 h-4" /> Add Type

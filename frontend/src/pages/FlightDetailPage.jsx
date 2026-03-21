@@ -17,24 +17,43 @@ export default function FlightDetailPage() {
   const [flight, setFlight] = useState(null)
   const [telemetry, setTelemetry] = useState([])
   const [pilots, setPilots] = useState([])
+  const [vehicles, setVehicles] = useState([])
   const [purposes, setPurposes] = useState([])
   const [editing, setEditing] = useState(false)
   const [editForm, setEditForm] = useState({})
   const [loading, setLoading] = useState(true)
   const { isAdmin } = useAuth()
 
+  const initEditForm = (f) => {
+    setEditForm({
+      pilot_id: f.pilot_id || '',
+      vehicle_id: f.vehicle_id || '',
+      purpose: f.purpose || '',
+      date: f.date || '',
+      takeoff_time: f.takeoff_time ? f.takeoff_time.slice(0, 16) : '',
+      landing_time: f.landing_time ? f.landing_time.slice(0, 16) : '',
+      duration_seconds: f.duration_seconds || '',
+      takeoff_address: f.takeoff_address || '',
+      case_number: f.case_number || '',
+      notes: f.notes || '',
+      review_status: f.review_status || 'needs_review',
+    })
+  }
+
   useEffect(() => {
     Promise.all([
       api.get(`/flights/${id}`),
       api.get(`/telemetry/flight/${id}`).catch(() => []),
       api.get('/pilots'),
+      api.get('/vehicles'),
       api.get('/flights/purposes/list'),
-    ]).then(([f, t, p, pu]) => {
+    ]).then(([f, t, p, v, pu]) => {
       setFlight(f)
       setTelemetry(Array.isArray(t) ? t : [])
       setPilots(p)
+      setVehicles(v)
       setPurposes(pu)
-      setEditForm({ pilot_id: f.pilot_id || '', purpose: f.purpose || '', case_number: f.case_number || '', notes: f.notes || '' })
+      initEditForm(f)
     }).catch(console.error).finally(() => setLoading(false))
   }, [id])
 
@@ -43,6 +62,12 @@ export default function FlightDetailPage() {
       const data = { ...editForm }
       if (data.pilot_id) data.pilot_id = parseInt(data.pilot_id)
       else data.pilot_id = null
+      if (data.vehicle_id) data.vehicle_id = parseInt(data.vehicle_id)
+      else data.vehicle_id = null
+      if (data.duration_seconds) data.duration_seconds = parseInt(data.duration_seconds)
+      else delete data.duration_seconds
+      // Clean empty strings
+      Object.keys(data).forEach(k => { if (data[k] === '') data[k] = null })
       const updated = await api.patch(`/flights/${id}`, data)
       setFlight(updated)
       setEditing(false)
@@ -72,7 +97,7 @@ export default function FlightDetailPage() {
             </button>
           )}
           {isAdmin && !editing && (
-            <button onClick={() => setEditing(true)} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90">
+            <button onClick={() => { initEditForm(flight); setEditing(true) }} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90">
               Edit
             </button>
           )}
@@ -108,6 +133,16 @@ export default function FlightDetailPage() {
                 </select>
               </div>
               <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Vehicle</label>
+                <select value={editForm.vehicle_id} onChange={e => setEditForm({...editForm, vehicle_id: e.target.value})}
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
+                  <option value="">Unassigned</option>
+                  {vehicles.map(v => <option key={v.id} value={v.id}>{v.manufacturer} {v.model}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
                 <label className="block text-sm font-medium text-foreground mb-1">Purpose</label>
                 <select value={editForm.purpose} onChange={e => setEditForm({...editForm, purpose: e.target.value})}
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
@@ -115,6 +150,43 @@ export default function FlightDetailPage() {
                   {purposes.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
                 </select>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Date</label>
+                <input type="date" value={editForm.date} onChange={e => setEditForm({...editForm, date: e.target.value})}
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Takeoff Time</label>
+                <input type="datetime-local" value={editForm.takeoff_time} onChange={e => setEditForm({...editForm, takeoff_time: e.target.value})}
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Landing Time</label>
+                <input type="datetime-local" value={editForm.landing_time} onChange={e => setEditForm({...editForm, landing_time: e.target.value})}
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Duration (seconds)</label>
+                <input type="number" value={editForm.duration_seconds} onChange={e => setEditForm({...editForm, duration_seconds: e.target.value})}
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Status</label>
+                <select value={editForm.review_status} onChange={e => setEditForm({...editForm, review_status: e.target.value})}
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
+                  <option value="needs_review">Needs Review</option>
+                  <option value="reviewed">Reviewed</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">Takeoff Address / Location</label>
+              <input type="text" value={editForm.takeoff_address} onChange={e => setEditForm({...editForm, takeoff_address: e.target.value})}
+                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
             <div>
               <label className="block text-sm font-medium text-foreground mb-1">Case Number</label>
@@ -130,7 +202,7 @@ export default function FlightDetailPage() {
               <button onClick={handleSave} className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
                 <Save className="w-4 h-4" /> Save
               </button>
-              <button onClick={() => setEditing(false)} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm">Cancel</button>
+              <button onClick={() => { setEditing(false); initEditForm(flight) }} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm">Cancel</button>
             </div>
           </div>
         ) : (
@@ -143,6 +215,7 @@ export default function FlightDetailPage() {
             <div><p className="text-xs text-muted-foreground">Max Altitude</p><p className="text-sm text-foreground">{flight.max_altitude_m ? `${flight.max_altitude_m.toFixed(1)}m` : '—'}</p></div>
             <div><p className="text-xs text-muted-foreground">Max Speed</p><p className="text-sm text-foreground">{flight.max_speed_mps ? `${flight.max_speed_mps.toFixed(1)} m/s` : '—'}</p></div>
             <div><p className="text-xs text-muted-foreground">Case #</p><p className="text-sm text-foreground">{flight.case_number || '—'}</p></div>
+            {flight.notes && <div className="col-span-2 md:col-span-4"><p className="text-xs text-muted-foreground">Notes</p><p className="text-sm text-foreground">{flight.notes}</p></div>}
           </div>
         )}
       </div>

@@ -193,10 +193,16 @@ export default function DashboardPage() {
                         </Link>
                       </td>
                       <td className="px-5 py-3 text-muted-foreground">
-                        {flight.pilot_name || flight.pilot?.name || '—'}
+                        {flight.pilot_id
+                          ? <Link to={`/pilots/${flight.pilot_id}`} className="hover:text-primary">{flight.pilot_name || flight.pilot?.name || '—'}</Link>
+                          : (flight.pilot_name || flight.pilot?.name || '—')
+                        }
                       </td>
                       <td className="px-5 py-3 text-muted-foreground hidden md:table-cell">
-                        {flight.vehicle_name || flight.vehicle?.name || flight.vehicle?.serial_number || '—'}
+                        {flight.vehicle_id
+                          ? <Link to={`/fleet/vehicles/${flight.vehicle_id}`} className="hover:text-primary">{flight.vehicle_name || flight.vehicle?.name || flight.vehicle?.serial_number || '—'}</Link>
+                          : (flight.vehicle_name || flight.vehicle?.name || flight.vehicle?.serial_number || '—')
+                        }
                       </td>
                       <td className="px-5 py-3 text-muted-foreground hidden md:table-cell">
                         {flight.purpose || flight.flight_purpose || '—'}

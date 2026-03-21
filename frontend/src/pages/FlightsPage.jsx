@@ -2,8 +2,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { formatDuration } from '@/lib/utils'
-import { Plus, Search, Filter, CheckCircle, ChevronUp, ChevronDown } from 'lucide-react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Plus, Search, CheckCircle, ChevronUp, ChevronDown, Pencil, X, Check, Download } from 'lucide-react'
+import { Link } from 'react-router-dom'
 
 function FlightModal({ pilots, vehicles, purposes, onSave, onClose }) {
   const [form, setForm] = useState({
@@ -97,20 +97,39 @@ export default function FlightsPage() {
   const [loading, setLoading] = useState(true)
   const [sortKey, setSortKey] = useState('date')
   const [sortDir, setSortDir] = useState('desc')
-  const [searchParams] = useSearchParams()
   const { isAdmin } = useAuth()
+
+  // Status filter: 'all' | 'needs_review' | 'reviewed'
+  const [statusFilter, setStatusFilter] = useState('all')
+
+  // Date range and dropdown filters
+  const [filterDateFrom, setFilterDateFrom] = useState('')
+  const [filterDateTo, setFilterDateTo] = useState('')
+  const [filterPilotId, setFilterPilotId] = useState('')
+  const [filterVehicleId, setFilterVehicleId] = useState('')
+  const [filterPurpose, setFilterPurpose] = useState('')
+
+  // Inline editing state
+  const [editingId, setEditingId] = useState(null)
+  const [editForm, setEditForm] = useState({})
 
   const toggleSort = (key) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
     else { setSortKey(key); setSortDir('asc') }
   }
 
-  const reviewFilter = searchParams.get('review_status')
-
   const load = () => {
-    const params = reviewFilter ? `?review_status=${reviewFilter}` : ''
+    const qp = new URLSearchParams()
+    if (filterDateFrom) qp.set('date_from', filterDateFrom)
+    if (filterDateTo) qp.set('date_to', filterDateTo)
+    if (filterPilotId) qp.set('pilot_id', filterPilotId)
+    if (filterVehicleId) qp.set('vehicle_id', filterVehicleId)
+    if (filterPurpose) qp.set('purpose', filterPurpose)
+    const qs = qp.toString()
+    const path = `/flights${qs ? `?${qs}` : ''}`
+
     Promise.all([
-      api.get(`/flights${params}`),
+      api.get(path),
       api.get('/pilots'),
       api.get('/vehicles'),
       api.get('/flights/purposes/list'),
@@ -119,7 +138,7 @@ export default function FlightsPage() {
     }).catch(console.error).finally(() => setLoading(false))
   }
 
-  useEffect(() => { load() }, [reviewFilter])
+  useEffect(() => { load() }, [filterDateFrom, filterDateTo, filterPilotId, filterVehicleId, filterPurpose])
 
   const handleSave = async (data) => {
     try {
@@ -138,11 +157,58 @@ export default function FlightsPage() {
     } catch (err) { alert(err.message) }
   }
 
+  const startEditing = (flight) => {
+    setEditingId(flight.id)
+    setEditForm({
+      pilot_id: flight.pilot_id || '',
+      purpose: flight.purpose || '',
+      date: flight.date || '',
+      duration_seconds: flight.duration_seconds || '',
+      review_status: flight.review_status || 'needs_review',
+    })
+  }
+
+  const cancelEditing = () => {
+    setEditingId(null)
+    setEditForm({})
+  }
+
+  const saveEditing = async () => {
+    try {
+      const data = { ...editForm }
+      if (data.pilot_id) data.pilot_id = parseInt(data.pilot_id)
+      else data.pilot_id = null
+      if (data.duration_seconds) data.duration_seconds = parseInt(data.duration_seconds)
+      else delete data.duration_seconds
+      await api.patch(`/flights/${editingId}`, data)
+      setEditingId(null)
+      setEditForm({})
+      load()
+    } catch (err) { alert(err.message) }
+  }
+
+  const handleExport = async () => {
+    try {
+      await api.download('/export/flights/csv')
+    } catch (err) { alert(err.message) }
+  }
+
   const filtered = useMemo(() => {
-    const list = flights.filter(f =>
+    let list = flights
+
+    // Apply status filter
+    if (statusFilter === 'needs_review') {
+      list = list.filter(f => f.review_status === 'needs_review')
+    } else if (statusFilter === 'reviewed') {
+      list = list.filter(f => f.review_status === 'reviewed')
+    }
+
+    // Apply text search
+    list = list.filter(f =>
       `${f.pilot_name || ''} ${f.vehicle_name || ''} ${f.purpose || ''} ${f.takeoff_address || ''}`
         .toLowerCase().includes(search.toLowerCase())
     )
+
     return [...list].sort((a, b) => {
       let aVal, bVal
       if (sortKey === 'date') {
@@ -171,14 +237,65 @@ export default function FlightsPage() {
       if (aVal > bVal) return sortDir === 'asc' ? 1 : -1
       return 0
     })
-  }, [flights, search, sortKey, sortDir])
+  }, [flights, search, sortKey, sortDir, statusFilter])
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>
 
   const needsReview = flights.filter(f => f.review_status === 'needs_review')
 
+  const selectCls = "px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+  const inputCls = "px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+
   return (
     <div className="space-y-4">
+      {/* Status filter toggle */}
+      <div className="flex items-center gap-2">
+        {['all', 'needs_review', 'reviewed'].map(s => (
+          <button key={s} onClick={() => setStatusFilter(s)}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              statusFilter === s
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-secondary text-secondary-foreground hover:bg-accent/30'
+            }`}>
+            {s === 'all' ? 'All' : s === 'needs_review' ? `Needs Review (${needsReview.length})` : 'Reviewed'}
+          </button>
+        ))}
+      </div>
+
+      {/* Filters row */}
+      <div className="flex flex-wrap items-end gap-3">
+        <div>
+          <label className="block text-xs text-muted-foreground mb-1">Date From</label>
+          <input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} className={inputCls} />
+        </div>
+        <div>
+          <label className="block text-xs text-muted-foreground mb-1">Date To</label>
+          <input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} className={inputCls} />
+        </div>
+        <div>
+          <label className="block text-xs text-muted-foreground mb-1">Pilot</label>
+          <select value={filterPilotId} onChange={e => setFilterPilotId(e.target.value)} className={selectCls}>
+            <option value="">All Pilots</option>
+            {pilots.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs text-muted-foreground mb-1">Vehicle</label>
+          <select value={filterVehicleId} onChange={e => setFilterVehicleId(e.target.value)} className={selectCls}>
+            <option value="">All Vehicles</option>
+            {vehicles.map(v => <option key={v.id} value={v.id}>{v.manufacturer} {v.model}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs text-muted-foreground mb-1">Purpose</label>
+          <select value={filterPurpose} onChange={e => setFilterPurpose(e.target.value)} className={selectCls}>
+            <option value="">All Purposes</option>
+            {purposes.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {/* Search + actions */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -186,7 +303,11 @@ export default function FlightsPage() {
             className="w-full pl-9 pr-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
         </div>
         <div className="flex gap-2">
-          {reviewFilter && needsReview.length > 0 && isAdmin && (
+          <button onClick={handleExport}
+            className="flex items-center gap-2 px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm font-medium hover:opacity-90">
+            <Download className="w-4 h-4" /> Export CSV
+          </button>
+          {needsReview.length > 0 && isAdmin && (
             <button
               onClick={() => handleBulkApprove(needsReview.map(f => f.id))}
               className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:opacity-90"
@@ -226,16 +347,66 @@ export default function FlightsPage() {
               <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none" onClick={() => toggleSort('review_status')}>
                 Status{sortKey === 'review_status' && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />)}
               </th>
+              <th className="text-right px-4 py-3 font-medium text-muted-foreground w-20">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map(f => (
+            {filtered.map(f => editingId === f.id ? (
+              <tr key={f.id} className="border-b border-border/50 bg-accent/20">
+                <td className="px-4 py-2">
+                  <input type="date" value={editForm.date} onChange={e => setEditForm({...editForm, date: e.target.value})}
+                    className="w-full px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm" />
+                </td>
+                <td className="px-4 py-2">
+                  <select value={editForm.pilot_id} onChange={e => setEditForm({...editForm, pilot_id: e.target.value})}
+                    className="w-full px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm">
+                    <option value="">Unassigned</option>
+                    {pilots.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+                  </select>
+                </td>
+                <td className="px-4 py-2 hidden md:table-cell text-muted-foreground">{f.vehicle_name || '—'}</td>
+                <td className="px-4 py-2 hidden md:table-cell">
+                  <select value={editForm.purpose} onChange={e => setEditForm({...editForm, purpose: e.target.value})}
+                    className="w-full px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm">
+                    <option value="">None</option>
+                    {purposes.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                  </select>
+                </td>
+                <td className="px-4 py-2 text-right">
+                  <input type="number" value={editForm.duration_seconds} onChange={e => setEditForm({...editForm, duration_seconds: e.target.value})}
+                    className="w-20 px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm text-right" placeholder="sec" />
+                </td>
+                <td className="px-4 py-2 hidden lg:table-cell text-muted-foreground">{f.takeoff_address || '—'}</td>
+                <td className="px-4 py-2">
+                  <button onClick={() => setEditForm({...editForm, review_status: editForm.review_status === 'reviewed' ? 'needs_review' : 'reviewed'})}
+                    className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium cursor-pointer ${
+                      editForm.review_status === 'needs_review' ? 'bg-amber-500/15 text-amber-400' : 'bg-emerald-500/15 text-emerald-400'
+                    }`}>
+                    {editForm.review_status === 'needs_review' ? 'Needs Review' : 'Reviewed'}
+                  </button>
+                </td>
+                <td className="px-4 py-2 text-right">
+                  <div className="flex items-center justify-end gap-1">
+                    <button onClick={saveEditing} title="Save" className="p-1.5 text-emerald-400 hover:bg-emerald-500/15 rounded">
+                      <Check className="w-4 h-4" />
+                    </button>
+                    <button onClick={cancelEditing} title="Cancel" className="p-1.5 text-muted-foreground hover:bg-accent/30 rounded">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ) : (
               <tr key={f.id} className="border-b border-border/50 hover:bg-accent/30 transition-colors">
                 <td className="px-4 py-3">
                   <Link to={`/flights/${f.id}`} className="text-foreground hover:text-primary">{f.date || '—'}</Link>
                 </td>
-                <td className="px-4 py-3 text-foreground">{f.pilot_name || <span className="text-amber-400">Unassigned</span>}</td>
-                <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{f.vehicle_name || '—'}</td>
+                <td className="px-4 py-3 text-foreground">
+                  {f.pilot_id ? <Link to={`/pilots/${f.pilot_id}`} className="hover:text-primary">{f.pilot_name}</Link> : (f.pilot_name || <span className="text-amber-400">Unassigned</span>)}
+                </td>
+                <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">
+                  {f.vehicle_id ? <Link to={`/fleet/vehicles/${f.vehicle_id}`} className="hover:text-primary">{f.vehicle_name}</Link> : (f.vehicle_name || '—')}
+                </td>
                 <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{f.purpose || <span className="text-amber-400">None</span>}</td>
                 <td className="px-4 py-3 text-right text-foreground">{formatDuration(f.duration_seconds)}</td>
                 <td className="px-4 py-3 text-muted-foreground truncate max-w-[200px] hidden lg:table-cell">{f.takeoff_address || '—'}</td>
@@ -244,9 +415,16 @@ export default function FlightsPage() {
                     f.review_status === 'needs_review' ? 'bg-amber-500/15 text-amber-400' : 'bg-emerald-500/15 text-emerald-400'
                   }`}>{f.review_status === 'needs_review' ? 'Needs Review' : 'Reviewed'}</span>
                 </td>
+                <td className="px-4 py-3 text-right">
+                  {isAdmin && (
+                    <button onClick={() => startEditing(f)} title="Edit" className="p-1.5 text-muted-foreground hover:text-foreground rounded hover:bg-accent/30">
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                  )}
+                </td>
               </tr>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">No flights found</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">No flights found</td></tr>}
           </tbody>
         </table>
         </div>

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
-import { Plus, Search, X, ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
+import { Plus, Search, X, ChevronDown, ChevronUp, Trash2, Download } from 'lucide-react'
 
 const TRAINING_TYPES = ['Initial', 'Recurrent', 'Proficiency', 'Special']
 const OUTCOME_OPTIONS = ['completed', 'incomplete', 'failed']
@@ -262,6 +262,12 @@ export default function TrainingLogPage() {
             <option value="">All Types</option>
             {TRAINING_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
+          <button
+            onClick={() => api.download('/export/training-logs/csv')}
+            className="flex items-center gap-1.5 px-3 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90"
+          >
+            <Download className="w-4 h-4" /> Export CSV
+          </button>
           {isAdmin && (
             <button onClick={() => { setEditTraining(null); setModal(true) }} className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
               <Plus className="w-4 h-4" /> Add Training

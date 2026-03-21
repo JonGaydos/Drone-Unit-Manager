@@ -23,6 +23,7 @@ class VehicleUpdate(BaseModel):
     faa_registration: Optional[str] = None
     status: Optional[str] = None
     acquired_date: Optional[date] = None
+    photo_url: Optional[str] = None
     notes: Optional[str] = None
 
 
@@ -39,6 +40,7 @@ class VehicleOut(BaseModel):
     skydio_vehicle_serial: Optional[str]
     api_provider: Optional[str]
     acquired_date: Optional[date]
+    photo_url: Optional[str] = None
     notes: Optional[str]
     created_at: datetime
     updated_at: datetime

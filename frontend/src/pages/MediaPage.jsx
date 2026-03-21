@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
-import { Search, Image, Video, Download, FileQuestion, Filter } from 'lucide-react'
+import { Search, Image as ImageIcon, Video, Download, FileQuestion, Filter } from 'lucide-react'
 
 export default function MediaPage() {
   const [media, setMedia] = useState([])
@@ -39,7 +39,7 @@ export default function MediaPage() {
   }
 
   const KindIcon = ({ kind }) => {
-    if (kind === 'photo') return <Image className="w-8 h-8 text-blue-400" />
+    if (kind === 'photo') return <ImageIcon className="w-8 h-8 text-blue-400" />
     if (kind === 'video') return <Video className="w-8 h-8 text-purple-400" />
     return <FileQuestion className="w-8 h-8 text-muted-foreground" />
   }
@@ -123,7 +123,16 @@ export default function MediaPage() {
           </div>
         ))}
         {filtered.length === 0 && (
-          <div className="col-span-full text-center py-12 text-muted-foreground">No media files found</div>
+          <div className="col-span-full">
+            <div className="bg-card border border-border rounded-xl p-8 text-center">
+              <ImageIcon className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+              <h3 className="text-lg font-semibold mb-2">No Media Files Yet</h3>
+              <p className="text-muted-foreground max-w-md mx-auto">
+                Media from flights will appear here when synced from the Skydio API
+                or uploaded manually. Connect your Skydio Cloud API in Settings to get started.
+              </p>
+            </div>
+          </div>
         )}
       </div>
     </div>

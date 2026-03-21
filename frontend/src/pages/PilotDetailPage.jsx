@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { api } from '@/api/client'
+import { useAuth } from '@/contexts/AuthContext'
 import { formatHours, formatDuration } from '@/lib/utils'
-import { ArrowLeft, Plane, Clock, Calendar, ShieldCheck, FileText } from 'lucide-react'
+import { ArrowLeft, Plane, Clock, Calendar, ShieldCheck, FileText, Edit, Save, X, Camera } from 'lucide-react'
+import DocumentUpload from '@/components/DocumentUpload'
 
 const STATUS_COLORS = {
   not_issued: 'bg-zinc-500/15 text-zinc-400',
@@ -17,12 +19,15 @@ const STATUS_COLORS = {
 
 export default function PilotDetailPage() {
   const { id } = useParams()
+  const { isAdmin } = useAuth()
   const [pilot, setPilot] = useState(null)
   const [stats, setStats] = useState(null)
   const [flights, setFlights] = useState([])
   const [certifications, setCertifications] = useState([])
-  const [documents, setDocuments] = useState([])
   const [loading, setLoading] = useState(true)
+  const [editing, setEditing] = useState(false)
+  const [editForm, setEditForm] = useState({})
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     Promise.all([
@@ -30,15 +35,44 @@ export default function PilotDetailPage() {
       api.get(`/pilots/${id}/stats`),
       api.get(`/flights?pilot_id=${id}&limit=20`),
       api.get(`/pilot-certifications?pilot_id=${id}`).catch(() => []),
-      api.get(`/documents?entity_type=pilot&entity_id=${id}`).catch(() => []),
-    ]).then(([p, s, f, c, d]) => {
+    ]).then(([p, s, f, c]) => {
       setPilot(p)
       setStats(s)
       setFlights(f)
       setCertifications(c)
-      setDocuments(d)
     }).catch(console.error).finally(() => setLoading(false))
   }, [id])
+
+  const startEditing = () => {
+    setEditForm({
+      first_name: pilot.first_name || '',
+      last_name: pilot.last_name || '',
+      email: pilot.email || '',
+      phone: pilot.phone || '',
+      badge_number: pilot.badge_number || '',
+      status: pilot.status || 'active',
+      notes: pilot.notes || '',
+    })
+    setEditing(true)
+  }
+
+  const cancelEditing = () => {
+    setEditForm({})
+    setEditing(false)
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      const updated = await api.patch(`/pilots/${id}`, editForm)
+      setPilot(updated)
+      setEditing(false)
+    } catch (err) {
+      alert(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>
   if (!pilot) return <div className="text-center text-muted-foreground py-12">Pilot not found</div>
@@ -52,21 +86,121 @@ export default function PilotDetailPage() {
       {/* Profile Header */}
       <div className="bg-card border border-border rounded-xl p-6">
         <div className="flex items-start gap-4">
-          <div className="w-16 h-16 rounded-2xl bg-primary/15 flex items-center justify-center text-primary text-xl font-bold">
-            {pilot.first_name[0]}{pilot.last_name[0]}
+          <div className="relative shrink-0">
+            {pilot.photo_url ? (
+              <img src={pilot.photo_url} alt={pilot.full_name}
+                className="w-16 h-16 rounded-2xl object-cover" />
+            ) : (
+              <div className="w-16 h-16 rounded-2xl bg-primary/15 flex items-center justify-center text-primary text-xl font-bold">
+                {(editing ? editForm.first_name : pilot.first_name)?.[0]}{(editing ? editForm.last_name : pilot.last_name)?.[0]}
+              </div>
+            )}
+            {isAdmin && !editing && (
+              <label className="absolute -bottom-1 -right-1 w-6 h-6 bg-primary text-primary-foreground rounded-full flex items-center justify-center cursor-pointer hover:opacity-90 shadow-sm">
+                <Camera className="w-3 h-3" />
+                <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                  const file = e.target.files[0]
+                  if (!file) return
+                  const formData = new FormData()
+                  formData.append('file', file)
+                  const token = localStorage.getItem('token')
+                  try {
+                    const res = await fetch(`/api/pilots/${id}/photo`, {
+                      method: 'POST',
+                      headers: { Authorization: `Bearer ${token}` },
+                      body: formData,
+                    })
+                    if (!res.ok) throw new Error('Upload failed')
+                    const result = await res.json()
+                    setPilot({ ...pilot, photo_url: result.photo_url + '?t=' + Date.now() })
+                  } catch (err) { alert(err.message) }
+                  e.target.value = ''
+                }} />
+              </label>
+            )}
           </div>
           <div className="flex-1">
-            <h2 className="text-xl font-bold text-foreground">{pilot.full_name}</h2>
-            <div className="flex flex-wrap gap-4 mt-2 text-sm text-muted-foreground">
-              {pilot.email && <span>{pilot.email}</span>}
-              {pilot.phone && <span>{pilot.phone}</span>}
-              {pilot.badge_number && <span>Badge: {pilot.badge_number}</span>}
-            </div>
-            <span className={`inline-flex mt-2 px-2 py-0.5 rounded-full text-xs font-medium ${
-              pilot.status === 'active' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'
-            }`}>
-              {pilot.status}
-            </span>
+            {editing ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">First Name</label>
+                    <input type="text" value={editForm.first_name} onChange={e => setEditForm({...editForm, first_name: e.target.value})}
+                      className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Last Name</label>
+                    <input type="text" value={editForm.last_name} onChange={e => setEditForm({...editForm, last_name: e.target.value})}
+                      className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Email</label>
+                    <input type="email" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})}
+                      className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Phone</label>
+                    <input type="text" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})}
+                      className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Badge Number</label>
+                    <input type="text" value={editForm.badge_number} onChange={e => setEditForm({...editForm, badge_number: e.target.value})}
+                      className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Status</label>
+                    <select value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})}
+                      className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Notes</label>
+                  <textarea value={editForm.notes} onChange={e => setEditForm({...editForm, notes: e.target.value})}
+                    className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm h-20 resize-none focus:outline-none focus:ring-2 focus:ring-ring" />
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={handleSave} disabled={saving}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50">
+                    <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save'}
+                  </button>
+                  <button onClick={cancelEditing}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90">
+                    <X className="w-4 h-4" /> Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-3">
+                  <h2 className="text-xl font-bold text-foreground">{pilot.full_name}</h2>
+                  <button onClick={startEditing}
+                    className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent transition-colors">
+                    <Edit className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-4 mt-2 text-sm text-muted-foreground">
+                  {pilot.email && <span>{pilot.email}</span>}
+                  {pilot.phone && <span>{pilot.phone}</span>}
+                  {pilot.badge_number && <span>Badge: {pilot.badge_number}</span>}
+                </div>
+                <span className={`inline-flex mt-2 px-2 py-0.5 rounded-full text-xs font-medium ${
+                  pilot.status === 'active' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'
+                }`}>
+                  {pilot.status}
+                </span>
+                {pilot.notes && (
+                  <p className="mt-2 text-sm text-muted-foreground">{pilot.notes}</p>
+                )}
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -155,30 +289,7 @@ export default function PilotDetailPage() {
       </div>
 
       {/* Documents */}
-      <div className="bg-card border border-border rounded-xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-border flex items-center gap-2">
-          <FileText className="w-4 h-4 text-primary" />
-          <h3 className="font-semibold text-foreground">Documents</h3>
-        </div>
-        <div className="divide-y divide-border/50">
-          {documents.map(doc => (
-            <button
-              key={doc.id}
-              onClick={() => window.open(doc.view_url, '_blank')}
-              className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-accent/30 transition-colors"
-            >
-              <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-foreground truncate">{doc.title || doc.filename}</p>
-                <p className="text-xs text-muted-foreground">{doc.mime_type}</p>
-              </div>
-            </button>
-          ))}
-          {documents.length === 0 && (
-            <div className="px-4 py-8 text-center text-muted-foreground text-sm">No documents uploaded</div>
-          )}
-        </div>
-      </div>
+      <DocumentUpload entityType="pilot" entityId={id} />
     </div>
   )
 }

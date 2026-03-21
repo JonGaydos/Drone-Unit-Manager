@@ -11,8 +11,9 @@ from app.database import telemetry_engine
 from app.routers import (
     auth, pilots, vehicles, flights, dashboard, settings as settings_router,
     certifications, documents, sync, telemetry, maintenance, media, alerts,
-    equipment, reports, export, mission_logs, training_logs,
+    equipment, reports, export, mission_logs, training_logs, maintenance_schedules,
 )
+from app.routers import vehicle_registrations
 from app.services.scheduler import start_scheduler, stop_scheduler
 from app.routers.auth import hash_password
 from app.database import SessionLocal
@@ -58,6 +59,8 @@ async def lifespan(app: FastAPI):
     # Create tables
     Base.metadata.create_all(bind=engine)
     TelemetryBase.metadata.create_all(bind=telemetry_engine)
+    from app.services.migrations import run_migrations
+    run_migrations()
     seed_defaults()
     start_scheduler()
     yield
@@ -97,6 +100,8 @@ app.include_router(reports.router)
 app.include_router(export.router)
 app.include_router(mission_logs.router)
 app.include_router(training_logs.router)
+app.include_router(maintenance_schedules.router)
+app.include_router(vehicle_registrations.router)
 
 
 # Serve frontend static files in production (Docker)

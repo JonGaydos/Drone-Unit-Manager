@@ -36,4 +36,26 @@ export const api = {
   patch: (path, data) => request(path, { method: 'PATCH', body: JSON.stringify(data) }),
   put: (path, data) => request(path, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (path) => request(path, { method: 'DELETE' }),
+  download: async (path) => {
+    const token = localStorage.getItem('token')
+    const res = await fetch(`${API_BASE}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+    if (!res.ok) throw new Error('Download failed')
+    const blob = await res.blob()
+    const disposition = res.headers.get('Content-Disposition')
+    let filename = 'export.csv'
+    if (disposition) {
+      const match = disposition.match(/filename="?(.+?)"?$/)
+      if (match) filename = match[1]
+    }
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  },
 }

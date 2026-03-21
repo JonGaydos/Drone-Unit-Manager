@@ -22,9 +22,11 @@ class Vehicle(Base):
     skydio_vehicle_serial: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     api_provider: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     acquired_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    photo_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
     flights = relationship("Flight", back_populates="vehicle")
     documents = relationship("Document", back_populates="vehicle", foreign_keys="Document.vehicle_id")
+    registrations = relationship("VehicleRegistration", back_populates="vehicle", order_by="VehicleRegistration.registration_date.desc()")

@@ -15,10 +15,53 @@ _scheduler: BackgroundScheduler | None = None
 SYNC_JOB_ID = "skydio_sync"
 
 
+def check_maintenance_schedules(db):
+    """Create alerts for overdue maintenance schedules."""
+    from datetime import date as date_type
+    from app.models.maintenance_schedule import MaintenanceSchedule
+    from app.models.alert import Alert
+
+    today = date_type.today()
+    overdue = db.query(MaintenanceSchedule).filter(
+        MaintenanceSchedule.is_active == True,
+        MaintenanceSchedule.next_due <= today,
+    ).all()
+
+    for schedule in overdue:
+        # Check if an alert already exists for this schedule today
+        existing = db.query(Alert).filter(
+            Alert.type == "maintenance_due",
+            Alert.title == f"Maintenance Due: {schedule.name}",
+            Alert.is_dismissed == False,
+        ).first()
+        if existing:
+            continue
+
+        entity_info = f"{schedule.entity_type}"
+        if schedule.entity_id:
+            entity_info += f" #{schedule.entity_id}"
+
+        alert = Alert(
+            type="maintenance_due",
+            severity="warning",
+            title=f"Maintenance Due: {schedule.name}",
+            message=f"Scheduled {schedule.frequency} maintenance for {entity_info} is overdue (due {schedule.next_due.isoformat()}).",
+            entity_type=schedule.entity_type,
+            entity_id=schedule.entity_id,
+        )
+        db.add(alert)
+
+    db.commit()
+    logger.info("Maintenance schedule check complete: %d overdue schedules found", len(overdue))
+
+
 def _run_scheduled_sync():
     """Execute a sync inside a fresh DB session (called by APScheduler)."""
     db = SessionLocal()
     try:
+        # Check maintenance schedules for overdue items
+        check_maintenance_schedules(db)
+
         # Check if sync is configured
         token_setting = db.query(Setting).filter(Setting.key == "skydio_api_token").first()
         if not token_setting or not token_setting.value:

@@ -23,6 +23,7 @@ class PilotUpdate(BaseModel):
     badge_number: Optional[str] = None
     skydio_user_uuid: Optional[str] = None
     status: Optional[str] = None
+    photo_url: Optional[str] = None
     notes: Optional[str] = None
 
 
@@ -36,6 +37,7 @@ class PilotOut(BaseModel):
     badge_number: Optional[str]
     skydio_user_uuid: Optional[str]
     status: str
+    photo_url: Optional[str] = None
     notes: Optional[str]
     created_at: datetime
     updated_at: datetime

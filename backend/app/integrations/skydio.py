@@ -76,10 +76,15 @@ class SkydioProvider(DroneProvider):
         """Fetch all pages from a paginated Skydio endpoint."""
         all_data = []
         params = dict(params or {})
+        params.setdefault("per_page", 200)
         page = 0
 
         while True:
             page += 1
+            if page > 100:
+                logger.warning("Pagination safety limit reached (100 pages), stopping")
+                break
+
             resp = self._request("GET", url, creds, params=params)
             body = resp.json()
 
@@ -116,20 +121,36 @@ class SkydioProvider(DroneProvider):
                     logger.warning("Expected list but got %s", type(items).__name__)
                     break
 
+                # Empty page means no more data
+                if len(items) == 0:
+                    break
+
                 all_data.extend(items)
                 logger.info("  Got %d items this page, %d total", len(items), len(all_data))
 
                 # Check for next page cursor/URL
                 next_cursor = body.get("next") or body.get("next_cursor")
-                if not next_cursor:
-                    break
+                if next_cursor:
+                    # If next is a full URL, use it directly
+                    if isinstance(next_cursor, str) and next_cursor.startswith("http"):
+                        url = next_cursor
+                        params = {}
+                    else:
+                        params["cursor"] = next_cursor
+                    continue
 
-                # If next is a full URL, use it directly
-                if isinstance(next_cursor, str) and next_cursor.startswith("http"):
-                    url = next_cursor
-                    params = {}
-                else:
-                    params["cursor"] = next_cursor
+                # Fallback: check has_more with offset-based pagination
+                if body.get("has_more"):
+                    params["offset"] = len(all_data)
+                    continue
+
+                # Fallback: page-number-based pagination
+                if body.get("page") is not None and body.get("total", 0) > len(all_data):
+                    params["page"] = body["page"] + 1
+                    continue
+
+                # No more pages
+                break
             else:
                 break
 

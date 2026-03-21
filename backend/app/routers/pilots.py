@@ -1,7 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
 from app.models.pilot import Pilot
 from app.models.flight import Flight
@@ -78,3 +82,36 @@ def delete_pilot(pilot_id: int, db: Session = Depends(get_db), admin: User = Dep
     db.delete(pilot)
     db.commit()
     return {"ok": True}
+
+
+@router.post("/{pilot_id}/photo")
+async def upload_pilot_photo(pilot_id: int, file: UploadFile, db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    pilot = db.query(Pilot).filter(Pilot.id == pilot_id).first()
+    if not pilot:
+        raise HTTPException(404, "Pilot not found")
+    upload_dir = Path(settings.UPLOAD_DIR) / "photos" / "pilots" / str(pilot_id)
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    # Remove old photos
+    for old in upload_dir.glob("profile.*"):
+        old.unlink()
+    ext = Path(file.filename).suffix or ".jpg"
+    filepath = upload_dir / f"profile{ext}"
+    with open(filepath, "wb") as f:
+        content = await file.read()
+        f.write(content)
+    pilot.photo_url = f"/api/pilots/{pilot_id}/photo/view"
+    db.commit()
+    return {"ok": True, "photo_url": pilot.photo_url}
+
+
+@router.get("/{pilot_id}/photo/view")
+def view_pilot_photo(pilot_id: int, db: Session = Depends(get_db)):
+    pilot = db.query(Pilot).filter(Pilot.id == pilot_id).first()
+    if not pilot:
+        raise HTTPException(404)
+    photo_dir = Path(settings.UPLOAD_DIR) / "photos" / "pilots" / str(pilot_id)
+    for ext in [".jpg", ".jpeg", ".png", ".webp"]:
+        p = photo_dir / f"profile{ext}"
+        if p.exists():
+            return FileResponse(p)
+    raise HTTPException(404, "No photo found")

@@ -55,7 +55,7 @@ def require_admin(user: User = Depends(get_current_user)) -> User:
 
 def require_manager(user: User = Depends(get_current_user)) -> User:
     """Allow admin or manager roles — blocks viewer-only users."""
-    if user.role not in ("admin", "manager"):
+    if user.role not in ("admin", "manager", "pilot"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager access required")
     return user
 
@@ -96,6 +96,7 @@ def create_user(data: UserCreate, admin: User = Depends(require_admin), db: Sess
         password_hash=hash_password(data.password),
         display_name=data.display_name,
         role=data.role,
+        pilot_id=data.pilot_id,
     )
     db.add(user)
     db.commit()
@@ -130,6 +131,8 @@ def update_user(user_id: int, data: UserUpdate, admin: User = Depends(require_ad
         target.role = data.role
     if data.is_active is not None:
         target.is_active = data.is_active
+    if data.pilot_id is not None:
+        target.pilot_id = data.pilot_id if data.pilot_id != 0 else None
     db.commit()
     db.refresh(target)
     return UserOut.model_validate(target)

@@ -19,6 +19,8 @@ from app.models.mission_log import MissionLog
 from app.models.mission_log_pilot import MissionLogPilot
 from app.models.training_log import TrainingLog
 from app.models.training_log_pilot import TrainingLogPilot
+from app.models.maintenance_schedule import MaintenanceSchedule
+from app.models.vehicle_registration import VehicleRegistration
 
 __all__ = [
     "User",
@@ -45,4 +47,6 @@ __all__ = [
     "MissionLogPilot",
     "TrainingLog",
     "TrainingLogPilot",
+    "MaintenanceSchedule",
+    "VehicleRegistration",
 ]

@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
-import { Plus, Edit, Trash2, Search, Plane, Battery, Gamepad2, Warehouse, Cpu, Paperclip, ChevronUp, ChevronDown } from 'lucide-react'
+import { Plus, Edit, Trash2, Search, Plane, Battery, Gamepad2, Warehouse, Cpu, Paperclip, ChevronUp, ChevronDown, Download } from 'lucide-react'
 
 // ─── Generic Equipment Modal ────────────────────────────────────────────────
 
@@ -148,13 +148,29 @@ const TAB_CONFIGS = {
     label: 'Vehicles',
     endpoint: '/vehicles',
     columns: [
-      { key: 'name', label: 'Vehicle', primary: true, render: v => {
-        const name = `${v.manufacturer || ''} ${v.model || ''}${v.nickname ? ` (${v.nickname})` : ''}`.trim() || '—'
+      { key: 'nickname', label: 'Vehicle', primary: true, render: v => {
+        const name = v.nickname || v.serial_number || '—'
         return <Link to={`/fleet/vehicles/${v.id}`} className="hover:text-primary">{name}</Link>
       }},
-      { key: 'serial_number', label: 'Serial' },
+      { key: 'manufacturer', label: 'Manufacturer' },
+      { key: 'model', label: 'Model' },
+      { key: 'serial_number', label: 'Serial Number' },
       { key: 'faa_registration', label: 'FAA Reg' },
-      { key: 'acquired_date', label: 'Acquired' },
+      { key: 'next_due', label: 'Next Due', sortable: true, render: v => {
+        if (!v._reg_expiry) return <span className="text-muted-foreground">--</span>
+        const today = new Date()
+        const expiry = new Date(v._reg_expiry)
+        const days = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24))
+        const isExpired = days < 0
+        const isSoon = days <= 90 && days >= 0
+        return (
+          <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+            isExpired ? 'bg-red-500/15 text-red-400' : isSoon ? 'bg-amber-500/15 text-amber-400' : 'bg-emerald-500/15 text-emerald-400'
+          }`}>
+            {isExpired ? `Expired` : `${days}d`}
+          </span>
+        )
+      }},
       { key: 'status', label: 'Status', render: v => <StatusBadge status={v.status} /> },
     ],
     fields: [
@@ -306,12 +322,25 @@ export default function FleetPage() {
 
   const config = TAB_CONFIGS[activeTab]
 
-  const load = () => {
+  const load = async () => {
     setLoading(true)
-    api.get(config.endpoint)
-      .then(setItems)
-      .catch(console.error)
-      .finally(() => setLoading(false))
+    try {
+      const data = await api.get(config.endpoint)
+      if (activeTab === 'vehicles') {
+        // Enrich vehicles with registration expiry
+        const enriched = await Promise.all(data.map(async (v) => {
+          try {
+            const regs = await api.get(`/vehicles/${v.id}/registrations`)
+            const current = regs.find(r => r.is_current)
+            return { ...v, _reg_expiry: current?.expiry_date || null, next_due: current?.expiry_date || '' }
+          } catch { return { ...v, _reg_expiry: null, next_due: '' } }
+        }))
+        setItems(enriched)
+      } else {
+        setItems(data)
+      }
+    } catch (err) { console.error(err) }
+    finally { setLoading(false) }
   }
 
   useEffect(() => {
@@ -356,10 +385,10 @@ export default function FleetPage() {
     })
     return [...list].sort((a, b) => {
       let aVal, bVal
-      // For vehicle name column, build composite name
-      if (sortKey === 'name' && activeTab === 'vehicles') {
-        aVal = `${a.manufacturer || ''} ${a.model || ''} ${a.nickname || ''}`.trim().toLowerCase()
-        bVal = `${b.manufacturer || ''} ${b.model || ''} ${b.nickname || ''}`.trim().toLowerCase()
+      // For vehicle nickname column, sort by nickname or serial_number
+      if (sortKey === 'nickname' && activeTab === 'vehicles') {
+        aVal = (a.nickname || a.serial_number || '').toLowerCase()
+        bVal = (b.nickname || b.serial_number || '').toLowerCase()
       } else if (typeof a[sortKey] === 'number' || typeof b[sortKey] === 'number') {
         aVal = a[sortKey] ?? 0
         bVal = b[sortKey] ?? 0
@@ -407,6 +436,14 @@ export default function FleetPage() {
             className="w-full pl-9 pr-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
+        {activeTab === 'vehicles' && (
+          <button
+            onClick={() => api.download('/export/vehicles/csv')}
+            className="flex items-center gap-1.5 px-3 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90"
+          >
+            <Download className="w-4 h-4" /> Export CSV
+          </button>
+        )}
         {isAdmin && (
           <button
             onClick={() => setModal('add')}

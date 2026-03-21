@@ -1,7 +1,11 @@
-from fastapi import APIRouter, Depends
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.config import settings as app_settings
 from app.database import get_db
 from app.models.setting import Setting
 from app.models.user import User
@@ -61,9 +65,44 @@ def set_setting(data: SettingValue, db: Session = Depends(get_db), admin: User =
     return {"ok": True}
 
 
+@router.post("/logo")
+async def upload_logo(file: UploadFile, db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    upload_dir = Path(app_settings.UPLOAD_DIR) / "org"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    # Remove old logos
+    for old in upload_dir.glob("logo.*"):
+        old.unlink()
+    ext = Path(file.filename).suffix or ".png"
+    filepath = upload_dir / f"logo{ext}"
+    with open(filepath, "wb") as f:
+        content = await file.read()
+        f.write(content)
+    # Save path as setting
+    setting = db.query(Setting).filter(Setting.key == "org_logo").first()
+    if setting:
+        setting.value = "/api/settings/logo/view"
+    else:
+        db.add(Setting(key="org_logo", value="/api/settings/logo/view"))
+    db.commit()
+    return {"ok": True, "logo_url": "/api/settings/logo/view"}
+
+
+@router.get("/logo/view")
+def view_logo():
+    logo_dir = Path(app_settings.UPLOAD_DIR) / "org"
+    for ext in [".png", ".jpg", ".jpeg", ".webp", ".svg"]:
+        p = logo_dir / f"logo{ext}"
+        if p.exists():
+            return FileResponse(p)
+    raise HTTPException(404, "No logo found")
+
+
 @router.put("/bulk")
 def set_settings_bulk(data: list[SettingValue], db: Session = Depends(get_db), admin: User = Depends(require_admin)):
     for item in data:
+        # Don't overwrite real token with masked value from frontend
+        if item.key in MASKED_KEYS and "..." in (item.value or ""):
+            continue
         setting = db.query(Setting).filter(Setting.key == item.key).first()
         if setting:
             setting.value = item.value

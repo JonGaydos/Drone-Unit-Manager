@@ -5,8 +5,10 @@ import { useAuth } from '@/contexts/AuthContext'
 import { formatHours, formatDuration } from '@/lib/utils'
 import {
   ArrowLeft, Plane, Clock, Calendar, Battery, Edit,
-  FileText, Wrench, Gamepad2, Cpu, Paperclip
+  FileText, Wrench, Gamepad2, Cpu, Paperclip, Camera,
+  ShieldCheck, Plus, Trash2, AlertTriangle
 } from 'lucide-react'
+import DocumentUpload from '@/components/DocumentUpload'
 
 const STATUS_COLORS = {
   active: 'bg-emerald-500/15 text-emerald-400',
@@ -27,9 +29,15 @@ export default function VehicleDetailPage() {
   const [sensors, setSensors] = useState([])
   const [attachments, setAttachments] = useState([])
   const [maintenance, setMaintenance] = useState([])
-  const [documents, setDocuments] = useState([])
+  const [registrations, setRegistrations] = useState([])
   const [loading, setLoading] = useState(true)
   const [equipTab, setEquipTab] = useState('batteries')
+  const [showRegForm, setShowRegForm] = useState(false)
+  const [regForm, setRegForm] = useState({ registration_number: '', registration_date: '', notes: '' })
+
+  const loadRegistrations = () => {
+    api.get(`/vehicles/${id}/registrations`).then(setRegistrations).catch(() => [])
+  }
 
   useEffect(() => {
     Promise.all([
@@ -41,8 +49,8 @@ export default function VehicleDetailPage() {
       api.get('/sensors').catch(() => []),
       api.get('/attachments').catch(() => []),
       api.get(`/maintenance?entity_type=vehicle&entity_id=${id}`).catch(() => []),
-      api.get(`/documents?entity_type=vehicle&entity_id=${id}`).catch(() => []),
-    ]).then(([v, s, f, bat, ctrl, sens, att, maint, docs]) => {
+      api.get(`/vehicles/${id}/registrations`).catch(() => []),
+    ]).then(([v, s, f, bat, ctrl, sens, att, maint, regs]) => {
       setVehicle(v)
       setStats(s)
       setFlights(f)
@@ -51,7 +59,7 @@ export default function VehicleDetailPage() {
       setSensors(sens)
       setAttachments(att)
       setMaintenance(maint)
-      setDocuments(docs)
+      setRegistrations(regs)
     }).catch(console.error).finally(() => setLoading(false))
   }, [id])
 
@@ -90,8 +98,38 @@ export default function VehicleDetailPage() {
       {/* Header */}
       <div className="bg-card border border-border rounded-xl p-6">
         <div className="flex items-start gap-4">
-          <div className="w-16 h-16 rounded-2xl bg-primary/15 flex items-center justify-center text-primary">
-            <Plane className="w-8 h-8" />
+          <div className="relative shrink-0">
+            {vehicle.photo_url ? (
+              <img src={vehicle.photo_url} alt={displayName}
+                className="w-16 h-16 rounded-2xl object-cover" />
+            ) : (
+              <div className="w-16 h-16 rounded-2xl bg-primary/15 flex items-center justify-center text-primary">
+                <Plane className="w-8 h-8" />
+              </div>
+            )}
+            {isAdmin && (
+              <label className="absolute -bottom-1 -right-1 w-6 h-6 bg-primary text-primary-foreground rounded-full flex items-center justify-center cursor-pointer hover:opacity-90 shadow-sm">
+                <Camera className="w-3 h-3" />
+                <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                  const file = e.target.files[0]
+                  if (!file) return
+                  const formData = new FormData()
+                  formData.append('file', file)
+                  const token = localStorage.getItem('token')
+                  try {
+                    const res = await fetch(`/api/vehicles/${id}/photo`, {
+                      method: 'POST',
+                      headers: { Authorization: `Bearer ${token}` },
+                      body: formData,
+                    })
+                    if (!res.ok) throw new Error('Upload failed')
+                    const result = await res.json()
+                    setVehicle({ ...vehicle, photo_url: result.photo_url + '?t=' + Date.now() })
+                  } catch (err) { alert(err.message) }
+                  e.target.value = ''
+                }} />
+              </label>
+            )}
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-3">
@@ -312,31 +350,167 @@ export default function VehicleDetailPage() {
         </div>
       </div>
 
-      {/* Documents */}
+      {/* FAA Registration */}
       <div className="bg-card border border-border rounded-xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-border flex items-center gap-2">
-          <FileText className="w-4 h-4 text-primary" />
-          <h3 className="font-semibold text-foreground">Documents</h3>
-        </div>
-        <div className="divide-y divide-border/50">
-          {documents.map(doc => (
+        <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-primary" />
+            <h3 className="font-semibold text-foreground">FAA Registration</h3>
+          </div>
+          {isAdmin && (
             <button
-              key={doc.id}
-              onClick={() => window.open(doc.view_url, '_blank')}
-              className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-accent/30 transition-colors"
+              onClick={() => setShowRegForm(!showRegForm)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:opacity-90"
             >
-              <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-foreground truncate">{doc.title || doc.filename}</p>
-                <p className="text-xs text-muted-foreground">{doc.mime_type}</p>
-              </div>
+              <Plus className="w-3.5 h-3.5" /> Add Registration
             </button>
-          ))}
-          {documents.length === 0 && (
-            <div className="px-4 py-8 text-center text-muted-foreground text-sm">No documents uploaded</div>
           )}
         </div>
+
+        {/* Current Registration Summary */}
+        {(() => {
+          const current = registrations.find(r => r.is_current)
+          if (current) {
+            const today = new Date()
+            const expiry = current.expiry_date ? new Date(current.expiry_date) : null
+            const daysUntil = expiry ? Math.ceil((expiry - today) / (1000 * 60 * 60 * 24)) : null
+            const isExpired = daysUntil !== null && daysUntil < 0
+            const isExpiringSoon = daysUntil !== null && daysUntil <= 90 && daysUntil >= 0
+            return (
+              <div className={`px-4 py-3 border-b border-border flex items-center gap-4 ${
+                isExpired ? 'bg-red-500/5' : isExpiringSoon ? 'bg-amber-500/5' : 'bg-emerald-500/5'
+              }`}>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-foreground">
+                    {current.registration_number || 'No registration number'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Registered: {current.registration_date || 'N/A'} | Expires: {current.expiry_date || 'N/A'}
+                  </p>
+                </div>
+                <div className="text-right">
+                  {daysUntil !== null && (
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                      isExpired ? 'bg-red-500/15 text-red-400' :
+                      isExpiringSoon ? 'bg-amber-500/15 text-amber-400' :
+                      'bg-emerald-500/15 text-emerald-400'
+                    }`}>
+                      {isExpired && <AlertTriangle className="w-3 h-3" />}
+                      {isExpired ? `Expired ${Math.abs(daysUntil)}d ago` :
+                       `${daysUntil}d until renewal`}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )
+          }
+          return null
+        })()}
+
+        {/* Add Registration Form */}
+        {showRegForm && isAdmin && (
+          <div className="px-4 py-3 border-b border-border bg-muted/20 space-y-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Registration #</label>
+                <input type="text" value={regForm.registration_number}
+                  onChange={e => setRegForm({...regForm, registration_number: e.target.value})}
+                  placeholder="FA..."
+                  className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Registration Date</label>
+                <input type="date" value={regForm.registration_date}
+                  onChange={e => setRegForm({...regForm, registration_date: e.target.value})}
+                  className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Notes</label>
+                <input type="text" value={regForm.notes}
+                  onChange={e => setRegForm({...regForm, notes: e.target.value})}
+                  placeholder="Optional"
+                  className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={async () => {
+                  try {
+                    await api.post(`/vehicles/${id}/registrations`, {
+                      registration_number: regForm.registration_number || null,
+                      registration_date: regForm.registration_date || null,
+                      notes: regForm.notes || null,
+                    })
+                    setRegForm({ registration_number: '', registration_date: '', notes: '' })
+                    setShowRegForm(false)
+                    loadRegistrations()
+                  } catch (err) { alert(err.message) }
+                }}
+                className="px-4 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:opacity-90"
+              >
+                Save Registration
+              </button>
+              <button onClick={() => setShowRegForm(false)}
+                className="px-4 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-xs hover:opacity-90">
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Registration History */}
+        {registrations.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/30">
+                  <th className="text-left px-4 py-2 text-muted-foreground font-medium">Reg #</th>
+                  <th className="text-left px-4 py-2 text-muted-foreground font-medium">Registered</th>
+                  <th className="text-left px-4 py-2 text-muted-foreground font-medium">Expires</th>
+                  <th className="text-left px-4 py-2 text-muted-foreground font-medium">Status</th>
+                  <th className="text-left px-4 py-2 text-muted-foreground font-medium hidden md:table-cell">Notes</th>
+                  {isAdmin && <th className="text-right px-4 py-2 text-muted-foreground font-medium">Actions</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {registrations.map(r => (
+                  <tr key={r.id} className="border-b border-border/50 hover:bg-accent/30">
+                    <td className="px-4 py-2 text-foreground font-medium">{r.registration_number || '--'}</td>
+                    <td className="px-4 py-2 text-muted-foreground">{r.registration_date || '--'}</td>
+                    <td className="px-4 py-2 text-muted-foreground">{r.expiry_date || '--'}</td>
+                    <td className="px-4 py-2">
+                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                        r.is_current ? 'bg-emerald-500/15 text-emerald-400' : 'bg-zinc-500/15 text-zinc-400'
+                      }`}>
+                        {r.is_current ? 'Current' : 'Previous'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-muted-foreground hidden md:table-cell">{r.notes || '--'}</td>
+                    {isAdmin && (
+                      <td className="px-4 py-2 text-right">
+                        <button onClick={async () => {
+                          if (!confirm('Delete this registration?')) return
+                          try {
+                            await api.delete(`/vehicle-registrations/${r.id}`)
+                            loadRegistrations()
+                          } catch (err) { alert(err.message) }
+                        }} className="p-1.5 text-muted-foreground hover:text-destructive rounded hover:bg-destructive/10">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="px-4 py-8 text-center text-muted-foreground text-sm">No FAA registrations recorded</div>
+        )}
       </div>
+
+      {/* Documents */}
+      <DocumentUpload entityType="vehicle" entityId={id} />
     </div>
   )
 }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
-import { Save, TestTube, Loader2, Upload, FileSpreadsheet, RefreshCw, UserPlus, Key, Trash2, Shield, ShieldCheck, Eye } from 'lucide-react'
+import { Save, TestTube, Loader2, Upload, FileSpreadsheet, RefreshCw, UserPlus, Key, Trash2, Shield, ShieldCheck, Eye, Image as ImageIcon } from 'lucide-react'
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState({})
@@ -15,9 +15,14 @@ export default function SettingsPage() {
 
   // User management state
   const [users, setUsers] = useState([])
+  const [pilots, setPilots] = useState([])
   const [showAddUser, setShowAddUser] = useState(false)
-  const [newUser, setNewUser] = useState({ username: '', password: '', display_name: '', role: 'manager' })
+  const [newUser, setNewUser] = useState({ username: '', password: '', display_name: '', role: 'pilot', pilot_id: '' })
   const [addingUser, setAddingUser] = useState(false)
+
+  // Logo state
+  const [logoUrl, setLogoUrl] = useState(null)
+  const [uploadingLogo, setUploadingLogo] = useState(false)
 
   // Change password state
   const [pwForm, setPwForm] = useState({ current_password: '', new_password: '', confirm_password: '' })
@@ -33,9 +38,11 @@ export default function SettingsPage() {
       const map = {}
       data.forEach(s => { map[s.key] = s.value })
       setSettings(map)
+      if (map.org_logo) setLogoUrl(map.org_logo + '?t=' + Date.now())
     }).catch(console.error)
     if (isAdmin) {
       api.get('/auth/users').then(setUsers).catch(console.error)
+      api.get('/pilots').then(setPilots).catch(console.error)
     }
   }, [isAdmin])
 
@@ -43,9 +50,15 @@ export default function SettingsPage() {
     e.preventDefault()
     setAddingUser(true)
     try {
-      const created = await api.post('/auth/users', newUser)
+      const payload = { ...newUser }
+      if (payload.pilot_id) {
+        payload.pilot_id = parseInt(payload.pilot_id)
+      } else {
+        delete payload.pilot_id
+      }
+      const created = await api.post('/auth/users', payload)
       setUsers([...users, created])
-      setNewUser({ username: '', password: '', display_name: '', role: 'manager' })
+      setNewUser({ username: '', password: '', display_name: '', role: 'pilot', pilot_id: '' })
       setShowAddUser(false)
     } catch (err) { alert(err.message) }
     finally { setAddingUser(false) }
@@ -192,36 +205,87 @@ export default function SettingsPage() {
   // Use refs for settings inputs to avoid re-renders on keystroke/paste
   const inputRefs = React.useRef({})
 
+  const PASSWORD_KEYS = new Set(['skydio_api_token'])
+
   const gatherInputs = () => {
     const gathered = { ...settings }
     for (const [key, ref] of Object.entries(inputRefs.current)) {
-      if (ref) gathered[key] = ref.value
+      if (!ref) continue
+      // Skip password fields where user didn't type anything new
+      if (PASSWORD_KEYS.has(key) && ref.value === '') continue
+      gathered[key] = ref.value
     }
     return gathered
   }
 
-  const field = (label, key, type = 'text', description = '') => (
-    <div>
-      <label className="block text-sm font-medium text-foreground mb-1">{label}</label>
-      {description && <p className="text-xs text-muted-foreground mb-1.5">{description}</p>}
-      <input
-        type={type}
-        ref={el => { inputRefs.current[key] = el }}
-        key={`${key}-${settings[key] === undefined ? 'loading' : 'loaded'}`}
-        defaultValue={settings[key] || ''}
-        className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-        disabled={!isAdmin}
-      />
-    </div>
-  )
+  const field = (label, key, type = 'text', description = '') => {
+    const isPassword = type === 'password'
+    const hasMaskedValue = isPassword && settings[key] && settings[key].includes('...')
+    return (
+      <div>
+        <label className="block text-sm font-medium text-foreground mb-1">{label}</label>
+        {description && <p className="text-xs text-muted-foreground mb-1.5">{description}</p>}
+        <input
+          type={type}
+          ref={el => { inputRefs.current[key] = el }}
+          key={`${key}-${settings[key] === undefined ? 'loading' : 'loaded'}`}
+          defaultValue={isPassword ? '' : (settings[key] || '')}
+          placeholder={hasMaskedValue ? 'Token saved (enter new to replace)' : ''}
+          className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          disabled={!isAdmin}
+        />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6 max-w-2xl">
       {/* Organization */}
       <div className="bg-card border border-border rounded-xl p-6">
         <h3 className="text-lg font-semibold text-foreground mb-4">Organization</h3>
-        <div className="space-y-3">
+        <div className="space-y-4">
           {field('Organization Name', 'org_name', 'text', 'Displayed on reports and exports')}
+
+          {/* Logo Upload */}
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-1">Organization Logo</label>
+            <p className="text-xs text-muted-foreground mb-2">Used on reports and exports</p>
+            <div className="flex items-center gap-4">
+              {logoUrl ? (
+                <img src={logoUrl} alt="Org logo" className="w-16 h-16 object-contain rounded-lg border border-border bg-secondary p-1" />
+              ) : (
+                <div className="w-16 h-16 rounded-lg border border-border border-dashed bg-secondary/50 flex items-center justify-center">
+                  <ImageIcon className="w-6 h-6 text-muted-foreground" />
+                </div>
+              )}
+              {isAdmin && (
+                <label className="flex items-center gap-2 px-4 py-2 bg-secondary border border-border rounded-lg text-sm cursor-pointer hover:bg-accent/30 transition-colors">
+                  {uploadingLogo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                  <span className="text-muted-foreground">{uploadingLogo ? 'Uploading...' : 'Upload Logo'}</span>
+                  <input type="file" accept="image/*" className="hidden" disabled={uploadingLogo} onChange={async (e) => {
+                    const file = e.target.files[0]
+                    if (!file) return
+                    setUploadingLogo(true)
+                    try {
+                      const formData = new FormData()
+                      formData.append('file', file)
+                      const token = localStorage.getItem('token')
+                      const res = await fetch('/api/settings/logo', {
+                        method: 'POST',
+                        headers: { Authorization: `Bearer ${token}` },
+                        body: formData,
+                      })
+                      if (!res.ok) throw new Error('Upload failed')
+                      const result = await res.json()
+                      setLogoUrl(result.logo_url + '?t=' + Date.now())
+                    } catch (err) { alert(err.message) }
+                    finally { setUploadingLogo(false) }
+                    e.target.value = ''
+                  }} />
+                </label>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -398,7 +462,7 @@ export default function SettingsPage() {
           {/* Role descriptions */}
           <div className="mb-4 p-3 bg-muted/30 rounded-lg text-xs text-muted-foreground space-y-1">
             <p><span className="font-medium text-foreground">Admin:</span> Full access — settings, API keys, user management, delete records</p>
-            <p><span className="font-medium text-foreground">Manager:</span> Add/edit flights, logs, certs, validate imports — cannot change settings, API keys, or manage users</p>
+            <p><span className="font-medium text-foreground">Pilot:</span> Add/edit flights, logs, certs — linked to a pilot profile</p>
             <p><span className="font-medium text-foreground">Viewer:</span> Read-only access to all data and reports</p>
           </div>
 
@@ -425,9 +489,19 @@ export default function SettingsPage() {
                   <label className="block text-sm font-medium text-foreground mb-1">Role</label>
                   <select value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value})}
                     className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
-                    <option value="manager">Manager</option>
-                    <option value="viewer">Viewer</option>
                     <option value="admin">Admin</option>
+                    <option value="pilot">Pilot</option>
+                    <option value="viewer">Viewer</option>
+                  </select>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium text-foreground mb-1">Link to Pilot</label>
+                  <select value={newUser.pilot_id} onChange={e => setNewUser({...newUser, pilot_id: e.target.value})}
+                    className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
+                    <option value="">-- No pilot linked --</option>
+                    {pilots.map(p => (
+                      <option key={p.id} value={p.id}>{p.full_name}{p.badge_number ? ` (Badge: ${p.badge_number})` : ''}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -467,6 +541,7 @@ export default function SettingsPage() {
                         disabled={u.id === currentUser?.id}
                         className="px-2 py-1 bg-secondary border border-border rounded text-xs text-foreground disabled:opacity-50">
                         <option value="admin">Admin</option>
+                        <option value="pilot">Pilot</option>
                         <option value="manager">Manager</option>
                         <option value="viewer">Viewer</option>
                       </select>

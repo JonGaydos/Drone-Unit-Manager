@@ -18,6 +18,7 @@ class Pilot(Base):
     badge_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     skydio_user_uuid: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="active")  # active, inactive
+    photo_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
@@ -26,6 +27,7 @@ class Pilot(Base):
     certifications = relationship("PilotCertification", back_populates="pilot", cascade="all, delete-orphan")
     equipment_quals = relationship("PilotEquipmentQual", back_populates="pilot", cascade="all, delete-orphan")
     documents = relationship("Document", back_populates="pilot", foreign_keys="Document.pilot_id")
+    user = relationship("User", back_populates="pilot", foreign_keys="User.pilot_id", uselist=False)
 
     @property
     def full_name(self) -> str:

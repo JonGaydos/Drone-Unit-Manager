@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
-import { Plus, Search, X, ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
+import { Plus, Search, X, ChevronDown, ChevronUp, Trash2, Download } from 'lucide-react'
 
 const STATUS_OPTIONS = ['planned', 'in_progress', 'completed', 'cancelled']
 const ROLE_OPTIONS = ['PIC', 'Observer', 'Spotter', 'Visual Observer', 'Support']
@@ -246,6 +246,12 @@ export default function MissionLogPage() {
             <option value="">All Pilots</option>
             {pilots.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
           </select>
+          <button
+            onClick={() => api.download('/export/mission-logs/csv')}
+            className="flex items-center gap-1.5 px-3 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90"
+          >
+            <Download className="w-4 h-4" /> Export CSV
+          </button>
           {isAdmin && (
             <button onClick={() => { setEditMission(null); setModal(true) }} className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
               <Plus className="w-4 h-4" /> Add Mission

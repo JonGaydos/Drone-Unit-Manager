@@ -1,6 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
 from app.models.vehicle import Vehicle
 from app.models.user import User
@@ -84,3 +88,36 @@ def delete_vehicle(vehicle_id: int, db: Session = Depends(get_db), admin: User =
     db.delete(vehicle)
     db.commit()
     return {"ok": True}
+
+
+@router.post("/{vehicle_id}/photo")
+async def upload_vehicle_photo(vehicle_id: int, file: UploadFile, db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
+    if not vehicle:
+        raise HTTPException(404, "Vehicle not found")
+    upload_dir = Path(settings.UPLOAD_DIR) / "photos" / "vehicles" / str(vehicle_id)
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    # Remove old photos
+    for old in upload_dir.glob("profile.*"):
+        old.unlink()
+    ext = Path(file.filename).suffix or ".jpg"
+    filepath = upload_dir / f"profile{ext}"
+    with open(filepath, "wb") as f:
+        content = await file.read()
+        f.write(content)
+    vehicle.photo_url = f"/api/vehicles/{vehicle_id}/photo/view"
+    db.commit()
+    return {"ok": True, "photo_url": vehicle.photo_url}
+
+
+@router.get("/{vehicle_id}/photo/view")
+def view_vehicle_photo(vehicle_id: int, db: Session = Depends(get_db)):
+    vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
+    if not vehicle:
+        raise HTTPException(404)
+    photo_dir = Path(settings.UPLOAD_DIR) / "photos" / "vehicles" / str(vehicle_id)
+    for ext in [".jpg", ".jpeg", ".png", ".webp"]:
+        p = photo_dir / f"profile{ext}"
+        if p.exists():
+            return FileResponse(p)
+    raise HTTPException(404, "No photo found")
