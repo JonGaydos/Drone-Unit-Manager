@@ -16,6 +16,23 @@ TELEMETRY_BASE = "https://api.skydio.com/api/v1"
 MAX_RETRIES = 3
 
 
+def _to_str(val):
+    """Convert API values to strings for DB storage. Handles dicts, lists, None."""
+    if val is None:
+        return None
+    if isinstance(val, str):
+        return val
+    if isinstance(val, dict):
+        # Extract the most useful field from a dict (serial, name, type)
+        for key in ("serial", "serial_number", "name", "type", "sensor_package_serial"):
+            if key in val:
+                return str(val[key])
+        return str(val)
+    if isinstance(val, list):
+        return ", ".join(str(v) for v in val)
+    return str(val)
+
+
 class SkydioProvider(DroneProvider):
     PROVIDER_NAME = "skydio"
 
@@ -265,13 +282,13 @@ class SkydioProvider(DroneProvider):
                     "max_altitude_m": f.get("max_altitude_m") or f.get("max_altitude"),
                     "max_speed_mps": f.get("max_speed_mps") or f.get("max_speed"),
                     "distance_m": f.get("distance_m") or f.get("total_distance"),
-                    "battery_serial": f.get("battery_serial"),
-                    "sensor_package": f.get("sensor_package"),
-                    "attachment_top": f.get("attachment_top"),
-                    "attachment_bottom": f.get("attachment_bottom"),
-                    "attachment_left": f.get("attachment_left"),
-                    "attachment_right": f.get("attachment_right"),
-                    "carrier": f.get("carrier") or f.get("carriers"),
+                    "battery_serial": _to_str(f.get("battery_serial")),
+                    "sensor_package": _to_str(f.get("sensor_package")),
+                    "attachment_top": _to_str(f.get("attachment_top")),
+                    "attachment_bottom": _to_str(f.get("attachment_bottom")),
+                    "attachment_left": _to_str(f.get("attachment_left")),
+                    "attachment_right": _to_str(f.get("attachment_right")),
+                    "carrier": _to_str(f.get("carrier") or f.get("carriers")),
                 })
 
             logger.info("Fetched %d flights from Skydio", len(flights))
@@ -386,13 +403,13 @@ class SkydioProvider(DroneProvider):
                 "max_altitude_m": f.get("max_altitude_m") or f.get("max_altitude"),
                 "max_speed_mps": f.get("max_speed_mps") or f.get("max_speed"),
                 "distance_m": f.get("distance_m") or f.get("total_distance"),
-                "battery_serial": f.get("battery_serial") or f.get("battery"),
-                "sensor_package": f.get("sensor_package"),
-                "attachment_top": f.get("attachment_top"),
-                "attachment_bottom": f.get("attachment_bottom"),
-                "attachment_left": f.get("attachment_left"),
-                "attachment_right": f.get("attachment_right"),
-                "carrier": f.get("carrier") or f.get("carriers"),
+                "battery_serial": _to_str(f.get("battery_serial") or f.get("battery")),
+                "sensor_package": _to_str(f.get("sensor_package")),
+                "attachment_top": _to_str(f.get("attachment_top")),
+                "attachment_bottom": _to_str(f.get("attachment_bottom")),
+                "attachment_left": _to_str(f.get("attachment_left")),
+                "attachment_right": _to_str(f.get("attachment_right")),
+                "carrier": _to_str(f.get("carrier") or f.get("carriers")),
             })
 
         return flights
