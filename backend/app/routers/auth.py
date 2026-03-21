@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.models.user import User
-from app.schemas.user import LoginRequest, LoginResponse, UserOut, UserCreate, UserUpdate
+from app.schemas.user import LoginRequest, LoginResponse, UserOut, UserCreate, UserUpdate, ChangePasswordRequest, AdminResetPasswordRequest
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 security = HTTPBearer(auto_error=False)
@@ -50,6 +50,13 @@ def get_current_user(
 def require_admin(user: User = Depends(get_current_user)) -> User:
     if user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+    return user
+
+
+def require_manager(user: User = Depends(get_current_user)) -> User:
+    """Allow admin or manager roles — blocks viewer-only users."""
+    if user.role not in ("admin", "manager"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager access required")
     return user
 
 
@@ -99,3 +106,54 @@ def create_user(data: UserCreate, admin: User = Depends(require_admin), db: Sess
 @router.get("/users", response_model=list[UserOut])
 def list_users(admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     return [UserOut.model_validate(u) for u in db.query(User).all()]
+
+
+@router.post("/change-password")
+def change_password(req: ChangePasswordRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if not verify_password(req.current_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    if len(req.new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    user.password_hash = hash_password(req.new_password)
+    db.commit()
+    return {"ok": True, "message": "Password changed successfully"}
+
+
+@router.patch("/users/{user_id}", response_model=UserOut)
+def update_user(user_id: int, data: UserUpdate, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    target = db.query(User).filter(User.id == user_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if data.display_name is not None:
+        target.display_name = data.display_name
+    if data.role is not None:
+        target.role = data.role
+    if data.is_active is not None:
+        target.is_active = data.is_active
+    db.commit()
+    db.refresh(target)
+    return UserOut.model_validate(target)
+
+
+@router.post("/users/{user_id}/reset-password")
+def admin_reset_password(user_id: int, req: AdminResetPasswordRequest, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    target = db.query(User).filter(User.id == user_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if len(req.new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    target.password_hash = hash_password(req.new_password)
+    db.commit()
+    return {"ok": True, "message": f"Password reset for {target.username}"}
+
+
+@router.delete("/users/{user_id}")
+def delete_user(user_id: int, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    target = db.query(User).filter(User.id == user_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if target.id == admin.id:
+        raise HTTPException(status_code=400, detail="Cannot delete your own account")
+    db.delete(target)
+    db.commit()
+    return {"ok": True}

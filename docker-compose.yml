@@ -4,7 +4,7 @@ services:
     image: ghcr.io/jongaydos/drone-unit-manager:latest
     container_name: drone-unit-manager
     ports:
-      - "${PORT:-8080}:8000"
+      - "${PORT:-3014}:8000"
     volumes:
       - dum-data:/app/data
     environment:

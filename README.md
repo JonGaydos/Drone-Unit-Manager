@@ -80,7 +80,7 @@ cp .env.example .env
 # Start the application
 docker compose up -d
 
-# Access at http://localhost:8080
+# Access at http://localhost:3014
 # Default login: admin / admin
 ```
 
@@ -89,7 +89,7 @@ docker compose up -d
 ```bash
 docker run -d \
   --name drone-unit-manager \
-  -p 8080:8000 \
+  -p 3014:8000 \
   -v dum-data:/app/data \
   -e SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))") \
   -e TZ=America/Chicago \
@@ -121,7 +121,7 @@ docker run -d \
    ```
 
 3. **Access the app**
-   - Open http://localhost:8080
+   - Open http://localhost:3014
    - Login with `admin` / `admin`
    - **Change the admin password immediately** in Settings
 
@@ -145,7 +145,7 @@ services:
     image: ghcr.io/jongaydos/drone-unit-manager:latest
     container_name: drone-unit-manager
     ports:
-      - "8080:8000"
+      - "3014:8000"
     volumes:
       - /mnt/user/appdata/drone-unit-manager:/app/data
     environment:
@@ -154,7 +154,7 @@ services:
 ```
 
 4. Click **Compose Up**
-5. Access at `http://YOUR_UNRAID_IP:8080`
+5. Access at `http://YOUR_UNRAID_IP:3014`
 
 #### Method 2: Community Applications Template
 
@@ -171,7 +171,7 @@ services:
 3. Fill in:
    - **Name:** `drone-unit-manager`
    - **Repository:** `ghcr.io/jongaydos/drone-unit-manager:latest`
-   - **Port Mapping:** Host `8080` → Container `8000`
+   - **Port Mapping:** Host `3014` → Container `8000`
    - **Path Mapping:** Host `/mnt/user/appdata/drone-unit-manager` → Container `/app/data`
    - **Variable:** `TZ` = `America/Chicago`
 4. Click **Apply**
@@ -182,7 +182,7 @@ services:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PORT` | `8080` | Host port to expose the application |
+| `PORT` | `3014` | Host port to expose the application |
 | `SECRET_KEY` | Auto-generated | JWT signing key. Auto-generated on first run if not set |
 | `TZ` | `America/Chicago` | Timezone for date/time display |
 | `DATABASE_URL` | `sqlite:////app/data/drone_unit_manager.db` | Database connection string |
@@ -233,8 +233,8 @@ cp -r /mnt/user/appdata/drone-unit-manager /mnt/user/backup/dum-backup
 ## API Documentation
 
 The app exposes a full REST API. When running, visit:
-- **Swagger UI:** `http://localhost:8080/docs`
-- **ReDoc:** `http://localhost:8080/redoc`
+- **Swagger UI:** `http://localhost:3014/docs`
+- **ReDoc:** `http://localhost:3014/redoc`
 
 ## Adding Support for Other Drone Manufacturers
 

@@ -18,6 +18,15 @@ class UserUpdate(BaseModel):
     theme: Optional[str] = None
 
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class AdminResetPasswordRequest(BaseModel):
+    new_password: str
+
+
 class UserOut(BaseModel):
     id: int
     username: str

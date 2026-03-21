@@ -13,7 +13,7 @@
     Self-hosted drone fleet management platform. Track flights, pilots, certifications, equipment, and maintenance for your drone program. Features include Skydio Cloud API integration, interactive analytics dashboard, certification matrix, mission and training logs, customizable reports, and mobile-responsive design. Built for law enforcement and public safety drone programs.
   </Overview>
   <Category>Tools: Productivity:</Category>
-  <WebUI>http://[IP]:[PORT:8080]/</WebUI>
+  <WebUI>http://[IP]:[PORT:3014]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/JonGaydos/Drone-Unit-Manager/main/unraid-template.xml</TemplateURL>
   <Icon>https://raw.githubusercontent.com/JonGaydos/Drone-Unit-Manager/main/frontend/public/icon.png</Icon>
   <ExtraParams>--restart unless-stopped</ExtraParams>
@@ -23,7 +23,7 @@
   <DonateText/>
   <DonateLink/>
   <Requires/>
-  <Config Name="Web UI Port" Target="8000" Default="8080" Mode="tcp" Description="Port for the web interface" Type="Port" Display="always" Required="true" Mask="false">8080</Config>
+  <Config Name="Web UI Port" Target="8000" Default="3014" Mode="tcp" Description="Port for the web interface" Type="Port" Display="always" Required="true" Mask="false">3014</Config>
   <Config Name="App Data" Target="/app/data" Default="/mnt/user/appdata/drone-unit-manager" Mode="rw" Description="Application data directory (database, uploads, config)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/drone-unit-manager</Config>
   <Config Name="Timezone" Target="TZ" Default="America/Chicago" Mode="" Description="Timezone for the application (e.g., America/New_York, America/Los_Angeles)" Type="Variable" Display="always" Required="false" Mask="false">America/Chicago</Config>
   <Config Name="Secret Key" Target="SECRET_KEY" Default="" Mode="" Description="JWT signing secret key. Leave blank to auto-generate on first run." Type="Variable" Display="advanced" Required="false" Mask="true"/>
