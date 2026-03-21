@@ -35,7 +35,7 @@ function FlightModal({ pilots, vehicles, purposes, onSave, onClose }) {
               <select value={form.pilot_id} onChange={e => setForm({...form, pilot_id: e.target.value})}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                 <option value="">Select pilot...</option>
-                {pilots.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+                {[...pilots].sort((a, b) => (a.full_name || '').localeCompare(b.full_name || '')).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
               </select>
             </div>
             <div>
@@ -43,7 +43,7 @@ function FlightModal({ pilots, vehicles, purposes, onSave, onClose }) {
               <select value={form.vehicle_id} onChange={e => setForm({...form, vehicle_id: e.target.value})}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                 <option value="">Select vehicle...</option>
-                {vehicles.map(v => <option key={v.id} value={v.id}>{v.manufacturer} {v.model}</option>)}
+                {[...vehicles].sort((a, b) => `${a.manufacturer} ${a.model}`.localeCompare(`${b.manufacturer} ${b.model}`)).map(v => <option key={v.id} value={v.id}>{v.manufacturer} {v.model}</option>)}
               </select>
             </div>
           </div>
@@ -65,7 +65,7 @@ function FlightModal({ pilots, vehicles, purposes, onSave, onClose }) {
             <select value={form.purpose} onChange={e => setForm({...form, purpose: e.target.value})}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
               <option value="">Select purpose...</option>
-              {purposes.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+              {[...purposes].sort((a, b) => (a.name || '').localeCompare(b.name || '')).map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
             </select>
           </div>
           <div>
@@ -132,6 +132,7 @@ export default function FlightsPage() {
     if (filterPilotId) qp.set('pilot_id', filterPilotId)
     if (filterVehicleId) qp.set('vehicle_id', filterVehicleId)
     if (filterPurpose) qp.set('purpose', filterPurpose)
+    if (statusFilter && statusFilter !== 'all') qp.set('review_status', statusFilter)
     qp.set('page', page)
     qp.set('per_page', 100)
     const qs = qp.toString()
@@ -152,7 +153,7 @@ export default function FlightsPage() {
     }).catch(console.error).finally(() => setLoading(false))
   }
 
-  useEffect(() => { load() }, [filterDateFrom, filterDateTo, filterPilotId, filterVehicleId, filterPurpose, page])
+  useEffect(() => { load() }, [filterDateFrom, filterDateTo, filterPilotId, filterVehicleId, filterPurpose, statusFilter, page])
 
   const handleSave = async (data) => {
     try {
@@ -208,17 +209,9 @@ export default function FlightsPage() {
   }
 
   const filtered = useMemo(() => {
-    let list = flights
-
-    // Apply status filter
-    if (statusFilter === 'needs_review') {
-      list = list.filter(f => f.review_status === 'needs_review')
-    } else if (statusFilter === 'reviewed') {
-      list = list.filter(f => f.review_status === 'reviewed')
-    }
-
+    // Status filter is now applied server-side via the API query param
     // Apply text search
-    list = list.filter(f =>
+    let list = flights.filter(f =>
       `${f.pilot_name || ''} ${f.vehicle_name || ''} ${f.purpose || ''} ${f.takeoff_address || ''}`
         .toLowerCase().includes(search.toLowerCase())
     )
@@ -251,7 +244,7 @@ export default function FlightsPage() {
       if (aVal > bVal) return sortDir === 'asc' ? 1 : -1
       return 0
     })
-  }, [flights, search, sortKey, sortDir, statusFilter])
+  }, [flights, search, sortKey, sortDir])
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>
 
@@ -266,7 +259,7 @@ export default function FlightsPage() {
       {/* Status filter toggle */}
       <div className="flex items-center gap-2">
         {['all', 'needs_review', 'reviewed'].map(s => (
-          <button key={s} onClick={() => setStatusFilter(s)}
+          <button key={s} onClick={() => { setStatusFilter(s); setPage(1) }}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
               statusFilter === s
                 ? 'bg-primary text-primary-foreground'
@@ -293,21 +286,21 @@ export default function FlightsPage() {
           <label className="block text-xs text-muted-foreground mb-1">Pilot</label>
           <select value={filterPilotId} onChange={e => setFilterPilotId(e.target.value)} className={selectCls}>
             <option value="">All Pilots</option>
-            {pilots.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+            {[...pilots].sort((a, b) => (a.full_name || '').localeCompare(b.full_name || '')).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
           </select>
         </div>
         <div>
           <label className="block text-xs text-muted-foreground mb-1">Vehicle</label>
           <select value={filterVehicleId} onChange={e => setFilterVehicleId(e.target.value)} className={selectCls}>
             <option value="">All Vehicles</option>
-            {vehicles.map(v => <option key={v.id} value={v.id}>{v.manufacturer} {v.model}</option>)}
+            {[...vehicles].sort((a, b) => `${a.manufacturer} ${a.model}`.localeCompare(`${b.manufacturer} ${b.model}`)).map(v => <option key={v.id} value={v.id}>{v.manufacturer} {v.model}</option>)}
           </select>
         </div>
         <div>
           <label className="block text-xs text-muted-foreground mb-1">Purpose</label>
           <select value={filterPurpose} onChange={e => setFilterPurpose(e.target.value)} className={selectCls}>
             <option value="">All Purposes</option>
-            {purposes.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+            {[...purposes].sort((a, b) => (a.name || '').localeCompare(b.name || '')).map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
           </select>
         </div>
       </div>
@@ -381,7 +374,7 @@ export default function FlightsPage() {
                   <select value={editForm.pilot_id} onChange={e => setEditForm({...editForm, pilot_id: e.target.value})}
                     className="w-full px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm">
                     <option value="">Unassigned</option>
-                    {pilots.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+                    {[...pilots].sort((a, b) => (a.full_name || '').localeCompare(b.full_name || '')).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
                   </select>
                 </td>
                 <td className="px-4 py-2 hidden md:table-cell text-muted-foreground">{f.vehicle_name || '—'}</td>
@@ -389,7 +382,7 @@ export default function FlightsPage() {
                   <select value={editForm.purpose} onChange={e => setEditForm({...editForm, purpose: e.target.value})}
                     className="w-full px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm">
                     <option value="">None</option>
-                    {purposes.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                    {[...purposes].sort((a, b) => (a.name || '').localeCompare(b.name || '')).map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
                   </select>
                 </td>
                 <td className="px-4 py-2 text-right">

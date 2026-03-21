@@ -75,9 +75,6 @@ export default function LoginPage() {
             {loading ? 'Signing in...' : 'Sign In'}
           </button>
 
-          <p className="text-xs text-muted-foreground text-center mt-4">
-            Default: admin / admin
-          </p>
         </form>
       </div>
     </div>

@@ -499,7 +499,7 @@ export default function SettingsPage() {
                   <select value={newUser.pilot_id} onChange={e => setNewUser({...newUser, pilot_id: e.target.value})}
                     className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                     <option value="">-- No pilot linked --</option>
-                    {pilots.map(p => (
+                    {[...pilots].sort((a, b) => (a.full_name || '').localeCompare(b.full_name || '')).map(p => (
                       <option key={p.id} value={p.id}>{p.full_name}{p.badge_number ? ` (Badge: ${p.badge_number})` : ''}</option>
                     ))}
                   </select>

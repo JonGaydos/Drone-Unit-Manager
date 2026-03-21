@@ -137,7 +137,7 @@ export default function FlightDetailPage() {
                 <select value={editForm.pilot_id} onChange={e => setEditForm({...editForm, pilot_id: e.target.value})}
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                   <option value="">Unassigned</option>
-                  {pilots.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+                  {[...pilots].sort((a, b) => (a.full_name || '').localeCompare(b.full_name || '')).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
                 </select>
               </div>
               <div>
@@ -145,7 +145,7 @@ export default function FlightDetailPage() {
                 <select value={editForm.vehicle_id} onChange={e => setEditForm({...editForm, vehicle_id: e.target.value})}
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                   <option value="">Unassigned</option>
-                  {vehicles.map(v => <option key={v.id} value={v.id}>{v.manufacturer} {v.model}</option>)}
+                  {[...vehicles].sort((a, b) => `${a.manufacturer} ${a.model}`.localeCompare(`${b.manufacturer} ${b.model}`)).map(v => <option key={v.id} value={v.id}>{v.manufacturer} {v.model}</option>)}
                 </select>
               </div>
             </div>
@@ -155,7 +155,7 @@ export default function FlightDetailPage() {
                 <select value={editForm.purpose} onChange={e => setEditForm({...editForm, purpose: e.target.value})}
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                   <option value="">None</option>
-                  {purposes.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                  {[...purposes].sort((a, b) => (a.name || '').localeCompare(b.name || '')).map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
                 </select>
               </div>
               <div>

@@ -115,7 +115,7 @@ function TrainingModal({ pilots, vehicles, onSave, onClose, initial }) {
             <select value={form.vehicle_id} onChange={e => setForm({...form, vehicle_id: e.target.value})}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
               <option value="">Select vehicle...</option>
-              {vehicles.map(v => <option key={v.id} value={v.id}>{v.manufacturer} {v.model}{v.nickname ? ` (${v.nickname})` : ''}</option>)}
+              {[...vehicles].sort((a, b) => `${a.manufacturer} ${a.model}`.localeCompare(`${b.manufacturer} ${b.model}`)).map(v => <option key={v.id} value={v.id}>{v.manufacturer} {v.model}{v.nickname ? ` (${v.nickname})` : ''}</option>)}
             </select>
           </div>
           <div>
@@ -146,7 +146,7 @@ function TrainingModal({ pilots, vehicles, onSave, onClose, initial }) {
                 <select value={pe.pilot_id} onChange={e => updatePilotEntry(i, 'pilot_id', e.target.value)}
                   className="flex-1 px-2 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm">
                   <option value="">Select pilot...</option>
-                  {pilots.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+                  {[...pilots].sort((a, b) => (a.full_name || '').localeCompare(b.full_name || '')).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
                 </select>
                 <select value={pe.role} onChange={e => updatePilotEntry(i, 'role', e.target.value)}
                   className="w-32 px-2 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm">
@@ -259,7 +259,7 @@ export default function TrainingLogPage() {
           <select value={filterPilot} onChange={e => setFilterPilot(e.target.value)}
             className="px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
             <option value="">All Pilots</option>
-            {pilots.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+            {[...pilots].sort((a, b) => (a.full_name || '').localeCompare(b.full_name || '')).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
           </select>
           <select value={filterType} onChange={e => setFilterType(e.target.value)}
             className="px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">

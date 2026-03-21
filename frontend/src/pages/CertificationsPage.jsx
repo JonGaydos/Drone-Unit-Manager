@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { normalizeDateValue } from '@/lib/utils'
-import { Plus, Edit, Trash2, ShieldCheck, FileText, Upload, Search, Filter, Download } from 'lucide-react'
+import { Plus, Edit, Trash2, ShieldCheck, FileText, Upload, Search, Filter, Download, ChevronLeft, ChevronRight, GripVertical } from 'lucide-react'
 import DocumentUpload from '@/components/DocumentUpload'
 
 const STATUS_COLORS = {
@@ -116,7 +116,7 @@ function AssignCertModal({ pilots, certTypes, existingCert, onSave, onClose }) {
               disabled={isEditing}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm disabled:opacity-60">
               <option value="">Select pilot...</option>
-              {pilots.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+              {[...pilots].sort((a, b) => (a.full_name || '').localeCompare(b.full_name || '')).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
             </select>
           </div>
           <div>
@@ -125,7 +125,7 @@ function AssignCertModal({ pilots, certTypes, existingCert, onSave, onClose }) {
               disabled={isEditing}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm disabled:opacity-60">
               <option value="">Select cert type...</option>
-              {certTypes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {[...certTypes].sort((a, b) => (a.name || '').localeCompare(b.name || '')).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
           <div>
@@ -242,6 +242,26 @@ export default function CertificationsPage() {
   const handleDeleteCertType = async (id) => {
     if (!confirm('Delete this certification type?')) return
     try { await api.delete(`/certification-types/${id}`); load() } catch (err) { alert(err.message) }
+  }
+
+  const handleReorderCertType = async (ctId, direction) => {
+    // Work with the active cert types in their current sorted order
+    const active = [...certTypes].filter(c => c.is_active)
+    const idx = active.findIndex(c => c.id === ctId)
+    if (idx < 0) return
+    const targetIdx = direction === 'left' ? idx - 1 : idx + 1
+    if (targetIdx < 0 || targetIdx >= active.length) return
+    // Swap
+    const reordered = [...active]
+    const temp = reordered[idx]
+    reordered[idx] = reordered[targetIdx]
+    reordered[targetIdx] = temp
+    // Assign new sort_order values
+    const items = reordered.map((ct, i) => ({ id: ct.id, sort_order: i }))
+    try {
+      await api.patch('/certification-types/reorder', { items })
+      load()
+    } catch (err) { alert(err.message) }
   }
 
   const [editCert, setEditCert] = useState(null)
@@ -362,9 +382,31 @@ export default function CertificationsPage() {
               <thead>
                 <tr className="border-b border-border bg-muted/30 sticky top-0 z-20">
                   <th className="text-left px-4 py-3 font-medium text-muted-foreground sticky left-0 bg-card z-30 min-w-[150px]">Pilot</th>
-                  {filteredCertTypes.map(ct => (
+                  {filteredCertTypes.map((ct, idx) => (
                     <th key={ct.id} className="text-center px-3 py-3 font-medium text-muted-foreground min-w-[100px] bg-card">
-                      <span className="text-xs">{ct.name}</span>
+                      <div className="flex items-center justify-center gap-0.5">
+                        {isAdmin && (
+                          <button
+                            onClick={() => handleReorderCertType(ct.id, 'left')}
+                            disabled={idx === 0}
+                            className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-20 disabled:cursor-not-allowed"
+                            title="Move left"
+                          >
+                            <ChevronLeft className="w-3 h-3" />
+                          </button>
+                        )}
+                        <span className="text-xs">{ct.name}</span>
+                        {isAdmin && (
+                          <button
+                            onClick={() => handleReorderCertType(ct.id, 'right')}
+                            disabled={idx === filteredCertTypes.length - 1}
+                            className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-20 disabled:cursor-not-allowed"
+                            title="Move right"
+                          >
+                            <ChevronRight className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
                     </th>
                   ))}
                 </tr>

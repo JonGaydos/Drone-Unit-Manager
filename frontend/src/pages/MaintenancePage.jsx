@@ -75,7 +75,7 @@ function MaintenanceModal({ record, onSave, onClose, entityLists, pilots }) {
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
               >
                 <option value="">Select {form.entity_type}...</option>
-                {entityOptions.map(ent => (
+                {[...entityOptions].sort((a, b) => getEntityName(a, form.entity_type).localeCompare(getEntityName(b, form.entity_type))).map(ent => (
                   <option key={ent.id} value={ent.id}>{getEntityName(ent, form.entity_type)}</option>
                 ))}
               </select>
@@ -111,7 +111,7 @@ function MaintenanceModal({ record, onSave, onClose, entityLists, pilots }) {
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
               >
                 <option value="">Select pilot...</option>
-                {pilots.map(p => (
+                {[...pilots].sort((a, b) => (a.full_name || '').localeCompare(b.full_name || '')).map(p => (
                   <option key={p.id} value={p.full_name}>{p.full_name}</option>
                 ))}
               </select>
@@ -235,7 +235,7 @@ function ScheduleModal({ schedule, onSave, onClose }) {
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
                 >
                   <option value="">Select...</option>
-                  {entities.map(e => (
+                  {[...entities].sort((a, b) => getEntityLabel(a).localeCompare(getEntityLabel(b))).map(e => (
                     <option key={e.id} value={e.id}>{getEntityLabel(e)}</option>
                   ))}
                 </select>
@@ -263,7 +263,7 @@ function ScheduleModal({ schedule, onSave, onClose }) {
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
               >
                 <option value="">Unassigned</option>
-                {pilots.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+                {[...pilots].sort((a, b) => (a.full_name || '').localeCompare(b.full_name || '')).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
               </select>
             </div>
           </div>

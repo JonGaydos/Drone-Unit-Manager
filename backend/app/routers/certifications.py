@@ -1,4 +1,7 @@
+from typing import List
+
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -11,6 +14,15 @@ from app.schemas.certification import (
     PilotCertificationCreate, PilotCertificationUpdate, PilotCertificationOut,
     PilotEquipmentQualCreate, PilotEquipmentQualUpdate, PilotEquipmentQualOut,
 )
+
+
+class ReorderItem(BaseModel):
+    id: int
+    sort_order: int
+
+
+class ReorderRequest(BaseModel):
+    items: List[ReorderItem]
 
 router = APIRouter(tags=["certifications"])
 
@@ -41,6 +53,20 @@ def create_certification_type(
     db.commit()
     db.refresh(ct)
     return CertificationTypeOut.model_validate(ct)
+
+
+@router.patch("/api/certification-types/reorder")
+def reorder_certification_types(
+    data: ReorderRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    for item in data.items:
+        ct = db.query(CertificationType).filter(CertificationType.id == item.id).first()
+        if ct:
+            ct.sort_order = item.sort_order
+    db.commit()
+    return {"ok": True}
 
 
 @router.patch("/api/certification-types/{ct_id}", response_model=CertificationTypeOut)
