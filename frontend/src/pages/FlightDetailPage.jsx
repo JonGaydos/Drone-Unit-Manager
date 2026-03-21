@@ -28,7 +28,6 @@ export default function FlightDetailPage() {
   const [refreshing, setRefreshing] = useState(false)
   const [refreshResult, setRefreshResult] = useState(null)
   const { isAdmin } = useAuth()
-  const toast = useToast()
 
   const initEditForm = (f) => {
     setEditForm({
