@@ -464,17 +464,12 @@ class SkydioProvider(DroneProvider):
             if not isinstance(body, dict):
                 return None
 
-            # Unwrap nested response: {"flight": {...}} or {"data": {...}}
-            if "flight" in body and isinstance(body["flight"], dict):
-                flight = body["flight"]
-            elif "data" in body and isinstance(body["data"], dict):
-                flight = body["data"]
-            elif "flight_id" in body or "uuid" in body or "takeoff_time" in body:
-                flight = body
-            else:
-                # Unknown structure — log it and return raw
-                logger.info("Unknown flight detail structure for %s: keys=%s", flight_id, list(body.keys()))
-                flight = body
+            # Unwrap nested response: {"data": {"flight": {...}}} or {"flight": {...}} or {"data": {...}}
+            flight = body
+            if "data" in flight and isinstance(flight["data"], dict):
+                flight = flight["data"]
+            if "flight" in flight and isinstance(flight["flight"], dict):
+                flight = flight["flight"]
 
             logger.info("Flight detail for %s: %d keys: %s", flight_id, len(flight.keys()), list(flight.keys()))
             return flight
@@ -493,9 +488,26 @@ class SkydioProvider(DroneProvider):
             )
             body = resp.json()
 
-            raw = body if isinstance(body, list) else (body.get("data") or body.get("points") or [])
+            # Unwrap telemetry response
+            raw = body
+            if isinstance(raw, dict):
+                raw = raw.get("data") or raw.get("points") or raw.get("telemetry") or []
+            if isinstance(raw, dict):
+                # Might be {"telemetry": [...]} or {"points": [...]}
+                for key in ("telemetry", "points", "data"):
+                    if key in raw and isinstance(raw[key], list):
+                        raw = raw[key]
+                        break
+            if not isinstance(raw, list):
+                logger.warning("Telemetry response not a list: type=%s, keys=%s",
+                             type(raw).__name__, list(raw.keys()) if isinstance(raw, dict) else "n/a")
+                print(f"[TELEMETRY] Raw response: {str(raw)[:500]}", flush=True)
+                return []
+
             points = []
             for p in raw:
+                if not isinstance(p, dict):
+                    continue
                 points.append({
                     "timestamp_ms": p.get("timestamp_ms") or p.get("timestamp"),
                     "lat": p.get("lat") or p.get("latitude"),

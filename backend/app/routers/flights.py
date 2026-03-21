@@ -207,28 +207,56 @@ def refresh_flight_from_api(flight_id: int, db: Session = Depends(get_db), admin
         if flight.pilot_id:
             updated_fields.append("pilot")
 
-    # Vehicle
-    vehicle_serial = detail.get("vehicle_serial") or detail.get("serial_number")
-    if vehicle_serial and not flight.vehicle_id:
-        vehicle = db.query(Vehicle).filter(
-            (Vehicle.skydio_vehicle_serial == str(vehicle_serial)) |
-            (Vehicle.serial_number == str(vehicle_serial))
-        ).first()
-        if vehicle:
-            flight.vehicle_id = vehicle.id
-            updated_fields.append("vehicle")
-
-    # Equipment
+    # Equipment — simple fields
     for api_key, field in [
         ("battery_serial", "battery_serial"), ("sensor_package", "sensor_package"),
-        ("attachment_top", "attachment_top"), ("attachment_bottom", "attachment_bottom"),
-        ("attachment_left", "attachment_left"), ("attachment_right", "attachment_right"),
         ("carrier", "carrier"),
     ]:
         val = detail.get(api_key)
         if val is not None:
             setattr(flight, field, _to_str(val))
             updated_fields.append(field)
+
+    # Attachments — Skydio returns a list of {attachment_serial, attachment_type, mount_point}
+    attachments = detail.get("attachments")
+    if isinstance(attachments, list):
+        mount_map = {"TOP": "attachment_top", "BOTTOM": "attachment_bottom",
+                     "LEFT": "attachment_left", "RIGHT": "attachment_right"}
+        for att in attachments:
+            if not isinstance(att, dict):
+                continue
+            mount = att.get("mount_point", "").upper()
+            field = mount_map.get(mount)
+            if field:
+                label = f"{att.get('attachment_type', '')} ({att.get('attachment_serial', '')})"
+                setattr(flight, field, label.strip())
+                updated_fields.append(field)
+
+    # Battery — Skydio may return as nested object
+    battery = detail.get("battery")
+    if isinstance(battery, dict) and not flight.battery_serial:
+        flight.battery_serial = battery.get("battery_serial") or battery.get("serial_number") or _to_str(battery)
+        updated_fields.append("battery_serial")
+    elif isinstance(battery, str) and not flight.battery_serial:
+        flight.battery_serial = battery
+        updated_fields.append("battery_serial")
+
+    # Sensor package — may be nested
+    sensor = detail.get("sensor_package")
+    if isinstance(sensor, dict) and not flight.sensor_package:
+        flight.sensor_package = sensor.get("sensor_package_serial") or sensor.get("serial_number") or _to_str(sensor)
+        updated_fields.append("sensor_package")
+
+    # Vehicle serial from detail
+    vs = detail.get("vehicle_serial") or detail.get("vehicle", {}).get("serial_number") if isinstance(detail.get("vehicle"), dict) else detail.get("vehicle_serial")
+    if vs and not flight.vehicle_id:
+        vehicle = db.query(Vehicle).filter(
+            (Vehicle.skydio_vehicle_serial == str(vs)) |
+            (Vehicle.serial_number == str(vs))
+        ).first()
+        if vehicle:
+            flight.vehicle_id = vehicle.id
+            updated_fields.append("vehicle")
 
     # Also try fetching telemetry
     telemetry_data = None
