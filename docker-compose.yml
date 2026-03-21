@@ -1,7 +1,7 @@
 services:
   drone-unit-manager:
     build: .
-    image: jongaydos/drone-unit-manager:latest
+    image: ghcr.io/jongaydos/drone-unit-manager:latest
     container_name: drone-unit-manager
     ports:
       - "${PORT:-8080}:8000"

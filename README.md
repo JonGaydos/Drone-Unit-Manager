@@ -94,7 +94,7 @@ docker run -d \
   -e SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))") \
   -e TZ=America/Chicago \
   --restart unless-stopped \
-  jongaydos/drone-unit-manager:latest
+  ghcr.io/jongaydos/drone-unit-manager:latest
 ```
 
 ## Installation
@@ -142,7 +142,7 @@ docker run -d \
 ```yaml
 services:
   drone-unit-manager:
-    image: jongaydos/drone-unit-manager:latest
+    image: ghcr.io/jongaydos/drone-unit-manager:latest
     container_name: drone-unit-manager
     ports:
       - "8080:8000"
@@ -170,7 +170,7 @@ services:
 2. Click **Add Container**
 3. Fill in:
    - **Name:** `drone-unit-manager`
-   - **Repository:** `jongaydos/drone-unit-manager:latest`
+   - **Repository:** `ghcr.io/jongaydos/drone-unit-manager:latest`
    - **Port Mapping:** Host `8080` → Container `8000`
    - **Path Mapping:** Host `/mnt/user/appdata/drone-unit-manager` → Container `/app/data`
    - **Variable:** `TZ` = `America/Chicago`
