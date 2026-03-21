@@ -129,21 +129,10 @@ def refresh_flight_from_api(flight_id: int, db: Session = Depends(get_db), admin
     provider = SkydioProvider()
 
     # Fetch raw response for debugging
-    raw_resp = provider._request("GET", f"https://api.skydio.com/api/v0/flight/{flight.external_id}", creds, timeout=15)
-    raw_body = raw_resp.json()
-    print(f"[REFRESH] Raw API response type: {type(raw_body).__name__}, keys: {list(raw_body.keys()) if isinstance(raw_body, dict) else 'not a dict'}", flush=True)
-    if isinstance(raw_body, dict):
-        for k, v in raw_body.items():
-            print(f"[REFRESH]   {k}: type={type(v).__name__}, value={str(v)[:200]}", flush=True)
-
     detail = provider.get_flight_detail(creds, flight.external_id)
 
     if not detail:
         raise HTTPException(status_code=502, detail="Could not fetch flight data from Skydio")
-
-    print(f"[REFRESH] Unwrapped detail keys ({len(detail)}): {list(detail.keys())}", flush=True)
-    for k, v in detail.items():
-        print(f"[REFRESH]   {k} = {str(v)[:150]}", flush=True)
 
     updated_fields = []
 
@@ -322,13 +311,6 @@ def refresh_flight_from_api(flight_id: int, db: Session = Depends(get_db), admin
             telemetry_points = len(telemetry_data)
             updated_fields.append(f"telemetry({telemetry_points}pts)")
 
-            # Verify save worked
-            verify = tdb.query(TelemetryPoint).filter(TelemetryPoint.flight_id == flight.id).limit(5).all()
-            for v in verify:
-                print(f"[TELEM-VERIFY] Saved: ts={v.timestamp_ms} alt={v.altitude_m} speed={v.speed_mps} bat={v.battery_pct} lat={v.lat}", flush=True)
-
-            print(f"[TELEM-STATS] max_alt={max_alt}, max_speed={max_speed}", flush=True)
-
             # Update flight with max altitude/speed from telemetry
             if max_alt > 0:
                 flight.max_altitude_m = round(max_alt, 2)
@@ -339,7 +321,6 @@ def refresh_flight_from_api(flight_id: int, db: Session = Depends(get_db), admin
 
         except Exception as exc:
             logger.error("Telemetry save failed: %s", exc)
-            print(f"[TELEMETRY] Save error: {exc}", flush=True)
             tdb.rollback()
         finally:
             tdb.close()

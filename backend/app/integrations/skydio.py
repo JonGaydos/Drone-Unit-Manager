@@ -496,39 +496,20 @@ class SkydioProvider(DroneProvider):
                 raw = raw["data"]
             # Step 2: extract the telemetry list
             if isinstance(raw, dict):
-                # Debug: print what we have
-                for k in raw:
-                    print(f"[TELEMETRY] After data unwrap: key='{k}', type={type(raw[k]).__name__}, is_list={isinstance(raw[k], list)}", flush=True)
                 for key in ("flight_telemetry", "telemetry", "points", "data"):
                     val = raw.get(key)
                     if isinstance(val, list):
                         raw = val
-                        print(f"[TELEMETRY] Extracted '{key}' as list with {len(val)} items", flush=True)
                         break
                     elif isinstance(val, dict):
-                        # flight_telemetry might itself be wrapped
-                        print(f"[TELEMETRY] '{key}' is a dict with keys: {list(val.keys())}", flush=True)
-                        # Check for list values inside
                         for subkey, subval in val.items():
                             if isinstance(subval, list):
                                 raw = subval
-                                print(f"[TELEMETRY] Extracted '{key}.{subkey}' as list with {len(subval)} items", flush=True)
                                 break
                         if isinstance(raw, list):
                             break
             if not isinstance(raw, list):
-                print(f"[TELEMETRY] FAILED: still not a list. type={type(raw).__name__}", flush=True)
-                if isinstance(raw, dict):
-                    print(f"[TELEMETRY] Remaining keys: {list(raw.keys())}", flush=True)
                 return []
-
-            if raw:
-                print(f"[TELEMETRY] Got {len(raw)} telemetry points", flush=True)
-                if isinstance(raw[0], dict):
-                    print(f"[TELEMETRY] First point keys: {list(raw[0].keys())}", flush=True)
-                    print(f"[TELEMETRY] First point: {raw[0]}", flush=True)
-                else:
-                    print(f"[TELEMETRY] First point type: {type(raw[0]).__name__}, value: {str(raw[0])[:200]}", flush=True)
 
             points = []
             for p in raw:

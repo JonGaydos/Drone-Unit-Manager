@@ -28,11 +28,6 @@ def get_flight_telemetry(
     if not points:
         return []
 
-    print(f"[TELEM-API] Flight {flight_id}: {len(points)} points, first ts_ms={points[0].timestamp_ms}, alt={points[0].altitude_m}, speed={points[0].speed_mps}, battery={points[0].battery_pct}", flush=True)
-    if len(points) > 100:
-        mid = points[len(points)//2]
-        print(f"[TELEM-API] Mid point: ts_ms={mid.timestamp_ms}, alt={mid.altitude_m}, speed={mid.speed_mps}", flush=True)
-
     base_ts = points[0].timestamp_ms
     return [
         {

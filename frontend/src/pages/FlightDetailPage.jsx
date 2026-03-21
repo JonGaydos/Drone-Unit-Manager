@@ -328,7 +328,7 @@ export default function FlightDetailPage() {
 
       {/* Telemetry Charts */}
       {telemetry.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="space-y-4">
           <div className="bg-card border border-border rounded-xl p-5">
             <h3 className="text-sm font-semibold text-foreground mb-4">Altitude (m)</h3>
             <ResponsiveContainer width="100%" height={250}>
@@ -341,41 +341,31 @@ export default function FlightDetailPage() {
               </LineChart>
             </ResponsiveContainer>
           </div>
-          <div className="bg-card border border-border rounded-xl p-5">
-            <h3 className="text-sm font-semibold text-foreground mb-4">Speed (m/s)</h3>
-            <ResponsiveContainer width="100%" height={250}>
-              <LineChart data={telemetry}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-                <XAxis dataKey="elapsed_s" stroke="var(--muted-fg)" fontSize={11} />
-                <YAxis stroke="var(--muted-fg)" fontSize={11} />
-                <Tooltip {...tooltipStyle} />
-                <Line type="monotone" dataKey="speed_mps" stroke="#3b82f6" strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="bg-card border border-border rounded-xl p-5">
-            <h3 className="text-sm font-semibold text-foreground mb-4">Battery (%)</h3>
-            <ResponsiveContainer width="100%" height={250}>
-              <LineChart data={telemetry}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-                <XAxis dataKey="elapsed_s" stroke="var(--muted-fg)" fontSize={11} />
-                <YAxis stroke="var(--muted-fg)" fontSize={11} domain={[0, 100]} />
-                <Tooltip {...tooltipStyle} />
-                <Line type="monotone" dataKey="battery_pct" stroke="#10b981" strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="bg-card border border-border rounded-xl p-5">
-            <h3 className="text-sm font-semibold text-foreground mb-4">Heading (deg)</h3>
-            <ResponsiveContainer width="100%" height={250}>
-              <LineChart data={telemetry}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-                <XAxis dataKey="elapsed_s" stroke="var(--muted-fg)" fontSize={11} />
-                <YAxis stroke="var(--muted-fg)" fontSize={11} domain={[0, 360]} />
-                <Tooltip {...tooltipStyle} />
-                <Line type="monotone" dataKey="heading_deg" stroke="#f59e0b" strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="bg-card border border-border rounded-xl p-5">
+              <h3 className="text-sm font-semibold text-foreground mb-4">Speed (m/s)</h3>
+              <ResponsiveContainer width="100%" height={250}>
+                <LineChart data={telemetry}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
+                  <XAxis dataKey="elapsed_s" stroke="var(--muted-fg)" fontSize={11} />
+                  <YAxis stroke="var(--muted-fg)" fontSize={11} />
+                  <Tooltip {...tooltipStyle} />
+                  <Line type="monotone" dataKey="speed_mps" stroke="#3b82f6" strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="bg-card border border-border rounded-xl p-5">
+              <h3 className="text-sm font-semibold text-foreground mb-4">Battery (%)</h3>
+              <ResponsiveContainer width="100%" height={250}>
+                <LineChart data={telemetry}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
+                  <XAxis dataKey="elapsed_s" stroke="var(--muted-fg)" fontSize={11} />
+                  <YAxis stroke="var(--muted-fg)" fontSize={11} domain={[0, 100]} />
+                  <Tooltip {...tooltipStyle} />
+                  <Line type="monotone" dataKey="battery_pct" stroke="#10b981" strokeWidth={2} dot={false} connectNulls={true} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </div>
       )}
