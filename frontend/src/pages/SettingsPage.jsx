@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { Save, TestTube, Loader2, Upload, FileSpreadsheet, RefreshCw, UserPlus, Key, Trash2, Shield, ShieldCheck, Eye } from 'lucide-react'
@@ -185,14 +185,23 @@ export default function SettingsPage() {
     }
   }
 
+  const settingsRef = React.useRef(settings)
+  React.useEffect(() => { settingsRef.current = settings }, [settings])
+
   const field = (label, key, type = 'text', description = '') => (
     <div>
       <label className="block text-sm font-medium text-foreground mb-1">{label}</label>
       {description && <p className="text-xs text-muted-foreground mb-1.5">{description}</p>}
       <input
         type={type}
-        value={settings[key] || ''}
-        onChange={(e) => setSettings({ ...settings, [key]: e.target.value })}
+        key={`${key}-${settings[key] === undefined ? 'loading' : 'loaded'}`}
+        defaultValue={settings[key] || ''}
+        onBlur={(e) => setSettings(prev => ({ ...prev, [key]: e.target.value }))}
+        onPaste={(e) => {
+          setTimeout(() => {
+            setSettings(prev => ({ ...prev, [key]: e.target.value }))
+          }, 0)
+        }}
         className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
         disabled={!isAdmin}
       />
