@@ -460,12 +460,24 @@ class SkydioProvider(DroneProvider):
         try:
             resp = self._request("GET", f"{BASE_URL}/flight/{flight_id}", creds, timeout=15)
             body = resp.json()
-            # The response might be the flight directly or wrapped in "data"
-            flight = body if not isinstance(body, dict) or "flight_id" in body or "uuid" in body else body.get("data", body)
-            if isinstance(flight, dict):
-                logger.info("Flight detail for %s: keys=%s", flight_id, list(flight.keys())[:15])
-                return flight
-            return None
+
+            if not isinstance(body, dict):
+                return None
+
+            # Unwrap nested response: {"flight": {...}} or {"data": {...}}
+            if "flight" in body and isinstance(body["flight"], dict):
+                flight = body["flight"]
+            elif "data" in body and isinstance(body["data"], dict):
+                flight = body["data"]
+            elif "flight_id" in body or "uuid" in body or "takeoff_time" in body:
+                flight = body
+            else:
+                # Unknown structure — log it and return raw
+                logger.info("Unknown flight detail structure for %s: keys=%s", flight_id, list(body.keys()))
+                flight = body
+
+            logger.info("Flight detail for %s: %d keys: %s", flight_id, len(flight.keys()), list(flight.keys()))
+            return flight
         except Exception as exc:
             logger.warning("Failed to get flight detail for %s: %s", flight_id, exc)
             return None
