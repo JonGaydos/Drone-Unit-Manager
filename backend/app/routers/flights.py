@@ -127,14 +127,23 @@ def refresh_flight_from_api(flight_id: int, db: Session = Depends(get_db), admin
         raise HTTPException(status_code=400, detail="Skydio API not configured")
 
     provider = SkydioProvider()
+
+    # Fetch raw response for debugging
+    raw_resp = provider._request("GET", f"https://api.skydio.com/api/v0/flight/{flight.external_id}", creds, timeout=15)
+    raw_body = raw_resp.json()
+    print(f"[REFRESH] Raw API response type: {type(raw_body).__name__}, keys: {list(raw_body.keys()) if isinstance(raw_body, dict) else 'not a dict'}", flush=True)
+    if isinstance(raw_body, dict):
+        for k, v in raw_body.items():
+            print(f"[REFRESH]   {k}: type={type(v).__name__}, value={str(v)[:200]}", flush=True)
+
     detail = provider.get_flight_detail(creds, flight.external_id)
 
     if not detail:
         raise HTTPException(status_code=502, detail="Could not fetch flight data from Skydio")
 
-    logger.info("Refresh flight %s: API returned keys: %s", flight.external_id, list(detail.keys()))
-    logger.info("Refresh flight %s: API data sample: %s", flight.external_id,
-                 {k: detail[k] for k in list(detail.keys())[:25]})
+    print(f"[REFRESH] Unwrapped detail keys ({len(detail)}): {list(detail.keys())}", flush=True)
+    for k, v in detail.items():
+        print(f"[REFRESH]   {k} = {str(v)[:150]}", flush=True)
 
     updated_fields = []
 

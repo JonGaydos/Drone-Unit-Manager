@@ -73,10 +73,9 @@ def _upsert_flights(flights_data: list[dict], skydio_users: list[dict], db: Sess
             result.flights_skipped += 1
             continue
 
-        # Check if flight already exists
+        # Check if flight already exists (match by UUID regardless of source)
         existing = db.query(Flight).filter(
             Flight.external_id == ext_id,
-            Flight.api_provider == "skydio",
         ).first()
 
         if existing:
