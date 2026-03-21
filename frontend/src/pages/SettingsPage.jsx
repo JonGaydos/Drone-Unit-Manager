@@ -104,7 +104,9 @@ export default function SettingsPage() {
   const handleSave = async () => {
     setSaving(true)
     try {
-      const items = Object.entries(settings).map(([key, value]) => ({ key, value }))
+      const current = gatherInputs()
+      setSettings(current)
+      const items = Object.entries(current).map(([key, value]) => ({ key, value }))
       await api.put('/settings/bulk', items)
       setTestResult({ ok: true, message: 'Settings saved!' })
     } catch (err) {
@@ -120,7 +122,9 @@ export default function SettingsPage() {
     setTestResult(null)
     try {
       // Save credentials first
-      const items = Object.entries(settings).map(([key, value]) => ({ key, value }))
+      const current = gatherInputs()
+      setSettings(current)
+      const items = Object.entries(current).map(([key, value]) => ({ key, value }))
       await api.put('/settings/bulk', items)
       // Then test
       const result = await api.post('/sync/test', {})
@@ -185,8 +189,16 @@ export default function SettingsPage() {
     }
   }
 
-  const settingsRef = React.useRef(settings)
-  React.useEffect(() => { settingsRef.current = settings }, [settings])
+  // Use refs for settings inputs to avoid re-renders on keystroke/paste
+  const inputRefs = React.useRef({})
+
+  const gatherInputs = () => {
+    const gathered = { ...settings }
+    for (const [key, ref] of Object.entries(inputRefs.current)) {
+      if (ref) gathered[key] = ref.value
+    }
+    return gathered
+  }
 
   const field = (label, key, type = 'text', description = '') => (
     <div>
@@ -194,14 +206,9 @@ export default function SettingsPage() {
       {description && <p className="text-xs text-muted-foreground mb-1.5">{description}</p>}
       <input
         type={type}
+        ref={el => { inputRefs.current[key] = el }}
         key={`${key}-${settings[key] === undefined ? 'loading' : 'loaded'}`}
         defaultValue={settings[key] || ''}
-        onBlur={(e) => setSettings(prev => ({ ...prev, [key]: e.target.value }))}
-        onPaste={(e) => {
-          setTimeout(() => {
-            setSettings(prev => ({ ...prev, [key]: e.target.value }))
-          }, 0)
-        }}
         className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
         disabled={!isAdmin}
       />
