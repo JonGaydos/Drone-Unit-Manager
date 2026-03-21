@@ -94,9 +94,23 @@ class SkydioProvider(DroneProvider):
                 break
             elif isinstance(body, dict):
                 items = body.get("data") or body.get("results") or []
+
+                # Handle nested dict: {"data": {"vehicles": [...]}} or {"data": {"key": [...]}}
+                if isinstance(items, dict):
+                    # Try to find the list inside the nested dict
+                    for key, val in items.items():
+                        if isinstance(val, list):
+                            logger.info("  Found list under 'data.%s' with %d items", key, len(val))
+                            items = val
+                            break
+                    else:
+                        logger.warning("Nested dict in 'data' but no list found. Keys: %s", list(items.keys()))
+                        break
+
                 if not isinstance(items, list):
-                    logger.warning("Expected list but got %s for 'data'/'results'", type(items).__name__)
+                    logger.warning("Expected list but got %s", type(items).__name__)
                     break
+
                 all_data.extend(items)
                 logger.info("  Got %d items this page, %d total", len(items), len(all_data))
 
@@ -167,7 +181,7 @@ class SkydioProvider(DroneProvider):
         try:
             params = {}
             if since:
-                params["date_from"] = since
+                params["date_from"] = since[:10] if len(since) > 10 else since
 
             raw = self._paginate(f"{BASE_URL}/flights", creds, params=params)
             flights = []
@@ -309,7 +323,8 @@ class SkydioProvider(DroneProvider):
         try:
             params = {}
             if since:
-                params["date_from"] = since
+                # Skydio expects date format YYYY-MM-DD, not full ISO timestamp
+                params["date_from"] = since[:10] if len(since) > 10 else since
 
             raw = self._paginate(f"{BASE_URL}/media/files", creds, params=params)
             media = []
