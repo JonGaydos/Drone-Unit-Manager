@@ -198,6 +198,30 @@ def enrich_flights(
     return SyncResultResponse(**asdict(result))
 
 
+@router.post("/cleanup")
+def cleanup_empty_flights(
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Delete all flights that have no date, no duration, and no location."""
+    from app.models.flight import Flight
+
+    empty = db.query(Flight).filter(
+        Flight.date.is_(None),
+        Flight.duration_seconds.is_(None),
+        Flight.takeoff_address.is_(None),
+        Flight.takeoff_lat.is_(None),
+    ).all()
+
+    count = len(empty)
+    for f in empty:
+        db.delete(f)
+    db.commit()
+
+    logger.info("Cleanup: deleted %d empty flights", count)
+    return {"ok": True, "deleted": count}
+
+
 @router.get("/status", response_model=SyncStatusResponse)
 def sync_status(
     db: Session = Depends(get_db),

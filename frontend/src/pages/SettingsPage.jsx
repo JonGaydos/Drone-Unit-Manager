@@ -376,6 +376,27 @@ export default function SettingsPage() {
             {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
             Enrich Flights
           </button>
+          <button
+            onClick={async () => {
+              if (!confirm('Delete all flights with no date, duration, or location?')) return
+              setSyncing(true)
+              setTestResult(null)
+              try {
+                const result = await api.post('/sync/cleanup', {})
+                setTestResult({ ok: true, message: `Cleaned up: ${result.deleted} empty flights removed` })
+              } catch (err) {
+                setTestResult({ ok: false, message: err.message })
+              } finally {
+                setSyncing(false)
+              }
+            }}
+            disabled={syncing || !isAdmin}
+            className="flex items-center gap-2 px-4 py-2 bg-destructive text-destructive-foreground rounded-lg text-sm hover:opacity-90 disabled:opacity-50"
+            title="Delete all flights that have no date, duration, or location data"
+          >
+            {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+            Clean Up Empty
+          </button>
         </div>
       </div>
 

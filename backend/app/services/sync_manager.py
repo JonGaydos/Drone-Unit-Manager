@@ -65,6 +65,14 @@ def _upsert_flights(flights_data: list[dict], skydio_users: list[dict], db: Sess
         if not ext_id:
             continue
 
+        # Skip flights with no useful data (no date, no duration, no location)
+        has_date = f_data.get("date") or f_data.get("takeoff_time")
+        has_duration = f_data.get("duration_seconds")
+        has_location = f_data.get("takeoff_lat") or f_data.get("takeoff_address")
+        if not has_date and not has_duration and not has_location:
+            result.flights_skipped += 1
+            continue
+
         # Check if flight already exists
         existing = db.query(Flight).filter(
             Flight.external_id == ext_id,
