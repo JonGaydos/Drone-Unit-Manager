@@ -321,12 +321,8 @@ class SkydioProvider(DroneProvider):
     def sync_media(self, creds: ProviderCredentials, since: str | None = None) -> list[dict]:
         """Fetch media files from Skydio Cloud."""
         try:
-            params = {}
-            if since:
-                # Skydio expects date format YYYY-MM-DD, not full ISO timestamp
-                params["date_from"] = since[:10] if len(since) > 10 else since
-
-            raw = self._paginate(f"{BASE_URL}/media/files", creds, params=params)
+            # Note: Skydio media endpoint doesn't support date_from filtering
+            raw = self._paginate(f"{BASE_URL}/media/files", creds)
             media = []
             for m in raw:
                 captured_time = None

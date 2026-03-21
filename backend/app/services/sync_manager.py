@@ -123,7 +123,8 @@ class SyncManager:
                     continue
 
                 existing = db.query(Vehicle).filter(
-                    Vehicle.skydio_vehicle_serial == serial
+                    (Vehicle.skydio_vehicle_serial == serial) |
+                    (Vehicle.serial_number == serial)
                 ).first()
 
                 if existing:
