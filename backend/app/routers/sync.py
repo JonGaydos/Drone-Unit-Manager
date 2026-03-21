@@ -59,6 +59,21 @@ def sync_now(
 ):
     logger.info("Manual sync triggered by admin (full=%s)", full)
     result = SyncManager.sync_all("skydio", db, full_sync=full)
+
+    if full:
+        # After full sync, clean up any flights with no useful data
+        from app.models.flight import Flight
+        empty = db.query(Flight).filter(
+            Flight.date.is_(None),
+            Flight.duration_seconds.is_(None),
+        ).all()
+        if empty:
+            for f in empty:
+                db.delete(f)
+            db.commit()
+            logger.info("Auto-cleanup: removed %d empty flights", len(empty))
+            result.errors.append(f"Auto-cleaned {len(empty)} flights with no data")
+
     return SyncResultResponse(**asdict(result))
 
 
@@ -209,8 +224,6 @@ def cleanup_empty_flights(
     empty = db.query(Flight).filter(
         Flight.date.is_(None),
         Flight.duration_seconds.is_(None),
-        Flight.takeoff_address.is_(None),
-        Flight.takeoff_lat.is_(None),
     ).all()
 
     count = len(empty)

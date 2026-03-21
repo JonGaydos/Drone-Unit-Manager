@@ -320,82 +320,10 @@ export default function SettingsPage() {
             onClick={() => handleSyncNow(true)}
             disabled={syncing || !isAdmin}
             className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm hover:opacity-90 disabled:opacity-50"
-            title="Ignore last sync date and fetch ALL historical flights from Skydio"
+            title="Fetch all available flights, enrich incomplete records, and clean up empty entries"
           >
             {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-            Full Sync
-          </button>
-          <button
-            onClick={async () => {
-              setSyncing(true)
-              setTestResult(null)
-              try {
-                const result = await api.post('/sync/deep', {})
-                const parts = [
-                  `${result.flights_new || 0} new flights`,
-                  `${result.flights_skipped || 0} skipped`,
-                  `${result.vehicles_synced || 0} vehicles`,
-                  `${result.users_synced || 0} users`,
-                ]
-                let msg = `Deep Sync: ${parts.join(', ')}`
-                if (result.errors?.length > 0) {
-                  msg += `\n\nErrors:\n${result.errors.join('\n')}`
-                }
-                setTestResult({ ok: result.errors?.length === 0, message: msg })
-              } catch (err) {
-                setTestResult({ ok: false, message: err.message })
-              } finally {
-                setSyncing(false)
-              }
-            }}
-            disabled={syncing || !isAdmin}
-            className="flex items-center gap-2 px-4 py-2 border border-primary text-primary rounded-lg text-sm hover:bg-primary/10 disabled:opacity-50"
-            title="Fetches ALL historical flights by paging through date windows. May take several minutes."
-          >
-            {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-            Deep Sync
-          </button>
-          <button
-            onClick={async () => {
-              setSyncing(true)
-              setTestResult(null)
-              try {
-                const result = await api.post('/sync/enrich', {})
-                const msg = `Enriched: ${result.flights_new || 0} flights updated, ${result.flights_skipped || 0} empty flights removed`
-                setTestResult({ ok: true, message: msg })
-              } catch (err) {
-                setTestResult({ ok: false, message: err.message })
-              } finally {
-                setSyncing(false)
-              }
-            }}
-            disabled={syncing || !isAdmin}
-            className="flex items-center gap-2 px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90 disabled:opacity-50"
-            title="Fetch full details for flights with missing data. Removes flights that cannot be enriched."
-          >
-            {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-            Enrich Flights
-          </button>
-          <button
-            onClick={async () => {
-              if (!confirm('Delete all flights with no date, duration, or location?')) return
-              setSyncing(true)
-              setTestResult(null)
-              try {
-                const result = await api.post('/sync/cleanup', {})
-                setTestResult({ ok: true, message: `Cleaned up: ${result.deleted} empty flights removed` })
-              } catch (err) {
-                setTestResult({ ok: false, message: err.message })
-              } finally {
-                setSyncing(false)
-              }
-            }}
-            disabled={syncing || !isAdmin}
-            className="flex items-center gap-2 px-4 py-2 bg-destructive text-destructive-foreground rounded-lg text-sm hover:opacity-90 disabled:opacity-50"
-            title="Delete all flights that have no date, duration, or location data"
-          >
-            {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-            Clean Up Empty
+            Sync All
           </button>
         </div>
       </div>
