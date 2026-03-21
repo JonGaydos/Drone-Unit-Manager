@@ -56,12 +56,13 @@ def test_connection(
 
 @router.post("/now", response_model=SyncResultResponse)
 def sync_now(
+    full: bool = False,
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
-    """Run a full sync from Skydio Cloud right now."""
-    logger.info("Manual sync triggered by admin")
-    result = SyncManager.sync_all("skydio", db)
+    """Run a sync from Skydio Cloud. Pass ?full=true for full historical sync."""
+    logger.info("Manual sync triggered by admin (full=%s)", full)
+    result = SyncManager.sync_all("skydio", db, full_sync=full)
     return SyncResultResponse(**asdict(result))
 
 

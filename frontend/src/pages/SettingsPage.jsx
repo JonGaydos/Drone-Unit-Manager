@@ -149,11 +149,11 @@ export default function SettingsPage() {
     }
   }
 
-  const handleSyncNow = async () => {
+  const handleSyncNow = async (full = false) => {
     setSyncing(true)
     setTestResult(null)
     try {
-      const result = await api.post('/sync/now', {})
+      const result = await api.post(`/sync/now?full=${full}`, {})
       const parts = [
         `${result.flights_new || 0} new flights`,
         `${result.flights_skipped || 0} skipped`,
@@ -323,12 +323,21 @@ export default function SettingsPage() {
             Test Connection
           </button>
           <button
-            onClick={handleSyncNow}
+            onClick={() => handleSyncNow(false)}
             disabled={syncing || !isAdmin}
             className="flex items-center gap-2 px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90 disabled:opacity-50"
           >
             {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
             Sync Now
+          </button>
+          <button
+            onClick={() => handleSyncNow(true)}
+            disabled={syncing || !isAdmin}
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm hover:opacity-90 disabled:opacity-50"
+            title="Ignore last sync date and fetch ALL historical flights from Skydio"
+          >
+            {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            Full Sync
           </button>
         </div>
       </div>

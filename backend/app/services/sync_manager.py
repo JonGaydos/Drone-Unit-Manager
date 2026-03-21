@@ -85,7 +85,7 @@ class SyncManager:
             return False, f"Connection failed: {exc}", {}
 
     @staticmethod
-    def sync_all(provider_name: str, db: Session) -> SyncResult:
+    def sync_all(provider_name: str, db: Session, full_sync: bool = False) -> SyncResult:
         """Run a full sync from the given provider into the local database."""
         result = SyncResult()
 
@@ -96,8 +96,12 @@ class SyncManager:
                 return result
 
             provider = get_provider(provider_name)
-            last_sync = _get_setting(db, "last_sync_timestamp")
-            since = last_sync if last_sync else None
+            if full_sync:
+                since = None
+                logger.info("Full sync requested — fetching all historical data")
+            else:
+                last_sync = _get_setting(db, "last_sync_timestamp")
+                since = last_sync if last_sync else None
 
         except Exception as exc:
             result.errors.append(f"Setup error: {exc}")
