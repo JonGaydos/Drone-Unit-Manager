@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { formatDuration, normalizeDateValue } from '@/lib/utils'
 import { sortByName, sortVehicles } from '@/lib/formatters'
-import { ArrowLeft, MapPin, Clock, Gauge, Battery, Plane, Save } from 'lucide-react'
+import { ArrowLeft, MapPin, Clock, Gauge, Battery, Plane, Save, RefreshCw, Loader2 } from 'lucide-react'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
@@ -25,7 +25,10 @@ export default function FlightDetailPage() {
   const [editing, setEditing] = useState(false)
   const [editForm, setEditForm] = useState({})
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshResult, setRefreshResult] = useState(null)
   const { isAdmin } = useAuth()
+  const toast = useToast()
 
   const initEditForm = (f) => {
     setEditForm({
@@ -106,6 +109,36 @@ export default function FlightDetailPage() {
               Approve Flight
             </button>
           )}
+          {isAdmin && !editing && flight.external_id && (
+            <button
+              onClick={async () => {
+                setRefreshing(true)
+                setRefreshResult(null)
+                try {
+                  const result = await api.post(`/flights/${flight.id}/refresh`, {})
+                  setRefreshResult(result)
+                  toast.success(`Refreshed: ${result.updated_fields.length} fields updated, ${result.telemetry_points} telemetry points`)
+                  // Reload flight data
+                  const [fData, tData] = await Promise.all([
+                    api.get(`/flights/${id}`),
+                    api.get(`/telemetry/flight/${id}`).catch(() => []),
+                  ])
+                  setFlight(fData)
+                  setTelemetry(tData)
+                } catch (err) {
+                  toast.error(err.message)
+                } finally {
+                  setRefreshing(false)
+                }
+              }}
+              disabled={refreshing}
+              className="flex items-center gap-2 px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90 disabled:opacity-50"
+              title="Fetch latest data from Skydio API for this flight"
+            >
+              {refreshing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+              Refresh from API
+            </button>
+          )}
           {isAdmin && !editing && (
             <button onClick={() => { initEditForm(flight); setEditing(true) }} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90">
               Edit
@@ -113,6 +146,15 @@ export default function FlightDetailPage() {
           )}
         </div>
       </div>
+
+      {refreshResult && (
+        <div className="bg-blue-500/10 border border-blue-500/30 text-blue-400 rounded-lg p-4">
+          <p className="font-medium mb-1">API Refresh Result</p>
+          <p className="text-sm">Updated: {refreshResult.updated_fields.join(', ') || 'none'}</p>
+          <p className="text-sm">Telemetry points: {refreshResult.telemetry_points}</p>
+          <p className="text-sm mt-1 text-xs text-muted-foreground">API keys returned: {refreshResult.api_keys_returned?.join(', ')}</p>
+        </div>
+      )}
 
       {/* Flight Info */}
       <div className="bg-card border border-border rounded-xl p-6">
