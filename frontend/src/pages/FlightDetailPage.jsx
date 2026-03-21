@@ -1,0 +1,213 @@
+import { useState, useEffect } from 'react'
+import { useParams, Link } from 'react-router-dom'
+import { api } from '@/api/client'
+import { useAuth } from '@/contexts/AuthContext'
+import { formatDuration } from '@/lib/utils'
+import { ArrowLeft, MapPin, Clock, Gauge, Battery, Plane, Save } from 'lucide-react'
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+} from 'recharts'
+
+const tooltipStyle = {
+  contentStyle: { background: 'var(--card)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--fg)' },
+}
+
+export default function FlightDetailPage() {
+  const { id } = useParams()
+  const [flight, setFlight] = useState(null)
+  const [telemetry, setTelemetry] = useState([])
+  const [pilots, setPilots] = useState([])
+  const [purposes, setPurposes] = useState([])
+  const [editing, setEditing] = useState(false)
+  const [editForm, setEditForm] = useState({})
+  const [loading, setLoading] = useState(true)
+  const { isAdmin } = useAuth()
+
+  useEffect(() => {
+    Promise.all([
+      api.get(`/flights/${id}`),
+      api.get(`/telemetry/flight/${id}`).catch(() => []),
+      api.get('/pilots'),
+      api.get('/flights/purposes/list'),
+    ]).then(([f, t, p, pu]) => {
+      setFlight(f)
+      setTelemetry(Array.isArray(t) ? t : [])
+      setPilots(p)
+      setPurposes(pu)
+      setEditForm({ pilot_id: f.pilot_id || '', purpose: f.purpose || '', case_number: f.case_number || '', notes: f.notes || '' })
+    }).catch(console.error).finally(() => setLoading(false))
+  }, [id])
+
+  const handleSave = async () => {
+    try {
+      const data = { ...editForm }
+      if (data.pilot_id) data.pilot_id = parseInt(data.pilot_id)
+      else data.pilot_id = null
+      const updated = await api.patch(`/flights/${id}`, data)
+      setFlight(updated)
+      setEditing(false)
+    } catch (err) { alert(err.message) }
+  }
+
+  const handleApprove = async () => {
+    try {
+      const updated = await api.patch(`/flights/${id}`, { review_status: 'reviewed', pilot_confirmed: true })
+      setFlight(updated)
+    } catch (err) { alert(err.message) }
+  }
+
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>
+  if (!flight) return <div className="text-center text-muted-foreground py-12">Flight not found</div>
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <Link to="/flights" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="w-4 h-4" /> Back to Flights
+        </Link>
+        <div className="flex gap-2">
+          {flight.review_status === 'needs_review' && isAdmin && (
+            <button onClick={handleApprove} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:opacity-90">
+              Approve Flight
+            </button>
+          )}
+          {isAdmin && !editing && (
+            <button onClick={() => setEditing(true)} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90">
+              Edit
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Flight Info */}
+      <div className="bg-card border border-border rounded-xl p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-12 h-12 rounded-xl bg-primary/15 flex items-center justify-center text-primary">
+            <Plane className="w-6 h-6" />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-foreground">Flight on {flight.date || 'Unknown Date'}</h2>
+            <div className="flex items-center gap-3 text-sm text-muted-foreground">
+              <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                flight.review_status === 'needs_review' ? 'bg-amber-500/15 text-amber-400' : 'bg-emerald-500/15 text-emerald-400'
+              }`}>{flight.review_status === 'needs_review' ? 'Needs Review' : 'Reviewed'}</span>
+              {flight.api_provider && <span>Source: {flight.api_provider}</span>}
+            </div>
+          </div>
+        </div>
+
+        {editing ? (
+          <div className="space-y-3 border-t border-border pt-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Pilot</label>
+                <select value={editForm.pilot_id} onChange={e => setEditForm({...editForm, pilot_id: e.target.value})}
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
+                  <option value="">Unassigned</option>
+                  {pilots.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Purpose</label>
+                <select value={editForm.purpose} onChange={e => setEditForm({...editForm, purpose: e.target.value})}
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
+                  <option value="">None</option>
+                  {purposes.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">Case Number</label>
+              <input type="text" value={editForm.case_number} onChange={e => setEditForm({...editForm, case_number: e.target.value})}
+                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">Notes</label>
+              <textarea value={editForm.notes} onChange={e => setEditForm({...editForm, notes: e.target.value})}
+                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm h-20 resize-none" />
+            </div>
+            <div className="flex gap-2">
+              <button onClick={handleSave} className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
+                <Save className="w-4 h-4" /> Save
+              </button>
+              <button onClick={() => setEditing(false)} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm">Cancel</button>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 border-t border-border pt-4">
+            <div><p className="text-xs text-muted-foreground">Pilot</p><p className="text-sm text-foreground">{flight.pilot_name || 'Unassigned'}</p></div>
+            <div><p className="text-xs text-muted-foreground">Vehicle</p><p className="text-sm text-foreground">{flight.vehicle_name || '—'}</p></div>
+            <div><p className="text-xs text-muted-foreground">Purpose</p><p className="text-sm text-foreground">{flight.purpose || '—'}</p></div>
+            <div><p className="text-xs text-muted-foreground">Duration</p><p className="text-sm text-foreground">{formatDuration(flight.duration_seconds)}</p></div>
+            <div><p className="text-xs text-muted-foreground">Takeoff</p><p className="text-sm text-foreground">{flight.takeoff_address || '—'}</p></div>
+            <div><p className="text-xs text-muted-foreground">Max Altitude</p><p className="text-sm text-foreground">{flight.max_altitude_m ? `${flight.max_altitude_m.toFixed(1)}m` : '—'}</p></div>
+            <div><p className="text-xs text-muted-foreground">Max Speed</p><p className="text-sm text-foreground">{flight.max_speed_mps ? `${flight.max_speed_mps.toFixed(1)} m/s` : '—'}</p></div>
+            <div><p className="text-xs text-muted-foreground">Case #</p><p className="text-sm text-foreground">{flight.case_number || '—'}</p></div>
+          </div>
+        )}
+      </div>
+
+      {/* Telemetry Charts */}
+      {telemetry.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="bg-card border border-border rounded-xl p-5">
+            <h3 className="text-sm font-semibold text-foreground mb-4">Altitude (m)</h3>
+            <ResponsiveContainer width="100%" height={250}>
+              <LineChart data={telemetry}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
+                <XAxis dataKey="elapsed_s" stroke="var(--muted-fg)" fontSize={11} label={{ value: 'seconds', position: 'bottom', fill: 'var(--muted-fg)', fontSize: 11 }} />
+                <YAxis stroke="var(--muted-fg)" fontSize={11} />
+                <Tooltip {...tooltipStyle} />
+                <Line type="monotone" dataKey="altitude_m" stroke="#6366f1" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="bg-card border border-border rounded-xl p-5">
+            <h3 className="text-sm font-semibold text-foreground mb-4">Speed (m/s)</h3>
+            <ResponsiveContainer width="100%" height={250}>
+              <LineChart data={telemetry}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
+                <XAxis dataKey="elapsed_s" stroke="var(--muted-fg)" fontSize={11} />
+                <YAxis stroke="var(--muted-fg)" fontSize={11} />
+                <Tooltip {...tooltipStyle} />
+                <Line type="monotone" dataKey="speed_mps" stroke="#3b82f6" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="bg-card border border-border rounded-xl p-5">
+            <h3 className="text-sm font-semibold text-foreground mb-4">Battery (%)</h3>
+            <ResponsiveContainer width="100%" height={250}>
+              <LineChart data={telemetry}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
+                <XAxis dataKey="elapsed_s" stroke="var(--muted-fg)" fontSize={11} />
+                <YAxis stroke="var(--muted-fg)" fontSize={11} domain={[0, 100]} />
+                <Tooltip {...tooltipStyle} />
+                <Line type="monotone" dataKey="battery_pct" stroke="#10b981" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="bg-card border border-border rounded-xl p-5">
+            <h3 className="text-sm font-semibold text-foreground mb-4">Heading (deg)</h3>
+            <ResponsiveContainer width="100%" height={250}>
+              <LineChart data={telemetry}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
+                <XAxis dataKey="elapsed_s" stroke="var(--muted-fg)" fontSize={11} />
+                <YAxis stroke="var(--muted-fg)" fontSize={11} domain={[0, 360]} />
+                <Tooltip {...tooltipStyle} />
+                <Line type="monotone" dataKey="heading_deg" stroke="#f59e0b" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {telemetry.length === 0 && (
+        <div className="bg-card border border-border rounded-xl p-8 text-center text-muted-foreground">
+          <MapPin className="w-8 h-8 mx-auto mb-2 opacity-50" />
+          <p>No telemetry data available for this flight.</p>
+          <p className="text-xs mt-1">Telemetry will be fetched automatically when Skydio API sync is configured.</p>
+        </div>
+      )}
+    </div>
+  )
+}

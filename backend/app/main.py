@@ -1,0 +1,118 @@
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.config import settings
+from app.database import Base, engine
+from app.models import *  # noqa: F401,F403 - Import all models to register them
+from app.models.telemetry import TelemetryBase
+from app.database import telemetry_engine
+from app.routers import (
+    auth, pilots, vehicles, flights, dashboard, settings as settings_router,
+    certifications, documents, sync, telemetry, maintenance, media, alerts,
+    equipment, reports, export, mission_logs, training_logs,
+)
+from app.services.scheduler import start_scheduler, stop_scheduler
+from app.routers.auth import hash_password
+from app.database import SessionLocal
+from app.models.user import User
+from app.models.flight import FlightPurpose
+
+
+DEFAULT_PURPOSES = [
+    "Training", "Demonstration", "Manhunt", "Security", "Other Agency Assist",
+    "Search Warrant", "Missing Person", "Photograph Request", "Map Scan",
+    "CPTED", "Citizen Assist", "Fire", "Patrol", "Investigation",
+    "Search & Rescue", "Surveillance", "Mapping", "Inspection", "Other",
+]
+
+
+def seed_defaults():
+    db = SessionLocal()
+    try:
+        # Create default admin if no users exist
+        if db.query(User).count() == 0:
+            admin = User(
+                username="admin",
+                password_hash=hash_password("admin"),
+                display_name="Administrator",
+                role="admin",
+            )
+            db.add(admin)
+            db.commit()
+
+        # Seed default flight purposes
+        if db.query(FlightPurpose).count() == 0:
+            for i, name in enumerate(DEFAULT_PURPOSES):
+                db.add(FlightPurpose(name=name, sort_order=i))
+            db.commit()
+    finally:
+        db.close()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Create tables
+    Base.metadata.create_all(bind=engine)
+    TelemetryBase.metadata.create_all(bind=telemetry_engine)
+    seed_defaults()
+    start_scheduler()
+    yield
+    stop_scheduler()
+
+
+app = FastAPI(
+    title="Drone Unit Manager",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Register routers
+app.include_router(auth.router)
+app.include_router(pilots.router)
+app.include_router(vehicles.router)
+app.include_router(flights.router)
+app.include_router(dashboard.router)
+app.include_router(settings_router.router)
+app.include_router(certifications.router)
+app.include_router(documents.router)
+app.include_router(sync.router)
+app.include_router(telemetry.router)
+app.include_router(maintenance.router)
+app.include_router(media.router)
+app.include_router(alerts.router)
+app.include_router(equipment.router)
+app.include_router(reports.router)
+app.include_router(export.router)
+app.include_router(mission_logs.router)
+app.include_router(training_logs.router)
+
+
+# Serve frontend static files in production (Docker)
+import os
+from pathlib import Path
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+_static_dir = Path(__file__).parent.parent / "static"
+if _static_dir.exists():
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str):
+        file_path = _static_dir / full_path
+        if file_path.is_file():
+            return FileResponse(file_path)
+        return FileResponse(_static_dir / "index.html")
+
+
+@app.get("/api/health")
+def health_check():
+    return {"status": "ok", "app": "Drone Unit Manager"}

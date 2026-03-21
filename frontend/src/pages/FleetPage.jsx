@@ -1,0 +1,451 @@
+import { useState, useEffect, useMemo } from 'react'
+import { Link } from 'react-router-dom'
+import { api } from '@/api/client'
+import { useAuth } from '@/contexts/AuthContext'
+import { Plus, Edit, Trash2, Search, Plane, Battery, Gamepad2, Warehouse, Cpu, Paperclip, ChevronUp, ChevronDown } from 'lucide-react'
+
+// ─── Generic Equipment Modal ────────────────────────────────────────────────
+
+function EquipmentModal({ title, record, fields, onSave, onClose }) {
+  const defaults = {}
+  fields.forEach(f => { defaults[f.key] = '' })
+  const [form, setForm] = useState(record || defaults)
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    const data = { ...form }
+    fields.forEach(f => {
+      if (f.type === 'number' && data[f.key]) data[f.key] = parseFloat(data[f.key])
+      if (data[f.key] === '') delete data[f.key]
+    })
+    onSave(data)
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <h2 className="text-lg font-semibold text-foreground mb-4">{record?.id ? `Edit ${title}` : `Add ${title}`}</h2>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          {fields.map(f => {
+            if (f.type === 'select') {
+              return (
+                <div key={f.key}>
+                  <label className="block text-sm font-medium text-foreground mb-1">{f.label}</label>
+                  <select
+                    value={form[f.key] || ''}
+                    onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
+                    className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
+                  >
+                    {f.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
+              )
+            }
+            return (
+              <div key={f.key}>
+                <label className="block text-sm font-medium text-foreground mb-1">{f.label}</label>
+                <input
+                  type={f.type || 'text'}
+                  value={form[f.key] || ''}
+                  onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+                />
+              </div>
+            )
+          })}
+          <div className="flex gap-2 pt-2">
+            <button type="submit" className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
+              {record?.id ? 'Update' : `Add ${title}`}
+            </button>
+            <button type="button" onClick={onClose} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90">
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ─── Generic Equipment Table ────────────────────────────────────────────────
+
+function EquipmentTable({ items, columns, isAdmin, onEdit, onDelete, emptyMessage, sortKey, sortDir, onToggleSort }) {
+  return (
+    <div className="bg-card border border-border rounded-xl overflow-hidden">
+      <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-border bg-muted/30">
+            {columns.map(c => (
+              <th key={c.key}
+                className={`${c.align === 'right' ? 'text-right' : 'text-left'} px-4 py-3 font-medium text-muted-foreground${c.sortable !== false ? ' cursor-pointer hover:text-foreground select-none' : ''}`}
+                onClick={() => c.sortable !== false && onToggleSort && onToggleSort(c.key)}>
+                {c.label}
+                {sortKey === c.key && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />)}
+              </th>
+            ))}
+            <th className="text-right px-4 py-3 font-medium text-muted-foreground">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map(item => (
+            <tr key={item.id} className="border-b border-border/50 hover:bg-accent/30 transition-colors">
+              {columns.map(c => (
+                <td key={c.key} className={`px-4 py-3 ${c.align === 'right' ? 'text-right' : ''} ${c.primary ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
+                  {c.render ? c.render(item) : (item[c.key] || '—')}
+                </td>
+              ))}
+              <td className="px-4 py-3 text-right">
+                {isAdmin && (
+                  <div className="flex items-center justify-end gap-1">
+                    <button onClick={() => onEdit(item)} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent">
+                      <Edit className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => onDelete(item.id)} className="p-1.5 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </td>
+            </tr>
+          ))}
+          {items.length === 0 && (
+            <tr><td colSpan={columns.length + 1} className="px-4 py-12 text-center text-muted-foreground">{emptyMessage}</td></tr>
+          )}
+        </tbody>
+      </table>
+      </div>
+    </div>
+  )
+}
+
+// ─── Status Badge ───────────────────────────────────────────────────────────
+
+function StatusBadge({ status }) {
+  const colors = {
+    active: 'bg-emerald-500/15 text-emerald-400',
+    available: 'bg-emerald-500/15 text-emerald-400',
+    online: 'bg-emerald-500/15 text-emerald-400',
+    in_use: 'bg-blue-500/15 text-blue-400',
+    charging: 'bg-blue-500/15 text-blue-400',
+    maintenance: 'bg-amber-500/15 text-amber-400',
+    offline: 'bg-zinc-500/15 text-zinc-400',
+    retired: 'bg-red-500/15 text-red-400',
+    damaged: 'bg-red-500/15 text-red-400',
+  }
+  return (
+    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${colors[status] || 'bg-zinc-500/15 text-zinc-400'}`}>
+      {status || '—'}
+    </span>
+  )
+}
+
+// ─── Tab Configs ────────────────────────────────────────────────────────────
+
+const TAB_CONFIGS = {
+  vehicles: {
+    icon: Plane,
+    label: 'Vehicles',
+    endpoint: '/vehicles',
+    columns: [
+      { key: 'name', label: 'Vehicle', primary: true, render: v => {
+        const name = `${v.manufacturer || ''} ${v.model || ''}${v.nickname ? ` (${v.nickname})` : ''}`.trim() || '—'
+        return <Link to={`/fleet/vehicles/${v.id}`} className="hover:text-primary">{name}</Link>
+      }},
+      { key: 'serial_number', label: 'Serial' },
+      { key: 'faa_registration', label: 'FAA Reg' },
+      { key: 'acquired_date', label: 'Acquired' },
+      { key: 'status', label: 'Status', render: v => <StatusBadge status={v.status} /> },
+    ],
+    fields: [
+      { key: 'serial_number', label: 'Serial Number' },
+      { key: 'manufacturer', label: 'Manufacturer' },
+      { key: 'model', label: 'Model' },
+      { key: 'nickname', label: 'Nickname' },
+      { key: 'faa_registration', label: 'FAA Registration' },
+      { key: 'acquired_date', label: 'Acquired Date', type: 'date' },
+      { key: 'status', label: 'Status', type: 'select', options: [
+        { value: 'active', label: 'Active' }, { value: 'maintenance', label: 'Maintenance' }, { value: 'retired', label: 'Retired' }
+      ]},
+      { key: 'notes', label: 'Notes' },
+    ],
+  },
+  batteries: {
+    icon: Battery,
+    label: 'Batteries',
+    endpoint: '/batteries',
+    columns: [
+      { key: 'serial_number', label: 'Serial', primary: true },
+      { key: 'manufacturer', label: 'Manufacturer' },
+      { key: 'model', label: 'Model' },
+      { key: 'vehicle_model', label: 'Vehicle Model' },
+      { key: 'cycle_count', label: 'Cycles', align: 'right' },
+      { key: 'health_pct', label: 'Health', align: 'right', render: b => b.health_pct != null ? `${b.health_pct}%` : '—' },
+      { key: 'status', label: 'Status', render: b => <StatusBadge status={b.status} /> },
+    ],
+    fields: [
+      { key: 'serial_number', label: 'Serial Number' },
+      { key: 'manufacturer', label: 'Manufacturer' },
+      { key: 'model', label: 'Model' },
+      { key: 'vehicle_model', label: 'Vehicle Model' },
+      { key: 'cycle_count', label: 'Cycle Count', type: 'number' },
+      { key: 'health_pct', label: 'Health %', type: 'number' },
+      { key: 'purchase_date', label: 'Purchase Date', type: 'date' },
+      { key: 'status', label: 'Status', type: 'select', options: [
+        { value: 'active', label: 'Active' }, { value: 'charging', label: 'Charging' },
+        { value: 'maintenance', label: 'Maintenance' }, { value: 'retired', label: 'Retired' }
+      ]},
+    ],
+  },
+  controllers: {
+    icon: Gamepad2,
+    label: 'Controllers',
+    endpoint: '/controllers',
+    columns: [
+      { key: 'serial_number', label: 'Serial', primary: true },
+      { key: 'manufacturer', label: 'Manufacturer' },
+      { key: 'model', label: 'Model' },
+      { key: 'status', label: 'Status', render: c => <StatusBadge status={c.status} /> },
+    ],
+    fields: [
+      { key: 'serial_number', label: 'Serial Number' },
+      { key: 'manufacturer', label: 'Manufacturer' },
+      { key: 'model', label: 'Model' },
+      { key: 'status', label: 'Status', type: 'select', options: [
+        { value: 'active', label: 'Active' }, { value: 'maintenance', label: 'Maintenance' }, { value: 'retired', label: 'Retired' }
+      ]},
+    ],
+  },
+  docks: {
+    icon: Warehouse,
+    label: 'Docks',
+    endpoint: '/docks',
+    columns: [
+      { key: 'name', label: 'Name', primary: true },
+      { key: 'serial_number', label: 'Serial' },
+      { key: 'location_name', label: 'Location' },
+      { key: 'lat', label: 'Lat', render: d => d.lat != null ? parseFloat(d.lat).toFixed(6) : '—' },
+      { key: 'lon', label: 'Lon', render: d => d.lon != null ? parseFloat(d.lon).toFixed(6) : '—' },
+      { key: 'status', label: 'Status', render: d => <StatusBadge status={d.status} /> },
+    ],
+    fields: [
+      { key: 'serial_number', label: 'Serial Number' },
+      { key: 'name', label: 'Name' },
+      { key: 'location_name', label: 'Location Name' },
+      { key: 'lat', label: 'Latitude', type: 'number' },
+      { key: 'lon', label: 'Longitude', type: 'number' },
+      { key: 'status', label: 'Status', type: 'select', options: [
+        { value: 'online', label: 'Online' }, { value: 'offline', label: 'Offline' }, { value: 'maintenance', label: 'Maintenance' }
+      ]},
+    ],
+  },
+  sensors: {
+    icon: Cpu,
+    label: 'Sensors',
+    endpoint: '/sensors',
+    columns: [
+      { key: 'name', label: 'Name', primary: true },
+      { key: 'serial_number', label: 'Serial' },
+      { key: 'type', label: 'Type' },
+      { key: 'manufacturer', label: 'Manufacturer' },
+      { key: 'model', label: 'Model' },
+      { key: 'status', label: 'Status', render: s => <StatusBadge status={s.status} /> },
+    ],
+    fields: [
+      { key: 'serial_number', label: 'Serial Number' },
+      { key: 'name', label: 'Name' },
+      { key: 'type', label: 'Type' },
+      { key: 'manufacturer', label: 'Manufacturer' },
+      { key: 'model', label: 'Model' },
+      { key: 'status', label: 'Status', type: 'select', options: [
+        { value: 'active', label: 'Active' }, { value: 'maintenance', label: 'Maintenance' }, { value: 'retired', label: 'Retired' }
+      ]},
+    ],
+  },
+  attachments: {
+    icon: Paperclip,
+    label: 'Attachments',
+    endpoint: '/attachments',
+    columns: [
+      { key: 'name', label: 'Name', primary: true },
+      { key: 'serial_number', label: 'Serial' },
+      { key: 'type', label: 'Type' },
+      { key: 'manufacturer', label: 'Manufacturer' },
+      { key: 'model', label: 'Model' },
+      { key: 'status', label: 'Status', render: a => <StatusBadge status={a.status} /> },
+    ],
+    fields: [
+      { key: 'serial_number', label: 'Serial Number' },
+      { key: 'name', label: 'Name' },
+      { key: 'type', label: 'Type' },
+      { key: 'manufacturer', label: 'Manufacturer' },
+      { key: 'model', label: 'Model' },
+      { key: 'status', label: 'Status', type: 'select', options: [
+        { value: 'active', label: 'Active' }, { value: 'maintenance', label: 'Maintenance' }, { value: 'retired', label: 'Retired' }
+      ]},
+    ],
+  },
+}
+
+// ─── Main Component ─────────────────────────────────────────────────────────
+
+export default function FleetPage() {
+  const [activeTab, setActiveTab] = useState('vehicles')
+  const [items, setItems] = useState([])
+  const [search, setSearch] = useState('')
+  const [modal, setModal] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [sortKey, setSortKey] = useState('name')
+  const [sortDir, setSortDir] = useState('asc')
+  const { isAdmin } = useAuth()
+
+  const toggleSort = (key) => {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(key); setSortDir('asc') }
+  }
+
+  const config = TAB_CONFIGS[activeTab]
+
+  const load = () => {
+    setLoading(true)
+    api.get(config.endpoint)
+      .then(setItems)
+      .catch(console.error)
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    setSearch('')
+    setModal(null)
+    setSortKey('name')
+    setSortDir('asc')
+    load()
+  }, [activeTab])
+
+  const handleSave = async (data) => {
+    try {
+      if (data.id) {
+        await api.patch(`${config.endpoint}/${data.id}`, data)
+      } else {
+        await api.post(config.endpoint, data)
+      }
+      setModal(null)
+      load()
+    } catch (err) {
+      alert(err.message)
+    }
+  }
+
+  const handleDelete = async (id) => {
+    if (!confirm(`Delete this ${config.label.slice(0, -1).toLowerCase()}?`)) return
+    try {
+      await api.delete(`${config.endpoint}/${id}`)
+      load()
+    } catch (err) {
+      alert(err.message)
+    }
+  }
+
+  const filtered = useMemo(() => {
+    const list = items.filter(item => {
+      const searchable = config.columns.map(c => {
+        if (c.key === 'status') return item.status || ''
+        return item[c.key] || ''
+      }).join(' ')
+      return searchable.toLowerCase().includes(search.toLowerCase())
+    })
+    return [...list].sort((a, b) => {
+      let aVal, bVal
+      // For vehicle name column, build composite name
+      if (sortKey === 'name' && activeTab === 'vehicles') {
+        aVal = `${a.manufacturer || ''} ${a.model || ''} ${a.nickname || ''}`.trim().toLowerCase()
+        bVal = `${b.manufacturer || ''} ${b.model || ''} ${b.nickname || ''}`.trim().toLowerCase()
+      } else if (typeof a[sortKey] === 'number' || typeof b[sortKey] === 'number') {
+        aVal = a[sortKey] ?? 0
+        bVal = b[sortKey] ?? 0
+      } else {
+        aVal = (a[sortKey] || '').toString().toLowerCase()
+        bVal = (b[sortKey] || '').toString().toLowerCase()
+      }
+      if (aVal < bVal) return sortDir === 'asc' ? -1 : 1
+      if (aVal > bVal) return sortDir === 'asc' ? 1 : -1
+      return 0
+    })
+  }, [items, search, sortKey, sortDir, config.columns, activeTab])
+
+  return (
+    <div className="space-y-4">
+      {/* Tabs */}
+      <div className="flex items-center gap-1 border-b border-border pb-2 overflow-x-auto">
+        {Object.entries(TAB_CONFIGS).map(([key, cfg]) => {
+          const Icon = cfg.icon
+          return (
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
+              className={`text-sm font-medium pb-2 border-b-2 transition-colors flex items-center gap-1.5 px-3 whitespace-nowrap ${
+                activeTab === key
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Icon className="w-4 h-4" /> {cfg.label}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Search + Add */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-4">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder={`Search ${config.label.toLowerCase()}...`}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-9 pr-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+        </div>
+        {isAdmin && (
+          <button
+            onClick={() => setModal('add')}
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90"
+          >
+            <Plus className="w-4 h-4" /> Add {config.label.slice(0, -1)}
+          </button>
+        )}
+      </div>
+
+      {/* Table */}
+      {loading ? (
+        <div className="flex items-center justify-center h-64">
+          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : (
+        <EquipmentTable
+          items={filtered}
+          columns={config.columns}
+          isAdmin={isAdmin}
+          onEdit={(item) => setModal(item)}
+          onDelete={handleDelete}
+          emptyMessage={`No ${config.label.toLowerCase()} found`}
+          sortKey={sortKey}
+          sortDir={sortDir}
+          onToggleSort={toggleSort}
+        />
+      )}
+
+      {/* Modal */}
+      {modal && (
+        <EquipmentModal
+          title={config.label.slice(0, -1)}
+          record={modal === 'add' ? null : modal}
+          fields={config.fields}
+          onSave={handleSave}
+          onClose={() => setModal(null)}
+        />
+      )}
+    </div>
+  )
+}

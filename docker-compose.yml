@@ -1,0 +1,23 @@
+services:
+  drone-unit-manager:
+    build: .
+    image: jongaydos/drone-unit-manager:latest
+    container_name: drone-unit-manager
+    ports:
+      - "${PORT:-8080}:8000"
+    volumes:
+      - dum-data:/app/data
+    environment:
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - TZ=${TZ:-America/Chicago}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  dum-data:
+    driver: local
