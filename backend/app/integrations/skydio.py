@@ -87,6 +87,11 @@ class SkydioProvider(DroneProvider):
                 url.split("/")[-1], page, resp.status_code,
                 type(body).__name__,
                 list(body.keys()) if isinstance(body, dict) else f"list[{len(body)}]")
+            # Log pagination-related fields
+            if isinstance(body, dict):
+                for pkey in ("next", "next_cursor", "cursor", "has_more", "total", "count", "page", "per_page", "offset", "limit"):
+                    if pkey in body:
+                        logger.info("  Pagination field '%s': %s", pkey, body[pkey])
 
             # Skydio API may return data in "data", "results", or as top-level list
             if isinstance(body, list):
@@ -185,6 +190,9 @@ class SkydioProvider(DroneProvider):
 
             raw = self._paginate(f"{BASE_URL}/flights", creds, params=params)
             flights = []
+            if raw:
+                logger.info("First flight raw keys: %s", list(raw[0].keys()))
+                logger.info("First flight raw data: %s", {k: raw[0][k] for k in list(raw[0].keys())[:20]})
             for f in raw:
                 # Parse timestamps
                 takeoff_time = None
