@@ -296,14 +296,19 @@ def refresh_flight_from_api(flight_id: int, db: Session = Depends(get_db), admin
                     timestamp_ms = int(ts)
 
                 # Skydio field names → our model
-                alt = point.get("height_above_takeoff") or point.get("hybrid_altitude") or point.get("gps_altitude") or 0
-                lat = point.get("gps_latitude") or point.get("lat")
-                lon = point.get("gps_longitude") or point.get("lon")
-                battery = point.get("battery_percentage")
-                if battery and battery <= 1.0:
-                    battery = battery * 100  # Convert 0-1 to percentage
+                # Use None-safe extraction (0.0 is valid, don't skip it)
+                alt_hat = point.get("height_above_takeoff")
+                alt_hyb = point.get("hybrid_altitude")
+                alt_gps = point.get("gps_altitude")
+                alt = alt_hat if alt_hat is not None else (alt_hyb if alt_hyb is not None else (alt_gps if alt_gps is not None else 0))
 
-                # Calculate speed from gps_velocity [vx, vy, vz]
+                lat = point.get("gps_latitude") if point.get("gps_latitude") is not None else point.get("lat")
+                lon = point.get("gps_longitude") if point.get("gps_longitude") is not None else point.get("lon")
+
+                battery = point.get("battery_percentage")
+                if battery is not None and battery <= 1.0:
+                    battery = battery * 100
+
                 velocity = point.get("gps_velocity")
                 speed = 0
                 if isinstance(velocity, list) and len(velocity) >= 2:
@@ -322,13 +327,20 @@ def refresh_flight_from_api(flight_id: int, db: Session = Depends(get_db), admin
                     altitude_m=round(alt, 2),
                     speed_mps=round(speed, 2),
                     heading_deg=None,
-                    battery_pct=round(battery, 1) if battery else None,
+                    battery_pct=round(battery, 1) if battery is not None else None,
                 )
                 tdb.add(tp)
 
             tdb.commit()
             telemetry_points = len(telemetry_data)
             updated_fields.append(f"telemetry({telemetry_points}pts)")
+
+            # Verify save worked
+            verify = tdb.query(TelemetryPoint).filter(TelemetryPoint.flight_id == flight.id).limit(5).all()
+            for v in verify:
+                print(f"[TELEM-VERIFY] Saved: ts={v.timestamp_ms} alt={v.altitude_m} speed={v.speed_mps} bat={v.battery_pct} lat={v.lat}", flush=True)
+
+            print(f"[TELEM-STATS] max_alt={max_alt}, max_speed={max_speed}", flush=True)
 
             # Update flight with max altitude/speed from telemetry
             if max_alt > 0:
