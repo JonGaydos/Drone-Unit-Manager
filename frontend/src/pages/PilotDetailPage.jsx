@@ -33,12 +33,12 @@ export default function PilotDetailPage() {
     Promise.all([
       api.get(`/pilots/${id}`),
       api.get(`/pilots/${id}/stats`),
-      api.get(`/flights?pilot_id=${id}&limit=20`),
+      api.get(`/flights?pilot_id=${id}&per_page=20`),
       api.get(`/pilot-certifications?pilot_id=${id}`).catch(() => []),
-    ]).then(([p, s, f, c]) => {
+    ]).then(([p, s, fData, c]) => {
       setPilot(p)
       setStats(s)
-      setFlights(f)
+      setFlights(fData.flights || fData)
       setCertifications(c)
     }).catch(console.error).finally(() => setLoading(false))
   }, [id])
@@ -49,6 +49,7 @@ export default function PilotDetailPage() {
       last_name: pilot.last_name || '',
       email: pilot.email || '',
       phone: pilot.phone || '',
+      phone_type: pilot.phone_type || 'work',
       badge_number: pilot.badge_number || '',
       status: pilot.status || 'active',
       notes: pilot.notes || '',
@@ -142,8 +143,29 @@ export default function PilotDetailPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-muted-foreground mb-1">Phone</label>
-                    <input type="text" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})}
-                      className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                    <div className="flex gap-2">
+                      <select
+                        value={editForm.phone_type || 'work'}
+                        onChange={(e) => setEditForm({...editForm, phone_type: e.target.value})}
+                        className="px-2 py-2 bg-secondary border border-border rounded-lg text-sm w-32"
+                      >
+                        <option value="work">Work Cell</option>
+                        <option value="personal">Personal Cell</option>
+                      </select>
+                      <input
+                        type="tel"
+                        value={editForm.phone || ''}
+                        onChange={(e) => {
+                          const digits = e.target.value.replace(/\D/g, '').slice(0, 10)
+                          let formatted = digits
+                          if (digits.length > 3) formatted = digits.slice(0,3) + '-' + digits.slice(3)
+                          if (digits.length > 6) formatted = digits.slice(0,3) + '-' + digits.slice(3,6) + '-' + digits.slice(6)
+                          setEditForm({...editForm, phone: formatted})
+                        }}
+                        placeholder="###-###-####"
+                        className="flex-1 px-3 py-2 bg-secondary border border-border rounded-lg text-sm"
+                      />
+                    </div>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
@@ -188,7 +210,7 @@ export default function PilotDetailPage() {
                 </div>
                 <div className="flex flex-wrap gap-4 mt-2 text-sm text-muted-foreground">
                   {pilot.email && <span>{pilot.email}</span>}
-                  {pilot.phone && <span>{pilot.phone}</span>}
+                  {pilot.phone && <span>{pilot.phone_type === 'personal' ? 'Personal' : 'Work'}: {pilot.phone}</span>}
                   {pilot.badge_number && <span>Badge: {pilot.badge_number}</span>}
                 </div>
                 <span className={`inline-flex mt-2 px-2 py-0.5 rounded-full text-xs font-medium ${

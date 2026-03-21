@@ -198,6 +198,12 @@ def import_excel(db: Session, file_bytes: bytes) -> dict:
                     takeoff_address=row.get("Takeoff Address", ""),
                     purpose=purpose if purpose else None,
                     battery_serial=row.get("Battery", ""),
+                    sensor_package=row.get("Sensor Package", "") or None,
+                    attachment_top=row.get("Attachment (TOP)", "") or None,
+                    attachment_bottom=row.get("Attachment (BOTTOM)", "") or None,
+                    attachment_left=row.get("Attachment (LEFT)", "") or None,
+                    attachment_right=row.get("Attachment (RIGHT)", "") or None,
+                    carrier=row.get("Carrier(s)", "") or None,
                     review_status="reviewed",
                     pilot_confirmed=True,
                 )

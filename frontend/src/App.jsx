@@ -13,6 +13,8 @@ const PilotsPage = lazy(() => import('@/pages/PilotsPage'))
 const PilotDetailPage = lazy(() => import('@/pages/PilotDetailPage'))
 const FleetPage = lazy(() => import('@/pages/FleetPage'))
 const VehicleDetailPage = lazy(() => import('@/pages/VehicleDetailPage'))
+const BatteryDetailPage = lazy(() => import('@/pages/BatteryDetailPage'))
+const ControllerDetailPage = lazy(() => import('@/pages/ControllerDetailPage'))
 const CertificationsPage = lazy(() => import('@/pages/CertificationsPage'))
 const MaintenancePage = lazy(() => import('@/pages/MaintenancePage'))
 const MediaPage = lazy(() => import('@/pages/MediaPage'))
@@ -62,6 +64,8 @@ function AppRoutes() {
           <Route path="/pilots/:id" element={<PilotDetailPage />} />
           <Route path="/fleet" element={<FleetPage />} />
           <Route path="/fleet/vehicles/:id" element={<VehicleDetailPage />} />
+          <Route path="/fleet/batteries/:id" element={<BatteryDetailPage />} />
+          <Route path="/fleet/controllers/:id" element={<ControllerDetailPage />} />
           <Route path="/certifications" element={<CertificationsPage />} />
           <Route path="/maintenance" element={<MaintenancePage />} />
           <Route path="/media" element={<MediaPage />} />

@@ -79,7 +79,7 @@ export default function AnalyticsPage() {
       api.get('/dashboard/analytics/monthly-flights'),
       api.get('/dashboard/analytics/vehicle-hours'),
       api.get('/dashboard/analytics/pilot-hours'),
-      api.get('/flights'),
+      api.get('/flights?per_page=1000'),
     ]).then(([purpose, year, pilot, dur, mon, veh, pil, flights]) => {
       setByPurpose(purpose)
       setByYear(year)
@@ -89,7 +89,7 @@ export default function AnalyticsPage() {
       setVehicleHours(veh)
       setPilotHours(pil)
       // Handle paginated or raw array response
-      setAllFlights(Array.isArray(flights) ? flights : flights.items || flights.data || [])
+      setAllFlights(Array.isArray(flights) ? flights : flights.flights || flights.items || flights.data || [])
     }).catch(console.error).finally(() => setLoading(false))
   }, [])
 

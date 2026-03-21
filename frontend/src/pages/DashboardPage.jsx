@@ -67,7 +67,7 @@ export default function DashboardPage() {
   useEffect(() => {
     Promise.all([
       api.get('/dashboard/stats').catch(() => null),
-      api.get('/flights?limit=10').catch(() => []),
+      api.get('/flights?per_page=10').catch(() => []),
       api.get('/pilot-certifications').catch(() => []),
       api.get('/maintenance?upcoming=true').catch(() => []),
     ])

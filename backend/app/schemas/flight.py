@@ -39,6 +39,12 @@ class FlightCreate(BaseModel):
     purpose: str | None = None
     case_number: str | None = None
     battery_serial: str | None = None
+    sensor_package: str | None = None
+    attachment_top: str | None = None
+    attachment_bottom: str | None = None
+    attachment_left: str | None = None
+    attachment_right: str | None = None
+    carrier: str | None = None
     notes: str | None = None
 
 
@@ -61,6 +67,12 @@ class FlightUpdate(BaseModel):
     purpose: str | None = None
     case_number: str | None = None
     battery_serial: str | None = None
+    sensor_package: str | None = None
+    attachment_top: str | None = None
+    attachment_bottom: str | None = None
+    attachment_left: str | None = None
+    attachment_right: str | None = None
+    carrier: str | None = None
     review_status: str | None = None
     pilot_confirmed: bool | None = None
     notes: str | None = None
@@ -88,6 +100,12 @@ class FlightOut(BaseModel):
     purpose: str | None = None
     case_number: str | None = None
     battery_serial: str | None = None
+    sensor_package: str | None = None
+    attachment_top: str | None = None
+    attachment_bottom: str | None = None
+    attachment_left: str | None = None
+    attachment_right: str | None = None
+    carrier: str | None = None
     has_telemetry: bool = False
     review_status: str = "reviewed"
     pilot_confirmed: bool = True

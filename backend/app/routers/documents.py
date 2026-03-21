@@ -119,6 +119,29 @@ def view_document(
     )
 
 
+@router.patch("/{doc_id}", response_model=DocumentOut)
+def update_document(
+    doc_id: int,
+    title: str = None,
+    document_type: str = None,
+    notes: str = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    doc = db.query(Document).filter(Document.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    if title is not None:
+        doc.title = title
+    if document_type is not None:
+        doc.document_type = document_type
+    if notes is not None:
+        doc.notes = notes
+    db.commit()
+    db.refresh(doc)
+    return _doc_to_out(doc)
+
+
 @router.delete("/{doc_id}")
 def delete_document(
     doc_id: int,

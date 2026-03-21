@@ -6,7 +6,7 @@ import { Plus, Edit, Trash2, Search, Plane, Battery, Gamepad2, Warehouse, Cpu, P
 
 // ─── Generic Equipment Modal ────────────────────────────────────────────────
 
-function EquipmentModal({ title, record, fields, onSave, onClose }) {
+function EquipmentModal({ title, record, fields, onSave, onClose, vehicleModels }) {
   const defaults = {}
   fields.forEach(f => { defaults[f.key] = '' })
   const [form, setForm] = useState(record || defaults)
@@ -38,6 +38,24 @@ function EquipmentModal({ title, record, fields, onSave, onClose }) {
                   >
                     {f.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
+                </div>
+              )
+            }
+            if (f.type === 'combobox') {
+              return (
+                <div key={f.key}>
+                  <label className="block text-sm font-medium text-foreground mb-1">{f.label}</label>
+                  <input
+                    type="text"
+                    list={`${f.key}-options`}
+                    value={form[f.key] || ''}
+                    onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
+                    className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+                    placeholder="Select or type a model..."
+                  />
+                  <datalist id={`${f.key}-options`}>
+                    {(vehicleModels || []).map(m => <option key={m} value={m} />)}
+                  </datalist>
                 </div>
               )
             }
@@ -140,6 +158,13 @@ function StatusBadge({ status }) {
   )
 }
 
+// ─── Singular helper ────────────────────────────────────────────────────────
+
+function singularize(label) {
+  const map = { Batteries: 'Battery', Vehicles: 'Vehicle', Controllers: 'Controller', Docks: 'Dock', Sensors: 'Sensor', Attachments: 'Attachment' }
+  return map[label] || label.slice(0, -1)
+}
+
 // ─── Tab Configs ────────────────────────────────────────────────────────────
 
 const TAB_CONFIGS = {
@@ -162,12 +187,16 @@ const TAB_CONFIGS = {
         const expiry = new Date(v._reg_expiry)
         const days = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24))
         const isExpired = days < 0
-        const isSoon = days <= 90 && days >= 0
+        const isUrgent = days >= 0 && days < 30
+        const isWarning = days >= 30 && days <= 90
         return (
           <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
-            isExpired ? 'bg-red-500/15 text-red-400' : isSoon ? 'bg-amber-500/15 text-amber-400' : 'bg-emerald-500/15 text-emerald-400'
+            isExpired ? 'bg-red-900/20 text-red-300' :
+            isUrgent ? 'bg-red-500/15 text-red-400' :
+            isWarning ? 'bg-amber-500/15 text-amber-400' :
+            'bg-emerald-500/15 text-emerald-400'
           }`}>
-            {isExpired ? `Expired` : `${days}d`}
+            {isExpired ? `Overdue` : `${days}d`}
           </span>
         )
       }},
@@ -191,7 +220,11 @@ const TAB_CONFIGS = {
     label: 'Batteries',
     endpoint: '/batteries',
     columns: [
-      { key: 'serial_number', label: 'Serial', primary: true },
+      { key: 'nickname', label: 'Battery', primary: true, render: b => {
+        const name = b.nickname || b.serial_number || '—'
+        return <Link to={`/fleet/batteries/${b.id}`} className="hover:text-primary">{name}</Link>
+      }},
+      { key: 'serial_number', label: 'Serial' },
       { key: 'manufacturer', label: 'Manufacturer' },
       { key: 'model', label: 'Model' },
       { key: 'vehicle_model', label: 'Vehicle Model' },
@@ -201,9 +234,10 @@ const TAB_CONFIGS = {
     ],
     fields: [
       { key: 'serial_number', label: 'Serial Number' },
+      { key: 'nickname', label: 'Nickname' },
       { key: 'manufacturer', label: 'Manufacturer' },
       { key: 'model', label: 'Model' },
-      { key: 'vehicle_model', label: 'Vehicle Model' },
+      { key: 'vehicle_model', label: 'Vehicle Model', type: 'combobox' },
       { key: 'cycle_count', label: 'Cycle Count', type: 'number' },
       { key: 'health_pct', label: 'Health %', type: 'number' },
       { key: 'purchase_date', label: 'Purchase Date', type: 'date' },
@@ -218,13 +252,18 @@ const TAB_CONFIGS = {
     label: 'Controllers',
     endpoint: '/controllers',
     columns: [
-      { key: 'serial_number', label: 'Serial', primary: true },
+      { key: 'nickname', label: 'Controller', primary: true, render: c => {
+        const name = c.nickname || c.serial_number || '—'
+        return <Link to={`/fleet/controllers/${c.id}`} className="hover:text-primary">{name}</Link>
+      }},
+      { key: 'serial_number', label: 'Serial' },
       { key: 'manufacturer', label: 'Manufacturer' },
       { key: 'model', label: 'Model' },
       { key: 'status', label: 'Status', render: c => <StatusBadge status={c.status} /> },
     ],
     fields: [
       { key: 'serial_number', label: 'Serial Number' },
+      { key: 'nickname', label: 'Nickname' },
       { key: 'manufacturer', label: 'Manufacturer' },
       { key: 'model', label: 'Model' },
       { key: 'status', label: 'Status', type: 'select', options: [
@@ -313,7 +352,16 @@ export default function FleetPage() {
   const [loading, setLoading] = useState(true)
   const [sortKey, setSortKey] = useState('name')
   const [sortDir, setSortDir] = useState('asc')
+  const [vehicleModels, setVehicleModels] = useState([])
   const { isAdmin } = useAuth()
+
+  // Fetch unique vehicle models for combobox
+  useEffect(() => {
+    api.get('/vehicles').then(vehicles => {
+      const models = [...new Set(vehicles.map(v => v.model).filter(Boolean))]
+      setVehicleModels(models.sort())
+    }).catch(() => {})
+  }, [])
 
   const toggleSort = (key) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -366,7 +414,7 @@ export default function FleetPage() {
   }
 
   const handleDelete = async (id) => {
-    if (!confirm(`Delete this ${config.label.slice(0, -1).toLowerCase()}?`)) return
+    if (!confirm(`Delete this ${singularize(config.label).toLowerCase()}?`)) return
     try {
       await api.delete(`${config.endpoint}/${id}`)
       load()
@@ -449,7 +497,7 @@ export default function FleetPage() {
             onClick={() => setModal('add')}
             className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90"
           >
-            <Plus className="w-4 h-4" /> Add {config.label.slice(0, -1)}
+            <Plus className="w-4 h-4" /> Add {singularize(config.label)}
           </button>
         )}
       </div>
@@ -476,11 +524,12 @@ export default function FleetPage() {
       {/* Modal */}
       {modal && (
         <EquipmentModal
-          title={config.label.slice(0, -1)}
+          title={singularize(config.label)}
           record={modal === 'add' ? null : modal}
           fields={config.fields}
           onSave={handleSave}
           onClose={() => setModal(null)}
+          vehicleModels={vehicleModels}
         />
       )}
     </div>

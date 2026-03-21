@@ -16,6 +16,18 @@ def run_migrations():
         # Phase 4: Photos
         ("pilots", "photo_url", "ALTER TABLE pilots ADD COLUMN photo_url VARCHAR(500)"),
         ("vehicles", "photo_url", "ALTER TABLE vehicles ADD COLUMN photo_url VARCHAR(500)"),
+        # Phone type for pilots
+        ("pilots", "phone_type", "ALTER TABLE pilots ADD COLUMN phone_type VARCHAR(20)"),
+        # Flight sensor/attachment fields
+        ("flights", "sensor_package", "ALTER TABLE flights ADD COLUMN sensor_package VARCHAR(100)"),
+        ("flights", "attachment_top", "ALTER TABLE flights ADD COLUMN attachment_top VARCHAR(100)"),
+        ("flights", "attachment_bottom", "ALTER TABLE flights ADD COLUMN attachment_bottom VARCHAR(100)"),
+        ("flights", "attachment_left", "ALTER TABLE flights ADD COLUMN attachment_left VARCHAR(100)"),
+        ("flights", "attachment_right", "ALTER TABLE flights ADD COLUMN attachment_right VARCHAR(100)"),
+        ("flights", "carrier", "ALTER TABLE flights ADD COLUMN carrier VARCHAR(200)"),
+        # Nicknames for batteries and controllers
+        ("batteries", "nickname", "ALTER TABLE batteries ADD COLUMN nickname VARCHAR(100)"),
+        ("controllers", "nickname", "ALTER TABLE controllers ADD COLUMN nickname VARCHAR(100)"),
     ]
 
     with engine.connect() as conn:

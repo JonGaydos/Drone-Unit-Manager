@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
-import { formatDuration } from '@/lib/utils'
+import { formatDuration, normalizeDateValue } from '@/lib/utils'
 import { ArrowLeft, MapPin, Clock, Gauge, Battery, Plane, Save } from 'lucide-react'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -35,6 +35,13 @@ export default function FlightDetailPage() {
       duration_seconds: f.duration_seconds || '',
       takeoff_address: f.takeoff_address || '',
       case_number: f.case_number || '',
+      battery_serial: f.battery_serial || '',
+      sensor_package: f.sensor_package || '',
+      attachment_top: f.attachment_top || '',
+      attachment_bottom: f.attachment_bottom || '',
+      attachment_left: f.attachment_left || '',
+      attachment_right: f.attachment_right || '',
+      carrier: f.carrier || '',
       notes: f.notes || '',
       review_status: f.review_status || 'needs_review',
     })
@@ -113,6 +120,7 @@ export default function FlightDetailPage() {
           <div>
             <h2 className="text-xl font-bold text-foreground">Flight on {flight.date || 'Unknown Date'}</h2>
             <div className="flex items-center gap-3 text-sm text-muted-foreground">
+              {flight.external_id && <span className="font-mono text-xs bg-secondary px-2 py-0.5 rounded" title={flight.external_id}>ID: {flight.external_id.slice(0, 12)}{flight.external_id.length > 12 ? '...' : ''}</span>}
               <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
                 flight.review_status === 'needs_review' ? 'bg-amber-500/15 text-amber-400' : 'bg-emerald-500/15 text-emerald-400'
               }`}>{flight.review_status === 'needs_review' ? 'Needs Review' : 'Reviewed'}</span>
@@ -153,6 +161,7 @@ export default function FlightDetailPage() {
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">Date</label>
                 <input type="date" value={editForm.date} onChange={e => setEditForm({...editForm, date: e.target.value})}
+                  onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) setEditForm(prev => ({...prev, date: n})) }}
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               </div>
             </div>
@@ -193,6 +202,47 @@ export default function FlightDetailPage() {
               <input type="text" value={editForm.case_number} onChange={e => setEditForm({...editForm, case_number: e.target.value})}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Battery Serial</label>
+                <input type="text" value={editForm.battery_serial} onChange={e => setEditForm({...editForm, battery_serial: e.target.value})}
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Sensor Package</label>
+                <input type="text" value={editForm.sensor_package} onChange={e => setEditForm({...editForm, sensor_package: e.target.value})}
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Attachment (TOP)</label>
+                <input type="text" value={editForm.attachment_top} onChange={e => setEditForm({...editForm, attachment_top: e.target.value})}
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Attachment (BOTTOM)</label>
+                <input type="text" value={editForm.attachment_bottom} onChange={e => setEditForm({...editForm, attachment_bottom: e.target.value})}
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Attachment (LEFT)</label>
+                <input type="text" value={editForm.attachment_left} onChange={e => setEditForm({...editForm, attachment_left: e.target.value})}
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Attachment (RIGHT)</label>
+                <input type="text" value={editForm.attachment_right} onChange={e => setEditForm({...editForm, attachment_right: e.target.value})}
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">Carrier(s)</label>
+              <input type="text" value={editForm.carrier} onChange={e => setEditForm({...editForm, carrier: e.target.value})}
+                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+            </div>
             <div>
               <label className="block text-sm font-medium text-foreground mb-1">Notes</label>
               <textarea value={editForm.notes} onChange={e => setEditForm({...editForm, notes: e.target.value})}
@@ -215,6 +265,18 @@ export default function FlightDetailPage() {
             <div><p className="text-xs text-muted-foreground">Max Altitude</p><p className="text-sm text-foreground">{flight.max_altitude_m ? `${flight.max_altitude_m.toFixed(1)}m` : '—'}</p></div>
             <div><p className="text-xs text-muted-foreground">Max Speed</p><p className="text-sm text-foreground">{flight.max_speed_mps ? `${flight.max_speed_mps.toFixed(1)} m/s` : '—'}</p></div>
             <div><p className="text-xs text-muted-foreground">Case #</p><p className="text-sm text-foreground">{flight.case_number || '—'}</p></div>
+            <div><p className="text-xs text-muted-foreground">Battery Serial</p><p className="text-sm text-foreground">{flight.battery_serial || '—'}</p></div>
+            <div><p className="text-xs text-muted-foreground">Sensor Package</p><p className="text-sm text-foreground">{flight.sensor_package || '—'}</p></div>
+            <div><p className="text-xs text-muted-foreground">Carrier(s)</p><p className="text-sm text-foreground">{flight.carrier || '—'}</p></div>
+            <div><p className="text-xs text-muted-foreground">&nbsp;</p></div>
+            {(flight.attachment_top || flight.attachment_bottom || flight.attachment_left || flight.attachment_right) && (
+              <>
+                <div><p className="text-xs text-muted-foreground">Attachment (TOP)</p><p className="text-sm text-foreground">{flight.attachment_top || '—'}</p></div>
+                <div><p className="text-xs text-muted-foreground">Attachment (BOTTOM)</p><p className="text-sm text-foreground">{flight.attachment_bottom || '—'}</p></div>
+                <div><p className="text-xs text-muted-foreground">Attachment (LEFT)</p><p className="text-sm text-foreground">{flight.attachment_left || '—'}</p></div>
+                <div><p className="text-xs text-muted-foreground">Attachment (RIGHT)</p><p className="text-sm text-foreground">{flight.attachment_right || '—'}</p></div>
+              </>
+            )}
             {flight.notes && <div className="col-span-2 md:col-span-4"><p className="text-xs text-muted-foreground">Notes</p><p className="text-sm text-foreground">{flight.notes}</p></div>}
           </div>
         )}

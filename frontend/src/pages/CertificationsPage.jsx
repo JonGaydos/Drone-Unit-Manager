@@ -2,7 +2,9 @@ import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
+import { normalizeDateValue } from '@/lib/utils'
 import { Plus, Edit, Trash2, ShieldCheck, FileText, Upload, Search, Filter, Download } from 'lucide-react'
+import DocumentUpload from '@/components/DocumentUpload'
 
 const STATUS_COLORS = {
   not_issued: 'bg-zinc-500/15 text-zinc-400',
@@ -137,11 +139,13 @@ function AssignCertModal({ pilots, certTypes, existingCert, onSave, onClose }) {
             <div>
               <label className="block text-sm font-medium text-foreground mb-1">Issue Date</label>
               <input type="date" value={form.issue_date} onChange={e => setForm({...form, issue_date: e.target.value})}
+                onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) setForm(prev => ({...prev, issue_date: n})) }}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
             <div>
               <label className="block text-sm font-medium text-foreground mb-1">Expiration Date</label>
               <input type="date" value={form.expiration_date} onChange={e => setForm({...form, expiration_date: e.target.value})}
+                onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) setForm(prev => ({...prev, expiration_date: n})) }}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
           </div>
@@ -155,6 +159,11 @@ function AssignCertModal({ pilots, certTypes, existingCert, onSave, onClose }) {
             <button type="button" onClick={onClose} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm">Cancel</button>
           </div>
         </form>
+        {isEditing && existingCert?.id && (
+          <div className="mt-4">
+            <DocumentUpload entityType="certification" entityId={existingCert.id} />
+          </div>
+        )}
       </div>
     </div>
   )

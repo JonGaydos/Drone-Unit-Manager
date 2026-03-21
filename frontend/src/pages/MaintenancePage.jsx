@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
+import { normalizeDateValue } from '@/lib/utils'
 import { Plus, Trash2, Search, Wrench, CalendarClock, History, Download, Edit, CheckCircle, Clock } from 'lucide-react'
 
 // Map entity_type to API endpoint
@@ -121,6 +122,7 @@ function MaintenanceModal({ record, onSave, onClose, entityLists, pilots }) {
                 type="date"
                 value={form.performed_date || ''}
                 onChange={(e) => setForm({ ...form, performed_date: e.target.value })}
+                onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) setForm(prev => ({...prev, performed_date: n})) }}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring text-sm"
               />
             </div>

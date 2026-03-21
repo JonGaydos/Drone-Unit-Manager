@@ -1,4 +1,5 @@
 from datetime import date
+from math import ceil
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
@@ -32,7 +33,7 @@ def _flight_to_out(flight: Flight, db: Session) -> FlightOut:
     return out
 
 
-@router.get("", response_model=list[FlightOut])
+@router.get("")
 def list_flights(
     pilot_id: int | None = None,
     vehicle_id: int | None = None,
@@ -40,26 +41,36 @@ def list_flights(
     date_from: date | None = None,
     date_to: date | None = None,
     review_status: str | None = None,
-    limit: int = Query(default=200, le=1000),
-    offset: int = 0,
+    page: int = 1,
+    per_page: int = 100,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    q = db.query(Flight)
+    filters = []
     if pilot_id:
-        q = q.filter(Flight.pilot_id == pilot_id)
+        filters.append(Flight.pilot_id == pilot_id)
     if vehicle_id:
-        q = q.filter(Flight.vehicle_id == vehicle_id)
+        filters.append(Flight.vehicle_id == vehicle_id)
     if purpose:
-        q = q.filter(Flight.purpose == purpose)
+        filters.append(Flight.purpose == purpose)
     if date_from:
-        q = q.filter(Flight.date >= date_from)
+        filters.append(Flight.date >= date_from)
     if date_to:
-        q = q.filter(Flight.date <= date_to)
+        filters.append(Flight.date <= date_to)
     if review_status:
-        q = q.filter(Flight.review_status == review_status)
-    flights = q.order_by(Flight.date.desc(), Flight.takeoff_time.desc()).offset(offset).limit(limit).all()
-    return [_flight_to_out(f, db) for f in flights]
+        filters.append(Flight.review_status == review_status)
+    total = db.query(func.count(Flight.id)).filter(*filters).scalar()
+    offset = (page - 1) * per_page
+    flights = db.query(Flight).filter(*filters).order_by(
+        Flight.date.desc(), Flight.takeoff_time.desc()
+    ).offset(offset).limit(per_page).all()
+    return {
+        "flights": [_flight_to_out(f, db) for f in flights],
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": ceil(total / per_page) if per_page > 0 else 1,
+    }
 
 
 @router.get("/count")

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
-import { formatDuration } from '@/lib/utils'
+import { formatDuration, normalizeDateValue } from '@/lib/utils'
 import { Plus, Search, CheckCircle, ChevronUp, ChevronDown, Pencil, X, Check, Download } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
@@ -51,6 +51,7 @@ function FlightModal({ pilots, vehicles, purposes, onSave, onClose }) {
             <div>
               <label className="block text-sm font-medium text-foreground mb-1">Date</label>
               <input type="date" value={form.date} onChange={e => setForm({...form, date: e.target.value})}
+                onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) setForm(prev => ({...prev, date: n})) }}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
             <div>
@@ -109,6 +110,12 @@ export default function FlightsPage() {
   const [filterVehicleId, setFilterVehicleId] = useState('')
   const [filterPurpose, setFilterPurpose] = useState('')
 
+  // Pagination state
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [total, setTotal] = useState(0)
+  const [reviewCount, setReviewCount] = useState(0)
+
   // Inline editing state
   const [editingId, setEditingId] = useState(null)
   const [editForm, setEditForm] = useState({})
@@ -125,6 +132,8 @@ export default function FlightsPage() {
     if (filterPilotId) qp.set('pilot_id', filterPilotId)
     if (filterVehicleId) qp.set('vehicle_id', filterVehicleId)
     if (filterPurpose) qp.set('purpose', filterPurpose)
+    qp.set('page', page)
+    qp.set('per_page', 100)
     const qs = qp.toString()
     const path = `/flights${qs ? `?${qs}` : ''}`
 
@@ -133,12 +142,17 @@ export default function FlightsPage() {
       api.get('/pilots'),
       api.get('/vehicles'),
       api.get('/flights/purposes/list'),
-    ]).then(([f, p, v, pu]) => {
-      setFlights(f); setPilots(p); setVehicles(v); setPurposes(pu)
+      api.get('/flights/count?review_status=needs_review'),
+    ]).then(([data, p, v, pu, rc]) => {
+      setFlights(data.flights || [])
+      setTotal(data.total || 0)
+      setTotalPages(data.total_pages || 1)
+      setPilots(p); setVehicles(v); setPurposes(pu)
+      setReviewCount(rc.count || 0)
     }).catch(console.error).finally(() => setLoading(false))
   }
 
-  useEffect(() => { load() }, [filterDateFrom, filterDateTo, filterPilotId, filterVehicleId, filterPurpose])
+  useEffect(() => { load() }, [filterDateFrom, filterDateTo, filterPilotId, filterVehicleId, filterPurpose, page])
 
   const handleSave = async (data) => {
     try {
@@ -242,6 +256,7 @@ export default function FlightsPage() {
   if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>
 
   const needsReview = flights.filter(f => f.review_status === 'needs_review')
+  const needsReviewCount = reviewCount
 
   const selectCls = "px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
   const inputCls = "px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
@@ -257,7 +272,7 @@ export default function FlightsPage() {
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-secondary text-secondary-foreground hover:bg-accent/30'
             }`}>
-            {s === 'all' ? 'All' : s === 'needs_review' ? `Needs Review (${needsReview.length})` : 'Reviewed'}
+            {s === 'all' ? 'All' : s === 'needs_review' ? `Needs Review (${needsReviewCount})` : 'Reviewed'}
           </button>
         ))}
       </div>
@@ -266,11 +281,13 @@ export default function FlightsPage() {
       <div className="flex flex-wrap items-end gap-3">
         <div>
           <label className="block text-xs text-muted-foreground mb-1">Date From</label>
-          <input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)} className={inputCls} />
+          <input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)}
+            onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) { e.target.value = n; setFilterDateFrom(n) } }} className={inputCls} />
         </div>
         <div>
           <label className="block text-xs text-muted-foreground mb-1">Date To</label>
-          <input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)} className={inputCls} />
+          <input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)}
+            onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) { e.target.value = n; setFilterDateTo(n) } }} className={inputCls} />
         </div>
         <div>
           <label className="block text-xs text-muted-foreground mb-1">Pilot</label>
@@ -328,6 +345,7 @@ export default function FlightsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/30">
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden lg:table-cell">Flight ID</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none" onClick={() => toggleSort('date')}>
                 Date{sortKey === 'date' && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />)}
               </th>
@@ -353,8 +371,10 @@ export default function FlightsPage() {
           <tbody>
             {filtered.map(f => editingId === f.id ? (
               <tr key={f.id} className="border-b border-border/50 bg-accent/20">
+                <td className="px-4 py-2 hidden lg:table-cell text-muted-foreground text-xs font-mono" title={f.external_id || ''}>{f.external_id ? f.external_id.slice(0, 8) : '—'}</td>
                 <td className="px-4 py-2">
                   <input type="date" value={editForm.date} onChange={e => setEditForm({...editForm, date: e.target.value})}
+                    onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) setEditForm(prev => ({...prev, date: n})) }}
                     className="w-full px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm" />
                 </td>
                 <td className="px-4 py-2">
@@ -398,6 +418,7 @@ export default function FlightsPage() {
               </tr>
             ) : (
               <tr key={f.id} className="border-b border-border/50 hover:bg-accent/30 transition-colors">
+                <td className="px-4 py-3 hidden lg:table-cell text-muted-foreground text-xs font-mono" title={f.external_id || ''}>{f.external_id ? f.external_id.slice(0, 8) : '—'}</td>
                 <td className="px-4 py-3">
                   <Link to={`/flights/${f.id}`} className="text-foreground hover:text-primary">{f.date || '—'}</Link>
                 </td>
@@ -424,9 +445,19 @@ export default function FlightsPage() {
                 </td>
               </tr>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={8} className="px-4 py-12 text-center text-muted-foreground">No flights found</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={9} className="px-4 py-12 text-center text-muted-foreground">No flights found</td></tr>}
           </tbody>
         </table>
+        </div>
+        <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+          <span className="text-sm text-muted-foreground">
+            Showing {total === 0 ? 0 : ((page-1)*100)+1}-{Math.min(page*100, total)} of {total} flights
+          </span>
+          <div className="flex gap-2">
+            <button disabled={page <= 1} onClick={() => setPage(p => p-1)} className="px-3 py-1 text-sm bg-secondary rounded-lg disabled:opacity-40">Previous</button>
+            <span className="px-3 py-1 text-sm">Page {page} of {totalPages}</span>
+            <button disabled={page >= totalPages} onClick={() => setPage(p => p+1)} className="px-3 py-1 text-sm bg-secondary rounded-lg disabled:opacity-40">Next</button>
+          </div>
         </div>
       </div>
 

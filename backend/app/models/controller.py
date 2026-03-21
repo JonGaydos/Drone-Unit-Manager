@@ -12,6 +12,7 @@ class Controller(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     serial_number: Mapped[str] = mapped_column(String(100), unique=True)
+    nickname: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     manufacturer: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     model: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="active")

@@ -264,6 +264,12 @@ class SkydioProvider(DroneProvider):
                     "max_speed_mps": f.get("max_speed_mps") or f.get("max_speed"),
                     "distance_m": f.get("distance_m") or f.get("total_distance"),
                     "battery_serial": f.get("battery_serial"),
+                    "sensor_package": f.get("sensor_package"),
+                    "attachment_top": f.get("attachment_top"),
+                    "attachment_bottom": f.get("attachment_bottom"),
+                    "attachment_left": f.get("attachment_left"),
+                    "attachment_right": f.get("attachment_right"),
+                    "carrier": f.get("carrier") or f.get("carriers"),
                 })
 
             logger.info("Fetched %d flights from Skydio", len(flights))

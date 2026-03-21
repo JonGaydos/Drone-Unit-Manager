@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
-import { FileBarChart, Upload, Loader2, Download, FileText } from 'lucide-react'
+import { normalizeDateValue } from '@/lib/utils'
+import { FileBarChart, Upload, Loader2, Download, FileText, FileDown } from 'lucide-react'
 
 const REPORT_TYPES = [
   { value: 'flight_summary', label: 'Flight Summary' },
@@ -109,6 +110,25 @@ export default function ReportsPage() {
     }
   }
 
+  const handleDownloadPdf = async () => {
+    setGenerating(true)
+    setError(null)
+    try {
+      const config = {
+        report_type: reportType,
+        date_from: dateFrom || undefined,
+        date_to: dateTo || undefined,
+        pilot_ids: selectedPilots.length > 0 ? selectedPilots : undefined,
+        vehicle_ids: selectedVehicles.length > 0 ? selectedVehicles : undefined,
+      }
+      await api.downloadPost('/reports/generate/pdf', config)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setGenerating(false)
+    }
+  }
+
   const handleExportCSV = (type) => {
     const params = new URLSearchParams()
     if (dateFrom) params.set('date_from', dateFrom)
@@ -153,12 +173,14 @@ export default function ReportsPage() {
                     type="date"
                     value={dateFrom}
                     onChange={(e) => setDateFrom(e.target.value)}
+                    onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) { e.target.value = n; setDateFrom(n) } }}
                     className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                   <input
                     type="date"
                     value={dateTo}
                     onChange={(e) => setDateTo(e.target.value)}
+                    onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) { e.target.value = n; setDateTo(n) } }}
                     className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </div>
@@ -229,18 +251,28 @@ export default function ReportsPage() {
                 </label>
               </div>
 
-              {/* Generate Button */}
-              <button
-                onClick={handleGenerate}
-                disabled={generating}
-                className="w-full flex items-center justify-center gap-2 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50"
-              >
-                {generating ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</>
-                ) : (
-                  <><FileBarChart className="w-4 h-4" /> Generate Report</>
-                )}
-              </button>
+              {/* Generate Buttons */}
+              <div className="flex gap-2">
+                <button
+                  onClick={handleGenerate}
+                  disabled={generating}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50"
+                >
+                  {generating ? (
+                    <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</>
+                  ) : (
+                    <><FileBarChart className="w-4 h-4" /> Generate</>
+                  )}
+                </button>
+                <button
+                  onClick={handleDownloadPdf}
+                  disabled={generating}
+                  className="flex items-center justify-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50"
+                  title="Download PDF"
+                >
+                  <FileDown className="w-4 h-4" /> PDF
+                </button>
+              </div>
 
               {/* Quick CSV Exports */}
               <div className="border-t border-border pt-3">

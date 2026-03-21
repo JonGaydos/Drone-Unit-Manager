@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom'
 
 function PilotModal({ pilot, onSave, onClose }) {
   const [form, setForm] = useState(pilot || {
-    first_name: '', last_name: '', email: '', phone: '', badge_number: '', status: 'active', notes: ''
+    first_name: '', last_name: '', email: '', phone: '', phone_type: 'work', badge_number: '', status: 'active', notes: ''
   })
 
   const handleSubmit = (e) => {
@@ -36,7 +36,32 @@ function PilotModal({ pilot, onSave, onClose }) {
             {field('Last Name', 'last_name')}
           </div>
           {field('Email', 'email', 'email')}
-          {field('Phone', 'phone', 'tel')}
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-1">Phone</label>
+            <div className="flex gap-2">
+              <select
+                value={form.phone_type || 'work'}
+                onChange={(e) => setForm({ ...form, phone_type: e.target.value })}
+                className="px-2 py-2 bg-secondary border border-border rounded-lg text-sm w-32"
+              >
+                <option value="work">Work Cell</option>
+                <option value="personal">Personal Cell</option>
+              </select>
+              <input
+                type="tel"
+                value={form.phone || ''}
+                onChange={(e) => {
+                  const digits = e.target.value.replace(/\D/g, '').slice(0, 10)
+                  let formatted = digits
+                  if (digits.length > 3) formatted = digits.slice(0,3) + '-' + digits.slice(3)
+                  if (digits.length > 6) formatted = digits.slice(0,3) + '-' + digits.slice(3,6) + '-' + digits.slice(6)
+                  setForm({ ...form, phone: formatted })
+                }}
+                placeholder="###-###-####"
+                className="flex-1 px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+          </div>
           {field('Badge Number', 'badge_number')}
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">Status</label>

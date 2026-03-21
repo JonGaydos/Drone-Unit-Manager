@@ -216,6 +216,12 @@ class SyncManager:
                     max_speed_mps=f_data.get("max_speed_mps"),
                     distance_m=f_data.get("distance_m"),
                     battery_serial=f_data.get("battery_serial"),
+                    sensor_package=f_data.get("sensor_package"),
+                    attachment_top=f_data.get("attachment_top"),
+                    attachment_bottom=f_data.get("attachment_bottom"),
+                    attachment_left=f_data.get("attachment_left"),
+                    attachment_right=f_data.get("attachment_right"),
+                    carrier=f_data.get("carrier"),
                     review_status="needs_review",
                     pilot_confirmed=False,
                 )

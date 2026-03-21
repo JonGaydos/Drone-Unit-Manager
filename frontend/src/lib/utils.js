@@ -17,3 +17,15 @@ export function formatHours(seconds) {
   if (!seconds) return '0.0'
   return (seconds / 3600).toFixed(1)
 }
+
+export function normalizeDateValue(value) {
+  if (!value) return value
+  // Handle dates like "0026-12-12" → "2026-12-12"
+  const match = value.match(/^00(\d{2})-/)
+  if (match) {
+    const yr = parseInt(match[1])
+    const century = yr >= 50 ? '19' : '20'
+    return value.replace(/^00\d{2}/, century + match[1])
+  }
+  return value
+}

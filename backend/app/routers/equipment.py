@@ -4,6 +4,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -21,6 +22,7 @@ router = APIRouter(prefix="/api", tags=["equipment"])
 
 class BatteryCreate(BaseModel):
     serial_number: str
+    nickname: Optional[str] = None
     manufacturer: Optional[str] = None
     model: Optional[str] = None
     vehicle_model: Optional[str] = None
@@ -32,6 +34,7 @@ class BatteryCreate(BaseModel):
 
 class BatteryUpdate(BaseModel):
     serial_number: Optional[str] = None
+    nickname: Optional[str] = None
     manufacturer: Optional[str] = None
     model: Optional[str] = None
     vehicle_model: Optional[str] = None
@@ -44,6 +47,7 @@ class BatteryUpdate(BaseModel):
 class BatteryOut(BaseModel):
     id: int
     serial_number: str
+    nickname: Optional[str] = None
     manufacturer: Optional[str]
     model: Optional[str]
     vehicle_model: Optional[str]
@@ -79,10 +83,27 @@ def delete_battery(bid: int, db: Session = Depends(get_db), admin: User = Depend
     db.delete(b); db.commit()
     return {"ok": True}
 
+@router.get("/batteries/{bid}", response_model=BatteryOut)
+def get_battery(bid: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    b = db.query(Battery).filter(Battery.id == bid).first()
+    if not b: raise HTTPException(404, "Battery not found")
+    return BatteryOut.model_validate(b)
+
+@router.get("/batteries/{bid}/stats")
+def get_battery_stats(bid: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    from app.models.flight import Flight
+    battery = db.query(Battery).filter(Battery.id == bid).first()
+    if not battery:
+        raise HTTPException(404, "Battery not found")
+    flight_count = db.query(func.count(Flight.id)).filter(Flight.battery_serial == battery.serial_number).scalar()
+    total_seconds = db.query(func.coalesce(func.sum(Flight.duration_seconds), 0)).filter(Flight.battery_serial == battery.serial_number).scalar()
+    return {"total_flights": flight_count, "total_hours": round(total_seconds / 3600, 2)}
+
 # ── Controllers ──────────────────────────────────────────────────
 
 class ControllerCreate(BaseModel):
     serial_number: str
+    nickname: Optional[str] = None
     manufacturer: Optional[str] = None
     model: Optional[str] = None
     status: str = "active"
@@ -91,6 +112,7 @@ class ControllerCreate(BaseModel):
 
 class ControllerUpdate(BaseModel):
     serial_number: Optional[str] = None
+    nickname: Optional[str] = None
     manufacturer: Optional[str] = None
     model: Optional[str] = None
     status: Optional[str] = None
@@ -100,6 +122,7 @@ class ControllerUpdate(BaseModel):
 class ControllerOut(BaseModel):
     id: int
     serial_number: str
+    nickname: Optional[str] = None
     manufacturer: Optional[str]
     model: Optional[str]
     status: str
@@ -131,6 +154,12 @@ def delete_controller(cid: int, db: Session = Depends(get_db), admin: User = Dep
     if not c: raise HTTPException(404, "Controller not found")
     db.delete(c); db.commit()
     return {"ok": True}
+
+@router.get("/controllers/{cid}", response_model=ControllerOut)
+def get_controller(cid: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    c = db.query(Controller).filter(Controller.id == cid).first()
+    if not c: raise HTTPException(404, "Controller not found")
+    return ControllerOut.model_validate(c)
 
 # ── Docks ────────────────────────────────────────────────────────
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-import { FileText, Upload, Trash2, Loader2, ExternalLink } from 'lucide-react'
+import { FileText, Upload, Trash2, Loader2, ExternalLink, Edit, Save, X } from 'lucide-react'
 
 export default function DocumentUpload({ entityType, entityId }) {
   const [documents, setDocuments] = useState([])
@@ -8,6 +8,10 @@ export default function DocumentUpload({ entityType, entityId }) {
   const [showUpload, setShowUpload] = useState(false)
   const [title, setTitle] = useState('')
   const [docType, setDocType] = useState('general')
+  const [selectedFile, setSelectedFile] = useState(null)
+  const [editingDoc, setEditingDoc] = useState(null)
+  const [editForm, setEditForm] = useState({ title: '', document_type: '' })
+  const [editSaving, setEditSaving] = useState(false)
   const { isAdmin } = useAuth()
 
   const fetchDocs = useCallback(() => {
@@ -24,17 +28,23 @@ export default function DocumentUpload({ entityType, entityId }) {
     fetchDocs()
   }, [fetchDocs])
 
-  const handleUpload = async (e) => {
+  const handleFileSelect = (e) => {
     const file = e.target.files[0]
     if (!file) return
+    setSelectedFile(file)
+    if (!title) setTitle(file.name)
+  }
+
+  const handleUpload = async () => {
+    if (!selectedFile) return
     setUploading(true)
     try {
       const formData = new FormData()
-      formData.append('file', file)
+      formData.append('file', selectedFile)
       formData.append('entity_type', entityType)
       formData.append('entity_id', entityId)
       formData.append('document_type', docType)
-      formData.append('title', title || file.name)
+      formData.append('title', title || selectedFile.name)
       const token = localStorage.getItem('token')
       const res = await fetch('/api/documents/upload', {
         method: 'POST',
@@ -47,13 +57,13 @@ export default function DocumentUpload({ entityType, entityId }) {
       }
       setTitle('')
       setDocType('general')
+      setSelectedFile(null)
       setShowUpload(false)
       fetchDocs()
     } catch (err) {
       alert(err.message)
     } finally {
       setUploading(false)
-      e.target.value = ''
     }
   }
 
@@ -69,6 +79,38 @@ export default function DocumentUpload({ entityType, entityId }) {
       fetchDocs()
     } catch (err) {
       alert(err.message)
+    }
+  }
+
+  const startEditDoc = (doc) => {
+    setEditingDoc(doc.id)
+    setEditForm({ title: doc.title || '', document_type: doc.document_type || 'general' })
+  }
+
+  const cancelEditDoc = () => {
+    setEditingDoc(null)
+    setEditForm({ title: '', document_type: '' })
+  }
+
+  const saveEditDoc = async (docId) => {
+    setEditSaving(true)
+    try {
+      const token = localStorage.getItem('token')
+      const params = new URLSearchParams()
+      if (editForm.title) params.set('title', editForm.title)
+      if (editForm.document_type) params.set('document_type', editForm.document_type)
+      const res = await fetch(`/api/documents/${docId}?${params.toString()}`, {
+        method: 'PATCH',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      if (!res.ok) throw new Error('Update failed')
+      setEditingDoc(null)
+      setEditForm({ title: '', document_type: '' })
+      fetchDocs()
+    } catch (err) {
+      alert(err.message)
+    } finally {
+      setEditSaving(false)
     }
   }
 
@@ -93,7 +135,7 @@ export default function DocumentUpload({ entityType, entityId }) {
         </div>
         {isAdmin && (
           <button
-            onClick={() => setShowUpload(!showUpload)}
+            onClick={() => { setShowUpload(!showUpload); setSelectedFile(null); setTitle(''); setDocType('general') }}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:opacity-90"
           >
             <Upload className="w-3.5 h-3.5" /> Upload
@@ -128,21 +170,34 @@ export default function DocumentUpload({ entityType, entityId }) {
             </div>
           </div>
           <label className="flex items-center gap-2 px-3 py-2 bg-secondary border border-border border-dashed rounded-lg cursor-pointer hover:bg-accent/30 transition-colors">
-            {uploading ? (
-              <Loader2 className="w-4 h-4 text-primary animate-spin" />
-            ) : (
-              <Upload className="w-4 h-4 text-primary" />
-            )}
+            <Upload className="w-4 h-4 text-primary" />
             <span className="text-sm text-muted-foreground">
-              {uploading ? 'Uploading...' : 'Choose file...'}
+              {selectedFile ? selectedFile.name : 'Choose file...'}
             </span>
             <input
               type="file"
               className="hidden"
-              onChange={handleUpload}
-              disabled={uploading}
+              onChange={handleFileSelect}
             />
           </label>
+          {selectedFile && (
+            <div className="flex gap-2">
+              <button
+                onClick={handleUpload}
+                disabled={uploading}
+                className="flex items-center gap-1.5 px-4 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:opacity-90 disabled:opacity-50"
+              >
+                {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                {uploading ? 'Uploading...' : 'Save'}
+              </button>
+              <button
+                onClick={() => { setSelectedFile(null); setTitle('') }}
+                className="px-4 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-xs hover:opacity-90"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -153,31 +208,77 @@ export default function DocumentUpload({ entityType, entityId }) {
             className="flex items-center gap-3 px-4 py-3 hover:bg-accent/30 transition-colors"
           >
             <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-foreground truncate">{doc.title || doc.filename}</p>
-              <p className="text-xs text-muted-foreground">
-                {doc.document_type !== 'general' ? doc.document_type.replace(/_/g, ' ') + ' | ' : ''}
-                {doc.mime_type}
-              </p>
-            </div>
-            <div className="flex items-center gap-1 shrink-0">
-              <button
-                onClick={() => window.open(doc.view_url, '_blank')}
-                className="p-1.5 text-muted-foreground hover:text-foreground rounded hover:bg-accent/30"
-                title="View"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-              </button>
-              {isAdmin && (
-                <button
-                  onClick={() => handleDelete(doc.id)}
-                  className="p-1.5 text-muted-foreground hover:text-destructive rounded hover:bg-destructive/10"
-                  title="Delete"
+            {editingDoc === doc.id ? (
+              <div className="flex-1 min-w-0 space-y-1.5">
+                <input
+                  type="text"
+                  value={editForm.title}
+                  onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                  className="w-full px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                <select
+                  value={editForm.document_type}
+                  onChange={(e) => setEditForm({ ...editForm, document_type: e.target.value })}
+                  className="w-full px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  {DOC_TYPES.map(dt => (
+                    <option key={dt.value} value={dt.value}>{dt.label}</option>
+                  ))}
+                </select>
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={() => saveEditDoc(doc.id)}
+                    disabled={editSaving}
+                    className="flex items-center gap-1 px-2.5 py-1 bg-primary text-primary-foreground rounded text-xs font-medium hover:opacity-90 disabled:opacity-50"
+                  >
+                    <Save className="w-3 h-3" /> {editSaving ? 'Saving...' : 'Save'}
+                  </button>
+                  <button
+                    onClick={cancelEditDoc}
+                    className="flex items-center gap-1 px-2.5 py-1 bg-secondary text-secondary-foreground rounded text-xs hover:opacity-90"
+                  >
+                    <X className="w-3 h-3" /> Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-foreground truncate">{doc.title || doc.filename}</p>
+                <p className="text-xs text-muted-foreground">
+                  {doc.document_type !== 'general' ? doc.document_type.replace(/_/g, ' ') + ' | ' : ''}
+                  {doc.mime_type}
+                </p>
+              </div>
+            )}
+            {editingDoc !== doc.id && (
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={() => window.open(doc.view_url, '_blank')}
+                  className="p-1.5 text-muted-foreground hover:text-foreground rounded hover:bg-accent/30"
+                  title="View"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
                 </button>
-              )}
-            </div>
+                {isAdmin && (
+                  <>
+                    <button
+                      onClick={() => startEditDoc(doc)}
+                      className="p-1.5 text-muted-foreground hover:text-foreground rounded hover:bg-accent/30"
+                      title="Edit"
+                    >
+                      <Edit className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(doc.id)}
+                      className="p-1.5 text-muted-foreground hover:text-destructive rounded hover:bg-destructive/10"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         ))}
         {documents.length === 0 && (

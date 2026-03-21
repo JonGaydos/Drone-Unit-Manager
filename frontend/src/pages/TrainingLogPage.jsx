@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
+import { normalizeDateValue } from '@/lib/utils'
 import { Plus, Search, X, ChevronDown, ChevronUp, Trash2, Download } from 'lucide-react'
 
 const TRAINING_TYPES = ['Initial', 'Recurrent', 'Proficiency', 'Special']
@@ -57,6 +58,7 @@ function TrainingModal({ pilots, vehicles, onSave, onClose, initial }) {
             <div>
               <label className="block text-sm font-medium text-foreground mb-1">Date *</label>
               <input type="date" required value={form.date} onChange={e => setForm({...form, date: e.target.value})}
+                onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) setForm(prev => ({...prev, date: n})) }}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
             <div>
@@ -249,8 +251,10 @@ export default function TrainingLogPage() {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+            onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) { e.target.value = n; setDateFrom(n) } }}
             className="px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
           <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+            onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) { e.target.value = n; setDateTo(n) } }}
             className="px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
           <select value={filterPilot} onChange={e => setFilterPilot(e.target.value)}
             className="px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">

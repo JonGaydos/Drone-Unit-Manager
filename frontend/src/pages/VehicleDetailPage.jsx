@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
-import { formatHours, formatDuration } from '@/lib/utils'
+import { formatHours, formatDuration, normalizeDateValue } from '@/lib/utils'
 import {
   ArrowLeft, Plane, Clock, Calendar, Battery, Edit,
   FileText, Wrench, Gamepad2, Cpu, Paperclip, Camera,
@@ -43,17 +43,17 @@ export default function VehicleDetailPage() {
     Promise.all([
       api.get(`/vehicles/${id}`),
       api.get(`/vehicles/${id}/stats`),
-      api.get(`/flights?vehicle_id=${id}&limit=50`),
+      api.get(`/flights?vehicle_id=${id}&per_page=50`),
       api.get('/batteries').catch(() => []),
       api.get('/controllers').catch(() => []),
       api.get('/sensors').catch(() => []),
       api.get('/attachments').catch(() => []),
       api.get(`/maintenance?entity_type=vehicle&entity_id=${id}`).catch(() => []),
       api.get(`/vehicles/${id}/registrations`).catch(() => []),
-    ]).then(([v, s, f, bat, ctrl, sens, att, maint, regs]) => {
+    ]).then(([v, s, fData, bat, ctrl, sens, att, maint, regs]) => {
       setVehicle(v)
       setStats(s)
-      setFlights(f)
+      setFlights(fData.flights || fData)
       setBatteries(bat)
       setControllers(ctrl)
       setSensors(sens)
@@ -375,29 +375,33 @@ export default function VehicleDetailPage() {
             const expiry = current.expiry_date ? new Date(current.expiry_date) : null
             const daysUntil = expiry ? Math.ceil((expiry - today) / (1000 * 60 * 60 * 24)) : null
             const isExpired = daysUntil !== null && daysUntil < 0
-            const isExpiringSoon = daysUntil !== null && daysUntil <= 90 && daysUntil >= 0
+            const isUrgent = daysUntil !== null && daysUntil >= 0 && daysUntil < 30
+            const isWarning = daysUntil !== null && daysUntil >= 30 && daysUntil <= 90
+            const isGood = daysUntil !== null && daysUntil > 90
             return (
               <div className={`px-4 py-3 border-b border-border flex items-center gap-4 ${
-                isExpired ? 'bg-red-500/5' : isExpiringSoon ? 'bg-amber-500/5' : 'bg-emerald-500/5'
+                isExpired ? 'bg-red-900/10' : isUrgent ? 'bg-red-500/5' : isWarning ? 'bg-amber-500/5' : 'bg-emerald-500/5'
               }`}>
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-foreground">
-                    {current.registration_number || 'No registration number'}
+                  <p className="text-lg font-semibold text-foreground">
+                    Next Due: {current.expiry_date || 'N/A'}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Registered: {current.registration_date || 'N/A'} | Expires: {current.expiry_date || 'N/A'}
+                    {current.registration_number || 'No registration number'} | Registered: {current.registration_date || 'N/A'}
                   </p>
                 </div>
                 <div className="text-right">
                   {daysUntil !== null && (
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-                      isExpired ? 'bg-red-500/15 text-red-400' :
-                      isExpiringSoon ? 'bg-amber-500/15 text-amber-400' :
+                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold ${
+                      isExpired ? 'bg-red-900/20 text-red-300' :
+                      isUrgent ? 'bg-red-500/15 text-red-400' :
+                      isWarning ? 'bg-amber-500/15 text-amber-400' :
                       'bg-emerald-500/15 text-emerald-400'
                     }`}>
-                      {isExpired && <AlertTriangle className="w-3 h-3" />}
-                      {isExpired ? `Expired ${Math.abs(daysUntil)}d ago` :
-                       `${daysUntil}d until renewal`}
+                      {isExpired && <AlertTriangle className="w-3.5 h-3.5" />}
+                      {isUrgent && <AlertTriangle className="w-3.5 h-3.5" />}
+                      {isExpired ? `Overdue ${Math.abs(daysUntil)}d` :
+                       `${daysUntil} days remaining`}
                     </span>
                   )}
                 </div>
@@ -410,7 +414,7 @@ export default function VehicleDetailPage() {
         {/* Add Registration Form */}
         {showRegForm && isAdmin && (
           <div className="px-4 py-3 border-b border-border bg-muted/20 space-y-2">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
               <div>
                 <label className="block text-xs font-medium text-foreground mb-1">Registration #</label>
                 <input type="text" value={regForm.registration_number}
@@ -422,7 +426,18 @@ export default function VehicleDetailPage() {
                 <label className="block text-xs font-medium text-foreground mb-1">Registration Date</label>
                 <input type="date" value={regForm.registration_date}
                   onChange={e => setRegForm({...regForm, registration_date: e.target.value})}
+                  onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) setRegForm(prev => ({...prev, registration_date: n})) }}
                   className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Expiry (auto: +2 years)</label>
+                <input type="text" readOnly
+                  value={regForm.registration_date ? (() => {
+                    const d = new Date(regForm.registration_date)
+                    d.setDate(d.getDate() + 730)
+                    return d.toISOString().split('T')[0]
+                  })() : '--'}
+                  className="w-full px-3 py-1.5 bg-muted border border-border rounded-lg text-muted-foreground text-sm cursor-not-allowed" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-foreground mb-1">Notes</label>
@@ -473,16 +488,20 @@ export default function VehicleDetailPage() {
                 </tr>
               </thead>
               <tbody>
-                {registrations.map(r => (
+                {registrations.map(r => {
+                  const isExpired = r.expiry_date && new Date(r.expiry_date) < new Date()
+                  const statusLabel = r.is_current ? (isExpired ? 'Expired' : 'Current') : (isExpired ? 'Expired' : 'Previous')
+                  const statusColor = r.is_current && !isExpired
+                    ? 'bg-emerald-500/15 text-emerald-400'
+                    : isExpired ? 'bg-red-500/15 text-red-400' : 'bg-zinc-500/15 text-zinc-400'
+                  return (
                   <tr key={r.id} className="border-b border-border/50 hover:bg-accent/30">
                     <td className="px-4 py-2 text-foreground font-medium">{r.registration_number || '--'}</td>
                     <td className="px-4 py-2 text-muted-foreground">{r.registration_date || '--'}</td>
                     <td className="px-4 py-2 text-muted-foreground">{r.expiry_date || '--'}</td>
                     <td className="px-4 py-2">
-                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
-                        r.is_current ? 'bg-emerald-500/15 text-emerald-400' : 'bg-zinc-500/15 text-zinc-400'
-                      }`}>
-                        {r.is_current ? 'Current' : 'Previous'}
+                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${statusColor}`}>
+                        {statusLabel}
                       </span>
                     </td>
                     <td className="px-4 py-2 text-muted-foreground hidden md:table-cell">{r.notes || '--'}</td>
@@ -500,7 +519,8 @@ export default function VehicleDetailPage() {
                       </td>
                     )}
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>
