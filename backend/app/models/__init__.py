@@ -21,6 +21,8 @@ from app.models.training_log import TrainingLog
 from app.models.training_log_pilot import TrainingLogPilot
 from app.models.maintenance_schedule import MaintenanceSchedule
 from app.models.vehicle_registration import VehicleRegistration
+from app.models.photo import Photo, PhotoPilot
+from app.models.folder import Folder
 
 __all__ = [
     "User",
@@ -49,4 +51,7 @@ __all__ = [
     "TrainingLogPilot",
     "MaintenanceSchedule",
     "VehicleRegistration",
+    "Photo",
+    "PhotoPilot",
+    "Folder",
 ]

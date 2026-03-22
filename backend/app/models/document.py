@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import String, Text, DateTime, Integer, ForeignKey, func
+from sqlalchemy import String, Text, DateTime, Integer, ForeignKey, func, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -24,6 +24,7 @@ class Document(Base):
     file_size_bytes: Mapped[int] = mapped_column(Integer)
     uploaded_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    folder_id: Mapped[Optional[int]] = mapped_column(ForeignKey("folders.id"), nullable=True)
 
     pilot = relationship("Pilot", back_populates="documents", foreign_keys=[pilot_id])
     vehicle = relationship("Vehicle", back_populates="documents", foreign_keys=[vehicle_id])

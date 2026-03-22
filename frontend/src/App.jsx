@@ -50,6 +50,7 @@ const ReportsPage = lazy(() => import('@/pages/ReportsPage'))
 const AlertsPage = lazy(() => import('@/pages/AlertsPage'))
 const MissionLogPage = lazy(() => import('@/pages/MissionLogPage'))
 const TrainingLogPage = lazy(() => import('@/pages/TrainingLogPage'))
+const DocumentStoragePage = lazy(() => import('@/pages/DocumentStoragePage'))
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'))
 
 function Spinner() {
@@ -97,6 +98,7 @@ function AppRoutes() {
           <Route path="/certifications" element={<CertificationsPage />} />
           <Route path="/maintenance" element={<MaintenancePage />} />
           <Route path="/media" element={<MediaPage />} />
+          <Route path="/documents" element={<DocumentStoragePage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/alerts" element={<AlertsPage />} />
           <Route path="/settings" element={<SettingsPage />} />

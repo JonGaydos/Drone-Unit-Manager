@@ -19,6 +19,16 @@ export function formatHours(seconds) {
   return (seconds / 3600).toFixed(1)
 }
 
+export function metersToFeet(m) {
+  if (m == null) return null
+  return Math.round(m * 3.28084)
+}
+
+export function mpsToMph(mps) {
+  if (mps == null) return null
+  return Math.round(mps * 2.23694 * 10) / 10
+}
+
 export function normalizeDateValue(value) {
   if (!value) return value
   // Handle dates like "0026-12-12" → "2026-12-12"

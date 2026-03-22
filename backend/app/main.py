@@ -15,6 +15,7 @@ from app.routers import (
     auth, pilots, vehicles, flights, dashboard, settings as settings_router,
     certifications, documents, sync, telemetry, maintenance, media, alerts,
     equipment, reports, export, mission_logs, training_logs, maintenance_schedules,
+    photos, folders,
 )
 from app.routers import vehicle_registrations
 from app.services.scheduler import start_scheduler, stop_scheduler
@@ -22,6 +23,7 @@ from app.routers.auth import hash_password
 from app.database import SessionLocal
 from app.models.user import User
 from app.models.flight import FlightPurpose
+from app.models.folder import Folder
 
 
 DEFAULT_PURPOSES = [
@@ -49,6 +51,12 @@ def seed_defaults():
             db.commit()
             if default_password == "admin":
                 logger.warning("WARNING: Default admin password in use. Set ADMIN_DEFAULT_PASSWORD env var.")
+
+        # Seed default folders
+        if db.query(Folder).count() == 0:
+            for name in ["General", "Certifications", "Insurance", "Maintenance", "Reports"]:
+                db.add(Folder(name=name, is_system=True))
+            db.commit()
 
         # Seed default flight purposes
         if db.query(FlightPurpose).count() == 0:
@@ -107,6 +115,8 @@ app.include_router(mission_logs.router)
 app.include_router(training_logs.router)
 app.include_router(maintenance_schedules.router)
 app.include_router(vehicle_registrations.router)
+app.include_router(photos.router)
+app.include_router(folders.router)
 
 
 # Serve frontend static files in production (Docker)

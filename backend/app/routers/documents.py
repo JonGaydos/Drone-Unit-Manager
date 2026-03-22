@@ -127,6 +127,7 @@ def update_document(
     title: str = None,
     document_type: str = None,
     notes: str = None,
+    folder_id: int | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(require_admin),
 ):
@@ -139,6 +140,8 @@ def update_document(
         doc.document_type = document_type
     if notes is not None:
         doc.notes = notes
+    if folder_id is not None:
+        doc.folder_id = folder_id
     db.commit()
     db.refresh(doc)
     return _doc_to_out(doc)

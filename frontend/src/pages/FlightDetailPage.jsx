@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
-import { formatDuration, normalizeDateValue } from '@/lib/utils'
+import { formatDuration, normalizeDateValue, metersToFeet, mpsToMph } from '@/lib/utils'
 import { sortByName, sortVehicles } from '@/lib/formatters'
 import { ArrowLeft, MapPin, Clock, Gauge, Battery, Plane, Save, RefreshCw, Loader2 } from 'lucide-react'
 import {
@@ -306,8 +306,8 @@ export default function FlightDetailPage() {
             <div><p className="text-xs text-muted-foreground">Purpose</p><p className="text-sm text-foreground">{flight.purpose || '—'}</p></div>
             <div><p className="text-xs text-muted-foreground">Duration</p><p className="text-sm text-foreground">{formatDuration(flight.duration_seconds)}</p></div>
             <div><p className="text-xs text-muted-foreground">Takeoff</p><p className="text-sm text-foreground">{flight.takeoff_address || '—'}</p></div>
-            <div><p className="text-xs text-muted-foreground">Max Altitude</p><p className="text-sm text-foreground">{flight.max_altitude_m ? `${flight.max_altitude_m.toFixed(1)}m` : '—'}</p></div>
-            <div><p className="text-xs text-muted-foreground">Max Speed</p><p className="text-sm text-foreground">{flight.max_speed_mps ? `${flight.max_speed_mps.toFixed(1)} m/s` : '—'}</p></div>
+            <div><p className="text-xs text-muted-foreground">Max Altitude</p><p className="text-sm text-foreground">{flight.max_altitude_m ? `${metersToFeet(flight.max_altitude_m)} ft` : '—'}</p></div>
+            <div><p className="text-xs text-muted-foreground">Max Speed</p><p className="text-sm text-foreground">{flight.max_speed_mps ? `${mpsToMph(flight.max_speed_mps)} mph` : '—'}</p></div>
             <div><p className="text-xs text-muted-foreground">Case #</p><p className="text-sm text-foreground">{flight.case_number || '—'}</p></div>
             <div><p className="text-xs text-muted-foreground">Battery Serial</p><p className="text-sm text-foreground">{flight.battery_serial || '—'}</p></div>
             <div><p className="text-xs text-muted-foreground">Sensor Package</p><p className="text-sm text-foreground">{flight.sensor_package || '—'}</p></div>
@@ -327,37 +327,43 @@ export default function FlightDetailPage() {
       </div>
 
       {/* Telemetry Charts */}
-      {telemetry.length > 0 && (
+      {telemetry.length > 0 && (() => {
+        const chartData = telemetry.map(t => ({
+          ...t,
+          altitude_ft: t.altitude_m != null ? Math.round(t.altitude_m * 3.28084) : null,
+          speed_mph: t.speed_mps != null ? Math.round(t.speed_mps * 2.23694 * 10) / 10 : null,
+        }))
+        return (
         <div className="space-y-4">
           <div className="bg-card border border-border rounded-xl p-5">
-            <h3 className="text-sm font-semibold text-foreground mb-4">Altitude (m)</h3>
+            <h3 className="text-sm font-semibold text-foreground mb-4">Altitude (ft)</h3>
             <ResponsiveContainer width="100%" height={250}>
-              <LineChart data={telemetry}>
+              <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
                 <XAxis dataKey="elapsed_s" stroke="var(--muted-fg)" fontSize={11} label={{ value: 'seconds', position: 'bottom', fill: 'var(--muted-fg)', fontSize: 11 }} />
                 <YAxis stroke="var(--muted-fg)" fontSize={11} />
                 <Tooltip {...tooltipStyle} />
-                <Line type="monotone" dataKey="altitude_m" stroke="#6366f1" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="altitude_ft" stroke="#6366f1" strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className="bg-card border border-border rounded-xl p-5">
-              <h3 className="text-sm font-semibold text-foreground mb-4">Speed (m/s)</h3>
+              <h3 className="text-sm font-semibold text-foreground mb-4">Speed (mph)</h3>
               <ResponsiveContainer width="100%" height={250}>
-                <LineChart data={telemetry}>
+                <LineChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
                   <XAxis dataKey="elapsed_s" stroke="var(--muted-fg)" fontSize={11} />
                   <YAxis stroke="var(--muted-fg)" fontSize={11} />
                   <Tooltip {...tooltipStyle} />
-                  <Line type="monotone" dataKey="speed_mps" stroke="#3b82f6" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="speed_mph" stroke="#3b82f6" strokeWidth={2} dot={false} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
             <div className="bg-card border border-border rounded-xl p-5">
               <h3 className="text-sm font-semibold text-foreground mb-4">Battery (%)</h3>
               <ResponsiveContainer width="100%" height={250}>
-                <LineChart data={telemetry}>
+                <LineChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
                   <XAxis dataKey="elapsed_s" stroke="var(--muted-fg)" fontSize={11} />
                   <YAxis stroke="var(--muted-fg)" fontSize={11} domain={[0, 100]} />
@@ -368,7 +374,8 @@ export default function FlightDetailPage() {
             </div>
           </div>
         </div>
-      )}
+        )
+      })()}
 
       {telemetry.length === 0 && (
         <div className="bg-card border border-border rounded-xl p-8 text-center text-muted-foreground">

@@ -18,6 +18,7 @@ class DocumentOut(BaseModel):
     file_size_bytes: int
     uploaded_at: datetime
     notes: Optional[str]
+    folder_id: Optional[int] = None
     view_url: Optional[str] = None
 
     model_config = {"from_attributes": True}

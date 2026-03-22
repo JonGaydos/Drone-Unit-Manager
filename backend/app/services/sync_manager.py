@@ -250,6 +250,84 @@ class SyncManager:
             logger.error("Flights sync error: %s", exc)
             db.rollback()
 
+        # --- Enrich flights with full details (full sync only) ---
+        if full_sync:
+            try:
+                from app.integrations.skydio import _to_str
+                unenriched = db.query(Flight).filter(
+                    Flight.api_provider == "skydio",
+                    Flight.max_altitude_m.is_(None),
+                    Flight.external_id.isnot(None),
+                ).limit(200).all()
+
+                enriched_count = 0
+                for flight in unenriched:
+                    try:
+                        detail = provider.get_flight_detail(creds, flight.external_id)
+                        if not detail:
+                            continue
+
+                        takeoff_str = detail.get("takeoff") or detail.get("takeoff_time")
+                        if takeoff_str and not flight.takeoff_time:
+                            try:
+                                takeoff = datetime.fromisoformat(str(takeoff_str).replace("Z", "+00:00"))
+                                flight.takeoff_time = takeoff
+                                if not flight.date:
+                                    flight.date = takeoff.date()
+                            except (ValueError, AttributeError):
+                                pass
+
+                        landing_str = detail.get("landing") or detail.get("landing_time")
+                        if landing_str and not flight.landing_time:
+                            try:
+                                flight.landing_time = datetime.fromisoformat(str(landing_str).replace("Z", "+00:00"))
+                            except (ValueError, AttributeError):
+                                pass
+
+                        if flight.takeoff_time and flight.landing_time and not flight.duration_seconds:
+                            flight.duration_seconds = int((flight.landing_time - flight.takeoff_time).total_seconds())
+
+                        attachments = detail.get("attachments")
+                        if isinstance(attachments, list):
+                            mount_map = {"TOP": "attachment_top", "BOTTOM": "attachment_bottom",
+                                         "LEFT": "attachment_left", "RIGHT": "attachment_right"}
+                            for att in attachments:
+                                if isinstance(att, dict):
+                                    mount = att.get("mount_point", "").upper()
+                                    field = mount_map.get(mount)
+                                    if field:
+                                        setattr(flight, field, f"{att.get('attachment_type', '')} ({att.get('attachment_serial', '')})")
+
+                        sensor = detail.get("sensor_package")
+                        if isinstance(sensor, dict):
+                            flight.sensor_package = sensor.get("sensor_package_serial") or _to_str(sensor)
+                        battery = detail.get("battery_serial")
+                        if battery:
+                            flight.battery_serial = _to_str(battery)
+
+                        for api_key, field in [("takeoff_latitude", "takeoff_lat"), ("takeoff_longitude", "takeoff_lon")]:
+                            val = detail.get(api_key)
+                            if val is not None:
+                                setattr(flight, field, val)
+
+                        vs = detail.get("vehicle_serial")
+                        if vs and not flight.vehicle_id:
+                            vehicle = db.query(Vehicle).filter(
+                                (Vehicle.skydio_vehicle_serial == str(vs)) | (Vehicle.serial_number == str(vs))
+                            ).first()
+                            if vehicle:
+                                flight.vehicle_id = vehicle.id
+
+                        enriched_count += 1
+                    except Exception as exc:
+                        logger.warning("Failed to enrich flight %s: %s", flight.external_id, exc)
+
+                db.flush()
+                logger.info("Enriched %d flights with full details", enriched_count)
+            except Exception as exc:
+                result.errors.append(f"Flight enrichment error: {exc}")
+                logger.error("Flight enrichment error: %s", exc)
+
         # --- Sync batteries ---
         try:
             batteries_data = provider.sync_batteries(creds)

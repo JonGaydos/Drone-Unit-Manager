@@ -28,6 +28,8 @@ def run_migrations():
         # Nicknames for batteries and controllers
         ("batteries", "nickname", "ALTER TABLE batteries ADD COLUMN nickname VARCHAR(100)"),
         ("controllers", "nickname", "ALTER TABLE controllers ADD COLUMN nickname VARCHAR(100)"),
+        # Folder support for documents
+        ("documents", "folder_id", "ALTER TABLE documents ADD COLUMN folder_id INTEGER REFERENCES folders(id)"),
     ]
 
     with engine.connect() as conn:
