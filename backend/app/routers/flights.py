@@ -59,7 +59,7 @@ def list_flights(
     flights = db.query(Flight).options(
         joinedload(Flight.pilot), joinedload(Flight.vehicle)
     ).filter(*filters).order_by(
-        Flight.date.desc(), Flight.takeoff_time.desc()
+        Flight.date.desc().nulls_first(), Flight.takeoff_time.desc().nulls_first()
     ).offset(offset).limit(per_page).all()
     return {
         "flights": [_flight_to_out(f) for f in flights],

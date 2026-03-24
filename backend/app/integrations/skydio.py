@@ -239,8 +239,8 @@ class SkydioProvider(DroneProvider):
                 landing_time = None
                 flight_date = None
 
-                takeoff_str = f.get("takeoff_time") or f.get("start_time")
-                landing_str = f.get("landing_time") or f.get("end_time")
+                takeoff_str = f.get("takeoff_time") or f.get("takeoff") or f.get("start_time")
+                landing_str = f.get("landing_time") or f.get("landing") or f.get("end_time")
 
                 if takeoff_str:
                     try:
