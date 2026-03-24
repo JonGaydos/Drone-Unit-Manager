@@ -15,7 +15,9 @@ from app.routers import (
     auth, pilots, vehicles, flights, dashboard, settings as settings_router,
     certifications, documents, sync, telemetry, maintenance, media, alerts,
     equipment, reports, export, mission_logs, training_logs, maintenance_schedules,
-    photos, folders,
+    photos, folders, audit, incidents, flight_plans,
+    weather, currency, equipment_checkouts, checklists,
+    components, geofences,
 )
 from app.routers import vehicle_registrations
 from app.services.scheduler import start_scheduler, stop_scheduler
@@ -117,6 +119,15 @@ app.include_router(maintenance_schedules.router)
 app.include_router(vehicle_registrations.router)
 app.include_router(photos.router)
 app.include_router(folders.router)
+app.include_router(audit.router)
+app.include_router(incidents.router)
+app.include_router(flight_plans.router)
+app.include_router(weather.router)
+app.include_router(currency.router)
+app.include_router(equipment_checkouts.router)
+app.include_router(checklists.router)
+app.include_router(components.router)
+app.include_router(geofences.router)
 
 
 # Serve frontend static files in production (Docker)

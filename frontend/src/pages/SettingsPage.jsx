@@ -456,8 +456,9 @@ export default function SettingsPage() {
 
           {/* Role descriptions */}
           <div className="mb-4 p-3 bg-muted/30 rounded-lg text-xs text-muted-foreground space-y-1">
-            <p><span className="font-medium text-foreground">Admin:</span> Full access — settings, API keys, user management, delete records</p>
-            <p><span className="font-medium text-foreground">Pilot:</span> Add/edit flights, logs, certs — linked to a pilot profile</p>
+            <p><span className="font-medium text-foreground">Admin:</span> Full access — settings, API keys, user management, audit logs</p>
+            <p><span className="font-medium text-foreground">Supervisor:</span> Manage pilots, vehicles, certifications, approve flights</p>
+            <p><span className="font-medium text-foreground">Pilot:</span> Create flights, missions, training logs, maintenance, upload photos/docs</p>
             <p><span className="font-medium text-foreground">Viewer:</span> Read-only access to all data and reports</p>
           </div>
 
@@ -485,6 +486,7 @@ export default function SettingsPage() {
                   <select value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value})}
                     className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                     <option value="admin">Admin</option>
+                    <option value="supervisor">Supervisor</option>
                     <option value="pilot">Pilot</option>
                     <option value="viewer">Viewer</option>
                   </select>
@@ -536,8 +538,8 @@ export default function SettingsPage() {
                         disabled={u.id === currentUser?.id}
                         className="px-2 py-1 bg-secondary border border-border rounded text-xs text-foreground disabled:opacity-50">
                         <option value="admin">Admin</option>
+                        <option value="supervisor">Supervisor</option>
                         <option value="pilot">Pilot</option>
-                        <option value="manager">Manager</option>
                         <option value="viewer">Viewer</option>
                       </select>
                     </td>

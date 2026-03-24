@@ -18,7 +18,7 @@ from app.models.certification import CertificationType, PilotCertification
 from app.models.battery import Battery
 from app.models.maintenance import MaintenanceRecord
 from app.models.setting import Setting
-from app.routers.auth import get_current_user
+from app.routers.auth import get_current_user, require_pilot
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
@@ -37,7 +37,7 @@ class ReportRow(BaseModel):
 
 
 @router.post("/generate")
-def generate_report(config: ReportConfig, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def generate_report(config: ReportConfig, db: Session = Depends(get_db), user: User = Depends(require_pilot)):
     if config.report_type == "flight_summary":
         return _flight_summary(config, db)
     elif config.report_type == "pilot_hours":
@@ -54,7 +54,7 @@ def generate_report(config: ReportConfig, db: Session = Depends(get_db), user: U
 
 
 @router.post("/generate/pdf")
-def generate_report_pdf(config: ReportConfig, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def generate_report_pdf(config: ReportConfig, db: Session = Depends(get_db), user: User = Depends(require_pilot)):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt

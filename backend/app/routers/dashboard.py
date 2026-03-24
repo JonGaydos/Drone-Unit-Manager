@@ -1,6 +1,6 @@
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, extract, case
 from sqlalchemy.orm import Session
 
@@ -170,6 +170,223 @@ def pilot_hours(db: Session = Depends(get_db), user: User = Depends(get_current_
         )
         for r in rows
     ]
+
+
+@router.get("/analytics/pilot-performance/{pilot_id}")
+def pilot_performance(pilot_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    from app.models.incident import Incident
+    from app.models.training_log_pilot import TrainingLogPilot
+    from app.models.mission_log_pilot import MissionLogPilot
+
+    pilot = db.query(Pilot).filter(Pilot.id == pilot_id).first()
+    if not pilot:
+        raise HTTPException(404, "Pilot not found")
+
+    flights = db.query(Flight).filter(Flight.pilot_id == pilot_id).all()
+    total_flights = len(flights)
+    total_hours = sum((f.duration_seconds or 0) for f in flights) / 3600
+    avg_duration = (sum((f.duration_seconds or 0) for f in flights) / total_flights) if total_flights else 0
+
+    # Flights by month (last 12 months)
+    monthly = {}
+    for f in flights:
+        if f.date:
+            key = f.date.strftime("%Y-%m") if hasattr(f.date, 'strftime') else str(f.date)[:7]
+            monthly[key] = monthly.get(key, 0) + 1
+
+    # Flights by purpose
+    by_purpose = {}
+    for f in flights:
+        p = f.purpose or "Unassigned"
+        by_purpose[p] = by_purpose.get(p, 0) + 1
+
+    # Vehicles flown
+    vehicles_flown = set()
+    for f in flights:
+        if f.vehicle_id:
+            vehicles_flown.add(f.vehicle_id)
+
+    # Incidents involving this pilot
+    incidents = db.query(Incident).filter(Incident.pilot_id == pilot_id).count()
+
+    # Training hours
+    training_hours = db.query(func.coalesce(func.sum(TrainingLogPilot.hours), 0)).filter(
+        TrainingLogPilot.pilot_id == pilot_id
+    ).scalar()
+
+    # Mission hours
+    mission_hours = db.query(func.coalesce(func.sum(MissionLogPilot.hours), 0)).filter(
+        MissionLogPilot.pilot_id == pilot_id
+    ).scalar()
+
+    # Max altitude and speed from telemetry
+    max_alt = db.query(func.max(Flight.max_altitude_m)).filter(Flight.pilot_id == pilot_id).scalar()
+    max_speed = db.query(func.max(Flight.max_speed_mps)).filter(Flight.pilot_id == pilot_id).scalar()
+
+    return {
+        "pilot_id": pilot_id,
+        "pilot_name": f"{pilot.first_name} {pilot.last_name}",
+        "total_flights": total_flights,
+        "total_flight_hours": round(total_hours, 1),
+        "avg_duration_min": round(avg_duration / 60, 1),
+        "flights_by_month": [{"month": k, "count": v} for k, v in sorted(monthly.items())],
+        "flights_by_purpose": [{"purpose": k, "count": v} for k, v in sorted(by_purpose.items(), key=lambda x: -x[1])],
+        "vehicles_flown": len(vehicles_flown),
+        "incidents": incidents,
+        "training_hours": round(float(training_hours), 1),
+        "mission_hours": round(float(mission_hours), 1),
+        "max_altitude_m": round(float(max_alt), 1) if max_alt else None,
+        "max_speed_mps": round(float(max_speed), 1) if max_speed else None,
+    }
+
+
+@router.get("/analytics/fleet-health")
+def fleet_health(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    from app.models.battery import Battery
+    from app.models.maintenance_schedule import MaintenanceSchedule
+
+    today = date.today()
+
+    vehicles = db.query(Vehicle).filter(Vehicle.status == "active").all()
+    batteries = db.query(Battery).all()
+
+    # Vehicle utilization
+    vehicle_stats = []
+    for v in vehicles:
+        flight_count = db.query(func.count(Flight.id)).filter(Flight.vehicle_id == v.id).scalar()
+        total_hours = db.query(func.coalesce(func.sum(Flight.duration_seconds), 0)).filter(Flight.vehicle_id == v.id).scalar() / 3600
+        last_flight = db.query(func.max(Flight.date)).filter(Flight.vehicle_id == v.id).scalar()
+        overdue = db.query(func.count(MaintenanceSchedule.id)).filter(
+            MaintenanceSchedule.entity_type == "vehicle",
+            MaintenanceSchedule.entity_id == v.id,
+            MaintenanceSchedule.is_active.is_(True),
+            MaintenanceSchedule.next_due < today,
+        ).scalar()
+        vehicle_stats.append({
+            "id": v.id,
+            "name": v.nickname or f"{v.manufacturer} {v.model}",
+            "serial": v.serial_number,
+            "flights": flight_count,
+            "hours": round(total_hours, 1),
+            "last_flight": str(last_flight) if last_flight else None,
+            "overdue_maintenance": overdue,
+            "status": v.status,
+        })
+
+    # Battery health
+    battery_stats = []
+    for b in batteries:
+        battery_stats.append({
+            "id": b.id,
+            "serial": b.serial_number,
+            "nickname": b.nickname,
+            "model": b.model,
+            "cycle_count": b.cycle_count or 0,
+            "health_pct": b.health_pct,
+            "status": b.status,
+        })
+
+    # Overall stats
+    avg_battery_health = sum(b.health_pct or 0 for b in batteries) / len(batteries) if batteries else 0
+    total_overdue = sum(v["overdue_maintenance"] for v in vehicle_stats)
+
+    return {
+        "vehicles": vehicle_stats,
+        "batteries": battery_stats,
+        "summary": {
+            "total_vehicles": len(vehicles),
+            "total_batteries": len(batteries),
+            "avg_battery_health": round(avg_battery_health, 1),
+            "total_overdue_maintenance": total_overdue,
+            "total_flight_hours": round(sum(v["hours"] for v in vehicle_stats), 1),
+        }
+    }
+
+
+@router.get("/compliance")
+def compliance_dashboard(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    from app.models.vehicle_registration import VehicleRegistration
+    from app.models.maintenance_schedule import MaintenanceSchedule
+    from app.models.incident import Incident
+    from app.models.flight_approval import FlightPlan
+
+    today = date.today()
+    soon = today + timedelta(days=90)
+
+    # Certification compliance
+    total_pilots = db.query(func.count(Pilot.id)).filter(Pilot.status == "active").scalar()
+
+    # Count pilots with expired certs
+    expired_certs = db.query(func.count(func.distinct(PilotCertification.pilot_id))).filter(
+        PilotCertification.expiration_date < today,
+        PilotCertification.status != "not_issued",
+    ).scalar()
+
+    # Count certs expiring within 90 days
+    expiring_soon = db.query(PilotCertification).filter(
+        PilotCertification.expiration_date.between(today, soon),
+        PilotCertification.status != "not_issued",
+    ).all()
+
+    # FAA registration compliance
+    total_vehicles = db.query(func.count(Vehicle.id)).filter(Vehicle.status == "active").scalar()
+    expired_regs = db.query(func.count(func.distinct(VehicleRegistration.vehicle_id))).filter(
+        VehicleRegistration.is_current.is_(True),
+        VehicleRegistration.expiry_date < today,
+    ).scalar()
+
+    # Maintenance overdue
+    overdue_maintenance = db.query(func.count(MaintenanceSchedule.id)).filter(
+        MaintenanceSchedule.is_active.is_(True),
+        MaintenanceSchedule.next_due < today,
+    ).scalar()
+
+    # Unreviewed flights
+    unreviewed_flights = db.query(func.count(Flight.id)).filter(
+        Flight.review_status == "needs_review"
+    ).scalar()
+
+    # Open incidents
+    open_incidents = db.query(func.count(Incident.id)).filter(
+        Incident.status.in_(["open", "investigating"])
+    ).scalar()
+
+    # Pending flight plans
+    pending_plans = db.query(func.count(FlightPlan.id)).filter(
+        FlightPlan.status == "pending"
+    ).scalar()
+
+    return {
+        "total_pilots": total_pilots,
+        "expired_certifications": expired_certs,
+        "expiring_certifications": [{
+            "pilot_id": c.pilot_id,
+            "cert_type_id": c.certification_type_id,
+            "expiration_date": c.expiration_date.isoformat() if c.expiration_date else None,
+            "days_remaining": (c.expiration_date - today).days if c.expiration_date else None,
+        } for c in expiring_soon],
+        "total_vehicles": total_vehicles,
+        "expired_registrations": expired_regs,
+        "overdue_maintenance": overdue_maintenance,
+        "unreviewed_flights": unreviewed_flights,
+        "open_incidents": open_incidents,
+        "pending_flight_plans": pending_plans,
+        "compliance_score": _calc_compliance_score(
+            total_pilots, expired_certs, total_vehicles, expired_regs, overdue_maintenance, open_incidents
+        ),
+    }
+
+
+def _calc_compliance_score(pilots, exp_certs, vehicles, exp_regs, overdue, incidents):
+    """Simple compliance score 0-100."""
+    deductions = 0
+    if pilots > 0:
+        deductions += (exp_certs / pilots) * 30  # cert compliance worth 30 points
+    if vehicles > 0:
+        deductions += (exp_regs / vehicles) * 20  # reg compliance worth 20 points
+    deductions += min(overdue * 5, 25)  # maintenance worth 25 points
+    deductions += min(incidents * 10, 25)  # incidents worth 25 points
+    return max(0, round(100 - deductions))
 
 
 @router.get("/upcoming-expirations")

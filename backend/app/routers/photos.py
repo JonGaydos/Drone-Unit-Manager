@@ -13,7 +13,7 @@ from PIL import Image as PILImage
 from app.database import get_db
 from app.models.photo import Photo, PhotoPilot
 from app.models.pilot import Pilot
-from app.routers.auth import get_current_user
+from app.routers.auth import get_current_user, require_pilot
 
 router = APIRouter(prefix="/api/photos", tags=["photos"])
 
@@ -33,7 +33,7 @@ def upload_photo(
     date_taken: Optional[str] = Form(None),
     pilot_ids: Optional[str] = Form(None),
     db: Session = Depends(get_db),
-    user=Depends(get_current_user),
+    user=Depends(require_pilot),
 ):
     # Create photo record first to get ID
     parsed_date = None
@@ -186,7 +186,7 @@ def update_photo(
 
 
 @router.delete("/{photo_id}")
-def delete_photo(photo_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
+def delete_photo(photo_id: int, db: Session = Depends(get_db), user=Depends(require_pilot)):
     photo = db.query(Photo).filter(Photo.id == photo_id).first()
     if not photo:
         raise HTTPException(404, "Photo not found")

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.database import get_db
 from app.models.flight import Flight, FlightPurpose
 from app.models.user import User
-from app.routers.auth import get_current_user, require_admin
+from app.routers.auth import get_current_user, require_admin, require_pilot, require_supervisor
 from app.schemas.flight import (
     FlightCreate, FlightUpdate, FlightOut,
     FlightPurposeCreate, FlightPurposeOut,
@@ -340,28 +340,37 @@ def refresh_flight_from_api(flight_id: int, db: Session = Depends(get_db), admin
 
 
 @router.post("", response_model=FlightOut)
-def create_flight(data: FlightCreate, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+def create_flight(data: FlightCreate, db: Session = Depends(get_db), admin: User = Depends(require_pilot)):
+    from app.services.audit import log_action
     flight = Flight(**data.model_dump(), review_status="reviewed", pilot_confirmed=True)
     db.add(flight)
+    db.flush()
+    log_action(db, admin.id, admin.display_name, "create", "flight", flight.id, f"Flight {flight.external_id or flight.id}")
     db.commit()
     db.refresh(flight)
     return _flight_to_out(flight)
 
 
 @router.patch("/{flight_id}", response_model=FlightOut)
-def update_flight(flight_id: int, data: FlightUpdate, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+def update_flight(flight_id: int, data: FlightUpdate, db: Session = Depends(get_db), admin: User = Depends(require_pilot)):
+    from app.services.audit import log_action, compute_changes
     flight = db.query(Flight).filter(Flight.id == flight_id).first()
     if not flight:
         raise HTTPException(status_code=404, detail="Flight not found")
-    for key, value in data.model_dump(exclude_unset=True).items():
+    update_data = data.model_dump(exclude_unset=True)
+    changes = compute_changes(flight, update_data, ["pilot_id", "vehicle_id", "purpose", "review_status", "date", "notes"])
+    for key, value in update_data.items():
         setattr(flight, key, value)
+    if changes:
+        log_action(db, admin.id, admin.display_name, "update", "flight", flight.id, f"Flight {flight.external_id or flight.id}", changes=changes)
     db.commit()
     db.refresh(flight)
     return _flight_to_out(flight)
 
 
 @router.post("/bulk-update")
-def bulk_update_flights(data: FlightBulkUpdate, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+def bulk_update_flights(data: FlightBulkUpdate, db: Session = Depends(get_db), admin: User = Depends(require_supervisor)):
+    from app.services.audit import log_action
     flights = db.query(Flight).filter(Flight.id.in_(data.flight_ids)).all()
     for flight in flights:
         if data.pilot_id is not None:
@@ -372,15 +381,20 @@ def bulk_update_flights(data: FlightBulkUpdate, db: Session = Depends(get_db), a
             flight.review_status = data.review_status
         if data.pilot_confirmed is not None:
             flight.pilot_confirmed = data.pilot_confirmed
+    action = "bulk_approve" if data.review_status == "reviewed" else "bulk_update"
+    log_action(db, admin.id, admin.display_name, action, "flight", details=f"Updated {len(flights)} flights")
     db.commit()
     return {"ok": True, "updated": len(flights)}
 
 
 @router.delete("/{flight_id}")
-def delete_flight(flight_id: int, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+def delete_flight(flight_id: int, db: Session = Depends(get_db), admin: User = Depends(require_pilot)):
+    from app.services.audit import log_action
     flight = db.query(Flight).filter(Flight.id == flight_id).first()
     if not flight:
         raise HTTPException(status_code=404, detail="Flight not found")
+    flight_name = f"Flight {flight.external_id or flight.id}"
+    log_action(db, admin.id, admin.display_name, "delete", "flight", flight.id, flight_name)
     db.delete(flight)
     db.commit()
     return {"ok": True}

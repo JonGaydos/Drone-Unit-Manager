@@ -5,7 +5,11 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { formatHours, formatDuration } from '@/lib/utils'
 import { CERT_STATUS_COLORS } from '@/lib/constants'
-import { ArrowLeft, Plane, Clock, Calendar, ShieldCheck, FileText, Edit, Save, X, Camera } from 'lucide-react'
+import { ArrowLeft, Plane, Clock, Calendar, ShieldCheck, FileText, Edit, Save, X, Camera, CheckCircle, XCircle, Target, GraduationCap, AlertTriangle, TrendingUp } from 'lucide-react'
+import {
+  BarChart, Bar, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+} from 'recharts'
 import DocumentUpload from '@/components/DocumentUpload'
 
 export default function PilotDetailPage() {
@@ -20,6 +24,8 @@ export default function PilotDetailPage() {
   const [editing, setEditing] = useState(false)
   const [editForm, setEditForm] = useState({})
   const [saving, setSaving] = useState(false)
+  const [currencyStatus, setCurrencyStatus] = useState(null)
+  const [performance, setPerformance] = useState(null)
 
   useEffect(() => {
     Promise.all([
@@ -27,11 +33,15 @@ export default function PilotDetailPage() {
       api.get(`/pilots/${id}/stats`),
       api.get(`/flights?pilot_id=${id}&per_page=20`),
       api.get(`/pilot-certifications?pilot_id=${id}`).catch(() => []),
-    ]).then(([p, s, fData, c]) => {
+      api.get(`/currency/status/${id}`).catch(() => null),
+      api.get(`/dashboard/analytics/pilot-performance/${id}`).catch(() => null),
+    ]).then(([p, s, fData, c, cur, perf]) => {
       setPilot(p)
       setStats(s)
       setFlights(fData.flights || fData)
       setCertifications(c)
+      setCurrencyStatus(cur)
+      setPerformance(perf)
     }).catch(console.error).finally(() => setLoading(false))
   }, [id])
 
@@ -228,6 +238,87 @@ export default function PilotDetailPage() {
         </div>
       </div>
 
+      {/* Performance Analytics */}
+      {performance && (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center text-primary"><Plane className="w-5 h-5" /></div>
+              <div><p className="text-2xl font-bold text-foreground">{performance.total_flights}</p><p className="text-xs text-muted-foreground">Total Flights</p></div>
+            </div>
+            <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-blue-500/15 flex items-center justify-center text-blue-400"><Clock className="w-5 h-5" /></div>
+              <div><p className="text-2xl font-bold text-foreground">{performance.total_flight_hours}h</p><p className="text-xs text-muted-foreground">Flight Hours</p></div>
+            </div>
+            <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center text-emerald-400"><TrendingUp className="w-5 h-5" /></div>
+              <div><p className="text-2xl font-bold text-foreground">{performance.avg_duration_min}m</p><p className="text-xs text-muted-foreground">Avg Duration</p></div>
+            </div>
+            <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-violet-500/15 flex items-center justify-center text-violet-400"><GraduationCap className="w-5 h-5" /></div>
+              <div><p className="text-2xl font-bold text-foreground">{performance.training_hours}h</p><p className="text-xs text-muted-foreground">Training Hours</p></div>
+            </div>
+            <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/15 flex items-center justify-center text-amber-400"><Target className="w-5 h-5" /></div>
+              <div><p className="text-2xl font-bold text-foreground">{performance.mission_hours}h</p><p className="text-xs text-muted-foreground">Mission Hours</p></div>
+            </div>
+            <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-red-500/15 flex items-center justify-center text-red-400"><AlertTriangle className="w-5 h-5" /></div>
+              <div><p className="text-2xl font-bold text-foreground">{performance.incidents}</p><p className="text-xs text-muted-foreground">Incidents</p></div>
+            </div>
+          </div>
+
+          {/* Charts Row */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Flights by Month Bar Chart */}
+            {performance.flights_by_month.length > 0 && (
+              <div className="bg-card border border-border rounded-xl p-5">
+                <h3 className="text-sm font-semibold text-foreground mb-4">Flights by Month</h3>
+                <ResponsiveContainer width="100%" height={250}>
+                  <BarChart data={performance.flights_by_month}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
+                    <XAxis dataKey="month" tick={{ fill: 'var(--muted-fg)', fontSize: 11 }} />
+                    <YAxis tick={{ fill: 'var(--muted-fg)', fontSize: 11 }} allowDecimals={false} />
+                    <Tooltip
+                      contentStyle={{ background: 'var(--card)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--fg)' }}
+                      labelStyle={{ color: 'var(--fg)' }}
+                    />
+                    <Bar dataKey="count" fill="#6366f1" radius={[4, 4, 0, 0]} name="Flights" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
+            {/* Flights by Purpose Pie Chart */}
+            {performance.flights_by_purpose.length > 0 && (
+              <div className="bg-card border border-border rounded-xl p-5">
+                <h3 className="text-sm font-semibold text-foreground mb-4">Flights by Purpose</h3>
+                <ResponsiveContainer width="100%" height={250}>
+                  <PieChart>
+                    <Pie
+                      data={performance.flights_by_purpose}
+                      dataKey="count"
+                      nameKey="purpose"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={90}
+                      label={({ purpose, count }) => `${purpose} (${count})`}
+                    >
+                      {performance.flights_by_purpose.map((_, i) => (
+                        <Cell key={i} fill={['#6366f1','#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#06b6d4'][i % 10]} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{ background: 'var(--card)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--fg)' }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
       {/* Recent Flights */}
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-border"><h3 className="font-semibold text-foreground">Recent Flights</h3></div>
@@ -294,6 +385,77 @@ export default function PilotDetailPage() {
         </table>
         </div>
       </div>
+
+      {/* Currency Status */}
+      {currencyStatus && currencyStatus.rules && currencyStatus.rules.length > 0 && (
+        <div className="bg-card border border-border rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-primary" />
+              <h3 className="font-semibold text-foreground">Currency Status</h3>
+            </div>
+            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
+              currencyStatus.is_current
+                ? 'bg-emerald-500/15 text-emerald-400'
+                : 'bg-red-500/15 text-red-400'
+            }`}>
+              {currencyStatus.is_current ? (
+                <><CheckCircle className="w-3.5 h-3.5" /> Current</>
+              ) : (
+                <><XCircle className="w-3.5 h-3.5" /> Lapsed</>
+              )}
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/30">
+                  <th className="text-left px-4 py-2 text-muted-foreground font-medium">Rule</th>
+                  <th className="text-left px-4 py-2 text-muted-foreground font-medium hidden md:table-cell">Model</th>
+                  <th className="text-left px-4 py-2 text-muted-foreground font-medium">Hours</th>
+                  <th className="text-left px-4 py-2 text-muted-foreground font-medium">Flights</th>
+                  <th className="text-left px-4 py-2 text-muted-foreground font-medium">Status</th>
+                  <th className="text-left px-4 py-2 text-muted-foreground font-medium hidden md:table-cell">Expires</th>
+                </tr>
+              </thead>
+              <tbody>
+                {currencyStatus.rules.map(r => (
+                  <tr key={r.rule_id} className="border-b border-border/50 hover:bg-accent/30">
+                    <td className="px-4 py-2 text-foreground font-medium">{r.rule_name}</td>
+                    <td className="px-4 py-2 text-muted-foreground hidden md:table-cell">{r.vehicle_model || 'All'}</td>
+                    <td className="px-4 py-2 text-muted-foreground">
+                      <span className={r.actual_hours >= r.required_hours ? 'text-emerald-400' : 'text-red-400'}>
+                        {r.actual_hours}
+                      </span>
+                      <span className="text-muted-foreground"> / {r.required_hours}h</span>
+                      <span className="text-xs text-muted-foreground ml-1">({r.period_days}d)</span>
+                    </td>
+                    <td className="px-4 py-2 text-muted-foreground">
+                      {r.required_flights != null ? (
+                        <>
+                          <span className={r.actual_flights >= r.required_flights ? 'text-emerald-400' : 'text-red-400'}>
+                            {r.actual_flights}
+                          </span>
+                          <span className="text-muted-foreground"> / {r.required_flights}</span>
+                        </>
+                      ) : '—'}
+                    </td>
+                    <td className="px-4 py-2">
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                        r.is_current ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'
+                      }`}>
+                        {r.is_current ? <CheckCircle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+                        {r.is_current ? 'Current' : 'Lapsed'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-muted-foreground hidden md:table-cell">{r.expires_date || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Documents */}
       <DocumentUpload entityType="pilot" entityId={id} />

@@ -51,7 +51,7 @@ export default function AlertsPage() {
   }
 
   const handleDismissAll = async () => {
-    if (!confirm('Dismiss all alerts?')) return
+    if (!window.confirm('Are you sure you want to dismiss all alerts?')) return
     try {
       await api.post('/alerts/dismiss-all')
       load()

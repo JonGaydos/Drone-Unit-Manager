@@ -364,7 +364,7 @@ export default function MaintenancePage() {
   }
 
   const handleDelete = async (id) => {
-    if (!confirm('Delete this maintenance record?')) return
+    if (!window.confirm('Are you sure you want to delete this maintenance record?')) return
     try {
       await api.delete(`/maintenance/${id}`)
       load()
@@ -388,7 +388,7 @@ export default function MaintenancePage() {
   }
 
   const handleScheduleDelete = async (id) => {
-    if (!confirm('Delete this schedule?')) return
+    if (!window.confirm('Are you sure you want to delete this maintenance schedule?')) return
     try {
       await api.delete(`/maintenance/schedules/${id}`)
       load()

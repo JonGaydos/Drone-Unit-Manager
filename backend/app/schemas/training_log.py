@@ -2,7 +2,7 @@ from datetime import datetime
 from datetime import date as DateType
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class TrainingLogPilotIn(BaseModel):
@@ -27,13 +27,14 @@ class TrainingLogCreate(BaseModel):
     training_type: str
     description: str | None = None
     location: str | None = None
-    man_hours: float = 0.0
+    man_hours: float = Field(default=0.0, ge=0)
     start_time: datetime | None = None
     end_time: datetime | None = None
     vehicle_id: int | None = None
     instructor: str | None = None
     objectives: str | None = None
     outcome: str = "completed"
+    total_cost: float | None = None
     notes: str | None = None
     pilots: list[TrainingLogPilotIn] = []
 
@@ -44,13 +45,14 @@ class TrainingLogUpdate(BaseModel):
     training_type: str | None = None
     description: str | None = None
     location: str | None = None
-    man_hours: float | None = None
+    man_hours: float | None = Field(None, ge=0)
     start_time: datetime | None = None
     end_time: datetime | None = None
     vehicle_id: int | None = None
     instructor: str | None = None
     objectives: str | None = None
     outcome: str | None = None
+    total_cost: float | None = None
     notes: str | None = None
     pilots: list[TrainingLogPilotIn] | None = None
 
@@ -70,6 +72,7 @@ class TrainingLogOut(BaseModel):
     instructor: str | None = None
     objectives: str | None = None
     outcome: str = "completed"
+    total_cost: float | None = None
     notes: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None

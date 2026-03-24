@@ -1,7 +1,7 @@
 from datetime import datetime, date
 from typing import Optional
 
-from sqlalchemy import String, Text, DateTime, Date, Float, Integer, Boolean, ForeignKey, func
+from sqlalchemy import String, Text, DateTime, Date, Float, Integer, Boolean, ForeignKey, Index, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -18,6 +18,12 @@ class FlightPurpose(Base):
 
 class Flight(Base):
     __tablename__ = "flights"
+    __table_args__ = (
+        Index('ix_flights_pilot_date', 'pilot_id', 'date'),
+        Index('ix_flights_vehicle_date', 'vehicle_id', 'date'),
+        Index('ix_flights_review_status', 'review_status'),
+        Index('ix_flights_date', 'date'),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     external_id: Mapped[Optional[str]] = mapped_column(String(200), nullable=True, index=True)
@@ -49,7 +55,10 @@ class Flight(Base):
     has_telemetry: Mapped[bool] = mapped_column(Boolean, default=False)
     review_status: Mapped[str] = mapped_column(String(20), default="reviewed")  # needs_review, reviewed
     pilot_confirmed: Mapped[bool] = mapped_column(Boolean, default=True)
+    operating_cost: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    modified_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 

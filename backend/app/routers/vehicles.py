@@ -8,7 +8,7 @@ from app.config import settings
 from app.database import get_db
 from app.models.vehicle import Vehicle
 from app.models.user import User
-from app.routers.auth import get_current_user, require_admin
+from app.routers.auth import get_current_user, require_admin, require_supervisor
 from app.schemas.vehicle import VehicleCreate, VehicleUpdate, VehicleOut
 
 router = APIRouter(prefix="/api/vehicles", tags=["vehicles"])
@@ -26,7 +26,7 @@ def list_vehicles(
         q = q.filter(Vehicle.status == status)
     if manufacturer:
         q = q.filter(Vehicle.manufacturer == manufacturer)
-    return [VehicleOut.model_validate(v) for v in q.order_by(Vehicle.manufacturer, Vehicle.model).all()]
+    return [VehicleOut.model_validate(v) for v in q.order_by(Vehicle.nickname, Vehicle.serial_number).all()]
 
 
 @router.get("/{vehicle_id}", response_model=VehicleOut)
@@ -58,36 +58,46 @@ def get_vehicle_stats(vehicle_id: int, db: Session = Depends(get_db), user: User
 
 
 @router.post("", response_model=VehicleOut)
-def create_vehicle(data: VehicleCreate, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+def create_vehicle(data: VehicleCreate, db: Session = Depends(get_db), admin: User = Depends(require_supervisor)):
+    from app.services.audit import log_action
     if db.query(Vehicle).filter(Vehicle.serial_number == data.serial_number).first():
         raise HTTPException(status_code=400, detail="Vehicle with this serial number already exists")
     vehicle = Vehicle(**data.model_dump())
     db.add(vehicle)
+    db.flush()
+    log_action(db, admin.id, admin.display_name, "create", "vehicle", vehicle.id, f"{vehicle.manufacturer} {vehicle.model}")
     db.commit()
     db.refresh(vehicle)
     return VehicleOut.model_validate(vehicle)
 
 
 @router.patch("/{vehicle_id}", response_model=VehicleOut)
-def update_vehicle(vehicle_id: int, data: VehicleUpdate, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+def update_vehicle(vehicle_id: int, data: VehicleUpdate, db: Session = Depends(get_db), admin: User = Depends(require_supervisor)):
+    from app.services.audit import log_action, compute_changes
     vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found")
-    for key, value in data.model_dump(exclude_unset=True).items():
+    update_data = data.model_dump(exclude_unset=True)
+    changes = compute_changes(vehicle, update_data, ["nickname", "status", "manufacturer", "model", "serial_number"])
+    for key, value in update_data.items():
         setattr(vehicle, key, value)
+    if changes:
+        log_action(db, admin.id, admin.display_name, "update", "vehicle", vehicle.id, vehicle.nickname or f"{vehicle.manufacturer} {vehicle.model}", changes=changes)
     db.commit()
     db.refresh(vehicle)
     return VehicleOut.model_validate(vehicle)
 
 
 @router.delete("/{vehicle_id}")
-def delete_vehicle(vehicle_id: int, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+def delete_vehicle(vehicle_id: int, db: Session = Depends(get_db), admin: User = Depends(require_supervisor)):
+    from app.services.audit import log_action
     vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found")
-    db.delete(vehicle)
+    vehicle.status = "retired"
+    log_action(db, admin.id, admin.display_name, "retire", "vehicle", vehicle.id, vehicle.nickname or f"{vehicle.manufacturer} {vehicle.model}")
     db.commit()
-    return {"ok": True}
+    return {"ok": True, "message": "Vehicle retired"}
 
 
 @router.post("/{vehicle_id}/photo")

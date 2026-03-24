@@ -8,7 +8,7 @@ from app.database import get_db
 from app.models.certification import CertificationType, PilotCertification, PilotEquipmentQual
 from app.models.pilot import Pilot
 from app.models.user import User
-from app.routers.auth import get_current_user, require_admin
+from app.routers.auth import get_current_user, require_supervisor
 from app.schemas.certification import (
     CertificationTypeCreate, CertificationTypeUpdate, CertificationTypeOut,
     PilotCertificationCreate, PilotCertificationUpdate, PilotCertificationOut,
@@ -40,12 +40,15 @@ def list_certification_types(
 def create_certification_type(
     data: CertificationTypeCreate,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_supervisor),
 ):
+    from app.services.audit import log_action
     if db.query(CertificationType).filter(CertificationType.name == data.name).first():
         raise HTTPException(status_code=400, detail="Certification type already exists")
     ct = CertificationType(**data.model_dump())
     db.add(ct)
+    db.flush()
+    log_action(db, admin.id, admin.display_name, "create", "certification_type", ct.id, ct.name)
     db.commit()
     db.refresh(ct)
     return CertificationTypeOut.model_validate(ct)
@@ -55,7 +58,7 @@ def create_certification_type(
 def reorder_certification_types(
     data: ReorderRequest,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_supervisor),
 ):
     for item in data.items:
         ct = db.query(CertificationType).filter(CertificationType.id == item.id).first()
@@ -70,13 +73,15 @@ def update_certification_type(
     ct_id: int,
     data: CertificationTypeUpdate,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_supervisor),
 ):
+    from app.services.audit import log_action
     ct = db.query(CertificationType).filter(CertificationType.id == ct_id).first()
     if not ct:
         raise HTTPException(status_code=404, detail="Certification type not found")
     for key, value in data.model_dump(exclude_unset=True).items():
         setattr(ct, key, value)
+    log_action(db, admin.id, admin.display_name, "update", "certification_type", ct.id, ct.name)
     db.commit()
     db.refresh(ct)
     return CertificationTypeOut.model_validate(ct)
@@ -86,11 +91,14 @@ def update_certification_type(
 def delete_certification_type(
     ct_id: int,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_supervisor),
 ):
+    from app.services.audit import log_action
     ct = db.query(CertificationType).filter(CertificationType.id == ct_id).first()
     if not ct:
         raise HTTPException(status_code=404, detail="Certification type not found")
+    ct_name = ct.name
+    log_action(db, admin.id, admin.display_name, "delete", "certification_type", ct_id, ct_name)
     db.delete(ct)
     db.commit()
     return {"ok": True}
@@ -125,10 +133,16 @@ def list_pilot_certifications(
 def create_pilot_certification(
     data: PilotCertificationCreate,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_supervisor),
 ):
+    from app.services.audit import log_action
     pc = PilotCertification(**data.model_dump())
     db.add(pc)
+    db.flush()
+    pilot = db.query(Pilot).filter(Pilot.id == pc.pilot_id).first()
+    ct = db.query(CertificationType).filter(CertificationType.id == pc.certification_type_id).first()
+    log_action(db, admin.id, admin.display_name, "create", "pilot_certification", pc.id,
+               f"{pilot.full_name if pilot else 'Unknown'} - {ct.name if ct else 'Unknown'}")
     db.commit()
     db.refresh(pc)
     return _pilot_cert_to_out(pc, db)
@@ -139,13 +153,18 @@ def update_pilot_certification(
     pc_id: int,
     data: PilotCertificationUpdate,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_supervisor),
 ):
+    from app.services.audit import log_action
     pc = db.query(PilotCertification).filter(PilotCertification.id == pc_id).first()
     if not pc:
         raise HTTPException(status_code=404, detail="Pilot certification not found")
     for key, value in data.model_dump(exclude_unset=True).items():
         setattr(pc, key, value)
+    pilot = db.query(Pilot).filter(Pilot.id == pc.pilot_id).first()
+    ct = db.query(CertificationType).filter(CertificationType.id == pc.certification_type_id).first()
+    log_action(db, admin.id, admin.display_name, "update", "pilot_certification", pc.id,
+               f"{pilot.full_name if pilot else 'Unknown'} - {ct.name if ct else 'Unknown'}")
     db.commit()
     db.refresh(pc)
     return _pilot_cert_to_out(pc, db)
@@ -155,11 +174,13 @@ def update_pilot_certification(
 def delete_pilot_certification(
     pc_id: int,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_supervisor),
 ):
+    from app.services.audit import log_action
     pc = db.query(PilotCertification).filter(PilotCertification.id == pc_id).first()
     if not pc:
         raise HTTPException(status_code=404, detail="Pilot certification not found")
+    log_action(db, admin.id, admin.display_name, "delete", "pilot_certification", pc_id)
     db.delete(pc)
     db.commit()
     return {"ok": True}
@@ -182,7 +203,7 @@ def list_pilot_equipment_quals(
 def create_pilot_equipment_qual(
     data: PilotEquipmentQualCreate,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_supervisor),
 ):
     peq = PilotEquipmentQual(**data.model_dump())
     db.add(peq)
@@ -196,7 +217,7 @@ def update_pilot_equipment_qual(
     peq_id: int,
     data: PilotEquipmentQualUpdate,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_supervisor),
 ):
     peq = db.query(PilotEquipmentQual).filter(PilotEquipmentQual.id == peq_id).first()
     if not peq:
@@ -212,7 +233,7 @@ def update_pilot_equipment_qual(
 def delete_pilot_equipment_qual(
     peq_id: int,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_supervisor),
 ):
     peq = db.query(PilotEquipmentQual).filter(PilotEquipmentQual.id == peq_id).first()
     if not peq:

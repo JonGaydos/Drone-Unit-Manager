@@ -9,7 +9,7 @@ from app.models.mission_log_pilot import MissionLogPilot
 from app.models.pilot import Pilot
 from app.models.vehicle import Vehicle
 from app.models.user import User
-from app.routers.auth import get_current_user, require_admin
+from app.routers.auth import get_current_user, require_pilot
 from app.schemas.mission_log import (
     MissionLogCreate, MissionLogUpdate, MissionLogOut,
     MissionLogPilotIn, MissionLogPilotOut,
@@ -91,7 +91,8 @@ def get_mission_log(mission_id: int, db: Session = Depends(get_db), user: User =
 
 
 @router.post("", response_model=MissionLogOut)
-def create_mission_log(data: MissionLogCreate, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+def create_mission_log(data: MissionLogCreate, db: Session = Depends(get_db), admin: User = Depends(require_pilot)):
+    from app.services.audit import log_action
     pilots_data = data.pilots
     mission_dict = data.model_dump(exclude={"pilots"})
     mission = MissionLog(**mission_dict)
@@ -104,13 +105,14 @@ def create_mission_log(data: MissionLogCreate, db: Session = Depends(get_db), ad
             role=p.role,
             hours=p.hours,
         ))
+    log_action(db, admin.id, admin.display_name, "create", "mission_log", mission.id, mission.title or f"Mission {mission.id}")
     db.commit()
     db.refresh(mission)
     return _mission_to_out(mission, db)
 
 
 @router.patch("/{mission_id}", response_model=MissionLogOut)
-def update_mission_log(mission_id: int, data: MissionLogUpdate, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+def update_mission_log(mission_id: int, data: MissionLogUpdate, db: Session = Depends(get_db), admin: User = Depends(require_pilot)):
     mission = db.query(MissionLog).filter(MissionLog.id == mission_id).first()
     if not mission:
         raise HTTPException(status_code=404, detail="Mission log not found")
@@ -120,23 +122,27 @@ def update_mission_log(mission_id: int, data: MissionLogUpdate, db: Session = De
         setattr(mission, key, value)
     if pilots_data is not None:
         _sync_pilots(db, mission, [MissionLogPilotIn(**p) for p in pilots_data])
+    from app.services.audit import log_action
+    log_action(db, admin.id, admin.display_name, "update", "mission_log", mission.id, mission.title or f"Mission {mission.id}")
     db.commit()
     db.refresh(mission)
     return _mission_to_out(mission, db)
 
 
 @router.delete("/{mission_id}")
-def delete_mission_log(mission_id: int, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+def delete_mission_log(mission_id: int, db: Session = Depends(get_db), admin: User = Depends(require_pilot)):
+    from app.services.audit import log_action
     mission = db.query(MissionLog).filter(MissionLog.id == mission_id).first()
     if not mission:
         raise HTTPException(status_code=404, detail="Mission log not found")
+    log_action(db, admin.id, admin.display_name, "delete", "mission_log", mission.id, mission.title or f"Mission {mission.id}")
     db.delete(mission)
     db.commit()
     return {"ok": True}
 
 
 @router.post("/{mission_id}/pilots", response_model=MissionLogPilotOut)
-def add_pilot_to_mission(mission_id: int, data: MissionLogPilotIn, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+def add_pilot_to_mission(mission_id: int, data: MissionLogPilotIn, db: Session = Depends(get_db), admin: User = Depends(require_pilot)):
     mission = db.query(MissionLog).filter(MissionLog.id == mission_id).first()
     if not mission:
         raise HTTPException(status_code=404, detail="Mission log not found")
@@ -157,7 +163,7 @@ def add_pilot_to_mission(mission_id: int, data: MissionLogPilotIn, db: Session =
 
 
 @router.delete("/{mission_id}/pilots/{pilot_id}")
-def remove_pilot_from_mission(mission_id: int, pilot_id: int, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+def remove_pilot_from_mission(mission_id: int, pilot_id: int, db: Session = Depends(get_db), admin: User = Depends(require_pilot)):
     mp = db.query(MissionLogPilot).filter(
         MissionLogPilot.mission_log_id == mission_id,
         MissionLogPilot.pilot_id == pilot_id,

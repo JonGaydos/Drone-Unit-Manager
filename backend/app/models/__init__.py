@@ -23,6 +23,14 @@ from app.models.maintenance_schedule import MaintenanceSchedule
 from app.models.vehicle_registration import VehicleRegistration
 from app.models.photo import Photo, PhotoPilot
 from app.models.folder import Folder
+from app.models.audit_log import AuditLog
+from app.models.incident import Incident
+from app.models.flight_approval import FlightPlan
+from app.models.currency_rule import CurrencyRule
+from app.models.equipment_checkout import EquipmentCheckout
+from app.models.checklist import ChecklistTemplate, ChecklistCompletion
+from app.models.component import Component
+from app.models.geofence import Geofence
 
 __all__ = [
     "User",
@@ -54,4 +62,13 @@ __all__ = [
     "Photo",
     "PhotoPilot",
     "Folder",
+    "AuditLog",
+    "Incident",
+    "FlightPlan",
+    "CurrencyRule",
+    "EquipmentCheckout",
+    "ChecklistTemplate",
+    "ChecklistCompletion",
+    "Component",
+    "Geofence",
 ]

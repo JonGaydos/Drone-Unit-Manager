@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.maintenance import MaintenanceRecord
 from app.models.user import User
-from app.routers.auth import get_current_user, require_admin
+from app.routers.auth import get_current_user, require_pilot
 
 
 class MaintenanceCreate(BaseModel):
@@ -82,31 +82,38 @@ def get_maintenance(record_id: int, db: Session = Depends(get_db), user: User = 
 
 
 @router.post("", response_model=MaintenanceOut)
-def create_maintenance(data: MaintenanceCreate, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+def create_maintenance(data: MaintenanceCreate, db: Session = Depends(get_db), admin: User = Depends(require_pilot)):
+    from app.services.audit import log_action
     record = MaintenanceRecord(**data.model_dump())
     db.add(record)
+    db.flush()
+    log_action(db, admin.id, admin.display_name, "create", "maintenance", record.id, record.description[:100] if record.description else None)
     db.commit()
     db.refresh(record)
     return MaintenanceOut.model_validate(record)
 
 
 @router.patch("/{record_id}", response_model=MaintenanceOut)
-def update_maintenance(record_id: int, data: MaintenanceUpdate, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+def update_maintenance(record_id: int, data: MaintenanceUpdate, db: Session = Depends(get_db), admin: User = Depends(require_pilot)):
+    from app.services.audit import log_action
     record = db.query(MaintenanceRecord).filter(MaintenanceRecord.id == record_id).first()
     if not record:
         raise HTTPException(status_code=404, detail="Record not found")
     for key, value in data.model_dump(exclude_unset=True).items():
         setattr(record, key, value)
+    log_action(db, admin.id, admin.display_name, "update", "maintenance", record.id, record.description[:100] if record.description else None)
     db.commit()
     db.refresh(record)
     return MaintenanceOut.model_validate(record)
 
 
 @router.delete("/{record_id}")
-def delete_maintenance(record_id: int, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+def delete_maintenance(record_id: int, db: Session = Depends(get_db), admin: User = Depends(require_pilot)):
+    from app.services.audit import log_action
     record = db.query(MaintenanceRecord).filter(MaintenanceRecord.id == record_id).first()
     if not record:
         raise HTTPException(status_code=404, detail="Record not found")
+    log_action(db, admin.id, admin.display_name, "delete", "maintenance", record.id, record.description[:100] if record.description else None)
     db.delete(record)
     db.commit()
     return {"ok": True}

@@ -1,7 +1,7 @@
 from datetime import datetime, date
 from typing import Optional
 
-from sqlalchemy import String, Text, DateTime, Date, Integer, Boolean, ForeignKey, func
+from sqlalchemy import String, Text, DateTime, Date, Integer, Boolean, ForeignKey, Index, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -25,6 +25,9 @@ class CertificationType(Base):
 
 class PilotCertification(Base):
     __tablename__ = "pilot_certifications"
+    __table_args__ = (
+        Index('ix_pilot_cert_expiry', 'pilot_id', 'expiration_date'),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     pilot_id: Mapped[int] = mapped_column(ForeignKey("pilots.id"))

@@ -13,6 +13,7 @@ router = APIRouter(prefix="/api/telemetry", tags=["telemetry"])
 @router.get("/flight/{flight_id}")
 def get_flight_telemetry(
     flight_id: int,
+    max_points: int = 2000,
     db: Session = Depends(get_db),
     tdb: Session = Depends(get_telemetry_db),
     user: User = Depends(get_current_user),
@@ -27,6 +28,11 @@ def get_flight_telemetry(
 
     if not points:
         return []
+
+    # Downsample if too many points
+    if len(points) > max_points:
+        step = len(points) // max_points
+        points = points[::step]
 
     base_ts = points[0].timestamp_ms
     return [

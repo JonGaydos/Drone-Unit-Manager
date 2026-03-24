@@ -223,7 +223,7 @@ export default function TrainingLogPage() {
   }
 
   const handleDelete = async (id) => {
-    if (!confirm('Delete this training log?')) return
+    if (!window.confirm('Are you sure you want to delete this training log?')) return
     try {
       await api.delete(`/training-logs/${id}`)
       load()

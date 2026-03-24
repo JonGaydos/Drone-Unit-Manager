@@ -9,7 +9,7 @@ from app.models.training_log_pilot import TrainingLogPilot
 from app.models.pilot import Pilot
 from app.models.vehicle import Vehicle
 from app.models.user import User
-from app.routers.auth import get_current_user, require_admin
+from app.routers.auth import get_current_user, require_pilot
 from app.schemas.training_log import (
     TrainingLogCreate, TrainingLogUpdate, TrainingLogOut,
     TrainingLogPilotIn, TrainingLogPilotOut,
@@ -94,7 +94,8 @@ def get_training_log(training_id: int, db: Session = Depends(get_db), user: User
 
 
 @router.post("", response_model=TrainingLogOut)
-def create_training_log(data: TrainingLogCreate, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+def create_training_log(data: TrainingLogCreate, db: Session = Depends(get_db), admin: User = Depends(require_pilot)):
+    from app.services.audit import log_action
     pilots_data = data.pilots
     training_dict = data.model_dump(exclude={"pilots"})
     training = TrainingLog(**training_dict)
@@ -107,13 +108,14 @@ def create_training_log(data: TrainingLogCreate, db: Session = Depends(get_db), 
             role=p.role,
             hours=p.hours,
         ))
+    log_action(db, admin.id, admin.display_name, "create", "training_log", training.id, training.title or f"Training {training.id}")
     db.commit()
     db.refresh(training)
     return _training_to_out(training, db)
 
 
 @router.patch("/{training_id}", response_model=TrainingLogOut)
-def update_training_log(training_id: int, data: TrainingLogUpdate, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+def update_training_log(training_id: int, data: TrainingLogUpdate, db: Session = Depends(get_db), admin: User = Depends(require_pilot)):
     training = db.query(TrainingLog).filter(TrainingLog.id == training_id).first()
     if not training:
         raise HTTPException(status_code=404, detail="Training log not found")
@@ -123,23 +125,27 @@ def update_training_log(training_id: int, data: TrainingLogUpdate, db: Session =
         setattr(training, key, value)
     if pilots_data is not None:
         _sync_pilots(db, training, [TrainingLogPilotIn(**p) for p in pilots_data])
+    from app.services.audit import log_action
+    log_action(db, admin.id, admin.display_name, "update", "training_log", training.id, training.title or f"Training {training.id}")
     db.commit()
     db.refresh(training)
     return _training_to_out(training, db)
 
 
 @router.delete("/{training_id}")
-def delete_training_log(training_id: int, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+def delete_training_log(training_id: int, db: Session = Depends(get_db), admin: User = Depends(require_pilot)):
+    from app.services.audit import log_action
     training = db.query(TrainingLog).filter(TrainingLog.id == training_id).first()
     if not training:
         raise HTTPException(status_code=404, detail="Training log not found")
+    log_action(db, admin.id, admin.display_name, "delete", "training_log", training.id, training.title or f"Training {training.id}")
     db.delete(training)
     db.commit()
     return {"ok": True}
 
 
 @router.post("/{training_id}/pilots", response_model=TrainingLogPilotOut)
-def add_pilot_to_training(training_id: int, data: TrainingLogPilotIn, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+def add_pilot_to_training(training_id: int, data: TrainingLogPilotIn, db: Session = Depends(get_db), admin: User = Depends(require_pilot)):
     training = db.query(TrainingLog).filter(TrainingLog.id == training_id).first()
     if not training:
         raise HTTPException(status_code=404, detail="Training log not found")
@@ -160,7 +166,7 @@ def add_pilot_to_training(training_id: int, data: TrainingLogPilotIn, db: Sessio
 
 
 @router.delete("/{training_id}/pilots/{pilot_id}")
-def remove_pilot_from_training(training_id: int, pilot_id: int, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+def remove_pilot_from_training(training_id: int, pilot_id: int, db: Session = Depends(get_db), admin: User = Depends(require_pilot)):
     tp = db.query(TrainingLogPilot).filter(
         TrainingLogPilot.training_log_id == training_id,
         TrainingLogPilot.pilot_id == pilot_id,

@@ -57,6 +57,7 @@ def sync_now(
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
+    from app.services.audit import log_action
     logger.info("Manual sync triggered by admin (full=%s)", full)
     result = SyncManager.sync_all("skydio", db, full_sync=full)
 
@@ -74,6 +75,9 @@ def sync_now(
             logger.info("Auto-cleanup: removed %d empty flights", len(empty))
             result.errors.append(f"Auto-cleaned {len(empty)} flights with no data")
 
+    log_action(db, admin.id, admin.display_name, "sync", "system",
+               details=f"{'Full' if full else 'Incremental'} sync: {result.flights_new} new flights, {result.vehicles_synced} vehicles")
+    db.commit()
     return SyncResultResponse(**asdict(result))
 
 

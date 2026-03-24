@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import String, Text, DateTime, Integer, ForeignKey, func, Boolean
+from sqlalchemy import String, Text, DateTime, Integer, ForeignKey, Index, func, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -9,6 +9,9 @@ from app.database import Base
 
 class Document(Base):
     __tablename__ = "documents"
+    __table_args__ = (
+        Index('ix_docs_entity', 'entity_type', 'entity_id'),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     pilot_id: Mapped[Optional[int]] = mapped_column(ForeignKey("pilots.id"), nullable=True)

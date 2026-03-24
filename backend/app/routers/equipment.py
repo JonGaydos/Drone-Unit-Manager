@@ -2,7 +2,7 @@ from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -23,8 +23,8 @@ class BatteryCreate(BaseModel):
     manufacturer: Optional[str] = None
     model: Optional[str] = None
     vehicle_model: Optional[str] = None
-    cycle_count: int = 0
-    health_pct: Optional[float] = None
+    cycle_count: int = Field(default=0, ge=0)
+    health_pct: Optional[float] = Field(None, ge=0, le=100)
     status: str = "active"
     purchase_date: Optional[date] = None
     notes: Optional[str] = None
@@ -35,8 +35,8 @@ class BatteryUpdate(BaseModel):
     manufacturer: Optional[str] = None
     model: Optional[str] = None
     vehicle_model: Optional[str] = None
-    cycle_count: Optional[int] = None
-    health_pct: Optional[float] = None
+    cycle_count: Optional[int] = Field(None, ge=0)
+    health_pct: Optional[float] = Field(None, ge=0, le=100)
     status: Optional[str] = None
     purchase_date: Optional[date] = None
     notes: Optional[str] = None

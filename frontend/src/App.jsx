@@ -52,6 +52,13 @@ const MissionLogPage = lazy(() => import('@/pages/MissionLogPage'))
 const TrainingLogPage = lazy(() => import('@/pages/TrainingLogPage'))
 const DocumentStoragePage = lazy(() => import('@/pages/DocumentStoragePage'))
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'))
+const AuditLogPage = lazy(() => import('@/pages/AuditLogPage'))
+const IncidentPage = lazy(() => import('@/pages/IncidentPage'))
+const FlightPlansPage = lazy(() => import('@/pages/FlightPlansPage'))
+const WeatherPage = lazy(() => import('@/pages/WeatherPage'))
+const FleetHealthPage = lazy(() => import('@/pages/FleetHealthPage'))
+const ChecklistPage = lazy(() => import('@/pages/ChecklistPage'))
+const CompliancePage = lazy(() => import('@/pages/CompliancePage'))
 
 function Spinner() {
   return (
@@ -84,6 +91,7 @@ function AppRoutes() {
           }
         >
           <Route path="/" element={<DashboardPage />} />
+          <Route path="/weather" element={<WeatherPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/flights" element={<FlightsPage />} />
           <Route path="/flights/:id" element={<FlightDetailPage />} />
@@ -92,6 +100,7 @@ function AppRoutes() {
           <Route path="/pilots" element={<PilotsPage />} />
           <Route path="/pilots/:id" element={<PilotDetailPage />} />
           <Route path="/fleet" element={<FleetPage />} />
+          <Route path="/fleet-health" element={<FleetHealthPage />} />
           <Route path="/fleet/vehicles/:id" element={<VehicleDetailPage />} />
           <Route path="/fleet/batteries/:id" element={<BatteryDetailPage />} />
           <Route path="/fleet/controllers/:id" element={<ControllerDetailPage />} />
@@ -101,7 +110,12 @@ function AppRoutes() {
           <Route path="/documents" element={<DocumentStoragePage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/alerts" element={<AlertsPage />} />
+          <Route path="/incidents" element={<IncidentPage />} />
+          <Route path="/flight-plans" element={<FlightPlansPage />} />
+          <Route path="/checklists" element={<ChecklistPage />} />
+          <Route path="/compliance" element={<CompliancePage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/audit-log" element={<AuditLogPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

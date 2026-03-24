@@ -10,7 +10,7 @@ from app.database import get_db
 from app.models.pilot import Pilot
 from app.models.flight import Flight
 from app.models.user import User
-from app.routers.auth import get_current_user, require_admin
+from app.routers.auth import get_current_user, require_admin, require_supervisor
 from app.schemas.pilot import PilotCreate, PilotUpdate, PilotOut, PilotStats
 
 router = APIRouter(prefix="/api/pilots", tags=["pilots"])
@@ -54,34 +54,44 @@ def get_pilot_stats(pilot_id: int, db: Session = Depends(get_db), user: User = D
 
 
 @router.post("", response_model=PilotOut)
-def create_pilot(data: PilotCreate, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+def create_pilot(data: PilotCreate, db: Session = Depends(get_db), admin: User = Depends(require_supervisor)):
+    from app.services.audit import log_action
     pilot = Pilot(**data.model_dump())
     db.add(pilot)
+    db.flush()
+    log_action(db, admin.id, admin.display_name, "create", "pilot", pilot.id, f"{pilot.first_name} {pilot.last_name}")
     db.commit()
     db.refresh(pilot)
     return PilotOut.model_validate(pilot)
 
 
 @router.patch("/{pilot_id}", response_model=PilotOut)
-def update_pilot(pilot_id: int, data: PilotUpdate, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+def update_pilot(pilot_id: int, data: PilotUpdate, db: Session = Depends(get_db), admin: User = Depends(require_supervisor)):
+    from app.services.audit import log_action, compute_changes
     pilot = db.query(Pilot).filter(Pilot.id == pilot_id).first()
     if not pilot:
         raise HTTPException(status_code=404, detail="Pilot not found")
-    for key, value in data.model_dump(exclude_unset=True).items():
+    update_data = data.model_dump(exclude_unset=True)
+    changes = compute_changes(pilot, update_data, ["first_name", "last_name", "email", "status", "badge_number"])
+    for key, value in update_data.items():
         setattr(pilot, key, value)
+    if changes:
+        log_action(db, admin.id, admin.display_name, "update", "pilot", pilot.id, f"{pilot.first_name} {pilot.last_name}", changes=changes)
     db.commit()
     db.refresh(pilot)
     return PilotOut.model_validate(pilot)
 
 
 @router.delete("/{pilot_id}")
-def delete_pilot(pilot_id: int, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+def delete_pilot(pilot_id: int, db: Session = Depends(get_db), admin: User = Depends(require_supervisor)):
+    from app.services.audit import log_action
     pilot = db.query(Pilot).filter(Pilot.id == pilot_id).first()
     if not pilot:
         raise HTTPException(status_code=404, detail="Pilot not found")
-    db.delete(pilot)
+    pilot.status = "inactive"
+    log_action(db, admin.id, admin.display_name, "deactivate", "pilot", pilot.id, f"{pilot.first_name} {pilot.last_name}")
     db.commit()
-    return {"ok": True}
+    return {"ok": True, "message": "Pilot deactivated"}
 
 
 @router.post("/{pilot_id}/photo")

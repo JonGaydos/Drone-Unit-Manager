@@ -30,6 +30,24 @@ def run_migrations():
         ("controllers", "nickname", "ALTER TABLE controllers ADD COLUMN nickname VARCHAR(100)"),
         # Folder support for documents
         ("documents", "folder_id", "ALTER TABLE documents ADD COLUMN folder_id INTEGER REFERENCES folders(id)"),
+        # Audit trail: created_by_id and modified_by_id
+        ("flights", "created_by_id", "ALTER TABLE flights ADD COLUMN created_by_id INTEGER REFERENCES users(id)"),
+        ("flights", "modified_by_id", "ALTER TABLE flights ADD COLUMN modified_by_id INTEGER REFERENCES users(id)"),
+        ("pilots", "created_by_id", "ALTER TABLE pilots ADD COLUMN created_by_id INTEGER REFERENCES users(id)"),
+        ("pilots", "modified_by_id", "ALTER TABLE pilots ADD COLUMN modified_by_id INTEGER REFERENCES users(id)"),
+        ("vehicles", "created_by_id", "ALTER TABLE vehicles ADD COLUMN created_by_id INTEGER REFERENCES users(id)"),
+        ("vehicles", "modified_by_id", "ALTER TABLE vehicles ADD COLUMN modified_by_id INTEGER REFERENCES users(id)"),
+        ("maintenance_records", "created_by_id", "ALTER TABLE maintenance_records ADD COLUMN created_by_id INTEGER REFERENCES users(id)"),
+        ("maintenance_records", "modified_by_id", "ALTER TABLE maintenance_records ADD COLUMN modified_by_id INTEGER REFERENCES users(id)"),
+        ("mission_logs", "created_by_id", "ALTER TABLE mission_logs ADD COLUMN created_by_id INTEGER REFERENCES users(id)"),
+        ("mission_logs", "modified_by_id", "ALTER TABLE mission_logs ADD COLUMN modified_by_id INTEGER REFERENCES users(id)"),
+        ("training_logs", "created_by_id", "ALTER TABLE training_logs ADD COLUMN created_by_id INTEGER REFERENCES users(id)"),
+        ("training_logs", "modified_by_id", "ALTER TABLE training_logs ADD COLUMN modified_by_id INTEGER REFERENCES users(id)"),
+        # Cost tracking fields
+        ("flights", "operating_cost", "ALTER TABLE flights ADD COLUMN operating_cost REAL"),
+        ("mission_logs", "total_cost", "ALTER TABLE mission_logs ADD COLUMN total_cost REAL"),
+        ("mission_logs", "cost_breakdown", "ALTER TABLE mission_logs ADD COLUMN cost_breakdown TEXT"),
+        ("training_logs", "total_cost", "ALTER TABLE training_logs ADD COLUMN total_cost REAL"),
     ]
 
     with engine.connect() as conn:

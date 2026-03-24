@@ -18,6 +18,7 @@ const pageTitles = {
   '/reports': 'Reports',
   '/alerts': 'Alerts',
   '/settings': 'Settings',
+  '/audit-log': 'Audit Log',
 }
 
 export function Layout() {

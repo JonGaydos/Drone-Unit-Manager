@@ -8,7 +8,8 @@ import { STATUS_COLORS } from '@/lib/constants'
 import {
   ArrowLeft, Plane, Clock, Calendar, Battery, Edit,
   FileText, Wrench, Gamepad2, Cpu, Paperclip, Camera,
-  ShieldCheck, Plus, Trash2, AlertTriangle
+  ShieldCheck, Plus, Trash2, AlertTriangle, LogIn, LogOut,
+  CheckCircle, User, Cog, X, Save
 } from 'lucide-react'
 import DocumentUpload from '@/components/DocumentUpload'
 
@@ -29,9 +30,34 @@ export default function VehicleDetailPage() {
   const [equipTab, setEquipTab] = useState('batteries')
   const [showRegForm, setShowRegForm] = useState(false)
   const [regForm, setRegForm] = useState({ registration_number: '', registration_date: '', notes: '' })
+  const [checkouts, setCheckouts] = useState([])
+  const [activeCheckout, setActiveCheckout] = useState(null)
+  const [pilots, setPilots] = useState([])
+  const [showCheckoutForm, setShowCheckoutForm] = useState(false)
+  const [checkoutForm, setCheckoutForm] = useState({ pilot_id: '', condition_out: 'good', notes_out: '' })
+  const [checkinForm, setCheckinForm] = useState({ condition_in: 'good', notes_in: '' })
+  const [showCheckinForm, setShowCheckinForm] = useState(false)
+  const [components, setComponents] = useState([])
+  const [showComponentForm, setShowComponentForm] = useState(false)
+  const [componentForm, setComponentForm] = useState({
+    name: '', component_type: 'propeller', serial_number: '', manufacturer: '', model: '',
+    status: 'active', install_date: '', flight_hours: 0, max_flight_hours: '', warranty_expiry: '',
+    replacement_cost: '', notes: ''
+  })
 
   const loadRegistrations = () => {
     api.get(`/vehicles/${id}/registrations`).then(setRegistrations).catch(() => [])
+  }
+
+  const loadComponents = () => {
+    api.get(`/components?vehicle_id=${id}`).then(setComponents).catch(() => [])
+  }
+
+  const loadCheckouts = () => {
+    api.get(`/equipment-checkouts?entity_type=vehicle&entity_id=${id}`).then(data => {
+      setCheckouts(data)
+      setActiveCheckout(data.find(c => !c.checked_in_at) || null)
+    }).catch(() => {})
   }
 
   useEffect(() => {
@@ -45,7 +71,10 @@ export default function VehicleDetailPage() {
       api.get('/attachments').catch(() => []),
       api.get(`/maintenance?entity_type=vehicle&entity_id=${id}`).catch(() => []),
       api.get(`/vehicles/${id}/registrations`).catch(() => []),
-    ]).then(([v, s, fData, bat, ctrl, sens, att, maint, regs]) => {
+      api.get(`/equipment-checkouts?entity_type=vehicle&entity_id=${id}`).catch(() => []),
+      api.get('/pilots').catch(() => []),
+      api.get(`/components?vehicle_id=${id}`).catch(() => []),
+    ]).then(([v, s, fData, bat, ctrl, sens, att, maint, regs, chk, pil, comp]) => {
       setVehicle(v)
       setStats(s)
       setFlights(fData.flights || fData)
@@ -55,6 +84,10 @@ export default function VehicleDetailPage() {
       setAttachments(att)
       setMaintenance(maint)
       setRegistrations(regs)
+      setCheckouts(chk)
+      setActiveCheckout(chk.find(c => !c.checked_in_at) || null)
+      setPilots(Array.isArray(pil) ? pil : (pil.pilots || []))
+      setComponents(comp)
     }).catch(console.error).finally(() => setLoading(false))
   }, [id])
 
@@ -514,6 +547,440 @@ export default function VehicleDetailPage() {
           </div>
         ) : (
           <div className="px-4 py-8 text-center text-muted-foreground text-sm">No FAA registrations recorded</div>
+        )}
+      </div>
+
+      {/* Equipment Checkout Status */}
+      <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <LogIn className="w-4 h-4 text-primary" />
+            <h3 className="font-semibold text-foreground">Checkout Status</h3>
+          </div>
+          {!activeCheckout && (
+            <button
+              onClick={() => setShowCheckoutForm(!showCheckoutForm)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:opacity-90"
+            >
+              <LogIn className="w-3.5 h-3.5" /> Check Out
+            </button>
+          )}
+        </div>
+
+        {/* Active checkout banner */}
+        {activeCheckout && (
+          <div className="px-4 py-3 border-b border-border bg-amber-500/5 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-amber-500/15 flex items-center justify-center">
+                <User className="w-4 h-4 text-amber-400" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  Checked out by {activeCheckout.checked_out_by_name || `Pilot #${activeCheckout.checked_out_by_id}`}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Since {new Date(activeCheckout.checked_out_at).toLocaleString()}
+                  {activeCheckout.condition_out && ` | Condition: ${activeCheckout.condition_out}`}
+                  {activeCheckout.notes_out && ` | ${activeCheckout.notes_out}`}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowCheckinForm(!showCheckinForm)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:opacity-90 shrink-0"
+            >
+              <LogOut className="w-3.5 h-3.5" /> Check In
+            </button>
+          </div>
+        )}
+
+        {/* Check-in form */}
+        {showCheckinForm && activeCheckout && (
+          <div className="px-4 py-3 border-b border-border bg-muted/20 space-y-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Returning Pilot</label>
+                <select
+                  value={checkinForm.pilot_id || ''}
+                  onChange={e => setCheckinForm({ ...checkinForm, pilot_id: e.target.value })}
+                  className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm"
+                >
+                  <option value="">Select pilot...</option>
+                  {pilots.map(p => (
+                    <option key={p.id} value={p.id}>{p.first_name} {p.last_name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Condition</label>
+                <select
+                  value={checkinForm.condition_in}
+                  onChange={e => setCheckinForm({ ...checkinForm, condition_in: e.target.value })}
+                  className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm"
+                >
+                  <option value="good">Good</option>
+                  <option value="fair">Fair</option>
+                  <option value="needs_attention">Needs Attention</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Notes</label>
+                <input type="text" value={checkinForm.notes_in}
+                  onChange={e => setCheckinForm({ ...checkinForm, notes_in: e.target.value })}
+                  placeholder="Optional"
+                  className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={async () => {
+                  if (!checkinForm.pilot_id) { toast.error('Select a pilot'); return }
+                  try {
+                    await api.post(`/equipment-checkouts/${activeCheckout.id}/checkin`, {
+                      checked_in_by_id: parseInt(checkinForm.pilot_id),
+                      condition_in: checkinForm.condition_in,
+                      notes_in: checkinForm.notes_in || null,
+                    })
+                    setShowCheckinForm(false)
+                    setCheckinForm({ condition_in: 'good', notes_in: '' })
+                    loadCheckouts()
+                    toast.success('Equipment checked in')
+                  } catch (err) { toast.error(err.message) }
+                }}
+                className="px-4 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:opacity-90"
+              >
+                Confirm Check-In
+              </button>
+              <button onClick={() => setShowCheckinForm(false)}
+                className="px-4 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-xs hover:opacity-90">
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Checkout form */}
+        {showCheckoutForm && !activeCheckout && (
+          <div className="px-4 py-3 border-b border-border bg-muted/20 space-y-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Pilot</label>
+                <select
+                  value={checkoutForm.pilot_id}
+                  onChange={e => setCheckoutForm({ ...checkoutForm, pilot_id: e.target.value })}
+                  className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm"
+                >
+                  <option value="">Select pilot...</option>
+                  {pilots.map(p => (
+                    <option key={p.id} value={p.id}>{p.first_name} {p.last_name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Condition</label>
+                <select
+                  value={checkoutForm.condition_out}
+                  onChange={e => setCheckoutForm({ ...checkoutForm, condition_out: e.target.value })}
+                  className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm"
+                >
+                  <option value="good">Good</option>
+                  <option value="fair">Fair</option>
+                  <option value="needs_attention">Needs Attention</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Notes</label>
+                <input type="text" value={checkoutForm.notes_out}
+                  onChange={e => setCheckoutForm({ ...checkoutForm, notes_out: e.target.value })}
+                  placeholder="Optional"
+                  className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={async () => {
+                  if (!checkoutForm.pilot_id) { toast.error('Select a pilot'); return }
+                  try {
+                    await api.post('/equipment-checkouts', {
+                      entity_type: 'vehicle',
+                      entity_id: parseInt(id),
+                      entity_name: displayName,
+                      checked_out_by_id: parseInt(checkoutForm.pilot_id),
+                      condition_out: checkoutForm.condition_out,
+                      notes_out: checkoutForm.notes_out || null,
+                    })
+                    setShowCheckoutForm(false)
+                    setCheckoutForm({ pilot_id: '', condition_out: 'good', notes_out: '' })
+                    loadCheckouts()
+                    toast.success('Equipment checked out')
+                  } catch (err) { toast.error(err.message) }
+                }}
+                className="px-4 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:opacity-90"
+              >
+                Confirm Check-Out
+              </button>
+              <button onClick={() => setShowCheckoutForm(false)}
+                className="px-4 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-xs hover:opacity-90">
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Checkout history */}
+        {checkouts.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/30">
+                  <th className="text-left px-4 py-2 text-muted-foreground font-medium">Checked Out By</th>
+                  <th className="text-left px-4 py-2 text-muted-foreground font-medium">Out</th>
+                  <th className="text-left px-4 py-2 text-muted-foreground font-medium">In</th>
+                  <th className="text-left px-4 py-2 text-muted-foreground font-medium hidden md:table-cell">Condition Out</th>
+                  <th className="text-left px-4 py-2 text-muted-foreground font-medium hidden md:table-cell">Condition In</th>
+                  <th className="text-left px-4 py-2 text-muted-foreground font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {checkouts.map(c => (
+                  <tr key={c.id} className="border-b border-border/50 hover:bg-accent/30">
+                    <td className="px-4 py-2 text-foreground font-medium">{c.checked_out_by_name || '--'}</td>
+                    <td className="px-4 py-2 text-muted-foreground text-xs">{c.checked_out_at ? new Date(c.checked_out_at).toLocaleString() : '--'}</td>
+                    <td className="px-4 py-2 text-muted-foreground text-xs">
+                      {c.checked_in_at ? new Date(c.checked_in_at).toLocaleString() : '--'}
+                      {c.checked_in_by_name && <span className="block text-xs">by {c.checked_in_by_name}</span>}
+                    </td>
+                    <td className="px-4 py-2 text-muted-foreground hidden md:table-cell">{c.condition_out || '--'}</td>
+                    <td className="px-4 py-2 text-muted-foreground hidden md:table-cell">{c.condition_in || '--'}</td>
+                    <td className="px-4 py-2">
+                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                        c.checked_in_at ? 'bg-emerald-500/15 text-emerald-400' : 'bg-amber-500/15 text-amber-400'
+                      }`}>
+                        {c.checked_in_at ? 'Returned' : 'Out'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="px-4 py-8 text-center text-muted-foreground text-sm">No checkout history</div>
+        )}
+      </div>
+
+      {/* Components */}
+      <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Cog className="w-4 h-4 text-primary" />
+            <h3 className="font-semibold text-foreground">Components</h3>
+          </div>
+          <button
+            onClick={() => setShowComponentForm(!showComponentForm)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:opacity-90"
+          >
+            <Plus className="w-3.5 h-3.5" /> Add Component
+          </button>
+        </div>
+
+        {/* Add Component Form */}
+        {showComponentForm && (
+          <div className="px-4 py-3 border-b border-border bg-muted/20 space-y-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Name *</label>
+                <input type="text" value={componentForm.name}
+                  onChange={e => setComponentForm({...componentForm, name: e.target.value})}
+                  placeholder="e.g. Front Left Propeller"
+                  className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Type *</label>
+                <select value={componentForm.component_type}
+                  onChange={e => setComponentForm({...componentForm, component_type: e.target.value})}
+                  className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm">
+                  <option value="propeller">Propeller</option>
+                  <option value="motor">Motor</option>
+                  <option value="esc">ESC</option>
+                  <option value="gimbal">Gimbal</option>
+                  <option value="camera">Camera</option>
+                  <option value="frame">Frame</option>
+                  <option value="landing_gear">Landing Gear</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Serial Number</label>
+                <input type="text" value={componentForm.serial_number}
+                  onChange={e => setComponentForm({...componentForm, serial_number: e.target.value})}
+                  className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Manufacturer</label>
+                <input type="text" value={componentForm.manufacturer}
+                  onChange={e => setComponentForm({...componentForm, manufacturer: e.target.value})}
+                  className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Model</label>
+                <input type="text" value={componentForm.model}
+                  onChange={e => setComponentForm({...componentForm, model: e.target.value})}
+                  className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Status</label>
+                <select value={componentForm.status}
+                  onChange={e => setComponentForm({...componentForm, status: e.target.value})}
+                  className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm">
+                  <option value="active">Active</option>
+                  <option value="needs_replacement">Needs Replacement</option>
+                  <option value="replaced">Replaced</option>
+                  <option value="retired">Retired</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Install Date</label>
+                <input type="date" value={componentForm.install_date}
+                  onChange={e => setComponentForm({...componentForm, install_date: e.target.value})}
+                  className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Flight Hours</label>
+                <input type="number" step="0.1" value={componentForm.flight_hours}
+                  onChange={e => setComponentForm({...componentForm, flight_hours: parseFloat(e.target.value) || 0})}
+                  className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Max Flight Hours</label>
+                <input type="number" step="0.1" value={componentForm.max_flight_hours}
+                  onChange={e => setComponentForm({...componentForm, max_flight_hours: e.target.value})}
+                  placeholder="Optional"
+                  className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Warranty Expiry</label>
+                <input type="date" value={componentForm.warranty_expiry}
+                  onChange={e => setComponentForm({...componentForm, warranty_expiry: e.target.value})}
+                  className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Replacement Cost</label>
+                <input type="number" step="0.01" value={componentForm.replacement_cost}
+                  onChange={e => setComponentForm({...componentForm, replacement_cost: e.target.value})}
+                  placeholder="$"
+                  className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Notes</label>
+                <input type="text" value={componentForm.notes}
+                  onChange={e => setComponentForm({...componentForm, notes: e.target.value})}
+                  className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={async () => {
+                  if (!componentForm.name) { toast.error('Name is required'); return }
+                  try {
+                    await api.post('/components', {
+                      ...componentForm,
+                      vehicle_id: parseInt(id),
+                      max_flight_hours: componentForm.max_flight_hours ? parseFloat(componentForm.max_flight_hours) : null,
+                      replacement_cost: componentForm.replacement_cost ? parseFloat(componentForm.replacement_cost) : null,
+                      install_date: componentForm.install_date || null,
+                      warranty_expiry: componentForm.warranty_expiry || null,
+                      serial_number: componentForm.serial_number || null,
+                      manufacturer: componentForm.manufacturer || null,
+                      model: componentForm.model || null,
+                      notes: componentForm.notes || null,
+                    })
+                    setComponentForm({
+                      name: '', component_type: 'propeller', serial_number: '', manufacturer: '', model: '',
+                      status: 'active', install_date: '', flight_hours: 0, max_flight_hours: '', warranty_expiry: '',
+                      replacement_cost: '', notes: ''
+                    })
+                    setShowComponentForm(false)
+                    loadComponents()
+                    toast.success('Component added')
+                  } catch (err) { toast.error(err.message) }
+                }}
+                className="px-4 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:opacity-90"
+              >
+                Save Component
+              </button>
+              <button onClick={() => setShowComponentForm(false)}
+                className="px-4 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-xs hover:opacity-90">
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Components Table */}
+        {components.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/30">
+                  <th className="text-left px-4 py-2 text-muted-foreground font-medium">Name</th>
+                  <th className="text-left px-4 py-2 text-muted-foreground font-medium">Type</th>
+                  <th className="text-left px-4 py-2 text-muted-foreground font-medium hidden md:table-cell">Serial</th>
+                  <th className="text-left px-4 py-2 text-muted-foreground font-medium">Status</th>
+                  <th className="text-left px-4 py-2 text-muted-foreground font-medium hidden md:table-cell">Flight Hours</th>
+                  <th className="text-left px-4 py-2 text-muted-foreground font-medium hidden lg:table-cell">Install Date</th>
+                  <th className="text-left px-4 py-2 text-muted-foreground font-medium hidden lg:table-cell">Warranty</th>
+                  {isAdmin && <th className="text-right px-4 py-2 text-muted-foreground font-medium">Actions</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {components.map(c => {
+                  const statusColors = {
+                    active: 'bg-emerald-500/15 text-emerald-400',
+                    needs_replacement: 'bg-amber-500/15 text-amber-400',
+                    replaced: 'bg-zinc-500/15 text-zinc-400',
+                    retired: 'bg-red-500/15 text-red-400',
+                  }
+                  const hoursDisplay = c.max_flight_hours
+                    ? `${c.flight_hours} / ${c.max_flight_hours}h`
+                    : `${c.flight_hours}h`
+                  const hoursWarning = c.max_flight_hours && c.flight_hours >= c.max_flight_hours * 0.9
+                  return (
+                    <tr key={c.id} className="border-b border-border/50 hover:bg-accent/30">
+                      <td className="px-4 py-2 text-foreground font-medium">{c.name}</td>
+                      <td className="px-4 py-2 text-muted-foreground capitalize">{(c.component_type || '').replace(/_/g, ' ')}</td>
+                      <td className="px-4 py-2 text-muted-foreground hidden md:table-cell">{c.serial_number || '--'}</td>
+                      <td className="px-4 py-2">
+                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[c.status] || 'bg-zinc-500/15 text-zinc-400'}`}>
+                          {(c.status || '').replace(/_/g, ' ')}
+                        </span>
+                      </td>
+                      <td className={`px-4 py-2 hidden md:table-cell ${hoursWarning ? 'text-amber-400 font-medium' : 'text-muted-foreground'}`}>
+                        {hoursDisplay}
+                      </td>
+                      <td className="px-4 py-2 text-muted-foreground hidden lg:table-cell">{c.install_date || '--'}</td>
+                      <td className="px-4 py-2 text-muted-foreground hidden lg:table-cell">{c.warranty_expiry || '--'}</td>
+                      {isAdmin && (
+                        <td className="px-4 py-2 text-right">
+                          <button onClick={async () => {
+                            if (!confirm('Delete this component?')) return
+                            try {
+                              await api.delete(`/components/${c.id}`)
+                              loadComponents()
+                            } catch (err) { toast.error(err.message) }
+                          }} className="p-1.5 text-muted-foreground hover:text-destructive rounded hover:bg-destructive/10">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="px-4 py-8 text-center text-muted-foreground text-sm">No components tracked</div>
         )}
       </div>
 

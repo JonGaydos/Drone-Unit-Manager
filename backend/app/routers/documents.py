@@ -9,7 +9,7 @@ from app.config import settings
 from app.database import get_db
 from app.models.document import Document
 from app.models.user import User
-from app.routers.auth import get_current_user, require_admin
+from app.routers.auth import get_current_user, require_pilot
 from app.schemas.document import DocumentOut
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
@@ -30,7 +30,7 @@ async def upload_document(
     title: str = Form(...),
     notes: str | None = Form(default=None),
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_pilot),
 ):
     upload_dir = Path(settings.UPLOAD_DIR) / "documents" / entity_type / str(entity_id)
     upload_dir.mkdir(parents=True, exist_ok=True)
@@ -129,7 +129,7 @@ def update_document(
     notes: str = None,
     folder_id: int | None = None,
     db: Session = Depends(get_db),
-    user: User = Depends(require_admin),
+    user: User = Depends(require_pilot),
 ):
     doc = db.query(Document).filter(Document.id == doc_id).first()
     if not doc:
@@ -151,7 +151,7 @@ def update_document(
 def delete_document(
     doc_id: int,
     db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_pilot),
 ):
     doc = db.query(Document).filter(Document.id == doc_id).first()
     if not doc:

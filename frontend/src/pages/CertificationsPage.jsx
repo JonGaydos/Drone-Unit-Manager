@@ -238,7 +238,7 @@ export default function CertificationsPage() {
   }
 
   const handleDeleteCertType = async (id) => {
-    if (!confirm('Delete this certification type?')) return
+    if (!window.confirm('Are you sure you want to delete this certification type?')) return
     try { await api.delete(`/certification-types/${id}`); load() } catch (err) { toast.error(err.message) }
   }
 

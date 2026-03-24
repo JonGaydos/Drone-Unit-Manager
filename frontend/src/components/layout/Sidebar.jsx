@@ -22,30 +22,44 @@ import {
   ClipboardCheck,
   Target,
   GraduationCap,
+  ScrollText,
+  AlertTriangle,
+  CloudSun,
+  Activity,
+  ClipboardList,
+  Shield,
 } from 'lucide-react'
 import { useEffect } from 'react'
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/weather', icon: CloudSun, label: 'Weather' },
   { to: '/analytics', icon: BarChart3, label: 'Analytics' },
+  { to: '/flight-plans', icon: ClipboardCheck, label: 'Flight Plans', badge: 'pendingPlansCount' },
+  { to: '/checklists', icon: ClipboardList, label: 'Checklists' },
   { to: '/flights', icon: Plane, label: 'Flights', badge: 'reviewCount' },
   { to: '/missions', icon: Target, label: 'Mission Log' },
   { to: '/training', icon: GraduationCap, label: 'Training Log' },
   { to: '/pilots', icon: Users, label: 'Pilots' },
   { to: '/fleet', icon: Box, label: 'Fleet' },
+  { to: '/fleet-health', icon: Activity, label: 'Fleet Health' },
   { to: '/certifications', icon: ShieldCheck, label: 'Certifications' },
   { to: '/maintenance', icon: Wrench, label: 'Maintenance' },
   { to: '/media', icon: Camera, label: 'Photo Gallery' },
   { to: '/documents', icon: FolderOpen, label: 'Documents' },
   { to: '/reports', icon: FileText, label: 'Reports' },
+  { to: '/compliance', icon: Shield, label: 'Compliance' },
   { to: '/alerts', icon: Bell, label: 'Alerts' },
+  { to: '/incidents', icon: AlertTriangle, label: 'Incidents' },
   { to: '/settings', icon: Settings, label: 'Settings' },
+  { to: '/audit-log', icon: ScrollText, label: 'Audit Log', adminOnly: true },
 ]
 
 export function Sidebar({ mobileOpen, onMobileClose }) {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('sidebar-collapsed') === 'true')
   const [reviewCount, setReviewCount] = useState(0)
-  const { user, logout } = useAuth()
+  const [pendingPlansCount, setPendingPlansCount] = useState(0)
+  const { user, logout, isAdmin } = useAuth()
   const location = useLocation()
 
   const toggleCollapsed = () => {
@@ -60,6 +74,9 @@ export function Sidebar({ mobileOpen, onMobileClose }) {
   useEffect(() => {
     api.get('/flights/count?review_status=needs_review')
       .then(data => setReviewCount(data.count))
+      .catch(() => {})
+    api.get('/flight-plans/pending/count')
+      .then(data => setPendingPlansCount(data.count))
       .catch(() => {})
   }, [location.pathname])
 
@@ -86,7 +103,7 @@ export function Sidebar({ mobileOpen, onMobileClose }) {
 
       {/* Navigation */}
       <nav className="flex-1 py-4 overflow-y-auto">
-        {navItems.map((item) => (
+        {navItems.filter(item => !item.adminOnly || isAdmin).map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
@@ -108,6 +125,11 @@ export function Sidebar({ mobileOpen, onMobileClose }) {
             {(!collapsed || mobileOpen) && item.badge === 'reviewCount' && reviewCount > 0 && (
               <span className="bg-destructive text-destructive-foreground text-xs px-1.5 py-0.5 rounded-full font-medium">
                 {reviewCount}
+              </span>
+            )}
+            {(!collapsed || mobileOpen) && item.badge === 'pendingPlansCount' && pendingPlansCount > 0 && (
+              <span className="bg-amber-500 text-white text-xs px-1.5 py-0.5 rounded-full font-medium">
+                {pendingPlansCount}
               </span>
             )}
           </NavLink>

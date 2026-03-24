@@ -211,7 +211,7 @@ export default function MissionLogPage() {
   }
 
   const handleDelete = async (id) => {
-    if (!confirm('Delete this mission log?')) return
+    if (!window.confirm('Are you sure you want to delete this mission log?')) return
     try {
       await api.delete(`/mission-logs/${id}`)
       load()

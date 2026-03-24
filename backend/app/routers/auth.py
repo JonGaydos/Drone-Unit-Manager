@@ -53,21 +53,40 @@ def require_admin(user: User = Depends(get_current_user)) -> User:
     return user
 
 
+def require_supervisor(user: User = Depends(get_current_user)) -> User:
+    """Allow admin or supervisor roles."""
+    if user.role not in ("admin", "supervisor"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Requires supervisor role or higher")
+    return user
+
+
+def require_pilot(user: User = Depends(get_current_user)) -> User:
+    """Allow admin, supervisor, or pilot roles."""
+    if user.role not in ("admin", "supervisor", "pilot"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Requires pilot role or higher")
+    return user
+
+
 def require_manager(user: User = Depends(get_current_user)) -> User:
-    """Allow admin or manager roles — blocks viewer-only users."""
-    if user.role not in ("admin", "manager", "pilot"):
+    """Legacy alias — allow admin, supervisor, or pilot roles."""
+    if user.role not in ("admin", "supervisor", "manager", "pilot"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager access required")
     return user
 
 
 @router.post("/login", response_model=LoginResponse)
 def login(req: LoginRequest, db: Session = Depends(get_db)):
+    from app.services.audit import log_action
     user = db.query(User).filter(User.username == req.username).first()
     if not user or not verify_password(req.password, user.password_hash):
+        log_action(db, None, req.username, "login_failed", "auth", details=f"Failed login attempt for '{req.username}'")
+        db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled")
     token = create_token(user.id)
+    log_action(db, user.id, user.display_name, "login", "auth", details="Successful login")
+    db.commit()
     return LoginResponse(token=token, user=UserOut.model_validate(user))
 
 
@@ -89,6 +108,7 @@ def update_me(data: UserUpdate, user: User = Depends(get_current_user), db: Sess
 
 @router.post("/users", response_model=UserOut)
 def create_user(data: UserCreate, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    from app.services.audit import log_action
     if db.query(User).filter(User.username == data.username).first():
         raise HTTPException(status_code=409, detail="Username already exists")
     user = User(
@@ -99,6 +119,8 @@ def create_user(data: UserCreate, admin: User = Depends(require_admin), db: Sess
         pilot_id=data.pilot_id,
     )
     db.add(user)
+    db.flush()
+    log_action(db, admin.id, admin.display_name, "create", "user", user.id, user.display_name, details=f"Created user '{user.username}' with role '{user.role}'")
     db.commit()
     db.refresh(user)
     return UserOut.model_validate(user)
@@ -111,11 +133,13 @@ def list_users(admin: User = Depends(require_admin), db: Session = Depends(get_d
 
 @router.post("/change-password")
 def change_password(req: ChangePasswordRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from app.services.audit import log_action
     if not verify_password(req.current_password, user.password_hash):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
     if len(req.new_password) < 6:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
     user.password_hash = hash_password(req.new_password)
+    log_action(db, user.id, user.display_name, "password_change", "user", user.id, user.display_name)
     db.commit()
     return {"ok": True, "message": "Password changed successfully"}
 
@@ -152,11 +176,15 @@ def admin_reset_password(user_id: int, req: AdminResetPasswordRequest, admin: Us
 
 @router.delete("/users/{user_id}")
 def delete_user(user_id: int, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    from app.services.audit import log_action
     target = db.query(User).filter(User.id == user_id).first()
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
     if target.id == admin.id:
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
+    target_name = target.display_name
+    target_username = target.username
     db.delete(target)
+    log_action(db, admin.id, admin.display_name, "delete", "user", user_id, target_name, details=f"Deleted user '{target_username}'")
     db.commit()
     return {"ok": True}

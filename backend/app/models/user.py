@@ -14,7 +14,7 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(100), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     display_name: Mapped[str] = mapped_column(String(200))
-    role: Mapped[str] = mapped_column(String(20), default="viewer")  # "admin", "pilot", or "viewer"
+    role: Mapped[str] = mapped_column(String(20), default="viewer")  # "admin", "supervisor", "pilot", or "viewer"
     is_active: Mapped[bool] = mapped_column(default=True)
     theme: Mapped[str] = mapped_column(String(30), default="dark")
     pilot_id: Mapped[Optional[int]] = mapped_column(ForeignKey("pilots.id"), nullable=True)

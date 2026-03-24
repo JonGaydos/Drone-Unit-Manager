@@ -135,10 +135,10 @@ export default function PilotsPage() {
     }
   }
 
-  const handleDelete = async (id) => {
-    if (!confirm('Delete this pilot?')) return
+  const handleDelete = async (pilot) => {
+    if (!window.confirm(`Are you sure you want to deactivate ${pilot.first_name} ${pilot.last_name}?`)) return
     try {
-      await api.delete(`/pilots/${id}`)
+      await api.delete(`/pilots/${pilot.id}`)
       loadPilots()
     } catch (err) {
       toast.error(err.message)
@@ -254,7 +254,7 @@ export default function PilotsPage() {
                       <button onClick={() => setModal(p)} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent">
                         <Edit className="w-4 h-4" />
                       </button>
-                      <button onClick={() => handleDelete(p.id)} className="p-1.5 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10">
+                      <button onClick={() => handleDelete(p)} className="p-1.5 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>

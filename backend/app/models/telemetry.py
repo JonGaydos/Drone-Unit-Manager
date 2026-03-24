@@ -1,6 +1,6 @@
 from typing import Optional
 
-from sqlalchemy import Integer, Float, BigInteger
+from sqlalchemy import Integer, Float, BigInteger, Index
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -10,6 +10,9 @@ class TelemetryBase(DeclarativeBase):
 
 class TelemetryPoint(TelemetryBase):
     __tablename__ = "telemetry_points"
+    __table_args__ = (
+        Index('ix_telemetry_flight_ts', 'flight_id', 'timestamp_ms'),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     flight_id: Mapped[int] = mapped_column(Integer, index=True)

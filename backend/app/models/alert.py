@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import String, Text, DateTime, Integer, Boolean, func
+from sqlalchemy import String, Text, DateTime, Integer, Boolean, Index, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -9,6 +9,9 @@ from app.database import Base
 
 class Alert(Base):
     __tablename__ = "alerts"
+    __table_args__ = (
+        Index('ix_alerts_dismissed_read', 'is_dismissed', 'is_read'),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     type: Mapped[str] = mapped_column(String(50))  # cert_expiring, maintenance_due, battery_health

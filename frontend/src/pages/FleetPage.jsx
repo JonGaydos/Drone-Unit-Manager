@@ -419,7 +419,7 @@ export default function FleetPage() {
   }
 
   const handleDelete = async (id) => {
-    if (!confirm(`Delete this ${singularize(config.label).toLowerCase()}?`)) return
+    if (!window.confirm(`Are you sure you want to delete this ${singularize(config.label).toLowerCase()}? This cannot be undone.`)) return
     try {
       await api.delete(`${config.endpoint}/${id}`)
       load()
