@@ -72,6 +72,41 @@ def _upsert_flights(flights_data: list[dict], skydio_users: list[dict], db: Sess
         ).first()
 
         if existing:
+            # Merge API data into existing flight — fill empty fields, don't overwrite
+            updated = False
+            merge_fields = {
+                "vehicle_id": None, "takeoff_lat": None, "takeoff_lon": None,
+                "landing_lat": None, "landing_lon": None, "battery_serial": None,
+                "sensor_package": None, "carrier": None, "attachment_top": None,
+                "attachment_bottom": None, "attachment_left": None, "attachment_right": None,
+            }
+            # Vehicle
+            if not existing.vehicle_id and f_data.get("vehicle_serial"):
+                v = db.query(Vehicle).filter(
+                    Vehicle.skydio_vehicle_serial == f_data["vehicle_serial"]
+                ).first()
+                if v:
+                    existing.vehicle_id = v.id
+                    updated = True
+            # Simple fields — only fill if currently empty
+            for api_key, db_field in [
+                ("takeoff_lat", "takeoff_lat"), ("takeoff_lon", "takeoff_lon"),
+                ("landing_lat", "landing_lat"), ("landing_lon", "landing_lon"),
+                ("battery_serial", "battery_serial"), ("sensor_package", "sensor_package"),
+                ("carrier", "carrier"), ("attachment_top", "attachment_top"),
+                ("attachment_bottom", "attachment_bottom"), ("attachment_left", "attachment_left"),
+                ("attachment_right", "attachment_right"),
+            ]:
+                new_val = f_data.get(api_key)
+                if new_val and not getattr(existing, db_field, None):
+                    setattr(existing, db_field, new_val)
+                    updated = True
+            # Duration — only if missing
+            if not existing.duration_seconds and f_data.get("duration_seconds"):
+                existing.duration_seconds = f_data["duration_seconds"]
+                updated = True
+            if updated:
+                result.flights_updated = getattr(result, 'flights_updated', 0) + 1
             result.flights_skipped += 1
             continue
 
@@ -314,11 +349,10 @@ class SyncManager:
             logger.error("Flights sync error: %s", exc)
             db.rollback()
 
-        # --- Enrich flights with full details ---
+        # --- Enrich flights with full details (any source with a Skydio UUID) ---
         try:
             from app.integrations.skydio import _to_str
             unenriched = db.query(Flight).filter(
-                Flight.api_provider == "skydio",
                 Flight.max_altitude_m.is_(None),
                 Flight.external_id.isnot(None),
             ).limit(200).all()
