@@ -15,7 +15,8 @@ class Pilot(Base):
     last_name: Mapped[str] = mapped_column(String(100))
     email: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    phone_type: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # "personal" or "work"
+    phone_type: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    phone_work: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     badge_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     skydio_user_uuid: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="active")  # active, inactive

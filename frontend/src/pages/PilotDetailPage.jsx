@@ -52,6 +52,7 @@ export default function PilotDetailPage() {
       email: pilot.email || '',
       phone: pilot.phone || '',
       phone_type: pilot.phone_type || 'work',
+      phone_work: pilot.phone_work || '',
       badge_number: pilot.badge_number || '',
       status: pilot.status || 'active',
       notes: pilot.notes || '',
@@ -163,6 +164,22 @@ export default function PilotDetailPage() {
                     </div>
                   </div>
                 </div>
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Work Phone</label>
+                  <input
+                    type="tel"
+                    value={editForm.phone_work || ''}
+                    onChange={(e) => {
+                      const digits = e.target.value.replace(/\D/g, '').slice(0, 10)
+                      let formatted = digits
+                      if (digits.length > 3) formatted = digits.slice(0,3) + '-' + digits.slice(3)
+                      if (digits.length > 6) formatted = digits.slice(0,3) + '-' + digits.slice(3,6) + '-' + digits.slice(6)
+                      setEditForm({...editForm, phone_work: formatted})
+                    }}
+                    placeholder="###-###-####"
+                    className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-muted-foreground mb-1">Badge Number</label>
@@ -206,6 +223,7 @@ export default function PilotDetailPage() {
                 <div className="flex flex-wrap gap-4 mt-2 text-sm text-muted-foreground">
                   {pilot.email && <span>{pilot.email}</span>}
                   {pilot.phone && <span>{pilot.phone_type === 'personal' ? 'Personal' : 'Work'}: {pilot.phone}</span>}
+                  {pilot.phone_work && <span>Work Phone: {pilot.phone_work}</span>}
                   {pilot.badge_number && <span>Badge: {pilot.badge_number}</span>}
                 </div>
                 <span className={`inline-flex mt-2 px-2 py-0.5 rounded-full text-xs font-medium ${

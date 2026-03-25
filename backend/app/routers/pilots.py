@@ -25,7 +25,7 @@ def list_pilots(
     q = db.query(Pilot)
     if status:
         q = q.filter(Pilot.status == status)
-    return [PilotOut.model_validate(p) for p in q.order_by(Pilot.last_name, Pilot.first_name).all()]
+    return [PilotOut.model_validate(p) for p in q.order_by(Pilot.first_name, Pilot.last_name).all()]
 
 
 @router.get("/{pilot_id}", response_model=PilotOut)

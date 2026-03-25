@@ -7,7 +7,7 @@ import { Link } from 'react-router-dom'
 
 function PilotModal({ pilot, onSave, onClose }) {
   const [form, setForm] = useState(pilot || {
-    first_name: '', last_name: '', email: '', phone: '', phone_type: 'work', badge_number: '', status: 'active', notes: ''
+    first_name: '', last_name: '', email: '', phone: '', phone_type: 'work', phone_work: '', badge_number: '', status: 'active', notes: ''
   })
   const [saving, setSaving] = useState(false)
 
@@ -64,6 +64,22 @@ function PilotModal({ pilot, onSave, onClose }) {
                 className="flex-1 px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-foreground mb-1">Work Phone</label>
+            <input
+              type="tel"
+              value={form.phone_work || ''}
+              onChange={(e) => {
+                const digits = e.target.value.replace(/\D/g, '').slice(0, 10)
+                let formatted = digits
+                if (digits.length > 3) formatted = digits.slice(0,3) + '-' + digits.slice(3)
+                if (digits.length > 6) formatted = digits.slice(0,3) + '-' + digits.slice(3,6) + '-' + digits.slice(6)
+                setForm({ ...form, phone_work: formatted })
+              }}
+              placeholder="###-###-####"
+              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            />
           </div>
           {field('Badge Number', 'badge_number')}
           <div>

@@ -18,6 +18,7 @@ def run_migrations():
         ("vehicles", "photo_url", "ALTER TABLE vehicles ADD COLUMN photo_url VARCHAR(500)"),
         # Phone type for pilots
         ("pilots", "phone_type", "ALTER TABLE pilots ADD COLUMN phone_type VARCHAR(20)"),
+        ("pilots", "phone_work", "ALTER TABLE pilots ADD COLUMN phone_work VARCHAR(50)"),
         # Flight sensor/attachment fields
         ("flights", "sensor_package", "ALTER TABLE flights ADD COLUMN sensor_package VARCHAR(100)"),
         ("flights", "attachment_top", "ALTER TABLE flights ADD COLUMN attachment_top VARCHAR(100)"),

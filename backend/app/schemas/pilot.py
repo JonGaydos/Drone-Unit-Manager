@@ -10,6 +10,7 @@ class PilotCreate(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     phone_type: Optional[str] = None
+    phone_work: Optional[str] = None
     badge_number: Optional[str] = None
     skydio_user_uuid: Optional[str] = None
     status: str = "active"
@@ -22,6 +23,7 @@ class PilotUpdate(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     phone_type: Optional[str] = None
+    phone_work: Optional[str] = None
     badge_number: Optional[str] = None
     skydio_user_uuid: Optional[str] = None
     status: Optional[str] = None
@@ -37,6 +39,7 @@ class PilotOut(BaseModel):
     email: Optional[str]
     phone: Optional[str]
     phone_type: Optional[str] = None
+    phone_work: Optional[str] = None
     badge_number: Optional[str]
     skydio_user_uuid: Optional[str]
     status: str

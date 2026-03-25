@@ -31,6 +31,19 @@ export default function SettingsPage() {
   const [sidebarItems, setSidebarItems] = useState([])
   const [savingSidebar, setSavingSidebar] = useState(false)
 
+  // Unsaved changes state
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+
+  useEffect(() => {
+    if (!hasUnsavedChanges) return
+    const handler = (e) => {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [hasUnsavedChanges])
+
   // Change password state
   const [pwForm, setPwForm] = useState({ current_password: '', new_password: '', confirm_password: '' })
   const [pwMsg, setPwMsg] = useState(null)
@@ -51,7 +64,6 @@ export default function SettingsPage() {
     { to: '/training', label: 'Training Log' },
     { to: '/pilots', label: 'Pilots' },
     { to: '/fleet', label: 'Fleet' },
-    { to: '/fleet-health', label: 'Fleet Health' },
     { to: '/certifications', label: 'Certifications' },
     { to: '/maintenance', label: 'Maintenance' },
     { to: '/media', label: 'Photo Gallery' },
@@ -176,6 +188,7 @@ export default function SettingsPage() {
       setSettings(current)
       const items = Object.entries(current).map(([key, value]) => ({ key, value }))
       await api.put('/settings/bulk', items)
+      setHasUnsavedChanges(false)
       setTestResult({ ok: true, message: 'Settings saved!' })
     } catch (err) {
       setTestResult({ ok: false, message: err.message })
@@ -278,6 +291,7 @@ export default function SettingsPage() {
           placeholder={hasMaskedValue ? 'Token saved (enter new to replace)' : ''}
           className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           disabled={!isAdmin}
+          onInput={() => setHasUnsavedChanges(true)}
         />
       </div>
     )
@@ -378,6 +392,11 @@ export default function SettingsPage() {
             Sync All
           </button>
         </div>
+        {testResult && (
+          <div className={`mt-4 p-3 rounded-lg border text-sm ${testResult.ok ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-destructive/10 border-destructive/30 text-destructive'}`}>
+            {testResult.message}
+          </div>
+        )}
       </div>
 
       {/* Excel Import */}
@@ -387,8 +406,26 @@ export default function SettingsPage() {
           Import pilots, flights, and certifications from an Excel spreadsheet (.xlsx).
           The spreadsheet should have sheets named "Skydio" (flights) and "Pilot Info" (certifications).
         </p>
+        <details className="mt-3">
+          <summary className="text-sm text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
+            Spreadsheet format requirements
+          </summary>
+          <div className="mt-2 p-3 bg-secondary/50 rounded-lg text-xs text-muted-foreground space-y-2">
+            <p>The spreadsheet should have a sheet named <strong className="text-foreground">"Skydio"</strong> with these columns:</p>
+            <code className="block bg-bg/50 p-2 rounded text-[11px] leading-relaxed">
+              Flight ID, Vehicle, Pilot, Local Takeoff Time, Takeoff, Takeoff Address,
+              Takeoff Latitude, Takeoff Longitude, Land, Duration (seconds), Battery,
+              Sensor Package, Attachment (TOP), Attachment (BOTTOM), Attachment (LEFT),
+              Attachment (RIGHT), Carrier(s), Purpose
+            </code>
+            <p>Optionally include a <strong className="text-foreground">"Pilot Info"</strong> sheet for certification data.</p>
+            <p>Column order does not matter, but column names must match exactly.</p>
+            <p className="text-muted-foreground/70 italic">Custom spreadsheet formats with different column names are not yet supported.</p>
+          </div>
+        </details>
+
         {isAdmin && (
-          <label className="flex items-center gap-3 px-4 py-3 bg-secondary border border-border border-dashed rounded-lg cursor-pointer hover:bg-accent/30 transition-colors">
+          <label className="flex items-center gap-3 px-4 py-3 bg-secondary border border-border border-dashed rounded-lg cursor-pointer hover:bg-accent/30 transition-colors mt-3">
             {importing ? (
               <Loader2 className="w-5 h-5 text-primary animate-spin" />
             ) : (
@@ -453,11 +490,6 @@ export default function SettingsPage() {
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             Save Settings
           </button>
-          {testResult && (
-            <span className={`text-sm ${testResult.ok ? 'text-emerald-400' : 'text-destructive'}`}>
-              {testResult.message}
-            </span>
-          )}
         </div>
       )}
 
