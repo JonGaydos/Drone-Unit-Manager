@@ -23,7 +23,7 @@ function StatCard({ title, value, subtitle, icon: Icon, trend, className }) {
   return (
     <div
       className={cn(
-        'rounded-xl border border-border bg-card p-6 shadow-sm',
+        'group rounded-xl border border-border bg-card p-6 shadow-sm hover:translate-y-[-2px] hover:shadow-md cursor-default transition-all duration-200',
         className
       )}
     >
@@ -46,7 +46,7 @@ function StatCard({ title, value, subtitle, icon: Icon, trend, className }) {
         </div>
         {Icon && (
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/10">
-            <Icon className="h-5 w-5 text-primary" />
+            <Icon className="h-5 w-5 text-primary group-hover:scale-110 transition-transform" />
           </div>
         )}
       </div>

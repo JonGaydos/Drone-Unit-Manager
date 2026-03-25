@@ -2,7 +2,7 @@ import { forwardRef } from 'react'
 import { cn } from '@/lib/utils'
 
 const buttonVariants = {
-  default: 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm',
+  default: 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm hover:shadow-[0_0_12px_rgba(124,58,237,0.25)]',
   secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
   destructive: 'bg-destructive text-white hover:bg-destructive/90 shadow-sm',
   outline: 'border border-border bg-transparent text-foreground hover:bg-accent hover:text-accent-foreground',
@@ -24,9 +24,9 @@ const Button = forwardRef(
         disabled={disabled}
         className={cn(
           'inline-flex items-center justify-center gap-2 font-medium transition-colors',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg',
           'disabled:pointer-events-none disabled:opacity-50',
-          'cursor-pointer',
+          'active:scale-[0.98] cursor-pointer',
           buttonVariants[variant],
           buttonSizes[size],
           className

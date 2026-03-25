@@ -59,7 +59,9 @@ export function Layout() {
           <TopBar title={title} />
         </div>
         <main className="p-4 md:p-6 pt-18 md:pt-6">
-          <Outlet />
+          <div className="page-enter" key={location.pathname}>
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>

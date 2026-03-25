@@ -30,12 +30,12 @@ function Modal({ open, onClose, title, children, className }) {
     <div
       ref={overlayRef}
       onClick={handleOverlayClick}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-[fadeIn_150ms_ease]"
     >
       <div
         className={cn(
           'relative w-full max-w-lg mx-4 rounded-xl border border-border bg-card text-foreground shadow-lg',
-          'animate-in zoom-in-95 fade-in duration-200',
+          'animate-[slideUp_200ms_ease]',
           className
         )}
       >

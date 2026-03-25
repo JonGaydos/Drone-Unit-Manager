@@ -139,10 +139,10 @@ export function Sidebar({ mobileOpen, onMobileClose }) {
             onClick={() => onMobileClose?.()}
             className={({ isActive }) =>
               cn(
-                'flex items-center gap-3 px-4 py-2.5 mx-2 rounded-lg text-sm transition-colors',
+                'flex items-center gap-3 px-4 py-2.5 mx-2 rounded-lg text-sm transition-all duration-150 hover:translate-x-0.5',
                 isActive
-                  ? 'bg-primary/15 text-primary font-medium'
-                  : 'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground'
+                  ? 'bg-primary/10 text-primary border-l-2 border-primary font-medium'
+                  : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground'
               )
             }
           >

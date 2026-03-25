@@ -62,7 +62,7 @@ function DataTable({
               data.map((row, idx) => (
                 <tr
                   key={row.id ?? idx}
-                  className="hover:bg-accent/50 transition-colors"
+                  className="hover:bg-muted/50 transition-colors"
                 >
                   {columns.map((col) => (
                     <td key={col.key} className="px-4 py-3 text-foreground">
