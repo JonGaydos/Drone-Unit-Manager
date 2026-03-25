@@ -197,23 +197,60 @@ class SyncManager:
 
         # --- Match Skydio users to pilots and populate emails ---
         try:
+            logger.info("Matching %d Skydio users to %d pilots",
+                        len(skydio_users), db.query(Pilot).filter(Pilot.status == "active").count())
+            matched = 0
             for su in skydio_users:
                 su_name = su.get("name", "").strip()
                 su_email = su.get("email", "")
-                if not su_name or not su_email:
+                if not su_email:
                     continue
-                parts = su_name.split()
-                if len(parts) >= 2:
-                    first, last = parts[0], parts[-1]
+                logger.info("  Skydio user: name='%s' email='%s'", su_name, su_email)
+
+                pilot = None
+                # Try exact first+last name match
+                if su_name:
+                    parts = su_name.split()
+                    if len(parts) >= 2:
+                        first, last = parts[0], parts[-1]
+                        pilot = db.query(Pilot).filter(
+                            Pilot.first_name.ilike(first),
+                            Pilot.last_name.ilike(last),
+                            Pilot.status == "active",
+                        ).first()
+
+                # Fallback: try matching email directly to any pilot with same email
+                if not pilot:
                     pilot = db.query(Pilot).filter(
-                        Pilot.first_name.ilike(first),
-                        Pilot.last_name.ilike(last),
-                        Pilot.status == "active",
+                        Pilot.email.ilike(su_email),
                     ).first()
-                    if pilot and not pilot.email:
+
+                # Fallback: try partial name from email (e.g. jgaydos -> Gaydos)
+                if not pilot and su_email:
+                    username = su_email.split("@")[0].lower()
+                    all_pilots = db.query(Pilot).filter(Pilot.status == "active").all()
+                    for p in all_pilots:
+                        last_lower = (p.last_name or "").lower()
+                        first_lower = (p.first_name or "").lower()
+                        if last_lower and last_lower in username:
+                            pilot = p
+                            break
+                        if first_lower and last_lower and username.startswith(first_lower[0]) and last_lower in username:
+                            pilot = p
+                            break
+
+                if pilot:
+                    if not pilot.email:
                         pilot.email = su_email
-                        logger.info("Set email for pilot %s %s: %s", first, last, su_email)
+                        matched += 1
+                        logger.info("    -> Matched to pilot: %s %s", pilot.first_name, pilot.last_name)
+                    else:
+                        logger.info("    -> Pilot %s already has email: %s", pilot.first_name, pilot.email)
+                else:
+                    logger.info("    -> No pilot match found")
+
             db.flush()
+            logger.info("Populated emails for %d pilots", matched)
         except Exception as exc:
             logger.warning("Pilot email matching error: %s", exc)
 
