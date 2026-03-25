@@ -4,6 +4,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime, date
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.integrations.base import ProviderCredentials
@@ -61,13 +62,13 @@ def _build_creds(db: Session, provider_name: str) -> ProviderCredentials:
 def _upsert_flights(flights_data: list[dict], skydio_users: list[dict], db: Session, result: SyncResult):
     """Shared flight upsert logic used by both sync_all and sync_all_deep."""
     for f_data in flights_data:
-        ext_id = str(f_data.get("external_id", ""))
+        ext_id = str(f_data.get("external_id", "")).upper()
         if not ext_id:
             continue
 
-        # Check if flight already exists (match by UUID regardless of source)
+        # Check if flight already exists (case-insensitive UUID match)
         existing = db.query(Flight).filter(
-            Flight.external_id == ext_id,
+            func.upper(Flight.external_id) == ext_id,
         ).first()
 
         if existing:
@@ -653,7 +654,7 @@ class SyncManager:
                     flight_ext_id = m_data.get("flight_external_id")
                     if flight_ext_id:
                         flight = db.query(Flight).filter(
-                            Flight.external_id == str(flight_ext_id),
+                            func.upper(Flight.external_id) == str(flight_ext_id).upper(),
                             Flight.api_provider == "skydio",
                         ).first()
                         if flight:
