@@ -138,10 +138,12 @@ def import_excel(db: Session, file_bytes: bytes) -> dict:
                 flight_id = row.get("Flight ID")
                 if not flight_id:
                     continue
-                flight_id = str(flight_id).upper()
+                flight_id = str(flight_id).upper().replace("-", "")
 
                 from sqlalchemy import func as sa_func
-                existing = db.query(Flight).filter(sa_func.upper(Flight.external_id) == flight_id).first()
+                existing = db.query(Flight).filter(
+                    sa_func.replace(sa_func.upper(Flight.external_id), "-", "") == flight_id
+                ).first()
                 if existing:
                     result["flights_skipped"] += 1
                     continue
