@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '@/api/client'
-import { Plane, Clock, Users, Box, AlertTriangle, ClipboardCheck, ArrowRight, Battery, Activity, Wrench } from 'lucide-react'
+import { Plane, Clock, Users, Box, AlertTriangle, ClipboardCheck, ArrowRight, Wrench } from 'lucide-react'
 import { formatDuration, formatHours } from '@/lib/utils'
 import { FlightLocationsMap } from '@/components/FlightMap'
 
@@ -324,32 +324,23 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Fleet Health Summary */}
+      {/* Fleet Overview */}
       {fleetHealth && fleetHealth.summary && (
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="flex items-center justify-between p-5 border-b border-border">
-            <h3 className="font-semibold text-foreground">Fleet Health</h3>
-            <Link to="/fleet-health" className="text-sm text-primary hover:text-primary/80 flex items-center gap-1 transition-colors">
-              Full details <ArrowRight className="w-3.5 h-3.5" />
+            <h3 className="font-semibold text-foreground">Fleet Overview</h3>
+            <Link to="/fleet" className="text-sm text-primary hover:text-primary/80 flex items-center gap-1 transition-colors">
+              Manage fleet <ArrowRight className="w-3.5 h-3.5" />
             </Link>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 p-5">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center text-emerald-400">
-                <Activity className="w-5 h-5" />
+              <div className="w-10 h-10 rounded-xl bg-blue-500/15 flex items-center justify-center text-blue-400">
+                <Clock className="w-5 h-5" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-foreground">{fleetHealth.summary.avg_battery_health}%</p>
-                <p className="text-xs text-muted-foreground">Avg Battery Health</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${(fleetHealth.batteries || []).filter(b => b.health_pct != null && b.health_pct < 50).length > 0 ? 'bg-red-500/15 text-red-400' : 'bg-emerald-500/15 text-emerald-400'}`}>
-                <Battery className="w-5 h-5" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-foreground">{(fleetHealth.batteries || []).filter(b => b.health_pct != null && b.health_pct < 50).length}</p>
-                <p className="text-xs text-muted-foreground">Batteries &lt;50% Health</p>
+                <p className="text-2xl font-bold text-foreground">{fleetHealth.summary.total_flight_hours}h</p>
+                <p className="text-xs text-muted-foreground">Total Fleet Hours</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -361,10 +352,10 @@ export default function DashboardPage() {
                   const topVehicles = [...(fleetHealth.vehicles || [])].sort((a, b) => (b.hours || 0) - (a.hours || 0)).slice(0, 3)
                   return topVehicles.length > 0 ? (
                     <div className="space-y-0.5">
-                      {topVehicles.map((v, i) => (
+                      {topVehicles.map((v) => (
                         <p key={v.id} className="text-xs">
-                          <span className="text-foreground font-medium">{v.name}</span>
-                          <span className="text-muted-foreground ml-1">{v.hours}h</span>
+                          <Link to={`/fleet/vehicles/${v.id}`} className="text-foreground font-medium hover:text-primary">{v.name}</Link>
+                          <span className="text-muted-foreground ml-1">{v.hours}h / {v.flights} flights</span>
                         </p>
                       ))}
                     </div>
@@ -372,7 +363,16 @@ export default function DashboardPage() {
                     <p className="text-sm text-muted-foreground">No vehicle data</p>
                   )
                 })()}
-                <p className="text-xs text-muted-foreground mt-0.5">Top Vehicles by Hours</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Top Vehicles</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-purple-500/15 flex items-center justify-center text-purple-400">
+                <Box className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-foreground">{fleetHealth.summary.total_batteries}</p>
+                <p className="text-xs text-muted-foreground">Batteries in Service</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
