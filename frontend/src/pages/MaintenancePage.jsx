@@ -161,7 +161,7 @@ function ScheduleModal({ schedule, onSave, onClose }) {
   const [entities, setEntities] = useState([])
 
   useEffect(() => {
-    api.get('/pilots').then(setPilots).catch(console.error)
+    api.get('/pilots').then(p => setPilots(Array.isArray(p) ? p : p.pilots || [])).catch(console.error)
   }, [])
 
   useEffect(() => {
@@ -177,7 +177,7 @@ function ScheduleModal({ schedule, onSave, onClose }) {
     }
     const endpoint = endpointMap[form.entity_type]
     if (endpoint) {
-      api.get(endpoint).then(setEntities).catch(console.error)
+      api.get(endpoint).then(d => setEntities(Array.isArray(d) ? d : d.items || [])).catch(console.error)
     }
   }, [form.entity_type])
 
@@ -332,8 +332,14 @@ export default function MaintenancePage() {
       api.get('/docks').catch(() => []),
       api.get('/pilots').catch(() => []),
     ]).then(([vehicles, batteries, controllers, docks, pilotsData]) => {
-      setEntityLists({ vehicle: vehicles, battery: batteries, controller: controllers, dock: docks })
-      setPilots(pilotsData)
+      const toArr = (d, key) => Array.isArray(d) ? d : d[key] || d.items || []
+      setEntityLists({
+        vehicle: toArr(vehicles, 'vehicles'),
+        battery: toArr(batteries, 'batteries'),
+        controller: toArr(controllers, 'controllers'),
+        dock: toArr(docks, 'docks'),
+      })
+      setPilots(Array.isArray(pilotsData) ? pilotsData : pilotsData.pilots || [])
     })
   }, [])
 
@@ -357,7 +363,7 @@ export default function MaintenancePage() {
         await api.post('/maintenance', data)
       }
       setModal(null)
-      load()
+      await load()
     } catch (err) {
       toast.error(err.message)
     }
@@ -381,7 +387,7 @@ export default function MaintenancePage() {
         await api.post('/maintenance/schedules', data)
       }
       setScheduleModal(null)
-      load()
+      await load()
     } catch (err) {
       toast.error(err.message)
     }
@@ -558,6 +564,11 @@ export default function MaintenancePage() {
 
       {/* Schedules View - Table */}
       {view === 'schedules' && (
+        <>
+        <p className="text-sm text-muted-foreground mb-4">
+          Create recurring maintenance schedules for your equipment. When a schedule is due,
+          it will appear in the Upcoming tab and generate an alert.
+        </p>
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -643,6 +654,7 @@ export default function MaintenancePage() {
           </table>
           </div>
         </div>
+        </>
       )}
 
       {modal && (

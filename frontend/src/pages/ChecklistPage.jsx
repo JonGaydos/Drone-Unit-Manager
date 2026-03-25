@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import {
   ClipboardList, Plus, X, Loader2, CheckCircle, XCircle,
-  GripVertical, Trash2, Edit2, Eye, ChevronDown,
+  GripVertical, Trash2, Edit2, Eye, ChevronDown, Download,
 } from 'lucide-react'
 
 // ─── Template Modal ──────────────────────────────────────────────
@@ -470,8 +470,8 @@ export default function ChecklistPage() {
       ])
       setTemplates(tpl)
       setCompletions(comp)
-      setPilots(Array.isArray(p) ? p : p.items || [])
-      setVehicles(Array.isArray(v) ? v : v.items || [])
+      setPilots(Array.isArray(p) ? p : p.pilots || p.items || [])
+      setVehicles(Array.isArray(v) ? v : v.vehicles || v.items || [])
     } catch (err) {
       toast({ title: 'Error', description: err.message, variant: 'destructive' })
     } finally {
@@ -492,7 +492,7 @@ export default function ChecklistPage() {
       }
       setShowTemplateModal(false)
       setEditingTemplate(null)
-      load()
+      await load()
     } catch (err) {
       toast({ title: 'Error', description: err.message, variant: 'destructive' })
     }
@@ -515,7 +515,7 @@ export default function ChecklistPage() {
       toast({ title: 'Checklist submitted' })
       setShowCompleteModal(false)
       setTab('completions')
-      load()
+      await load()
     } catch (err) {
       toast({ title: 'Error', description: err.message, variant: 'destructive' })
     }
@@ -530,6 +530,13 @@ export default function ChecklistPage() {
           <h1 className="text-2xl font-bold text-foreground">Pre-Flight Checklists</h1>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => api.download('/export/checklists/csv')}
+            className="flex items-center gap-2 px-3 py-2 text-sm bg-secondary border border-border text-secondary-foreground rounded-lg hover:bg-secondary/80"
+          >
+            <Download className="w-4 h-4" />
+            Export CSV
+          </button>
           <button
             onClick={() => setShowCompleteModal(true)}
             className="flex items-center gap-2 px-3 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"

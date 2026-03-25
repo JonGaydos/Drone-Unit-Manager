@@ -2,40 +2,85 @@ import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/contexts/ToastContext'
 import { formatHours, formatDuration } from '@/lib/utils'
 import { STATUS_COLORS } from '@/lib/constants'
 import {
-  ArrowLeft, Battery, Clock, Plane, Wrench, Edit, Zap, Activity
+  ArrowLeft, Battery, Clock, Plane, Wrench, Edit, Zap, Activity, Save, X, Loader2
 } from 'lucide-react'
 import DocumentUpload from '@/components/DocumentUpload'
 
 export default function BatteryDetailPage() {
   const { id } = useParams()
   const { isAdmin } = useAuth()
+  const toast = useToast()
   const [battery, setBattery] = useState(null)
   const [stats, setStats] = useState(null)
   const [flights, setFlights] = useState([])
   const [maintenance, setMaintenance] = useState([])
   const [vehicles, setVehicles] = useState([])
   const [loading, setLoading] = useState(true)
+  const [editing, setEditing] = useState(false)
+  const [editForm, setEditForm] = useState({})
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     Promise.all([
       api.get(`/batteries/${id}`),
       api.get(`/batteries/${id}/stats`),
-      api.get('/flights').catch(() => []),
+      api.get('/flights?per_page=1000').catch(() => ({ flights: [] })),
       api.get(`/maintenance?entity_type=battery&entity_id=${id}`).catch(() => []),
       api.get('/vehicles').catch(() => []),
-    ]).then(([b, s, f, m, v]) => {
+    ]).then(([b, s, fResp, m, v]) => {
       setBattery(b)
       setStats(s)
-      // Filter flights by battery serial
-      const batteryFlights = f.filter(fl => fl.battery_serial === b.serial_number)
+      // Handle paginated response
+      const allFlights = Array.isArray(fResp) ? fResp : (fResp.flights || [])
+      const batteryFlights = allFlights.filter(fl => fl.battery_serial === b.serial_number)
       setFlights(batteryFlights)
       setMaintenance(m)
       setVehicles(v)
     }).catch(() => {}).finally(() => setLoading(false))
   }, [id])
+
+  const startEditing = () => {
+    setEditForm({
+      serial_number: battery.serial_number || '',
+      nickname: battery.nickname || '',
+      manufacturer: battery.manufacturer || '',
+      model: battery.model || '',
+      vehicle_model: battery.vehicle_model || '',
+      cycle_count: battery.cycle_count || 0,
+      health_pct: battery.health_pct ?? '',
+      status: battery.status || 'active',
+      purchase_date: battery.purchase_date || '',
+      notes: battery.notes || '',
+    })
+    setEditing(true)
+  }
+
+  const cancelEditing = () => {
+    setEditForm({})
+    setEditing(false)
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      const payload = { ...editForm }
+      if (payload.health_pct === '') delete payload.health_pct
+      else payload.health_pct = parseFloat(payload.health_pct)
+      payload.cycle_count = parseInt(payload.cycle_count) || 0
+      if (!payload.purchase_date) delete payload.purchase_date
+      const updated = await api.patch(`/batteries/${id}`, payload)
+      setBattery(updated)
+      setEditing(false)
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>
   if (!battery) return <div className="text-center text-muted-foreground py-12">Battery not found</div>
@@ -58,23 +103,97 @@ export default function BatteryDetailPage() {
             <Battery className="w-8 h-8" />
           </div>
           <div className="flex-1">
-            <div className="flex items-center gap-3">
-              <h2 className="text-xl font-bold text-foreground">{displayName}</h2>
-              {isAdmin && (
-                <Link to="/fleet" className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent">
-                  <Edit className="w-4 h-4" />
-                </Link>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-4 mt-2 text-sm text-muted-foreground">
-              {battery.manufacturer && <span>{battery.manufacturer}</span>}
-              {battery.model && <span>{battery.model}</span>}
-              <span>S/N: {battery.serial_number}</span>
-              {battery.purchase_date && <span>Purchased: {battery.purchase_date}</span>}
-            </div>
-            <span className={`inline-flex mt-2 px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[battery.status] || 'bg-zinc-500/15 text-zinc-400'}`}>
-              {battery.status || 'unknown'}
-            </span>
+            {editing ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Nickname</label>
+                    <input type="text" value={editForm.nickname} onChange={e => setEditForm({...editForm, nickname: e.target.value})}
+                      className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Serial Number</label>
+                    <input type="text" value={editForm.serial_number} onChange={e => setEditForm({...editForm, serial_number: e.target.value})}
+                      className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Manufacturer</label>
+                    <input type="text" value={editForm.manufacturer} onChange={e => setEditForm({...editForm, manufacturer: e.target.value})}
+                      className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Model</label>
+                    <input type="text" value={editForm.model} onChange={e => setEditForm({...editForm, model: e.target.value})}
+                      className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Vehicle Model</label>
+                    <input type="text" value={editForm.vehicle_model} onChange={e => setEditForm({...editForm, vehicle_model: e.target.value})}
+                      className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Status</label>
+                    <select value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})}
+                      className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm">
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                      <option value="maintenance">Maintenance</option>
+                      <option value="retired">Retired</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Cycle Count</label>
+                    <input type="number" min="0" value={editForm.cycle_count} onChange={e => setEditForm({...editForm, cycle_count: e.target.value})}
+                      className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Health %</label>
+                    <input type="number" min="0" max="100" step="0.1" value={editForm.health_pct} onChange={e => setEditForm({...editForm, health_pct: e.target.value})}
+                      className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Purchase Date</label>
+                    <input type="date" value={editForm.purchase_date} onChange={e => setEditForm({...editForm, purchase_date: e.target.value})}
+                      className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Notes</label>
+                  <textarea value={editForm.notes} onChange={e => setEditForm({...editForm, notes: e.target.value})}
+                    className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm h-16 resize-none focus:outline-none focus:ring-2 focus:ring-ring" />
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={handleSave} disabled={saving}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50">
+                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save
+                  </button>
+                  <button onClick={cancelEditing}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90">
+                    <X className="w-4 h-4" /> Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-3">
+                  <h2 className="text-xl font-bold text-foreground">{displayName}</h2>
+                  {isAdmin && (
+                    <button onClick={startEditing} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent">
+                      <Edit className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-4 mt-2 text-sm text-muted-foreground">
+                  {battery.manufacturer && <span>{battery.manufacturer}</span>}
+                  {battery.model && <span>{battery.model}</span>}
+                  <span>S/N: {battery.serial_number}</span>
+                  {battery.purchase_date && <span>Purchased: {battery.purchase_date}</span>}
+                </div>
+                <span className={`inline-flex mt-2 px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[battery.status] || 'bg-zinc-500/15 text-zinc-400'}`}>
+                  {battery.status || 'unknown'}
+                </span>
+              </>
+            )}
           </div>
         </div>
       </div>

@@ -212,9 +212,9 @@ export default function FlightPlansPage() {
         api.get('/vehicles'),
         api.get('/flight-plans/pending/count'),
       ])
-      setPlans(p)
-      setPilots(pi)
-      setVehicles(v)
+      setPlans(Array.isArray(p) ? p : p.plans || p.flight_plans || [])
+      setPilots(Array.isArray(pi) ? pi : pi.pilots || [])
+      setVehicles(Array.isArray(v) ? v : v.vehicles || [])
       setPendingCount(pc.count)
     } catch (err) {
       toast.error(err.message)

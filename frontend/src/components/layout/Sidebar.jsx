@@ -71,12 +71,22 @@ export function Sidebar({ mobileOpen, onMobileClose }) {
     })
   }
 
+  const [sidebarConfig, setSidebarConfig] = useState(null)
+
   useEffect(() => {
     api.get('/flights/count?review_status=needs_review')
       .then(data => setReviewCount(data.count))
       .catch(() => {})
     api.get('/flight-plans/pending/count')
       .then(data => setPendingPlansCount(data.count))
+      .catch(() => {})
+    api.get('/settings')
+      .then(data => {
+        const cfg = data.find(s => s.key === 'sidebar_config')
+        if (cfg && cfg.value) {
+          try { setSidebarConfig(JSON.parse(cfg.value)) } catch {}
+        }
+      })
       .catch(() => {})
   }, [location.pathname])
 
@@ -103,7 +113,26 @@ export function Sidebar({ mobileOpen, onMobileClose }) {
 
       {/* Navigation */}
       <nav className="flex-1 py-4 overflow-y-auto">
-        {navItems.filter(item => !item.adminOnly || isAdmin).map((item) => (
+        {(() => {
+          let items = navItems.filter(item => !item.adminOnly || isAdmin)
+          if (sidebarConfig && Array.isArray(sidebarConfig)) {
+            // Build a map of path -> config
+            const configMap = {}
+            sidebarConfig.forEach(c => { configMap[c.to] = c })
+            // Filter visible and sort by order
+            items = items
+              .filter(item => {
+                const cfg = configMap[item.to]
+                return !cfg || cfg.visible !== false
+              })
+              .sort((a, b) => {
+                const aOrder = configMap[a.to]?.order ?? 999
+                const bOrder = configMap[b.to]?.order ?? 999
+                return aOrder - bOrder
+              })
+          }
+          return items
+        })().map((item) => (
           <NavLink
             key={item.to}
             to={item.to}

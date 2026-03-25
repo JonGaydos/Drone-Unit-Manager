@@ -247,7 +247,7 @@ class SyncManager:
             from app.integrations.skydio import _to_str
             unenriched = db.query(Flight).filter(
                 Flight.api_provider == "skydio",
-                Flight.date.is_(None),
+                Flight.max_altitude_m.is_(None),
                 Flight.external_id.isnot(None),
             ).limit(200).all()
 
@@ -296,10 +296,20 @@ class SyncManager:
                     if battery:
                         flight.battery_serial = _to_str(battery)
 
-                    for api_key, field in [("takeoff_latitude", "takeoff_lat"), ("takeoff_longitude", "takeoff_lon")]:
+                    for api_key, field in [("takeoff_latitude", "takeoff_lat"), ("takeoff_longitude", "takeoff_lon"),
+                                            ("max_altitude_m", "max_altitude_m"), ("max_altitude", "max_altitude_m"),
+                                            ("max_speed_mps", "max_speed_mps"), ("max_speed", "max_speed_mps"),
+                                            ("distance_m", "distance_m"), ("total_distance", "distance_m")]:
                         val = detail.get(api_key)
-                        if val is not None:
-                            setattr(flight, field, val)
+                        if val is not None and not getattr(flight, field, None):
+                            try:
+                                setattr(flight, field, float(val))
+                            except (ValueError, TypeError):
+                                pass
+
+                    addr = detail.get("takeoff_address") or detail.get("location")
+                    if addr and not flight.takeoff_address:
+                        flight.takeoff_address = str(addr)
 
                     vs = detail.get("vehicle_serial")
                     if vs and not flight.vehicle_id:
@@ -328,6 +338,7 @@ class SyncManager:
             ghosts = db.query(Flight).filter(
                 Flight.api_provider == "skydio",
                 Flight.date.is_(None),
+                Flight.max_altitude_m.is_(None),
                 Flight.external_id.isnot(None),
             ).all()
             ghost_count = len(ghosts)

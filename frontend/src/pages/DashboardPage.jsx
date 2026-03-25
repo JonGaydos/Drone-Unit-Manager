@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '@/api/client'
-import { Plane, Clock, Users, Box, AlertTriangle, ClipboardCheck, ArrowRight } from 'lucide-react'
+import { Plane, Clock, Users, Box, AlertTriangle, ClipboardCheck, ArrowRight, Battery, Activity, Wrench } from 'lucide-react'
 import { formatDuration, formatHours } from '@/lib/utils'
 import { FlightLocationsMap } from '@/components/FlightMap'
 
@@ -63,6 +63,7 @@ export default function DashboardPage() {
   const [recentFlights, setRecentFlights] = useState([])
   const [upcomingCerts, setUpcomingCerts] = useState([])
   const [upcomingMaintenance, setUpcomingMaintenance] = useState([])
+  const [fleetHealth, setFleetHealth] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -71,8 +72,9 @@ export default function DashboardPage() {
       api.get('/flights?per_page=10').catch(() => []),
       api.get('/pilot-certifications').catch(() => []),
       api.get('/maintenance?upcoming=true').catch(() => []),
+      api.get('/dashboard/analytics/fleet-health').catch(() => null),
     ])
-      .then(([statsData, flightsData, certsData, maintenanceData]) => {
+      .then(([statsData, flightsData, certsData, maintenanceData, fleetHealthData]) => {
         setStats(statsData)
 
         // Handle flights - could be paginated or plain array
@@ -98,6 +100,9 @@ export default function DashboardPage() {
         // Handle maintenance
         const maint = Array.isArray(maintenanceData) ? maintenanceData : (maintenanceData?.items || maintenanceData?.maintenance || [])
         setUpcomingMaintenance(maint)
+
+        // Fleet health
+        setFleetHealth(fleetHealthData)
       })
       .finally(() => setLoading(false))
   }, [])
@@ -315,6 +320,70 @@ export default function DashboardPage() {
                 })}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Fleet Health Summary */}
+      {fleetHealth && fleetHealth.summary && (
+        <div className="bg-card border border-border rounded-xl overflow-hidden">
+          <div className="flex items-center justify-between p-5 border-b border-border">
+            <h3 className="font-semibold text-foreground">Fleet Health</h3>
+            <Link to="/fleet-health" className="text-sm text-primary hover:text-primary/80 flex items-center gap-1 transition-colors">
+              Full details <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 p-5">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center text-emerald-400">
+                <Activity className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-foreground">{fleetHealth.summary.avg_battery_health}%</p>
+                <p className="text-xs text-muted-foreground">Avg Battery Health</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${(fleetHealth.batteries || []).filter(b => b.health_pct != null && b.health_pct < 50).length > 0 ? 'bg-red-500/15 text-red-400' : 'bg-emerald-500/15 text-emerald-400'}`}>
+                <Battery className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-foreground">{(fleetHealth.batteries || []).filter(b => b.health_pct != null && b.health_pct < 50).length}</p>
+                <p className="text-xs text-muted-foreground">Batteries &lt;50% Health</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-blue-500/15 flex items-center justify-center text-blue-400">
+                <Plane className="w-5 h-5" />
+              </div>
+              <div>
+                {(() => {
+                  const topVehicles = [...(fleetHealth.vehicles || [])].sort((a, b) => (b.hours || 0) - (a.hours || 0)).slice(0, 3)
+                  return topVehicles.length > 0 ? (
+                    <div className="space-y-0.5">
+                      {topVehicles.map((v, i) => (
+                        <p key={v.id} className="text-xs">
+                          <span className="text-foreground font-medium">{v.name}</span>
+                          <span className="text-muted-foreground ml-1">{v.hours}h</span>
+                        </p>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No vehicle data</p>
+                  )
+                })()}
+                <p className="text-xs text-muted-foreground mt-0.5">Top Vehicles by Hours</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${fleetHealth.summary.total_overdue_maintenance > 0 ? 'bg-red-500/15 text-red-400' : 'bg-emerald-500/15 text-emerald-400'}`}>
+                <Wrench className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-foreground">{fleetHealth.summary.total_overdue_maintenance}</p>
+                <p className="text-xs text-muted-foreground">Overdue Maintenance</p>
+              </div>
+            </div>
           </div>
         </div>
       )}

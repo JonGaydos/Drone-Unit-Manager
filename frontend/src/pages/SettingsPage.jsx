@@ -3,7 +3,7 @@ import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { sortByName } from '@/lib/formatters'
-import { Save, TestTube, Loader2, Upload, FileSpreadsheet, RefreshCw, UserPlus, Key, Trash2, Shield, ShieldCheck, Eye, Image as ImageIcon } from 'lucide-react'
+import { Save, TestTube, Loader2, Upload, FileSpreadsheet, RefreshCw, UserPlus, Key, Trash2, Shield, ShieldCheck, Eye, Image as ImageIcon, ChevronUp, ChevronDown, ExternalLink } from 'lucide-react'
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState({})
@@ -27,6 +27,10 @@ export default function SettingsPage() {
   const [logoUrl, setLogoUrl] = useState(null)
   const [uploadingLogo, setUploadingLogo] = useState(false)
 
+  // Sidebar config state
+  const [sidebarItems, setSidebarItems] = useState([])
+  const [savingSidebar, setSavingSidebar] = useState(false)
+
   // Change password state
   const [pwForm, setPwForm] = useState({ current_password: '', new_password: '', confirm_password: '' })
   const [pwMsg, setPwMsg] = useState(null)
@@ -36,12 +40,60 @@ export default function SettingsPage() {
   const [resetUserId, setResetUserId] = useState(null)
   const [resetPw, setResetPw] = useState('')
 
+  const DEFAULT_SIDEBAR_ITEMS = [
+    { to: '/', label: 'Dashboard' },
+    { to: '/weather', label: 'Weather' },
+    { to: '/analytics', label: 'Analytics' },
+    { to: '/flight-plans', label: 'Flight Plans' },
+    { to: '/checklists', label: 'Checklists' },
+    { to: '/flights', label: 'Flights' },
+    { to: '/missions', label: 'Mission Log' },
+    { to: '/training', label: 'Training Log' },
+    { to: '/pilots', label: 'Pilots' },
+    { to: '/fleet', label: 'Fleet' },
+    { to: '/fleet-health', label: 'Fleet Health' },
+    { to: '/certifications', label: 'Certifications' },
+    { to: '/maintenance', label: 'Maintenance' },
+    { to: '/media', label: 'Photo Gallery' },
+    { to: '/documents', label: 'Documents' },
+    { to: '/reports', label: 'Reports' },
+    { to: '/compliance', label: 'Compliance' },
+    { to: '/alerts', label: 'Alerts' },
+    { to: '/incidents', label: 'Incidents' },
+    { to: '/settings', label: 'Settings' },
+    { to: '/audit-log', label: 'Audit Log' },
+  ]
+
   useEffect(() => {
     api.get('/settings').then(data => {
       const map = {}
       data.forEach(s => { map[s.key] = s.value })
       setSettings(map)
       if (map.org_logo) setLogoUrl(map.org_logo + '?t=' + Date.now())
+      // Load sidebar config
+      if (map.sidebar_config) {
+        try {
+          const parsed = JSON.parse(map.sidebar_config)
+          // Merge with defaults to pick up any new items
+          const configMap = {}
+          parsed.forEach(c => { configMap[c.to] = c })
+          const merged = DEFAULT_SIDEBAR_ITEMS.map((item, i) => {
+            const existing = configMap[item.to]
+            return {
+              to: item.to,
+              label: item.label,
+              visible: existing ? existing.visible !== false : true,
+              order: existing ? existing.order : i,
+            }
+          })
+          merged.sort((a, b) => a.order - b.order)
+          setSidebarItems(merged)
+        } catch {
+          setSidebarItems(DEFAULT_SIDEBAR_ITEMS.map((item, i) => ({ ...item, visible: true, order: i })))
+        }
+      } else {
+        setSidebarItems(DEFAULT_SIDEBAR_ITEMS.map((item, i) => ({ ...item, visible: true, order: i })))
+      }
     }).catch(console.error)
     if (isAdmin) {
       api.get('/auth/users').then(setUsers).catch(console.error)
@@ -406,6 +458,92 @@ export default function SettingsPage() {
               {testResult.message}
             </span>
           )}
+        </div>
+      )}
+
+      {/* API Documentation */}
+      <div className="bg-card border border-border rounded-xl p-6">
+        <h3 className="text-lg font-semibold text-foreground mb-2">API Documentation</h3>
+        <p className="text-sm text-muted-foreground mb-3">Browse the interactive API documentation powered by Swagger UI.</p>
+        <a href="/docs" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-primary hover:underline text-sm">
+          <ExternalLink className="w-4 h-4" /> Open API Documentation (Swagger UI)
+        </a>
+      </div>
+
+      {/* Sidebar Configuration - Admin Only */}
+      {isAdmin && sidebarItems.length > 0 && (
+        <div className="bg-card border border-border rounded-xl p-6">
+          <h3 className="text-lg font-semibold text-foreground mb-1">Sidebar Configuration</h3>
+          <p className="text-sm text-muted-foreground mb-4">Toggle visibility and reorder sidebar navigation items.</p>
+          <div className="space-y-1">
+            {sidebarItems.map((item, idx) => (
+              <div key={item.to} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/30">
+                <div className="flex flex-col gap-0.5">
+                  <button
+                    onClick={() => {
+                      if (idx === 0) return
+                      const items = [...sidebarItems]
+                      ;[items[idx - 1], items[idx]] = [items[idx], items[idx - 1]]
+                      items.forEach((it, i) => { it.order = i })
+                      setSidebarItems(items)
+                    }}
+                    disabled={idx === 0}
+                    className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"
+                  >
+                    <ChevronUp className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (idx === sidebarItems.length - 1) return
+                      const items = [...sidebarItems]
+                      ;[items[idx], items[idx + 1]] = [items[idx + 1], items[idx]]
+                      items.forEach((it, i) => { it.order = i })
+                      setSidebarItems(items)
+                    }}
+                    disabled={idx === sidebarItems.length - 1}
+                    className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"
+                  >
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <label className="flex items-center gap-3 flex-1 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={item.visible}
+                    onChange={() => {
+                      const items = [...sidebarItems]
+                      items[idx] = { ...items[idx], visible: !items[idx].visible }
+                      setSidebarItems(items)
+                    }}
+                    className="w-4 h-4 rounded border-border text-primary focus:ring-ring"
+                  />
+                  <span className={`text-sm ${item.visible ? 'text-foreground' : 'text-muted-foreground line-through'}`}>
+                    {item.label}
+                  </span>
+                  <span className="text-xs text-muted-foreground ml-auto">{item.to}</span>
+                </label>
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={async () => {
+              setSavingSidebar(true)
+              try {
+                const config = sidebarItems.map((item, i) => ({ to: item.to, label: item.label, visible: item.visible, order: i }))
+                await api.put('/settings/bulk', [{ key: 'sidebar_config', value: JSON.stringify(config) }])
+                toast.success('Sidebar configuration saved')
+              } catch (err) {
+                toast.error(err.message)
+              } finally {
+                setSavingSidebar(false)
+              }
+            }}
+            disabled={savingSidebar}
+            className="mt-4 flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50"
+          >
+            {savingSidebar ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            Save Sidebar Config
+          </button>
         </div>
       )}
 

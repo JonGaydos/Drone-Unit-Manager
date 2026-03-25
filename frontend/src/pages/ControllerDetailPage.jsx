@@ -2,18 +2,23 @@ import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/contexts/ToastContext'
 import { STATUS_COLORS } from '@/lib/constants'
 import {
-  ArrowLeft, Gamepad2, Wrench, Edit
+  ArrowLeft, Gamepad2, Wrench, Edit, Save, X, Loader2
 } from 'lucide-react'
 import DocumentUpload from '@/components/DocumentUpload'
 
 export default function ControllerDetailPage() {
   const { id } = useParams()
   const { isAdmin } = useAuth()
+  const toast = useToast()
   const [controller, setController] = useState(null)
   const [maintenance, setMaintenance] = useState([])
   const [loading, setLoading] = useState(true)
+  const [editing, setEditing] = useState(false)
+  const [editForm, setEditForm] = useState({})
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     Promise.all([
@@ -24,6 +29,36 @@ export default function ControllerDetailPage() {
       setMaintenance(m)
     }).catch(() => {}).finally(() => setLoading(false))
   }, [id])
+
+  const startEditing = () => {
+    setEditForm({
+      serial_number: controller.serial_number || '',
+      nickname: controller.nickname || '',
+      manufacturer: controller.manufacturer || '',
+      model: controller.model || '',
+      status: controller.status || 'active',
+      notes: controller.notes || '',
+    })
+    setEditing(true)
+  }
+
+  const cancelEditing = () => {
+    setEditForm({})
+    setEditing(false)
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      const updated = await api.patch(`/controllers/${id}`, editForm)
+      setController(updated)
+      setEditing(false)
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>
   if (!controller) return <div className="text-center text-muted-foreground py-12">Controller not found</div>
@@ -43,22 +78,76 @@ export default function ControllerDetailPage() {
             <Gamepad2 className="w-8 h-8" />
           </div>
           <div className="flex-1">
-            <div className="flex items-center gap-3">
-              <h2 className="text-xl font-bold text-foreground">{displayName}</h2>
-              {isAdmin && (
-                <Link to="/fleet" className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent">
-                  <Edit className="w-4 h-4" />
-                </Link>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-4 mt-2 text-sm text-muted-foreground">
-              {controller.manufacturer && <span>{controller.manufacturer}</span>}
-              {controller.model && <span>{controller.model}</span>}
-              <span>S/N: {controller.serial_number}</span>
-            </div>
-            <span className={`inline-flex mt-2 px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[controller.status] || 'bg-zinc-500/15 text-zinc-400'}`}>
-              {controller.status || 'unknown'}
-            </span>
+            {editing ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Nickname</label>
+                    <input type="text" value={editForm.nickname} onChange={e => setEditForm({...editForm, nickname: e.target.value})}
+                      className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Serial Number</label>
+                    <input type="text" value={editForm.serial_number} onChange={e => setEditForm({...editForm, serial_number: e.target.value})}
+                      className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Manufacturer</label>
+                    <input type="text" value={editForm.manufacturer} onChange={e => setEditForm({...editForm, manufacturer: e.target.value})}
+                      className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Model</label>
+                    <input type="text" value={editForm.model} onChange={e => setEditForm({...editForm, model: e.target.value})}
+                      className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Status</label>
+                    <select value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})}
+                      className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm">
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                      <option value="maintenance">Maintenance</option>
+                      <option value="retired">Retired</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Notes</label>
+                  <textarea value={editForm.notes} onChange={e => setEditForm({...editForm, notes: e.target.value})}
+                    className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm h-16 resize-none focus:outline-none focus:ring-2 focus:ring-ring" />
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={handleSave} disabled={saving}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50">
+                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save
+                  </button>
+                  <button onClick={cancelEditing}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90">
+                    <X className="w-4 h-4" /> Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-3">
+                  <h2 className="text-xl font-bold text-foreground">{displayName}</h2>
+                  {isAdmin && (
+                    <button onClick={startEditing} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent">
+                      <Edit className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-4 mt-2 text-sm text-muted-foreground">
+                  {controller.manufacturer && <span>{controller.manufacturer}</span>}
+                  {controller.model && <span>{controller.model}</span>}
+                  <span>S/N: {controller.serial_number}</span>
+                </div>
+                <span className={`inline-flex mt-2 px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[controller.status] || 'bg-zinc-500/15 text-zinc-400'}`}>
+                  {controller.status || 'unknown'}
+                </span>
+              </>
+            )}
           </div>
         </div>
       </div>

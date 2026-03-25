@@ -258,11 +258,11 @@ export default function IncidentPage() {
         api.get('/vehicles'),
         api.get('/flights?limit=100'),
       ])
-      setIncidents(inc)
+      setIncidents(Array.isArray(inc) ? inc : inc.incidents || [])
       setStats(st)
-      setPilots(p)
-      setVehicles(v)
-      setFlights(f)
+      setPilots(Array.isArray(p) ? p : p.pilots || [])
+      setVehicles(Array.isArray(v) ? v : v.vehicles || [])
+      setFlights(Array.isArray(f) ? f : f.flights || [])
     } catch (err) {
       toast.error(err.message)
     } finally {

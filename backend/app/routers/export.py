@@ -130,6 +130,34 @@ def export_maintenance_csv(
     )
 
 
+@router.get("/checklists/csv")
+def export_checklists_csv(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    from app.models.checklist import ChecklistCompletion, ChecklistTemplate
+    completions = db.query(ChecklistCompletion).order_by(ChecklistCompletion.completed_at.desc()).all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Date", "Pilot", "Vehicle", "Template", "Passed", "Notes"])
+    for c in completions:
+        pilot = db.query(Pilot).filter(Pilot.id == c.pilot_id).first()
+        vehicle = db.query(Vehicle).filter(Vehicle.id == c.vehicle_id).first() if c.vehicle_id else None
+        template = db.query(ChecklistTemplate).filter(ChecklistTemplate.id == c.template_id).first()
+        writer.writerow([
+            c.completed_at.strftime("%Y-%m-%d %H:%M") if c.completed_at else "",
+            pilot.full_name if pilot else "",
+            f"{vehicle.manufacturer} {vehicle.model}" if vehicle else "",
+            template.name if template else "",
+            "Yes" if c.all_passed else "No",
+            c.notes or "",
+        ])
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=checklists_export.csv"},
+    )
+
+
 @router.get("/certifications/csv")
 def export_certifications_csv(
     pilot_id: int | None = None,
