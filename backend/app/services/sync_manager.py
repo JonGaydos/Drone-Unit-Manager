@@ -195,6 +195,28 @@ class SyncManager:
             result.errors.append(f"Users sync error: {exc}")
             logger.error("Users sync error: %s", exc, exc_info=True)
 
+        # --- Match Skydio users to pilots and populate emails ---
+        try:
+            for su in skydio_users:
+                su_name = su.get("name", "").strip()
+                su_email = su.get("email", "")
+                if not su_name or not su_email:
+                    continue
+                parts = su_name.split()
+                if len(parts) >= 2:
+                    first, last = parts[0], parts[-1]
+                    pilot = db.query(Pilot).filter(
+                        Pilot.first_name.ilike(first),
+                        Pilot.last_name.ilike(last),
+                        Pilot.status == "active",
+                    ).first()
+                    if pilot and not pilot.email:
+                        pilot.email = su_email
+                        logger.info("Set email for pilot %s %s: %s", first, last, su_email)
+            db.flush()
+        except Exception as exc:
+            logger.warning("Pilot email matching error: %s", exc)
+
         # --- Sync vehicles ---
         try:
             vehicles_data = provider.sync_vehicles(creds)
@@ -310,6 +332,21 @@ class SyncManager:
                     addr = detail.get("takeoff_address") or detail.get("location")
                     if addr and not flight.takeoff_address:
                         flight.takeoff_address = str(addr)
+
+                    # Reverse geocode if we have coordinates but no address
+                    if not flight.takeoff_address and flight.takeoff_lat and flight.takeoff_lon:
+                        try:
+                            import httpx
+                            geo_resp = httpx.get(
+                                "https://nominatim.openstreetmap.org/reverse",
+                                params={"lat": flight.takeoff_lat, "lon": flight.takeoff_lon, "format": "json", "zoom": 16},
+                                headers={"User-Agent": "DroneUnitManager/1.0"},
+                                timeout=5,
+                            )
+                            if geo_resp.status_code == 200:
+                                flight.takeoff_address = geo_resp.json().get("display_name", "")
+                        except Exception:
+                            pass
 
                     vs = detail.get("vehicle_serial")
                     if vs and not flight.vehicle_id:
