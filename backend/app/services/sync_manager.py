@@ -225,18 +225,30 @@ class SyncManager:
                         Pilot.email.ilike(su_email),
                     ).first()
 
-                # Fallback: try partial name from email (e.g. jgaydos -> Gaydos)
+                # Fallback: match email username patterns
+                # Pattern 1: firstinitial+lastname (e.g. jgaydos)
+                # Pattern 2: first3oflast+firstname (e.g. gayjonathan)
                 if not pilot and su_email:
                     username = su_email.split("@")[0].lower()
                     all_pilots = db.query(Pilot).filter(Pilot.status == "active").all()
                     for p in all_pilots:
                         last_lower = (p.last_name or "").lower()
                         first_lower = (p.first_name or "").lower()
-                        if last_lower and last_lower in username:
+                        if not last_lower or not first_lower:
+                            continue
+                        # Pattern 1: jgaydos = j + gaydos
+                        p1 = first_lower[0] + last_lower
+                        # Pattern 2: gayjonathan = gay + jonathan
+                        p2 = last_lower[:3] + first_lower
+                        # Pattern 3: lastname only in username
+                        if username == p1 or username == p2 or username == last_lower + first_lower or username == first_lower + last_lower:
                             pilot = p
+                            logger.info("    -> Pattern match: '%s' matched pilot %s %s", username, p.first_name, p.last_name)
                             break
-                        if first_lower and last_lower and username.startswith(first_lower[0]) and last_lower in username:
+                        # Looser: last name appears in username
+                        if len(last_lower) >= 4 and last_lower in username:
                             pilot = p
+                            logger.info("    -> Substring match: '%s' contains '%s' -> %s %s", username, last_lower, p.first_name, p.last_name)
                             break
 
                 if pilot:
