@@ -174,8 +174,12 @@ def get_incident(incident_id: int, db: Session = Depends(get_db), user: User = D
 
 @router.post("", response_model=IncidentOut)
 def create_incident(data: IncidentCreate, db: Session = Depends(get_db), user: User = Depends(require_pilot)):
+    try:
+        parsed_date = date.fromisoformat(data.date)
+    except ValueError:
+        raise HTTPException(status_code=422, detail=f"Invalid date format: {data.date}")
     incident = Incident(
-        date=date.fromisoformat(data.date),
+        date=parsed_date,
         title=data.title,
         severity=data.severity,
         category=data.category,
@@ -211,9 +215,15 @@ def update_incident(incident_id: int, data: IncidentUpdate, db: Session = Depend
         raise HTTPException(status_code=403, detail="You can only edit your own incident reports")
     update_data = data.model_dump(exclude_unset=True)
     if "date" in update_data and update_data["date"] is not None:
-        update_data["date"] = date.fromisoformat(update_data["date"])
+        try:
+            update_data["date"] = date.fromisoformat(update_data["date"])
+        except ValueError:
+            raise HTTPException(status_code=422, detail=f"Invalid date format: {update_data['date']}")
     if "resolution_date" in update_data and update_data["resolution_date"] is not None:
-        update_data["resolution_date"] = date.fromisoformat(update_data["resolution_date"])
+        try:
+            update_data["resolution_date"] = date.fromisoformat(update_data["resolution_date"])
+        except ValueError:
+            raise HTTPException(status_code=422, detail=f"Invalid resolution_date format: {update_data['resolution_date']}")
     for key, value in update_data.items():
         setattr(incident, key, value)
     log_action(db, user.id, user.display_name, "update", "incident", incident.id, incident.title,

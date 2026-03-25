@@ -76,7 +76,7 @@ export default function AuditLogPage() {
         setLogs(data.logs)
         setTotal(data.total)
       })
-      .catch(console.error)
+      .catch(() => {})
       .finally(() => setLoading(false))
   }, [isAdmin, page, perPage, entityType, action])
 

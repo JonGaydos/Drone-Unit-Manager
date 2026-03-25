@@ -91,7 +91,7 @@ export default function AnalyticsPage() {
       setPilotHours(pil)
       // Handle paginated or raw array response
       setAllFlights(Array.isArray(flights) ? flights : flights.flights || flights.items || flights.data || [])
-    }).catch(console.error).finally(() => setLoading(false))
+    }).catch(() => {}).finally(() => setLoading(false))
   }, [])
 
   // Compute filtered subsets from allFlights when filters change

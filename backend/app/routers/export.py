@@ -1,6 +1,5 @@
 import csv
 import io
-import json
 from datetime import date
 
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException

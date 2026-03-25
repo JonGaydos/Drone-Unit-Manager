@@ -4,11 +4,12 @@ from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
 from app.models.flight import Flight
 from app.models.pilot import Pilot
@@ -89,7 +90,7 @@ def generate_report_pdf(config: ReportConfig, db: Session = Depends(get_db), use
     logo_path = None
     if logo_setting and logo_setting.value:
         for ext in ["png", "jpg", "jpeg", "gif", "webp"]:
-            candidate = os.path.join("data", "uploads", "org", f"logo.{ext}")
+            candidate = os.path.join(str(settings.UPLOAD_DIR), "org", f"logo.{ext}")
             if os.path.exists(candidate):
                 logo_path = candidate
                 break

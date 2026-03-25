@@ -50,7 +50,7 @@ export function Layout() {
 
       {/* Mobile overlay backdrop */}
       {mobileOpen && (
-        <div className="md:hidden fixed inset-0 bg-black/50 z-40" onClick={() => setMobileOpen(false)} />
+        <div className="md:hidden fixed inset-0 bg-black/50 z-40" role="button" aria-label="Close menu" onClick={() => setMobileOpen(false)} />
       )}
 
       <Sidebar mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} />

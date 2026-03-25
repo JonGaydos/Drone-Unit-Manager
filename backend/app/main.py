@@ -130,10 +130,13 @@ app.include_router(components.router)
 app.include_router(geofences.router)
 
 
+@app.get("/api/health")
+def health_check():
+    return {"status": "ok", "app": "Drone Unit Manager"}
+
+
 # Serve frontend static files in production (Docker)
-import os
 from pathlib import Path
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 _static_dir = Path(__file__).parent.parent / "static"
@@ -144,8 +147,3 @@ if _static_dir.exists():
         if file_path.is_file():
             return FileResponse(file_path)
         return FileResponse(_static_dir / "index.html")
-
-
-@app.get("/api/health")
-def health_check():
-    return {"status": "ok", "app": "Drone Unit Manager"}

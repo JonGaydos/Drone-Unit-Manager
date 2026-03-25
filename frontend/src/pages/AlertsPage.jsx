@@ -27,7 +27,7 @@ export default function AlertsPage() {
     ]).then(([a, c]) => {
       setAlerts(a)
       setCount(typeof c === 'object' ? c.count : c)
-    }).catch(console.error).finally(() => setLoading(false))
+    }).catch(() => {}).finally(() => setLoading(false))
   }
 
   useEffect(() => { load() }, [severityFilter])

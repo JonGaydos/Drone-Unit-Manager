@@ -29,7 +29,7 @@ export default function FleetHealthPage() {
   useEffect(() => {
     api.get('/dashboard/analytics/fleet-health')
       .then(setData)
-      .catch(console.error)
+      .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
 

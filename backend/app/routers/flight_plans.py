@@ -97,6 +97,13 @@ class FlightPlanOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+def _parse_datetime(value: str) -> datetime:
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        raise HTTPException(status_code=422, detail=f"Invalid datetime format: {value}")
+
+
 def _enrich(plan: FlightPlan, db: Session) -> FlightPlanOut:
     out = FlightPlanOut.model_validate(plan)
     if plan.pilot_id:
@@ -165,7 +172,7 @@ def get_flight_plan(plan_id: int, db: Session = Depends(get_db), user: User = De
 def create_flight_plan(data: FlightPlanCreate, db: Session = Depends(get_db), user: User = Depends(require_pilot)):
     plan = FlightPlan(
         title=data.title,
-        date_planned=datetime.fromisoformat(data.date_planned),
+        date_planned=_parse_datetime(data.date_planned),
         pilot_id=data.pilot_id,
         vehicle_id=data.vehicle_id,
         location=data.location,
@@ -200,7 +207,7 @@ def update_flight_plan(plan_id: int, data: FlightPlanUpdate, db: Session = Depen
         raise HTTPException(status_code=400, detail="Can only edit pending or denied plans")
     update_data = data.model_dump(exclude_unset=True)
     if "date_planned" in update_data and update_data["date_planned"] is not None:
-        update_data["date_planned"] = datetime.fromisoformat(update_data["date_planned"])
+        update_data["date_planned"] = _parse_datetime(update_data["date_planned"])
     for key, value in update_data.items():
         setattr(plan, key, value)
     log_action(db, user.id, user.display_name, "update", "flight_plan", plan.id, plan.title,

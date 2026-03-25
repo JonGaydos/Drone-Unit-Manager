@@ -95,6 +95,11 @@ def list_review_queue(
     return [_flight_to_out(f) for f in flights]
 
 
+@router.get("/purposes/list", response_model=list[FlightPurposeOut])
+def list_purposes(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    return [FlightPurposeOut.model_validate(p) for p in db.query(FlightPurpose).order_by(FlightPurpose.sort_order, FlightPurpose.name).all()]
+
+
 @router.get("/{flight_id}", response_model=FlightOut)
 def get_flight(flight_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     flight = db.query(Flight).options(
@@ -398,11 +403,6 @@ def delete_flight(flight_id: int, db: Session = Depends(get_db), admin: User = D
     db.delete(flight)
     db.commit()
     return {"ok": True}
-
-
-@router.get("/purposes/list", response_model=list[FlightPurposeOut])
-def list_purposes(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    return [FlightPurposeOut.model_validate(p) for p in db.query(FlightPurpose).order_by(FlightPurpose.sort_order, FlightPurpose.name).all()]
 
 
 @router.post("/purposes", response_model=FlightPurposeOut)

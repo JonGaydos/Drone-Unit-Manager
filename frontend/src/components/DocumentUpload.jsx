@@ -20,7 +20,7 @@ export default function DocumentUpload({ entityType, entityId }) {
   const fetchDocs = useCallback(() => {
     api.get(`/documents?entity_type=${entityType}&entity_id=${entityId}`)
       .then(setDocuments)
-      .catch(console.error)
+      .catch(() => {})
   }, [entityType, entityId])
 
   useEffect(() => {

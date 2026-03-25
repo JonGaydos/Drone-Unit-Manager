@@ -3,6 +3,7 @@ import os
 import uuid
 import shutil
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
@@ -10,6 +11,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from PIL import Image as PILImage
 
+from app.config import settings
 from app.database import get_db
 from app.models.photo import Photo, PhotoPilot
 from app.models.pilot import Pilot
@@ -17,7 +19,7 @@ from app.routers.auth import get_current_user, require_pilot
 
 router = APIRouter(prefix="/api/photos", tags=["photos"])
 
-UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "uploads", "photos")
+UPLOAD_DIR = str(Path(settings.UPLOAD_DIR) / "photos")
 THUMB_WIDTH = 400
 
 
@@ -157,7 +159,7 @@ def update_photo(
     date_taken: Optional[str] = Form(None),
     pilot_ids: Optional[str] = Form(None),
     db: Session = Depends(get_db),
-    user=Depends(get_current_user),
+    user=Depends(require_pilot),
 ):
     photo = db.query(Photo).filter(Photo.id == photo_id).first()
     if not photo:

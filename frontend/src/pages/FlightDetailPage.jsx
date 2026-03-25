@@ -67,7 +67,7 @@ export default function FlightDetailPage() {
       setVehicles(v)
       setPurposes(pu)
       initEditForm(f)
-    }).catch(console.error).finally(() => setLoading(false))
+    }).catch(() => {}).finally(() => setLoading(false))
   }, [id])
 
   const handleSave = async () => {

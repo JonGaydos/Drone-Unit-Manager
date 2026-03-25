@@ -45,7 +45,7 @@ export default function ReportsPage() {
       if (logoSetting?.value) {
         setOrgLogoUrl(logoSetting.value)
       }
-    }).catch(console.error).finally(() => setLoading(false))
+    }).catch(() => {}).finally(() => setLoading(false))
   }, [])
 
   const togglePilot = (id) => {

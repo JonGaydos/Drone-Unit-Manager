@@ -30,7 +30,7 @@ export default function DocumentStoragePage() {
       // Expand all folders by default
       setExpandedFolders(new Set(f.map(folder => folder.id)))
     } catch (err) {
-      console.error(err)
+      // silently catch
     }
   }, [])
 
@@ -44,7 +44,7 @@ export default function DocumentStoragePage() {
         setDocuments([])
       }
     } catch (err) {
-      console.error(err)
+      // silently catch
     } finally {
       setDocsLoading(false)
     }
@@ -70,7 +70,7 @@ export default function DocumentStoragePage() {
       api.get('/documents').then(docs => {
         const unfiled = (Array.isArray(docs) ? docs : []).filter(d => !d.folder_id)
         setDocuments(unfiled)
-      }).catch(console.error).finally(() => setDocsLoading(false))
+      }).catch(() => {}).finally(() => setDocsLoading(false))
     } else if (selectedFolder) {
       loadDocuments(selectedFolder)
     } else {
@@ -114,7 +114,7 @@ export default function DocumentStoragePage() {
       setNewFolderParent(null)
       loadFolders()
     } catch (err) {
-      console.error(err)
+      // silently catch
     }
   }
 
@@ -126,7 +126,7 @@ export default function DocumentStoragePage() {
       setEditName('')
       loadFolders()
     } catch (err) {
-      console.error(err)
+      // silently catch
     }
   }
 
@@ -137,7 +137,7 @@ export default function DocumentStoragePage() {
       if (selectedFolder === id) setSelectedFolder(null)
       loadFolders()
     } catch (err) {
-      console.error(err)
+      // silently catch
     }
   }
 
@@ -148,7 +148,7 @@ export default function DocumentStoragePage() {
       loadFolders()
       loadAllDocuments()
     } catch (err) {
-      console.error(err)
+      // silently catch
     }
   }
 

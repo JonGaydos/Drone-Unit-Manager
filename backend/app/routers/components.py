@@ -115,7 +115,7 @@ def create_component(data: ComponentCreate, db: Session = Depends(get_db), user:
     db.add(c)
     db.commit()
     db.refresh(c)
-    log_action(db, user.id, "component.create", "component", c.id, new_data={"name": c.name})
+    log_action(db, user.id, user.display_name, "create", "component", c.id, data.name)
     return _serialize(c)
 
 
@@ -132,7 +132,7 @@ def update_component(component_id: int, data: ComponentUpdate, db: Session = Dep
         setattr(c, key, val)
     db.commit()
     db.refresh(c)
-    log_action(db, user.id, "component.update", "component", c.id, new_data=update_data)
+    log_action(db, user.id, user.display_name, "update", "component", c.id, c.name, changes=update_data)
     return _serialize(c)
 
 
@@ -141,7 +141,7 @@ def delete_component(component_id: int, db: Session = Depends(get_db), user: Use
     c = db.query(Component).filter(Component.id == component_id).first()
     if not c:
         raise HTTPException(404, "Component not found")
-    log_action(db, user.id, "component.delete", "component", c.id, old_data={"name": c.name})
+    log_action(db, user.id, user.display_name, "delete", "component", c.id, c.name)
     db.delete(c)
     db.commit()
     return {"ok": True}

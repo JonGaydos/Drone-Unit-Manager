@@ -158,7 +158,7 @@ def create_geofence(data: GeofenceCreate, db: Session = Depends(get_db), user: U
     db.add(g)
     db.commit()
     db.refresh(g)
-    log_action(db, user.id, "geofence.create", "geofence", g.id, new_data={"name": g.name})
+    log_action(db, user.id, user.display_name, "create", "geofence", g.id, data.name)
     return _serialize(g)
 
 
@@ -172,7 +172,7 @@ def update_geofence(geofence_id: int, data: GeofenceUpdate, db: Session = Depend
         setattr(g, key, val)
     db.commit()
     db.refresh(g)
-    log_action(db, user.id, "geofence.update", "geofence", g.id, new_data=update_data)
+    log_action(db, user.id, user.display_name, "update", "geofence", g.id, g.name, changes=update_data)
     return _serialize(g)
 
 
@@ -181,7 +181,7 @@ def delete_geofence(geofence_id: int, db: Session = Depends(get_db), user: User 
     g = db.query(Geofence).filter(Geofence.id == geofence_id).first()
     if not g:
         raise HTTPException(404, "Geofence not found")
-    log_action(db, user.id, "geofence.delete", "geofence", g.id, old_data={"name": g.name})
+    log_action(db, user.id, user.display_name, "delete", "geofence", g.id, g.name)
     db.delete(g)
     db.commit()
     return {"ok": True}

@@ -10,7 +10,7 @@ from app.models.maintenance_schedule import MaintenanceSchedule
 from app.models.maintenance import MaintenanceRecord
 from app.models.pilot import Pilot
 from app.models.user import User
-from app.routers.auth import get_current_user
+from app.routers.auth import get_current_user, require_pilot
 
 router = APIRouter(prefix="/api/maintenance/schedules", tags=["maintenance-schedules"])
 
@@ -113,7 +113,7 @@ def get_schedule(
 def create_schedule(
     data: ScheduleCreate,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_pilot),
 ):
     schedule = MaintenanceSchedule(
         name=data.name,
@@ -128,7 +128,7 @@ def create_schedule(
     db.add(schedule)
     db.commit()
     db.refresh(schedule)
-    return {"id": schedule.id, "message": "Schedule created"}
+    return {"ok": True, "id": schedule.id}
 
 
 @router.patch("/{schedule_id}")
@@ -136,7 +136,7 @@ def update_schedule(
     schedule_id: int,
     data: ScheduleUpdate,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_pilot),
 ):
     schedule = db.query(MaintenanceSchedule).filter(MaintenanceSchedule.id == schedule_id).first()
     if not schedule:
@@ -145,28 +145,28 @@ def update_schedule(
     for key, value in update_data.items():
         setattr(schedule, key, value)
     db.commit()
-    return {"message": "Schedule updated"}
+    return {"ok": True}
 
 
 @router.delete("/{schedule_id}")
 def delete_schedule(
     schedule_id: int,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_pilot),
 ):
     schedule = db.query(MaintenanceSchedule).filter(MaintenanceSchedule.id == schedule_id).first()
     if not schedule:
         raise HTTPException(404, "Schedule not found")
     db.delete(schedule)
     db.commit()
-    return {"message": "Schedule deleted"}
+    return {"ok": True}
 
 
 @router.post("/{schedule_id}/complete")
 def complete_schedule(
     schedule_id: int,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_pilot),
 ):
     schedule = db.query(MaintenanceSchedule).filter(MaintenanceSchedule.id == schedule_id).first()
     if not schedule:
@@ -189,7 +189,7 @@ def complete_schedule(
     db.add(record)
     db.commit()
     return {
-        "message": "Schedule marked complete",
+        "ok": True,
         "last_completed": today.isoformat(),
         "next_due": schedule.next_due.isoformat(),
     }

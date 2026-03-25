@@ -26,7 +26,7 @@ export default function MediaPage() {
     ]).then(([p, pl]) => {
       setPhotos(p)
       setPilots(pl)
-    }).catch(console.error).finally(() => setLoading(false))
+    }).catch(() => {}).finally(() => setLoading(false))
   }, [])
 
   useEffect(() => { load() }, [load])
@@ -319,7 +319,7 @@ function UploadModal({ pilots, onClose, onSuccess }) {
       await api.upload('/photos/upload', fd)
       onSuccess()
     } catch (err) {
-      console.error(err)
+      // silently catch
     } finally {
       setUploading(false)
     }
@@ -456,7 +456,7 @@ function EditModal({ photo, pilots, onClose, onSuccess }) {
       })
       onSuccess()
     } catch (err) {
-      console.error(err)
+      // silently catch
     } finally {
       setSaving(false)
     }

@@ -8,7 +8,7 @@ from sqlalchemy import func
 from app.database import get_db
 from app.models.folder import Folder
 from app.models.document import Document
-from app.routers.auth import get_current_user
+from app.routers.auth import get_current_user, require_pilot
 
 router = APIRouter(prefix="/api/folders", tags=["folders"])
 
@@ -63,7 +63,7 @@ def get_folder_documents(folder_id: int, db: Session = Depends(get_db), _user=De
 
 
 @router.post("")
-def create_folder(data: FolderCreate, db: Session = Depends(get_db), _user=Depends(get_current_user)):
+def create_folder(data: FolderCreate, db: Session = Depends(get_db), _user=Depends(require_pilot)):
     folder = Folder(
         name=data.name,
         parent_id=data.parent_id,
@@ -76,7 +76,7 @@ def create_folder(data: FolderCreate, db: Session = Depends(get_db), _user=Depen
 
 
 @router.patch("/{folder_id}")
-def update_folder(folder_id: int, data: FolderUpdate, db: Session = Depends(get_db), _user=Depends(get_current_user)):
+def update_folder(folder_id: int, data: FolderUpdate, db: Session = Depends(get_db), _user=Depends(require_pilot)):
     folder = db.query(Folder).filter(Folder.id == folder_id).first()
     if not folder:
         raise HTTPException(404, "Folder not found")
@@ -91,7 +91,7 @@ def update_folder(folder_id: int, data: FolderUpdate, db: Session = Depends(get_
 
 
 @router.delete("/{folder_id}")
-def delete_folder(folder_id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
+def delete_folder(folder_id: int, db: Session = Depends(get_db), _user=Depends(require_pilot)):
     folder = db.query(Folder).filter(Folder.id == folder_id).first()
     if not folder:
         raise HTTPException(404, "Folder not found")
