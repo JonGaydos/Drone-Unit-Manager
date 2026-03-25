@@ -42,7 +42,6 @@ const navItems = [
   { to: '/training', icon: GraduationCap, label: 'Training Log' },
   { to: '/pilots', icon: Users, label: 'Pilots' },
   { to: '/fleet', icon: Box, label: 'Fleet' },
-  { to: '/fleet-health', icon: Activity, label: 'Fleet Health' },
   { to: '/certifications', icon: ShieldCheck, label: 'Certifications' },
   { to: '/maintenance', icon: Wrench, label: 'Maintenance' },
   { to: '/media', icon: Camera, label: 'Photo Gallery' },

@@ -194,12 +194,24 @@ def refresh_flight_from_api(flight_id: int, db: Session = Depends(get_db), admin
             setattr(flight, field, val)
             updated_fields.append(field)
 
-    # Pilot
-    pilot_name = detail.get("pilot_name") or detail.get("operator_name") or detail.get("user_name")
-    if pilot_name and not flight.pilot_id:
-        flight.pilot_id = _match_pilot(db, pilot_name)
-        if flight.pilot_id:
-            updated_fields.append("pilot")
+    # Pilot — match by email first, then by name
+    if not flight.pilot_id:
+        user_email = detail.get("user_email")
+        if user_email:
+            from app.models.pilot import Pilot
+            pilot = db.query(Pilot).filter(
+                Pilot.email.ilike(str(user_email)),
+                Pilot.status == "active",
+            ).first()
+            if pilot:
+                flight.pilot_id = pilot.id
+                updated_fields.append("pilot")
+        if not flight.pilot_id:
+            pilot_name = detail.get("pilot_name") or detail.get("operator_name") or detail.get("user_name")
+            if pilot_name:
+                flight.pilot_id = _match_pilot(db, pilot_name)
+                if flight.pilot_id:
+                    updated_fields.append("pilot")
 
     # Equipment — simple fields
     for api_key, field in [
