@@ -1,3 +1,4 @@
+@import "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
 @import "tailwindcss";
 
 @custom-variant dark (&:where(.dark, .dark *));

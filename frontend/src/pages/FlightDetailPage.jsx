@@ -6,6 +6,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { formatDuration, normalizeDateValue, metersToFeet, mpsToMph } from '@/lib/utils'
 import { sortByName, sortVehicles } from '@/lib/formatters'
 import { ArrowLeft, MapPin, Clock, Gauge, Battery, Plane, Save, RefreshCw, Loader2 } from 'lucide-react'
+import { FlightPathMap } from '@/components/FlightMap'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
@@ -335,6 +336,18 @@ export default function FlightDetailPage() {
         }))
         return (
         <div className="space-y-4">
+          {(flight.takeoff_lat || chartData.some(p => p.lat)) && (
+            <div className="bg-card border border-border rounded-xl p-4">
+              <h3 className="text-sm font-semibold text-foreground mb-3">Flight Path</h3>
+              <FlightPathMap
+                telemetry={chartData}
+                takeoffLat={flight.takeoff_lat}
+                takeoffLon={flight.takeoff_lon}
+                landingLat={flight.landing_lat}
+                landingLon={flight.landing_lon}
+              />
+            </div>
+          )}
           <div className="bg-card border border-border rounded-xl p-5">
             <h3 className="text-sm font-semibold text-foreground mb-4">Altitude (ft)</h3>
             <ResponsiveContainer width="100%" height={250}>
@@ -378,11 +391,19 @@ export default function FlightDetailPage() {
       })()}
 
       {telemetry.length === 0 && (
-        <div className="bg-card border border-border rounded-xl p-8 text-center text-muted-foreground">
-          <MapPin className="w-8 h-8 mx-auto mb-2 opacity-50" />
-          <p>No telemetry data available for this flight.</p>
-          <p className="text-xs mt-1">Telemetry will be fetched automatically when Skydio API sync is configured.</p>
-        </div>
+        <>
+          {flight.takeoff_lat && (
+            <div className="bg-card border border-border rounded-xl p-4">
+              <h3 className="text-sm font-semibold text-foreground mb-3">Flight Location</h3>
+              <FlightPathMap takeoffLat={flight.takeoff_lat} takeoffLon={flight.takeoff_lon} height="300px" />
+            </div>
+          )}
+          <div className="bg-card border border-border rounded-xl p-8 text-center text-muted-foreground">
+            <MapPin className="w-8 h-8 mx-auto mb-2 opacity-50" />
+            <p>No telemetry data available for this flight.</p>
+            <p className="text-xs mt-1">Click "Refresh from API" to fetch telemetry data.</p>
+          </div>
+        </>
       )}
     </div>
   )

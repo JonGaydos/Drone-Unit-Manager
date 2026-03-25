@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { api } from '@/api/client'
 import { Plane, Clock, Users, Box, AlertTriangle, ClipboardCheck, ArrowRight } from 'lucide-react'
 import { formatDuration, formatHours } from '@/lib/utils'
+import { FlightLocationsMap } from '@/components/FlightMap'
 
 function StatCard({ title, value, subtitle, icon: Icon, color = 'primary', to }) {
   const colorMap = {
@@ -315,6 +316,13 @@ export default function DashboardPage() {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {recentFlights.some(f => f.takeoff_lat) && (
+        <div className="bg-card border border-border rounded-xl p-4">
+          <h3 className="font-semibold text-foreground mb-3">Recent Flight Locations</h3>
+          <FlightLocationsMap flights={recentFlights} height="350px" />
         </div>
       )}
     </div>

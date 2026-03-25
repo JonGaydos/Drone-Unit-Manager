@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { api } from '@/api/client'
 import { X, Filter } from 'lucide-react'
+import { FlightLocationsMap } from '@/components/FlightMap'
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -586,6 +587,13 @@ export default function AnalyticsPage() {
           </div>
         </ChartCard>
       </div>
+
+      {allFlights.some(f => f.takeoff_lat) && (
+        <div className="bg-card border border-border rounded-xl p-4">
+          <h3 className="text-lg font-semibold text-foreground mb-3">Flight Locations</h3>
+          <FlightLocationsMap flights={hasActiveFilter ? filteredFlights : allFlights} height="400px" />
+        </div>
+      )}
     </div>
   )
 }

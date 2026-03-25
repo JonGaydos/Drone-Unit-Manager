@@ -6,6 +6,7 @@ import {
   CheckCircle, AlertTriangle, XCircle, ChevronDown, ChevronUp,
   Navigation, Clock, Gauge
 } from 'lucide-react'
+import { LocationPickerMap } from '@/components/FlightMap'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from 'recharts'
@@ -143,7 +144,14 @@ export default function WeatherPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              <LocationPickerMap
+                lat={coords.lat ? parseFloat(coords.lat) : null}
+                lon={coords.lon ? parseFloat(coords.lon) : null}
+                onSelect={(newLat, newLon) => setCoords({ lat: newLat.toFixed(6), lon: newLon.toFixed(6) })}
+                height="250px"
+              />
+
+              <div className="grid grid-cols-2 gap-2 mt-2">
                 <div>
                   <label className="block text-xs font-medium text-muted-foreground mb-1">Latitude</label>
                   <input
