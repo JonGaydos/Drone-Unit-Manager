@@ -1,180 +1,132 @@
 # Drone Unit Manager
 
-A self-hosted drone fleet management platform for tracking flights, pilots, certifications, equipment, and maintenance. Built for law enforcement and public safety drone programs, but usable by any organization managing a drone fleet.
+A self-hosted drone fleet management platform for law enforcement, public safety, and enterprise drone programs. Track flights, pilots, certifications, equipment, maintenance, compliance, and more from a single application.
 
-> **AirData alternative** — Self-hosted, no subscription fees, full data ownership.
+## Overview
+
+Drone Unit Manager replaces spreadsheets, AirData subscriptions, and scattered documentation with a unified platform that your organization owns and controls. Import flight data from Skydio's Cloud API or Excel spreadsheets, manage pilot certifications and currency, track equipment maintenance, generate compliance reports, and monitor fleet health — all from a modern web interface accessible on desktop and mobile.
+
+The application runs as a single Docker container with no external dependencies. Your data stays on your infrastructure.
 
 ## Features
 
-### Flight Management
-- Import flights from **Skydio Cloud API** with automatic sync
-- Manual flight entry for any drone manufacturer
-- **Excel/CSV import** with intelligent deduplication
-- Flight review queue — verify pilot assignments and add flight purposes
-- Detailed flight statistics and duration tracking
+### Fleet Management
+- Vehicle, battery, controller, sensor, and attachment tracking
+- Equipment check-in/check-out with chain of custody
+- Component-level tracking (propellers, gimbals, cameras) with flight hours and warranty
+- FAA registration tracking with 2-year renewal calculation and history
+
+### Flight Tracking and Telemetry
+- Import flights from Skydio Cloud API or Excel spreadsheets
+- GPS flight path visualization on interactive maps
+- Altitude, speed, and battery telemetry charts
+- Per-flight detail with equipment linkage (battery, sensor, attachments, carrier)
+- Automatic pilot matching via email cross-reference
+- Reverse geocoding for takeoff addresses
 
 ### Pilot Management
-- Full pilot profiles with contact info, badge numbers, and status
-- **Certification tracking** with customizable cert types, expiration dates, and renewal alerts
-- **Certification matrix** — at-a-glance view of all pilots vs. all certifications
-- Equipment qualifications per pilot
-- Individual pilot flight hour reports
+- Pilot profiles with contact info, badge numbers, photos
+- Certification matrix with customizable cert types and status labels
+- Pilot currency tracking (configurable hours-in-days rules)
+- Performance analytics (flights by month, purpose, training hours)
+- Document attachments per pilot
 
-### Analytics Dashboard (Power BI-style)
-- **Interactive cross-filtering** — click any chart element to filter all other charts
-- Flights by purpose, by year, by pilot (pie, bar, line charts)
-- Average flight duration trends
-- Vehicle utilization breakdown
-- Pilot leaderboard with hours and flight counts
+### Pre-Flight Operations
+- Live weather briefing with GO/CAUTION/NO-GO advisory
+- METAR, TAF, and hyperlocal weather from GPS coordinates
+- Configurable weather thresholds per organization
+- Flight plan submission and supervisor approval workflow
+- Customizable pre-flight checklist templates
 
-### Fleet & Equipment
-- Vehicle tracking with FAA registration, serial numbers, acquisition dates
-- **Drill-down vehicle detail pages** — click any vehicle to see its full history
-- Battery management with cycle counts and health tracking
-- Controller, sensor package, attachment, and dock inventory
-- All equipment cross-linked to flights and pilots
+### Compliance and Reporting
+- Compliance dashboard with 0-100 score
+- Expired certifications, registrations, and overdue maintenance tracking
+- PDF reports with organization logo and charts
+- Report types: Flight Summary, Pilot Hours, Equipment Utilization, Pilot Activity Summary, Annual Unit Report, Certifications, Battery Status, Maintenance History
+- CSV export on every page
 
-### Mission & Training Logs
-- **Mission Log** — track operational deployments with man-hours, case numbers, multiple pilots with roles
-- **Training Log** — track training sessions with type, instructor, objectives, outcomes
-- Both link to pilots and drones for comprehensive hour tracking
+### Maintenance
+- Manual maintenance records with history
+- Recurring schedule system (monthly, quarterly, yearly)
+- Automatic alerts when maintenance is due
+- Linked to specific vehicles, batteries, controllers, or organization-wide
 
-### Certifications & Compliance
-- Customizable certification types (FAA Part 107, NIST, equipment-specific, insurance, etc.)
-- Expiration tracking with renewal alerts (30/60/90 day warnings)
-- Category-based filtering (FAA, NIST, Equipment, Insurance, Training, Custom)
-- Inline status editing — click any cell in the matrix to update
-- Document uploads per certification
+### Activity Reports
+- Incident reporting (crashes, near-misses, equipment failures)
+- Success tracking (missing persons found, suspects located, evidence collected)
+- Severity levels, resolution workflow, corrective actions
+- Linked to flights, pilots, and vehicles
 
-### Reports
-- **Customizable report builder** with custom logos
-- Report types: Flight Summary, Pilot Hours, Equipment Utilization, Pilot Certifications, Battery Status, Maintenance History
-- Date range filtering, pilot/vehicle selection
-- PDF and CSV export
+### Photo Gallery and Document Storage
+- Photo uploads with date grouping and lightbox viewer
+- Batch upload support
+- Folder-based document storage with system folders
+- Documents auto-filed from certifications, maintenance, and profiles
 
-### Additional Features
-- **6 theme presets** — Dark, Light, Glass (glassmorphism), Grafana (ops center), Blue, High Contrast
-- **Mobile responsive** — full functionality on phones and tablets
-- Role-based access (Admin and Viewer roles)
-- Document management with file uploads
-- Maintenance scheduling and tracking
-- Alert system with severity levels
-- **Drone-agnostic** — works with any manufacturer, with API integration for Skydio
+### Analytics
+- Interactive Power BI-style cross-filtering
+- Click any chart element to filter all other charts
+- Flights by pilot, year, purpose, and vehicle
+- Flight locations map
 
-## Screenshots
+### API Integrations
+- Skydio Cloud API (flights, vehicles, batteries, controllers, telemetry, users)
+- Drone-agnostic architecture for future integrations (DJI, BRINC)
+- Automatic and manual sync with intelligent deduplication
+- Bulk telemetry fetching
 
-*Screenshots coming soon*
+### Security and Access Control
+- Four roles: Admin, Supervisor, Pilot, Viewer
+- First-run setup wizard (no default credentials)
+- Login rate limiting
+- File upload size limits
+- Activity audit log tracking all changes
+- Path traversal prevention
+- JWT authentication with configurable secret key
+- Password policy enforcement (12+ characters, uppercase, number)
 
 ## Quick Start
 
-### Docker Compose (Recommended)
-
-```bash
-# Clone the repository
-git clone https://github.com/JonGaydos/Drone-Unit-Manager.git
-cd Drone-Unit-Manager
-
-# Copy environment file
-cp .env.example .env
-
-# Start the application
-docker compose up -d
-
-# Access at http://localhost:3014
-# Default login: admin / admin
-```
-
-### Docker Run
+### Docker
 
 ```bash
 docker run -d \
   --name drone-unit-manager \
   -p 3014:8000 \
-  -v dum-data:/app/data \
-  -e SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))") \
+  -v /path/to/data:/app/data \
   -e TZ=America/Chicago \
-  --restart unless-stopped \
   ghcr.io/jongaydos/drone-unit-manager:latest
 ```
 
-## Installation
+Open `http://localhost:3014` and complete the setup wizard.
 
-### Docker on Windows (Docker Desktop)
-
-#### Prerequisites
-- [Docker Desktop for Windows](https://docs.docker.com/desktop/install/windows-install/) installed and running
-- WSL 2 backend enabled (Docker Desktop will prompt you)
-
-#### Steps
-
-1. **Install Docker Desktop**
-   - Download from https://docs.docker.com/desktop/install/windows-install/
-   - Run the installer and restart when prompted
-   - Open Docker Desktop and ensure it shows "Docker Desktop is running"
-
-2. **Clone and start**
-   ```powershell
-   git clone https://github.com/JonGaydos/Drone-Unit-Manager.git
-   cd Drone-Unit-Manager
-   copy .env.example .env
-   docker compose up -d
-   ```
-
-3. **Access the app**
-   - Open http://localhost:3014
-   - Login with `admin` / `admin`
-   - **Change the admin password immediately** in Settings
-
-4. **Verify it's running**
-   ```powershell
-   docker ps
-   docker logs drone-unit-manager
-   ```
-
-### Docker on Unraid
-
-#### Method 1: Docker Compose (Recommended)
-
-1. Install the **Compose Manager** plugin from Community Applications
-2. Create a new compose stack named `drone-unit-manager`
-3. Paste the following compose file:
+### Docker Compose
 
 ```yaml
 services:
-  drone-unit-manager:
+  app:
     image: ghcr.io/jongaydos/drone-unit-manager:latest
-    container_name: drone-unit-manager
     ports:
       - "3014:8000"
     volumes:
-      - /mnt/user/appdata/drone-unit-manager:/app/data
+      - ./data:/app/data
     environment:
       - TZ=America/Chicago
     restart: unless-stopped
 ```
 
-4. Click **Compose Up**
-5. Access at `http://YOUR_UNRAID_IP:3014`
+```bash
+docker compose up -d
+```
 
-#### Method 2: Community Applications Template
+### Unraid
 
-1. Go to the **Apps** tab in Unraid
-2. Search for "Drone Unit Manager"
-3. Click **Install**
-4. Configure the port and appdata path
-5. Click **Apply**
-
-#### Method 3: Manual Docker Container
-
-1. Go to the **Docker** tab in Unraid
-2. Click **Add Container**
-3. Fill in:
-   - **Name:** `drone-unit-manager`
-   - **Repository:** `ghcr.io/jongaydos/drone-unit-manager:latest`
-   - **Port Mapping:** Host `3014` → Container `8000`
-   - **Path Mapping:** Host `/mnt/user/appdata/drone-unit-manager` → Container `/app/data`
-   - **Variable:** `TZ` = `America/Chicago`
-4. Click **Apply**
+1. Add container from the Community Applications template, or manually:
+   - Repository: `ghcr.io/jongaydos/drone-unit-manager:latest`
+   - Port: 3014 -> 8000
+   - Path: /mnt/user/appdata/drone-unit-manager -> /app/data
+2. Start the container
+3. Open the WebUI and complete setup
 
 ## Configuration
 
@@ -182,79 +134,73 @@ services:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PORT` | `3014` | Host port to expose the application |
-| `SECRET_KEY` | Auto-generated | JWT signing key. Auto-generated on first run if not set |
-| `TZ` | `America/Chicago` | Timezone for date/time display |
-| `DATABASE_URL` | `sqlite:////app/data/drone_unit_manager.db` | Database connection string |
+| `PORT` | `8000` | Internal server port |
+| `SECRET_KEY` | Auto-generated | JWT signing key. Set for persistent sessions across restarts. |
+| `TZ` | `UTC` | Timezone |
+| `ADMIN_DEFAULT_PASSWORD` | None | Not used — setup wizard handles initial account creation |
 
-### Connecting Skydio Cloud API
+### First-Run Setup
 
-1. Go to **Settings** in the app
-2. Enter your Skydio API Token and Token ID
-3. Click **Test Connection** to verify
-4. Click **Sync Now** to pull flights, vehicles, batteries, and other data
-5. Set a sync interval for automatic updates
+On first launch with an empty database, the application displays a setup wizard. Enter your organization name, your name, and create an admin account. No default credentials exist.
 
-### Importing Existing Data
+### Skydio API Integration
 
-1. Go to **Settings** → **Import Data**
-2. Upload your Excel spreadsheet (.xlsx)
-3. The importer supports:
-   - **Skydio flight exports** — maps Flight ID, Vehicle, Pilot, Times, Location, Purpose
-   - **Pilot certification data** — creates pilots, cert types, and assignments
-4. Duplicate flights are automatically detected and skipped
+1. Log into Skydio Cloud at cloud.skydio.com
+2. Go to Settings > Integrations > API Tokens
+3. Create a token with read access to: Flights, Flight Telemetry, Vehicles, Batteries, Controllers, Users, Attachments, Sensor Packages
+4. In Drone Unit Manager, go to Settings > Skydio Cloud API
+5. Enter the API Token and Token ID
+6. Click Test Connection, then Sync All
 
-### Data Backup
+For automatic pilot matching, ensure each pilot's profile has their Skydio account email address.
 
-All data is stored in the `/app/data` volume:
-- `drone_unit_manager.db` — Main database
-- `uploads/` — Uploaded documents and files
+### Excel Import
 
-**To backup:**
-```bash
-# Docker
-docker cp drone-unit-manager:/app/data ./backup
+The application imports flight data from Excel spreadsheets with a sheet named "Skydio" containing these columns:
 
-# Unraid
-cp -r /mnt/user/appdata/drone-unit-manager /mnt/user/backup/dum-backup
+```
+Flight ID, Vehicle, Pilot, Local Takeoff Time, Takeoff, Takeoff Address,
+Takeoff Latitude, Takeoff Longitude, Land, Duration (seconds), Battery,
+Sensor Package, Attachment (TOP), Attachment (BOTTOM), Attachment (LEFT),
+Attachment (RIGHT), Carrier(s), Purpose
 ```
 
-## Tech Stack
+An optional "Pilot Info" sheet imports certification data.
 
-| Component | Technology |
-|-----------|-----------|
-| **Frontend** | React 19, Tailwind CSS v4, Recharts, Lucide Icons |
-| **Backend** | Python 3.12, FastAPI, SQLAlchemy, Pydantic |
-| **Database** | SQLite (zero configuration) |
-| **PDF Reports** | WeasyPrint, Jinja2 |
-| **API Integration** | Skydio Cloud API (extensible to other providers) |
-| **Container** | Docker (multi-stage build) |
+## Architecture
+
+- **Backend:** Python 3.12, FastAPI, SQLAlchemy, SQLite
+- **Frontend:** React 19, Vite, Tailwind CSS v4, Recharts, Leaflet.js
+- **Database:** 34 tables, 212+ API endpoints
+- **Deployment:** Single Docker container, multi-stage build
 
 ## API Documentation
 
-The app exposes a full REST API. When running, visit:
-- **Swagger UI:** `http://localhost:3014/docs`
-- **ReDoc:** `http://localhost:3014/redoc`
+Interactive API documentation is available at `/docs` (Swagger UI) and `/redoc` (ReDoc) on your running instance.
 
-## Adding Support for Other Drone Manufacturers
+## Backup and Restore
 
-The app uses a pluggable provider architecture. To add a new drone manufacturer:
+### Backup
 
-1. Create a new file in `backend/app/integrations/`
-2. Implement the `DroneProvider` base class
-3. Register the provider with `register_provider()`
-4. The new provider will automatically appear in Settings
+```bash
+# Stop the container first for a clean backup
+docker stop drone-unit-manager
+cp /path/to/data/drone_unit_manager.db /path/to/backup/
+cp /path/to/data/telemetry.db /path/to/backup/
+cp -r /path/to/data/uploads /path/to/backup/
+docker start drone-unit-manager
+```
 
-See `backend/app/integrations/skydio.py` for a complete reference implementation.
+### Restore
 
-## Contributing
-
-Contributions are welcome! Please open an issue or pull request on GitHub.
+```bash
+docker stop drone-unit-manager
+cp /path/to/backup/drone_unit_manager.db /path/to/data/
+cp /path/to/backup/telemetry.db /path/to/data/
+cp -r /path/to/backup/uploads /path/to/data/
+docker start drone-unit-manager
+```
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) for details.
-
-## Acknowledgments
-
-Built with [Claude Code](https://claude.ai/claude-code) by Anthropic.
+MIT License. See [LICENSE](LICENSE) for details.
