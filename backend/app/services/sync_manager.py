@@ -349,13 +349,28 @@ class SyncManager:
             logger.error("Flights sync error: %s", exc)
             db.rollback()
 
-        # --- Enrich flights with full details (any source with a Skydio UUID) ---
+        # --- Enrich flights with full details ---
+        # Prioritize new API flights (no pilot/vehicle), then older unenriched flights
         try:
             from app.integrations.skydio import _to_str
-            unenriched = db.query(Flight).filter(
-                Flight.max_altitude_m.is_(None),
+            # Pass 1: New API flights missing pilot or vehicle (most urgent)
+            urgent = db.query(Flight).filter(
                 Flight.external_id.isnot(None),
+                Flight.api_provider == "skydio",
+                (Flight.pilot_id.is_(None)) | (Flight.vehicle_id.is_(None)) | (Flight.max_altitude_m.is_(None)),
             ).limit(200).all()
+            # Pass 2: Any remaining unenriched flights (Excel imports needing telemetry)
+            urgent_ids = {f.id for f in urgent}
+            remaining_slots = max(0, 200 - len(urgent))
+            extra = []
+            if remaining_slots > 0:
+                extra = db.query(Flight).filter(
+                    Flight.max_altitude_m.is_(None),
+                    Flight.external_id.isnot(None),
+                    Flight.id.notin_(urgent_ids) if urgent_ids else True,
+                ).limit(remaining_slots).all()
+            unenriched = urgent + extra
+            logger.info("Enrichment: %d urgent API flights + %d extra = %d total", len(urgent), len(extra), len(unenriched))
 
             enriched_count = 0
             for flight in unenriched:
