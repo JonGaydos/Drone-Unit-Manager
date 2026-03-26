@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { useConfirm } from '@/hooks/useConfirm'
 import { Bell, CheckCircle, X, Filter, AlertTriangle, Info, AlertOctagon } from 'lucide-react'
 
 const SEVERITY_CONFIG = {
@@ -17,6 +19,7 @@ export default function AlertsPage() {
   const [loading, setLoading] = useState(true)
   const { isAdmin } = useAuth()
   const toast = useToast()
+  const [confirmProps, requestConfirm] = useConfirm()
 
   const load = () => {
     setLoading(true)
@@ -50,14 +53,19 @@ export default function AlertsPage() {
     }
   }
 
-  const handleDismissAll = async () => {
-    if (!window.confirm('Are you sure you want to dismiss all alerts?')) return
-    try {
-      await api.post('/alerts/dismiss-all')
-      load()
-    } catch (err) {
-      toast.error(err.message)
-    }
+  const handleDismissAll = () => {
+    requestConfirm({
+      title: 'Dismiss All Alerts',
+      message: 'Are you sure you want to dismiss all alerts?',
+      onConfirm: async () => {
+        try {
+          await api.post('/alerts/dismiss-all')
+          load()
+        } catch (err) {
+          toast.error(err.message)
+        }
+      }
+    })
   }
 
   if (loading) {
@@ -155,6 +163,7 @@ export default function AlertsPage() {
           </div>
         )}
       </div>
+      <ConfirmDialog {...confirmProps} />
     </div>
   )
 }

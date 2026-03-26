@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { useConfirm } from '@/hooks/useConfirm'
 import { sortByName, sortVehicles, sortPilotsActiveFirst, vehicleDisplayName } from '@/lib/formatters'
 import {
   ClipboardCheck, Plus, Filter, X, Loader2, Check, Ban, Clock,
@@ -206,6 +208,7 @@ export default function FlightPlansPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const { user, isAdmin, isPilot } = useAuth()
   const toast = useToast()
+  const [confirmProps, requestConfirm] = useConfirm()
   const isSupervisor = user?.role === 'admin' || user?.role === 'supervisor'
 
   const load = async () => {
@@ -266,15 +269,20 @@ export default function FlightPlansPage() {
     }
   }
 
-  const handleCancel = async (id) => {
-    if (!window.confirm('Cancel this flight plan?')) return
-    try {
-      await api.post(`/flight-plans/${id}/cancel`, {})
-      toast.success('Flight plan cancelled')
-      load()
-    } catch (err) {
-      toast.error(err.message)
-    }
+  const handleCancel = (id) => {
+    requestConfirm({
+      title: 'Cancel Flight Plan',
+      message: 'Cancel this flight plan?',
+      onConfirm: async () => {
+        try {
+          await api.post(`/flight-plans/${id}/cancel`, {})
+          toast.success('Flight plan cancelled')
+          load()
+        } catch (err) {
+          toast.error(err.message)
+        }
+      }
+    })
   }
 
   const handleAdminEdit = async (id) => {
@@ -287,15 +295,20 @@ export default function FlightPlansPage() {
     }
   }
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Delete this flight plan?')) return
-    try {
-      await api.delete(`/flight-plans/${id}`)
-      toast.success('Flight plan deleted')
-      load()
-    } catch (err) {
-      toast.error(err.message)
-    }
+  const handleDelete = (id) => {
+    requestConfirm({
+      title: 'Delete Flight Plan',
+      message: 'Delete this flight plan?',
+      onConfirm: async () => {
+        try {
+          await api.delete(`/flight-plans/${id}`)
+          toast.success('Flight plan deleted')
+          load()
+        } catch (err) {
+          toast.error(err.message)
+        }
+      }
+    })
   }
 
   const formatDT = (dt) => {
@@ -515,6 +528,7 @@ export default function FlightPlansPage() {
         <DenyModal plan={denyTarget}
           onDeny={handleDeny} onClose={() => setDenyTarget(null)} />
       )}
+      <ConfirmDialog {...confirmProps} />
     </div>
   )
 }

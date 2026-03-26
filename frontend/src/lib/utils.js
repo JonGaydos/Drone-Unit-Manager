@@ -29,6 +29,20 @@ export function mpsToMph(mps) {
   return Math.round(mps * 2.23694 * 10) / 10
 }
 
+export function formatDate(iso) {
+  if (!iso) return '—'
+  const d = new Date(iso.includes('T') ? iso : iso + 'T00:00:00')
+  if (isNaN(d.getTime())) return '—'
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+export function formatDateTime(iso) {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return '—'
+  return d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+}
+
 export function normalizeDateValue(value) {
   if (!value) return value
   // Handle dates like "0026-12-12" → "2026-12-12"

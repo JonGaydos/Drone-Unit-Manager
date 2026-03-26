@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { useConfirm } from '@/hooks/useConfirm'
 import {
   Search, Upload, X, ChevronLeft, ChevronRight, Edit2, Trash2,
   Camera, Calendar, User, Info, ZoomIn, Image as ImageIcon
@@ -19,6 +21,7 @@ export default function MediaPage() {
   const [showEdit, setShowEdit] = useState(null)
   const [lightbox, setLightbox] = useState(null)
   const { isAdmin, isPilot, isSupervisor } = useAuth()
+  const [confirmProps, requestConfirm] = useConfirm()
 
   const load = useCallback(() => {
     setLoading(true)
@@ -64,10 +67,15 @@ export default function MediaPage() {
     return () => window.removeEventListener('keydown', handler)
   }, [lightbox, filtered.length])
 
-  const handleDelete = async (id) => {
-    if (!confirm('Delete this photo permanently?')) return
-    await api.delete(`/photos/${id}`)
-    load()
+  const handleDelete = (id) => {
+    requestConfirm({
+      title: 'Delete Photo',
+      message: 'Delete this photo permanently?',
+      onConfirm: async () => {
+        await api.delete(`/photos/${id}`)
+        load()
+      }
+    })
   }
 
   const formatSize = (bytes) => {
@@ -237,6 +245,7 @@ export default function MediaPage() {
           onSuccess={() => { setShowEdit(null); load() }}
         />
       )}
+      <ConfirmDialog {...confirmProps} />
     </div>
   )
 }

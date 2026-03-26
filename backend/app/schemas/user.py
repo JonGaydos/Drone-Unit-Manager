@@ -42,6 +42,13 @@ class UserOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class SetupRequest(BaseModel):
+    username: str
+    password: str
+    display_name: str = ""
+    org_name: str = ""
+
+
 class LoginRequest(BaseModel):
     username: str
     password: str

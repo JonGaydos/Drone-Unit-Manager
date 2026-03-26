@@ -6,7 +6,6 @@ import { api } from '@/api/client'
 import {
   LayoutDashboard,
   BarChart3,
-  Plane,
   Users,
   Box,
   ShieldCheck,
@@ -25,11 +24,12 @@ import {
   ScrollText,
   AlertTriangle,
   CloudSun,
-  Activity,
   ClipboardList,
   Shield,
+  BookOpen,
 } from 'lucide-react'
 import { useEffect } from 'react'
+import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -37,7 +37,7 @@ const navItems = [
   { to: '/analytics', icon: BarChart3, label: 'Analytics' },
   { to: '/flight-plans', icon: ClipboardCheck, label: 'Flight Plans', badge: 'pendingPlansCount' },
   { to: '/checklists', icon: ClipboardList, label: 'Checklists' },
-  { to: '/flights', icon: Plane, label: 'Flights', badge: 'reviewCount' },
+  { to: '/flights', icon: QuadcopterIcon, label: 'Flights', badge: 'reviewCount' },
   { to: '/missions', icon: Target, label: 'Mission Log' },
   { to: '/training', icon: GraduationCap, label: 'Training Log' },
   { to: '/pilots', icon: Users, label: 'Pilots' },
@@ -75,10 +75,10 @@ export function Sidebar({ mobileOpen, onMobileClose }) {
   useEffect(() => {
     api.get('/flights/count?review_status=needs_review')
       .then(data => setReviewCount(data.count))
-      .catch(() => {})
+      .catch(err => console.warn('Failed to fetch review count:', err.message))
     api.get('/flight-plans/pending/count')
       .then(data => setPendingPlansCount(data.count))
-      .catch(() => {})
+      .catch(err => console.warn('Failed to fetch pending plans count:', err.message))
     api.get('/settings')
       .then(data => {
         const cfg = data.find(s => s.key === 'sidebar_config')
@@ -86,7 +86,7 @@ export function Sidebar({ mobileOpen, onMobileClose }) {
           try { setSidebarConfig(JSON.parse(cfg.value)) } catch {}
         }
       })
-      .catch(() => {})
+      .catch(err => console.warn('Failed to fetch sidebar config:', err.message))
   }, [location.pathname])
 
   return (
@@ -102,10 +102,10 @@ export function Sidebar({ mobileOpen, onMobileClose }) {
     >
       {/* Logo */}
       <div className="h-16 max-md:h-14 flex items-center px-4 border-b border-border">
-        <Plane className="w-7 h-7 text-primary shrink-0" />
+        <QuadcopterIcon className="w-7 h-7 text-primary shrink-0" />
         {(!collapsed || mobileOpen) && (
           <span className="ml-3 font-semibold text-lg text-foreground whitespace-nowrap">
-            Drone Unit Mgr
+            Drone Unit Manager
           </span>
         )}
       </div>
@@ -163,6 +163,27 @@ export function Sidebar({ mobileOpen, onMobileClose }) {
           </NavLink>
         ))}
       </nav>
+
+      {/* User Manual link */}
+      <div className="px-2 pb-2">
+        <NavLink
+          to="/manual"
+          onClick={() => onMobileClose?.()}
+          className={({ isActive }) =>
+            cn(
+              'flex items-center gap-3 px-4 py-2.5 mx-0 rounded-lg text-sm transition-all duration-150 hover:translate-x-0.5',
+              isActive
+                ? 'bg-primary/10 text-primary border-l-2 border-primary font-medium'
+                : 'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground'
+            )
+          }
+        >
+          <BookOpen className="w-5 h-5 shrink-0" />
+          {(!collapsed || mobileOpen) && (
+            <span className="whitespace-nowrap">User Manual</span>
+          )}
+        </NavLink>
+      </div>
 
       {/* User section */}
       <div className="border-t border-border p-3">

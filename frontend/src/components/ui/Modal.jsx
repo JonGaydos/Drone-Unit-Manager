@@ -1,29 +1,69 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useCallback } from 'react'
 import { cn } from '@/lib/utils'
 import { X } from 'lucide-react'
 
 function Modal({ open, onClose, title, children, className }) {
   const overlayRef = useRef(null)
+  const modalRef = useRef(null)
+
+  const stableOnClose = useCallback(() => {
+    onClose?.()
+  }, [onClose])
 
   useEffect(() => {
     if (!open) return
 
     const handleEscape = (e) => {
-      if (e.key === 'Escape') onClose?.()
+      if (e.key === 'Escape') stableOnClose()
     }
+
+    // Focus trap
+    const handleTab = (e) => {
+      if (e.key !== 'Tab' || !modalRef.current) return
+      const focusable = modalRef.current.querySelectorAll(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      )
+      if (focusable.length === 0) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (e.shiftKey) {
+        if (document.activeElement === first) {
+          e.preventDefault()
+          last.focus()
+        }
+      } else {
+        if (document.activeElement === last) {
+          e.preventDefault()
+          first.focus()
+        }
+      }
+    }
+
     document.addEventListener('keydown', handleEscape)
+    document.addEventListener('keydown', handleTab)
     document.body.style.overflow = 'hidden'
+
+    // Focus first focusable element
+    requestAnimationFrame(() => {
+      if (modalRef.current) {
+        const focusable = modalRef.current.querySelector(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        )
+        focusable?.focus()
+      }
+    })
 
     return () => {
       document.removeEventListener('keydown', handleEscape)
+      document.removeEventListener('keydown', handleTab)
       document.body.style.overflow = ''
     }
-  }, [open, onClose])
+  }, [open, stableOnClose])
 
   if (!open) return null
 
   const handleOverlayClick = (e) => {
-    if (e.target === overlayRef.current) onClose?.()
+    if (e.target === overlayRef.current) stableOnClose()
   }
 
   return (
@@ -31,8 +71,12 @@ function Modal({ open, onClose, title, children, className }) {
       ref={overlayRef}
       onClick={handleOverlayClick}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md animate-[fadeIn_150ms_ease]"
+      role="dialog"
+      aria-modal="true"
+      aria-label={title || 'Dialog'}
     >
       <div
+        ref={modalRef}
         className={cn(
           'relative w-full max-w-lg mx-4 rounded-xl border border-border bg-card text-foreground shadow-lg',
           'animate-[slideUp_200ms_ease]',
@@ -44,7 +88,8 @@ function Modal({ open, onClose, title, children, className }) {
             <h2 className="text-lg font-semibold text-foreground">{title}</h2>
           )}
           <button
-            onClick={onClose}
+            onClick={stableOnClose}
+            aria-label="Close dialog"
             className="ml-auto rounded-lg p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors cursor-pointer"
           >
             <X className="h-4 w-4" />

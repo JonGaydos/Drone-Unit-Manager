@@ -3,7 +3,10 @@ import { Link } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
-import { Plus, Edit, Trash2, Search, Plane, Battery, Gamepad2, Warehouse, Cpu, Paperclip, ChevronUp, ChevronDown, Download, Loader2 } from 'lucide-react'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { useConfirm } from '@/hooks/useConfirm'
+import { Plus, Edit, Trash2, Search, Battery, Gamepad2, Warehouse, Cpu, Paperclip, ChevronUp, ChevronDown, Download, Loader2 } from 'lucide-react'
+import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 
 // ─── Generic Equipment Modal ────────────────────────────────────────────────
 
@@ -172,7 +175,7 @@ function singularize(label) {
 
 const TAB_CONFIGS = {
   vehicles: {
-    icon: Plane,
+    icon: QuadcopterIcon,
     label: 'Vehicles',
     endpoint: '/vehicles',
     columns: [
@@ -359,6 +362,7 @@ export default function FleetPage() {
   const [vehicleModels, setVehicleModels] = useState([])
   const { isAdmin, isPilot, isSupervisor } = useAuth()
   const toast = useToast()
+  const [confirmProps, requestConfirm] = useConfirm()
 
   // Fetch unique vehicle models for combobox
   useEffect(() => {
@@ -418,14 +422,19 @@ export default function FleetPage() {
     }
   }
 
-  const handleDelete = async (id) => {
-    if (!window.confirm(`Are you sure you want to delete this ${singularize(config.label).toLowerCase()}? This cannot be undone.`)) return
-    try {
-      await api.delete(`${config.endpoint}/${id}`)
-      load()
-    } catch (err) {
-      toast.error(err.message)
-    }
+  const handleDelete = (id) => {
+    requestConfirm({
+      title: `Delete ${singularize(config.label)}`,
+      message: `Are you sure you want to delete this ${singularize(config.label).toLowerCase()}? This cannot be undone.`,
+      onConfirm: async () => {
+        try {
+          await api.delete(`${config.endpoint}/${id}`)
+          load()
+        } catch (err) {
+          toast.error(err.message)
+        }
+      }
+    })
   }
 
   const filtered = useMemo(() => {
@@ -538,6 +547,7 @@ export default function FleetPage() {
           vehicleModels={vehicleModels}
         />
       )}
+      <ConfirmDialog {...confirmProps} />
     </div>
   )
 }

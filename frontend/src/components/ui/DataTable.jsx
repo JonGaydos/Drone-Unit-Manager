@@ -85,6 +85,7 @@ function DataTable({
             <button
               onClick={() => onPageChange?.(page - 1)}
               disabled={page <= 1}
+              aria-label="Previous page"
               className={cn(
                 'inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors',
                 'hover:bg-accent hover:text-accent-foreground',
@@ -97,6 +98,7 @@ function DataTable({
             <button
               onClick={() => onPageChange?.(page + 1)}
               disabled={page >= totalPages}
+              aria-label="Next page"
               className={cn(
                 'inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors',
                 'hover:bg-accent hover:text-accent-foreground',

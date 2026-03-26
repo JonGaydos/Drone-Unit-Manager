@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { api } from '@/api/client'
 import { Link } from 'react-router-dom'
-import { Activity, Plane, Battery, AlertTriangle, Clock, ChevronUp, ChevronDown } from 'lucide-react'
+import { Activity, Battery, AlertTriangle, Clock, ChevronUp, ChevronDown } from 'lucide-react'
+import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts'
@@ -79,7 +80,7 @@ export default function FleetHealthPage() {
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center text-primary"><Plane className="w-5 h-5" /></div>
+          <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center text-primary"><QuadcopterIcon className="w-5 h-5" /></div>
           <div><p className="text-2xl font-bold text-foreground">{summary.total_vehicles}</p><p className="text-xs text-muted-foreground">Active Vehicles</p></div>
         </div>
         <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">

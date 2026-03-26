@@ -4,6 +4,7 @@ import { TopBar } from './TopBar'
 import { useState, useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Menu } from 'lucide-react'
+import { PageErrorBoundary } from '@/components/ui/PageErrorBoundary'
 
 const pageTitles = {
   '/': 'Dashboard',
@@ -19,6 +20,7 @@ const pageTitles = {
   '/alerts': 'Alerts',
   '/settings': 'Settings',
   '/audit-log': 'Audit Log',
+  '/manual': 'User Manual',
 }
 
 export function Layout() {
@@ -59,9 +61,11 @@ export function Layout() {
           <TopBar title={title} />
         </div>
         <main className="p-4 md:p-6 pt-18 md:pt-6">
-          <div className="page-enter" key={location.pathname}>
-            <Outlet />
-          </div>
+          <PageErrorBoundary key={location.pathname}>
+            <div className="page-enter">
+              <Outlet />
+            </div>
+          </PageErrorBoundary>
         </main>
       </div>
     </div>

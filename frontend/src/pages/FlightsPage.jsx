@@ -6,6 +6,7 @@ import { formatDuration, normalizeDateValue } from '@/lib/utils'
 import { sortByName, sortVehicles, sortPilotsActiveFirst, vehicleDisplayName } from '@/lib/formatters'
 import { Plus, Search, CheckCircle, ChevronUp, ChevronDown, Pencil, X, Check, Download, Loader2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 
 function FlightModal({ pilots, vehicles, purposes, onSave, onClose }) {
   const [form, setForm] = useState({
@@ -125,6 +126,7 @@ export default function FlightsPage() {
   // Inline editing state
   const [editingId, setEditingId] = useState(null)
   const [editForm, setEditForm] = useState({})
+  const [showBulkApproveConfirm, setShowBulkApproveConfirm] = useState(false)
 
   const toggleSort = (key) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -326,7 +328,7 @@ export default function FlightsPage() {
           </button>
           {needsReview.length > 0 && isSupervisor && (
             <button
-              onClick={() => handleBulkApprove(needsReview.map(f => f.id))}
+              onClick={() => setShowBulkApproveConfirm(true)}
               className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:opacity-90"
             >
               <CheckCircle className="w-4 h-4" /> Approve All ({needsReview.length})
@@ -468,6 +470,16 @@ export default function FlightsPage() {
       </div>
 
       {modal && <FlightModal pilots={pilots} vehicles={vehicles} purposes={purposes} onSave={handleSave} onClose={() => setModal(false)} />}
+
+      <ConfirmDialog
+        open={showBulkApproveConfirm}
+        onClose={() => setShowBulkApproveConfirm(false)}
+        onConfirm={() => handleBulkApprove(needsReview.map(f => f.id))}
+        title="Approve All Flights"
+        message={`Are you sure you want to approve all ${needsReview.length} flights that need review?`}
+        confirmLabel="Approve All"
+        confirmVariant="primary"
+      />
     </div>
   )
 }

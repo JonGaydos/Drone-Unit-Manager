@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { useConfirm } from '@/hooks/useConfirm'
 import { normalizeDateValue } from '@/lib/utils'
 import { FREQUENCY_COLORS } from '@/lib/constants'
 import { sortByName, sortPilotsActiveFirst, vehicleDisplayName, equipmentDisplayName } from '@/lib/formatters'
@@ -342,6 +344,7 @@ export default function MaintenancePage() {
   const [showAllUpcoming, setShowAllUpcoming] = useState(false)
   const { isAdmin, isPilot, isSupervisor } = useAuth()
   const toast = useToast()
+  const [confirmProps, requestConfirm] = useConfirm()
 
   // Entity lists for name resolution and dropdowns
   const [entityLists, setEntityLists] = useState({ vehicle: [], battery: [], controller: [], dock: [] })
@@ -397,14 +400,19 @@ export default function MaintenancePage() {
     }
   }
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this maintenance record?')) return
-    try {
-      await api.delete(`/maintenance/${id}`)
-      loadAll()
-    } catch (err) {
-      toast.error(err.message)
-    }
+  const handleDelete = (id) => {
+    requestConfirm({
+      title: 'Delete Maintenance Record',
+      message: 'Are you sure you want to delete this maintenance record?',
+      onConfirm: async () => {
+        try {
+          await api.delete(`/maintenance/${id}`)
+          loadAll()
+        } catch (err) {
+          toast.error(err.message)
+        }
+      }
+    })
   }
 
   const handleScheduleSave = async (data) => {
@@ -422,14 +430,19 @@ export default function MaintenancePage() {
     }
   }
 
-  const handleScheduleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this maintenance schedule?')) return
-    try {
-      await api.delete(`/maintenance/schedules/${id}`)
-      loadAll()
-    } catch (err) {
-      toast.error(err.message)
-    }
+  const handleScheduleDelete = (id) => {
+    requestConfirm({
+      title: 'Delete Schedule',
+      message: 'Are you sure you want to delete this maintenance schedule?',
+      onConfirm: async () => {
+        try {
+          await api.delete(`/maintenance/schedules/${id}`)
+          loadAll()
+        } catch (err) {
+          toast.error(err.message)
+        }
+      }
+    })
   }
 
   const handleScheduleComplete = async (id) => {
@@ -738,6 +751,7 @@ export default function MaintenancePage() {
           onClose={() => setScheduleModal(null)}
         />
       )}
+      <ConfirmDialog {...confirmProps} />
     </div>
   )
 }

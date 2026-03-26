@@ -13,6 +13,15 @@ from app.routers.auth import get_current_user, require_admin
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
+# Whitelist of allowed setting keys
+ALLOWED_SETTING_KEYS = {
+    "org_name", "org_logo", "skydio_api_token", "skydio_token_id",
+    "sync_interval", "sidebar_config", "weather_wind_threshold",
+    "weather_visibility_threshold", "weather_ceiling_threshold",
+    "weather_temp_min", "weather_temp_max", "weather_location",
+    "cert_types_config", "cert_status_labels",
+}
+
 
 class SettingValue(BaseModel):
     key: str
@@ -55,23 +64,32 @@ def get_setting(key: str, db: Session = Depends(get_db), user: User = Depends(ge
 
 @router.put("")
 def set_setting(data: SettingValue, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    if data.key not in ALLOWED_SETTING_KEYS:
+        raise HTTPException(400, f"Setting key '{data.key}' is not allowed")
+    from app.services.audit import log_action
     setting = db.query(Setting).filter(Setting.key == data.key).first()
     if setting:
         setting.value = data.value
     else:
         setting = Setting(key=data.key, value=data.value)
         db.add(setting)
+    log_action(db, admin.id, admin.display_name, "update", "setting", details=f"Updated setting '{data.key}'")
     db.commit()
     return {"ok": True}
+
+
+ALLOWED_LOGO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".svg"}
 
 
 @router.post("/logo")
 async def upload_logo(file: UploadFile, db: Session = Depends(get_db), user: User = Depends(require_admin)):
     upload_dir = Path(app_settings.UPLOAD_DIR) / "org"
     upload_dir.mkdir(parents=True, exist_ok=True)
+    ext = Path(file.filename).suffix.lower() or ".png"
+    if ext not in ALLOWED_LOGO_EXTENSIONS:
+        raise HTTPException(400, f"File type '{ext}' not allowed for logo.")
     for old in upload_dir.glob("logo.*"):
         old.unlink()
-    ext = Path(file.filename).suffix or ".png"
     filepath = upload_dir / f"logo{ext}"
     content = await file.read()
     if len(content) > app_settings.MAX_UPLOAD_SIZE:
@@ -100,6 +118,8 @@ def view_logo():
 @router.put("/bulk")
 def set_settings_bulk(data: list[SettingValue], db: Session = Depends(get_db), admin: User = Depends(require_admin)):
     for item in data:
+        if item.key not in ALLOWED_SETTING_KEYS:
+            continue
         # Don't overwrite real token with masked value from frontend
         if item.key in MASKED_KEYS and "..." in (item.value or ""):
             continue

@@ -5,7 +5,8 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { formatDuration, normalizeDateValue, metersToFeet, mpsToMph } from '@/lib/utils'
 import { sortByName, sortVehicles, sortPilotsActiveFirst, vehicleDisplayName } from '@/lib/formatters'
-import { ArrowLeft, MapPin, Clock, Gauge, Battery, Plane, Save, RefreshCw, Loader2 } from 'lucide-react'
+import { ArrowLeft, MapPin, Clock, Gauge, Battery, Save, RefreshCw, Loader2 } from 'lucide-react'
+import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 import { FlightPathMap } from '@/components/FlightMap'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -160,7 +161,7 @@ export default function FlightDetailPage() {
       <div className="bg-card border border-border rounded-xl p-6">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-12 h-12 rounded-xl bg-primary/15 flex items-center justify-center text-primary">
-            <Plane className="w-6 h-6" />
+            <QuadcopterIcon className="w-6 h-6" />
           </div>
           <div>
             <h2 className="text-xl font-bold text-foreground">Flight on {flight.date || 'Unknown Date'}</h2>

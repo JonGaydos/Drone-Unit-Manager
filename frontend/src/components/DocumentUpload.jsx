@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { useConfirm } from '@/hooks/useConfirm'
 import { FileText, Upload, Trash2, Loader2, ExternalLink, Edit, Save, X } from 'lucide-react'
 
 export default function DocumentUpload({ entityType, entityId, folderId }) {
@@ -16,6 +18,7 @@ export default function DocumentUpload({ entityType, entityId, folderId }) {
   const [editForm, setEditForm] = useState({ title: '', document_type: '' })
   const [editSaving, setEditSaving] = useState(false)
   const { isAdmin } = useAuth()
+  const [confirmProps, requestConfirm] = useConfirm()
 
   const fetchDocs = useCallback(() => {
     api.get(`/documents?entity_type=${entityType}&entity_id=${entityId}`)
@@ -58,14 +61,19 @@ export default function DocumentUpload({ entityType, entityId, folderId }) {
     }
   }
 
-  const handleDelete = async (docId) => {
-    if (!confirm('Delete this document?')) return
-    try {
-      await api.delete(`/documents/${docId}`)
-      fetchDocs()
-    } catch (err) {
-      toast.error(err.message)
-    }
+  const handleDelete = (docId) => {
+    requestConfirm({
+      title: 'Delete Document',
+      message: 'Delete this document?',
+      onConfirm: async () => {
+        try {
+          await api.delete(`/documents/${docId}`)
+          fetchDocs()
+        } catch (err) {
+          toast.error(err.message)
+        }
+      }
+    })
   }
 
   const startEditDoc = (doc) => {
@@ -266,6 +274,7 @@ export default function DocumentUpload({ entityType, entityId, folderId }) {
           <div className="px-4 py-8 text-center text-muted-foreground text-sm">No documents uploaded</div>
         )}
       </div>
+      <ConfirmDialog {...confirmProps} />
     </div>
   )
 }

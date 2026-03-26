@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { useConfirm } from '@/hooks/useConfirm'
 import { normalizeDateValue } from '@/lib/utils'
 import { OUTCOME_COLORS } from '@/lib/constants'
 import { sortByName, sortVehicles, sortPilotsActiveFirst, vehicleDisplayName } from '@/lib/formatters'
@@ -190,6 +192,7 @@ export default function TrainingLogPage() {
   const [filterType, setFilterType] = useState('')
   const { isAdmin, isPilot, isSupervisor } = useAuth()
   const toast = useToast()
+  const [confirmProps, requestConfirm] = useConfirm()
 
   const load = () => {
     const params = new URLSearchParams()
@@ -222,12 +225,17 @@ export default function TrainingLogPage() {
     } catch (err) { toast.error(err.message) }
   }
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this training log?')) return
-    try {
-      await api.delete(`/training-logs/${id}`)
-      load()
-    } catch (err) { toast.error(err.message) }
+  const handleDelete = (id) => {
+    requestConfirm({
+      title: 'Delete Training Log',
+      message: 'Are you sure you want to delete this training log?',
+      onConfirm: async () => {
+        try {
+          await api.delete(`/training-logs/${id}`)
+          load()
+        } catch (err) { toast.error(err.message) }
+      }
+    })
   }
 
   const handleEdit = (training) => {
@@ -379,6 +387,7 @@ export default function TrainingLogPage() {
           initial={editTraining}
         />
       )}
+      <ConfirmDialog {...confirmProps} />
     </div>
   )
 }

@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { useConfirm } from '@/hooks/useConfirm'
 import { normalizeDateValue } from '@/lib/utils'
 import { CERT_STATUS_COLORS } from '@/lib/constants'
 import { sortByName, sortPilotsActiveFirst } from '@/lib/formatters'
@@ -175,6 +177,7 @@ export default function CertificationsPage() {
   const [error, setError] = useState(null)
   const { isAdmin, isPilot, isSupervisor } = useAuth()
   const toast = useToast()
+  const [confirmProps, requestConfirm] = useConfirm()
 
   // Auto-file documents to Certifications folder
   const [certFolderId, setCertFolderId] = useState(null)
@@ -253,9 +256,14 @@ export default function CertificationsPage() {
     } catch (err) { toast.error(err.message) }
   }
 
-  const handleDeleteCertType = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this certification type?')) return
-    try { await api.delete(`/certification-types/${id}`); load() } catch (err) { toast.error(err.message) }
+  const handleDeleteCertType = (id) => {
+    requestConfirm({
+      title: 'Delete Certification Type',
+      message: 'Are you sure you want to delete this certification type?',
+      onConfirm: async () => {
+        try { await api.delete(`/certification-types/${id}`); load() } catch (err) { toast.error(err.message) }
+      }
+    })
   }
 
   const handleReorderCertType = async (ctId, direction) => {
@@ -515,6 +523,7 @@ export default function CertificationsPage() {
       {modal === 'assign' && <AssignCertModal pilots={pilots} certTypes={certTypes} onSave={handleAssignCert} onClose={() => { setModal(null); setEditCert(null) }} certFolderId={certFolderId} />}
       {modal === 'editCert' && editCert && <AssignCertModal pilots={pilots} certTypes={certTypes} existingCert={editCert} onSave={handleAssignCert} onClose={() => { setModal(null); setEditCert(null) }} certFolderId={certFolderId} />}
       {modal && typeof modal === 'object' && modal.name && <CertTypeModal certType={modal} onSave={handleSaveCertType} onClose={() => setModal(null)} />}
+      <ConfirmDialog {...confirmProps} />
     </div>
   )
 }

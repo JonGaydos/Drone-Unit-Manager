@@ -97,16 +97,21 @@ def delete_pilot(pilot_id: int, db: Session = Depends(get_db), admin: User = Dep
     return {"ok": True, "message": "Pilot deactivated"}
 
 
+ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+
+
 @router.post("/{pilot_id}/photo")
 async def upload_pilot_photo(pilot_id: int, file: UploadFile, db: Session = Depends(get_db), user: User = Depends(require_admin)):
     pilot = db.query(Pilot).filter(Pilot.id == pilot_id).first()
     if not pilot:
         raise HTTPException(404, "Pilot not found")
+    ext = Path(file.filename).suffix.lower() or ".jpg"
+    if ext not in ALLOWED_IMAGE_EXTENSIONS:
+        raise HTTPException(400, f"File type '{ext}' not allowed.")
     upload_dir = Path(settings.UPLOAD_DIR) / "photos" / "pilots" / str(pilot_id)
     upload_dir.mkdir(parents=True, exist_ok=True)
     for old in upload_dir.glob("profile.*"):
         old.unlink()
-    ext = Path(file.filename).suffix or ".jpg"
     filepath = upload_dir / f"profile{ext}"
     content = await file.read()
     if len(content) > settings.MAX_UPLOAD_SIZE:
@@ -119,11 +124,16 @@ async def upload_pilot_photo(pilot_id: int, file: UploadFile, db: Session = Depe
 
 
 @router.get("/{pilot_id}/photo/view")
-def view_pilot_photo(pilot_id: int, db: Session = Depends(get_db)):
+def view_pilot_photo(pilot_id: int, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
     pilot = db.query(Pilot).filter(Pilot.id == pilot_id).first()
     if not pilot:
         raise HTTPException(404)
     photo_dir = Path(settings.UPLOAD_DIR) / "photos" / "pilots" / str(pilot_id)
+    # Path traversal prevention
+    resolved_dir = photo_dir.resolve()
+    upload_root = Path(settings.UPLOAD_DIR).resolve()
+    if not str(resolved_dir).startswith(str(upload_root)):
+        raise HTTPException(403, "Access denied")
     for ext in [".jpg", ".jpeg", ".png", ".webp"]:
         p = photo_dir / f"profile{ext}"
         if p.exists():

@@ -61,6 +61,7 @@ const WeatherPage = lazy(() => import('@/pages/WeatherPage'))
 const FleetHealthPage = lazy(() => import('@/pages/FleetHealthPage'))
 const ChecklistPage = lazy(() => import('@/pages/ChecklistPage'))
 const CompliancePage = lazy(() => import('@/pages/CompliancePage'))
+const UserManualPage = lazy(() => import('@/pages/UserManualPage'))
 
 function Spinner() {
   return (
@@ -125,6 +126,7 @@ function AppRoutes() {
           <Route path="/compliance" element={<CompliancePage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/audit-log" element={<AuditLogPage />} />
+          <Route path="/manual" element={<UserManualPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

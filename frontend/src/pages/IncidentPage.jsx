@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { useConfirm } from '@/hooks/useConfirm'
 import { sortByName, sortVehicles, sortPilotsActiveFirst, vehicleDisplayName } from '@/lib/formatters'
 import {
   AlertTriangle, Plus, Filter, Search, ChevronDown, ChevronUp,
@@ -288,6 +290,7 @@ export default function IncidentPage() {
   const [filters, setFilters] = useState({ status: '', severity: '', category: '', date_from: '', date_to: '', report_type: '' })
   const { user, isAdmin, isPilot, isSupervisor } = useAuth()
   const toast = useToast()
+  const [confirmProps, requestConfirm] = useConfirm()
 
   const load = async () => {
     setLoading(true)
@@ -343,15 +346,20 @@ export default function IncidentPage() {
     }
   }
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Delete this incident report?')) return
-    try {
-      await api.delete(`/incidents/${id}`)
-      toast.success('Incident deleted')
-      load()
-    } catch (err) {
-      toast.error(err.message)
-    }
+  const handleDelete = (id) => {
+    requestConfirm({
+      title: 'Delete Incident',
+      message: 'Delete this incident report?',
+      onConfirm: async () => {
+        try {
+          await api.delete(`/incidents/${id}`)
+          toast.success('Incident deleted')
+          load()
+        } catch (err) {
+          toast.error(err.message)
+        }
+      }
+    })
   }
 
   if (loading && incidents.length === 0) {
@@ -581,6 +589,7 @@ export default function IncidentPage() {
         <ResolveModal incident={resolveTarget}
           onSave={handleResolve} onClose={() => setResolveTarget(null)} />
       )}
+      <ConfirmDialog {...confirmProps} />
     </div>
   )
 }

@@ -2,14 +2,16 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
+from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.database import Base, engine
+from app.database import Base, engine, SessionLocal
 from app.models import *  # noqa: F401,F403 - Import all models to register them
 from app.models.telemetry import TelemetryBase
 from app.database import telemetry_engine
@@ -23,7 +25,6 @@ from app.routers import (
 )
 from app.routers import vehicle_registrations
 from app.services.scheduler import start_scheduler, stop_scheduler
-from app.database import SessionLocal
 from app.models.user import User
 from app.models.flight import FlightPurpose
 from app.models.folder import Folder
@@ -74,7 +75,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Drone Unit Manager",
-    version="1.0.0",
+    version="2.0.0",
     lifespan=lifespan,
 )
 
@@ -82,9 +83,20 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
+
+
+@app.middleware("http")
+async def add_request_id(request: Request, call_next):
+    """Add a unique request ID to every request for tracing."""
+    request_id = str(uuid4())
+    request.state.request_id = request_id
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    return response
+
 
 # Register routers
 app.include_router(auth.router)
@@ -122,11 +134,23 @@ app.include_router(geofences.router)
 
 @app.get("/api/health")
 def health_check():
-    return {"status": "ok", "app": "Drone Unit Manager"}
+    """Health check that verifies database connectivity."""
+    try:
+        db = SessionLocal()
+        db.execute(text("SELECT 1"))
+        db.close()
+        return {"status": "ok", "app": "Drone Unit Manager", "database": "connected"}
+    except Exception as e:
+        logger.error("Health check failed: %s", e)
+        return JSONResponse(
+            status_code=503,
+            content={"status": "unhealthy", "app": "Drone Unit Manager", "database": "disconnected"},
+        )
 
+
+from sqlalchemy import text
 
 # Serve frontend static files in production (Docker)
-import os
 from fastapi.responses import FileResponse
 
 _static_dir = str(Path(__file__).parent.parent / "static")

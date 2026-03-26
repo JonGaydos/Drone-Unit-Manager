@@ -7,6 +7,7 @@ import {
   Upload, Trash2, Edit2, X, File, Search, Home,
   FileImage, FileSpreadsheet, Save, FolderInput
 } from 'lucide-react'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 
 export default function DocumentStoragePage() {
   const [folders, setFolders] = useState([])
@@ -25,6 +26,7 @@ export default function DocumentStoragePage() {
   const [movingDoc, setMovingDoc] = useState(null)
   const [expandedFolders, setExpandedFolders] = useState(new Set())
   const [search, setSearch] = useState('')
+  const [confirmDeleteFolder, setConfirmDeleteFolder] = useState(null)
   const { isAdmin, isPilot, isSupervisor } = useAuth()
   const toast = useToast()
 
@@ -69,18 +71,28 @@ export default function DocumentStoragePage() {
   }, [loadFolders, loadAllDocuments])
 
   useEffect(() => {
+    const controller = new AbortController()
+
     if (selectedFolder === 'unfiled') {
       // Show documents without a folder
       setDocsLoading(true)
       api.get('/documents').then(docs => {
-        const unfiled = (Array.isArray(docs) ? docs : []).filter(d => !d.folder_id)
-        setDocuments(unfiled)
-      }).catch(err => toast.error(err.message || 'An error occurred')).finally(() => setDocsLoading(false))
+        if (!controller.signal.aborted) {
+          const unfiled = (Array.isArray(docs) ? docs : []).filter(d => !d.folder_id)
+          setDocuments(unfiled)
+        }
+      }).catch(err => {
+        if (!controller.signal.aborted) toast.error(err.message || 'An error occurred')
+      }).finally(() => {
+        if (!controller.signal.aborted) setDocsLoading(false)
+      })
     } else if (selectedFolder) {
       loadDocuments(selectedFolder)
     } else {
       setDocuments([])
     }
+
+    return () => controller.abort()
   }, [selectedFolder, loadDocuments])
 
   // Build folder tree
@@ -136,7 +148,6 @@ export default function DocumentStoragePage() {
   }
 
   const handleDeleteFolder = async (id) => {
-    if (!confirm('Delete this folder? Documents will be moved to "Unfiled".')) return
     try {
       await api.delete(`/folders/${id}`)
       if (selectedFolder === id) setSelectedFolder(null)
@@ -255,9 +266,9 @@ export default function DocumentStoragePage() {
                 <Edit2 className="w-3 h-3" />
               </button>
               <button
-                onClick={(e) => { e.stopPropagation(); handleDeleteFolder(folder.id) }}
+                onClick={(e) => { e.stopPropagation(); setConfirmDeleteFolder(folder.id) }}
                 className="p-0.5 text-muted-foreground hover:text-destructive"
-                aria-label="Delete"
+                aria-label="Delete folder"
               >
                 <Trash2 className="w-3 h-3" />
               </button>
@@ -537,6 +548,15 @@ export default function DocumentStoragePage() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={!!confirmDeleteFolder}
+        onClose={() => setConfirmDeleteFolder(null)}
+        onConfirm={() => handleDeleteFolder(confirmDeleteFolder)}
+        title="Delete Folder"
+        message='Delete this folder? Documents will be moved to "Unfiled".'
+        confirmLabel="Delete"
+      />
     </div>
   )
 }

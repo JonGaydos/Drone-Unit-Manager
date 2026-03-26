@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { useConfirm } from '@/hooks/useConfirm'
 import {
   ClipboardList, Plus, X, Loader2, CheckCircle, XCircle,
   Trash2, Edit2, Eye, ChevronDown, Download,
@@ -459,6 +461,7 @@ export default function ChecklistPage() {
   const [viewCompletion, setViewCompletion] = useState(null)
   const { isSupervisor, isPilot } = useAuth()
   const toast = useToast()
+  const [confirmProps, requestConfirm] = useConfirm()
 
   const load = async () => {
     setLoading(true)
@@ -499,15 +502,20 @@ export default function ChecklistPage() {
     }
   }
 
-  const handleDeleteTemplate = async (id) => {
-    if (!confirm('Delete this template?')) return
-    try {
-      await api.delete(`/checklists/templates/${id}`)
-      toast.success('Template deleted')
-      load()
-    } catch (err) {
-      toast.error(err.message)
-    }
+  const handleDeleteTemplate = (id) => {
+    requestConfirm({
+      title: 'Delete Template',
+      message: 'Delete this template?',
+      onConfirm: async () => {
+        try {
+          await api.delete(`/checklists/templates/${id}`)
+          toast.success('Template deleted')
+          load()
+        } catch (err) {
+          toast.error(err.message)
+        }
+      }
+    })
   }
 
   const handleComplete = async (data) => {
@@ -721,6 +729,7 @@ export default function ChecklistPage() {
           onClose={() => setViewCompletion(null)}
         />
       )}
+      <ConfirmDialog {...confirmProps} />
     </div>
   )
 }

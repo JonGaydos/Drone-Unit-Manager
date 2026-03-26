@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { useConfirm } from '@/hooks/useConfirm'
 import { normalizeDateValue } from '@/lib/utils'
 import { MISSION_STATUS_COLORS } from '@/lib/constants'
 import { sortByName, sortVehicles, formatStatusText, sortPilotsActiveFirst, vehicleDisplayName } from '@/lib/formatters'
@@ -202,6 +204,7 @@ export default function MissionLogPage() {
   const [filterPilot, setFilterPilot] = useState('')
   const { isAdmin, isPilot, isSupervisor } = useAuth()
   const toast = useToast()
+  const [confirmProps, requestConfirm] = useConfirm()
 
   const load = () => {
     const params = new URLSearchParams()
@@ -237,12 +240,17 @@ export default function MissionLogPage() {
     } catch (err) { toast.error(err.message) }
   }
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this mission log?')) return
-    try {
-      await api.delete(`/mission-logs/${id}`)
-      load()
-    } catch (err) { toast.error(err.message) }
+  const handleDelete = (id) => {
+    requestConfirm({
+      title: 'Delete Mission Log',
+      message: 'Are you sure you want to delete this mission log?',
+      onConfirm: async () => {
+        try {
+          await api.delete(`/mission-logs/${id}`)
+          load()
+        } catch (err) { toast.error(err.message) }
+      }
+    })
   }
 
   const handleEdit = (mission) => {
@@ -387,6 +395,7 @@ export default function MissionLogPage() {
           initial={editMission}
         />
       )}
+      <ConfirmDialog {...confirmProps} />
     </div>
   )
 }

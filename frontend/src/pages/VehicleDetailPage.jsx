@@ -3,6 +3,8 @@ import { useParams, Link } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { useConfirm } from '@/hooks/useConfirm'
 import { formatHours, formatDuration, normalizeDateValue } from '@/lib/utils'
 import { STATUS_COLORS } from '@/lib/constants'
 import {
@@ -17,6 +19,7 @@ export default function VehicleDetailPage() {
   const { id } = useParams()
   const { isAdmin } = useAuth()
   const toast = useToast()
+  const [confirmProps, requestConfirm] = useConfirm()
   const [vehicle, setVehicle] = useState(null)
   const [stats, setStats] = useState(null)
   const [flights, setFlights] = useState([])
@@ -630,12 +633,17 @@ export default function VehicleDetailPage() {
                     <td className="px-4 py-2 text-muted-foreground hidden md:table-cell">{r.notes || '--'}</td>
                     {isAdmin && (
                       <td className="px-4 py-2 text-right">
-                        <button onClick={async () => {
-                          if (!confirm('Delete this registration?')) return
-                          try {
-                            await api.delete(`/vehicle-registrations/${r.id}`)
-                            loadRegistrations()
-                          } catch (err) { toast.error(err.message) }
+                        <button onClick={() => {
+                          requestConfirm({
+                            title: 'Delete Registration',
+                            message: 'Delete this registration?',
+                            onConfirm: async () => {
+                              try {
+                                await api.delete(`/vehicle-registrations/${r.id}`)
+                                loadRegistrations()
+                              } catch (err) { toast.error(err.message) }
+                            }
+                          })
                         }} className="p-1.5 text-muted-foreground hover:text-destructive rounded hover:bg-destructive/10">
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -1064,12 +1072,17 @@ export default function VehicleDetailPage() {
                       <td className="px-4 py-2 text-muted-foreground hidden lg:table-cell">{c.warranty_expiry || '--'}</td>
                       {isAdmin && (
                         <td className="px-4 py-2 text-right">
-                          <button onClick={async () => {
-                            if (!confirm('Delete this component?')) return
-                            try {
-                              await api.delete(`/components/${c.id}`)
-                              loadComponents()
-                            } catch (err) { toast.error(err.message) }
+                          <button onClick={() => {
+                            requestConfirm({
+                              title: 'Delete Component',
+                              message: 'Delete this component?',
+                              onConfirm: async () => {
+                                try {
+                                  await api.delete(`/components/${c.id}`)
+                                  loadComponents()
+                                } catch (err) { toast.error(err.message) }
+                              }
+                            })
                           }} className="p-1.5 text-muted-foreground hover:text-destructive rounded hover:bg-destructive/10">
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -1088,6 +1101,7 @@ export default function VehicleDetailPage() {
 
       {/* Documents */}
       <DocumentUpload entityType="vehicle" entityId={id} folderId={maintenanceFolderId} />
+      <ConfirmDialog {...confirmProps} />
     </div>
   )
 }

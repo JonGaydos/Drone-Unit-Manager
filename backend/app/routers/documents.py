@@ -15,6 +15,12 @@ from app.schemas.document import DocumentOut
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
+ALLOWED_DOCUMENT_EXTENSIONS = {
+    ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".csv", ".txt", ".rtf",
+    ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif",
+    ".ppt", ".pptx", ".odt", ".ods", ".odp",
+}
+
 
 def _doc_to_out(doc: Document) -> DocumentOut:
     out = DocumentOut.model_validate(doc)
@@ -34,10 +40,16 @@ async def upload_document(
     db: Session = Depends(get_db),
     admin: User = Depends(require_pilot),
 ):
+    filename = file.filename or "upload"
+
+    # Validate file extension
+    ext = Path(filename).suffix.lower()
+    if ext and ext not in ALLOWED_DOCUMENT_EXTENSIONS:
+        raise HTTPException(400, f"File type '{ext}' not allowed.")
+
     upload_dir = Path(settings.UPLOAD_DIR) / "documents" / entity_type / str(entity_id)
     upload_dir.mkdir(parents=True, exist_ok=True)
 
-    filename = file.filename or "upload"
     dest = upload_dir / filename
     counter = 1
     while dest.exists():
@@ -96,6 +108,7 @@ def list_documents(
 def view_document(
     doc_id: int,
     db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
 ):
     doc = db.query(Document).filter(Document.id == doc_id).first()
     if not doc:
@@ -156,6 +169,7 @@ def delete_document(
     db: Session = Depends(get_db),
     admin: User = Depends(require_pilot),
 ):
+    from app.services.audit import log_action
     doc = db.query(Document).filter(Document.id == doc_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -164,6 +178,7 @@ def delete_document(
     if file_path.exists():
         os.remove(file_path)
 
+    log_action(db, admin.id, admin.display_name, "delete", "document", doc_id, doc.title or doc.filename)
     db.delete(doc)
     db.commit()
     return {"ok": True}

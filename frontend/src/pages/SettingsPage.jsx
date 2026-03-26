@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { useConfirm } from '@/hooks/useConfirm'
 import { sortByName, sortPilotsActiveFirst } from '@/lib/formatters'
 import { Save, TestTube, Loader2, Upload, FileSpreadsheet, RefreshCw, UserPlus, Key, Trash2, Shield, ShieldCheck, Eye, Image as ImageIcon, ChevronUp, ChevronDown, ExternalLink, X, Edit2 } from 'lucide-react'
 
@@ -15,6 +17,7 @@ export default function SettingsPage() {
   const [importing, setImporting] = useState(false)
   const { isAdmin, user: currentUser } = useAuth()
   const toast = useToast()
+  const [confirmProps, requestConfirm] = useConfirm()
 
   // User management state
   const [users, setUsers] = useState([])
@@ -184,12 +187,17 @@ export default function SettingsPage() {
     finally { setAddingUser(false) }
   }
 
-  const handleDeleteUser = async (id) => {
-    if (!confirm('Delete this user?')) return
-    try {
-      await api.delete(`/auth/users/${id}`)
-      setUsers(users.filter(u => u.id !== id))
-    } catch (err) { toast.error(err.message) }
+  const handleDeleteUser = (id) => {
+    requestConfirm({
+      title: 'Delete User',
+      message: 'Delete this user?',
+      onConfirm: async () => {
+        try {
+          await api.delete(`/auth/users/${id}`)
+          setUsers(users.filter(u => u.id !== id))
+        } catch (err) { toast.error(err.message) }
+      }
+    })
   }
 
   const handleToggleActive = async (u) => {
@@ -1030,6 +1038,7 @@ export default function SettingsPage() {
           </div>
         </div>
       )}
+      <ConfirmDialog {...confirmProps} />
     </div>
   )
 }

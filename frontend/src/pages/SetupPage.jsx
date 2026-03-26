@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { api } from '@/api/client'
-import { Plane, Shield, ArrowRight } from 'lucide-react'
+import { Shield, ArrowRight } from 'lucide-react'
+import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 
 export default function SetupPage() {
   const [step, setStep] = useState(1)
@@ -51,7 +52,7 @@ export default function SetupPage() {
         {/* Header */}
         <div className="text-center mb-8">
           <div className="w-16 h-16 bg-primary/15 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <Plane className="w-8 h-8 text-primary" />
+            <QuadcopterIcon className="w-8 h-8 text-primary" />
           </div>
           <h1 className="text-3xl font-bold text-foreground">Drone Unit Manager</h1>
           <p className="text-muted-foreground mt-2">Welcome! Let's set up your account.</p>

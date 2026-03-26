@@ -2,6 +2,7 @@
 import os
 import uuid
 import shutil
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -17,14 +18,27 @@ from app.models.photo import Photo, PhotoPilot
 from app.models.pilot import Pilot
 from app.routers.auth import get_current_user, require_pilot
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/photos", tags=["photos"])
 
 UPLOAD_DIR = str(Path(settings.UPLOAD_DIR) / "photos")
 THUMB_WIDTH = 400
 
+ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif"}
+
 
 def _ensure_dir(path: str):
     os.makedirs(path, exist_ok=True)
+
+
+def _validate_path(file_path: str) -> Path:
+    """Validate that file_path is within the upload directory (path traversal prevention)."""
+    resolved = Path(file_path).resolve()
+    upload_root = Path(UPLOAD_DIR).resolve()
+    if not str(resolved).startswith(str(upload_root)):
+        raise HTTPException(status_code=403, detail="Access denied")
+    return resolved
 
 
 @router.post("/upload")
@@ -37,6 +51,11 @@ def upload_photo(
     db: Session = Depends(get_db),
     user=Depends(require_pilot),
 ):
+    # Validate file extension
+    ext = os.path.splitext(file.filename or "photo.jpg")[1].lower()
+    if ext not in ALLOWED_IMAGE_EXTENSIONS:
+        raise HTTPException(400, f"File type '{ext}' not allowed. Allowed: {', '.join(sorted(ALLOWED_IMAGE_EXTENSIONS))}")
+
     # Create photo record first to get ID
     parsed_date = None
     if date_taken:
@@ -45,7 +64,6 @@ def upload_photo(
         except (ValueError, AttributeError):
             pass
 
-    ext = os.path.splitext(file.filename or "photo.jpg")[1].lower()
     stored_name = f"{uuid.uuid4().hex}{ext}"
 
     photo = Photo(
@@ -64,6 +82,10 @@ def upload_photo(
     photo_dir = os.path.join(UPLOAD_DIR, str(photo.id))
     _ensure_dir(photo_dir)
     file_path = os.path.join(photo_dir, stored_name)
+
+    # Validate path before writing
+    _validate_path(file_path)
+
     content = file.file.read()
     if len(content) > settings.MAX_UPLOAD_SIZE:
         raise HTTPException(413, f"File too large. Maximum size is {settings.MAX_UPLOAD_SIZE // (1024*1024)}MB")
@@ -82,7 +104,8 @@ def upload_photo(
             img = img.convert("RGB")
         img.save(thumb_path, "JPEG", quality=85)
         photo.thumbnail_path = thumb_path
-    except Exception:
+    except (IOError, OSError) as e:
+        logger.warning("Thumbnail generation failed for photo %s: %s", photo.id, e)
         photo.thumbnail_path = None
 
     # Create pilot associations
@@ -100,18 +123,32 @@ def upload_photo(
 @router.get("")
 def list_photos(db: Session = Depends(get_db), _user=Depends(get_current_user)):
     photos = db.query(Photo).order_by(Photo.date_taken.desc().nullslast(), Photo.created_at.desc()).all()
+
+    # Batch-load all pilot associations to avoid N+1 queries
+    photo_ids = [p.id for p in photos]
+    associations = db.query(PhotoPilot).filter(PhotoPilot.photo_id.in_(photo_ids)).all() if photo_ids else []
+
+    pilot_ids_set = {a.pilot_id for a in associations}
+    pilots_map = {}
+    if pilot_ids_set:
+        pilots = db.query(Pilot).filter(Pilot.id.in_(pilot_ids_set)).all()
+        pilots_map = {p.id: p for p in pilots}
+
+    # Group associations by photo
+    photo_assoc = {}
+    for a in associations:
+        photo_assoc.setdefault(a.photo_id, []).append(a.pilot_id)
+
     result = []
     for p in photos:
-        # Get associated pilot names
-        associations = db.query(PhotoPilot).filter(PhotoPilot.photo_id == p.id).all()
         pilot_names = []
-        pilot_ids = []
-        for a in associations:
-            pilot = db.query(Pilot).filter(Pilot.id == a.pilot_id).first()
+        pilot_ids_list = []
+        for pid in photo_assoc.get(p.id, []):
+            pilot = pilots_map.get(pid)
             if pilot:
                 name = f"{pilot.first_name} {pilot.last_name}".strip()
                 pilot_names.append(name)
-                pilot_ids.append(pilot.id)
+                pilot_ids_list.append(pilot.id)
 
         result.append({
             "id": p.id,
@@ -123,35 +160,39 @@ def list_photos(db: Session = Depends(get_db), _user=Depends(get_current_user)):
             "mime_type": p.mime_type,
             "has_thumbnail": p.thumbnail_path is not None,
             "pilot_names": pilot_names,
-            "pilot_ids": pilot_ids,
+            "pilot_ids": pilot_ids_list,
             "created_at": p.created_at.isoformat() if p.created_at else None,
         })
     return result
 
 
 @router.get("/{photo_id}/view")
-def view_photo(photo_id: int, db: Session = Depends(get_db)):
+def view_photo(photo_id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     photo = db.query(Photo).filter(Photo.id == photo_id).first()
     if not photo:
         raise HTTPException(404, "Photo not found")
     file_path = os.path.join(UPLOAD_DIR, str(photo.id), photo.filename)
-    if not os.path.exists(file_path):
+    resolved = _validate_path(file_path)
+    if not resolved.exists():
         raise HTTPException(404, "File not found on disk")
-    return FileResponse(file_path, media_type=photo.mime_type or "image/jpeg")
+    return FileResponse(str(resolved), media_type=photo.mime_type or "image/jpeg")
 
 
 @router.get("/{photo_id}/thumbnail")
-def view_thumbnail(photo_id: int, db: Session = Depends(get_db)):
+def view_thumbnail(photo_id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
     photo = db.query(Photo).filter(Photo.id == photo_id).first()
     if not photo:
         raise HTTPException(404, "Photo not found")
-    if photo.thumbnail_path and os.path.exists(photo.thumbnail_path):
-        return FileResponse(photo.thumbnail_path, media_type="image/jpeg")
+    if photo.thumbnail_path:
+        thumb_resolved = _validate_path(photo.thumbnail_path)
+        if thumb_resolved.exists():
+            return FileResponse(str(thumb_resolved), media_type="image/jpeg")
     # Fall back to full image
     file_path = os.path.join(UPLOAD_DIR, str(photo.id), photo.filename)
-    if not os.path.exists(file_path):
+    resolved = _validate_path(file_path)
+    if not resolved.exists():
         raise HTTPException(404, "File not found on disk")
-    return FileResponse(file_path, media_type=photo.mime_type or "image/jpeg")
+    return FileResponse(str(resolved), media_type=photo.mime_type or "image/jpeg")
 
 
 @router.patch("/{photo_id}")
@@ -192,6 +233,7 @@ def update_photo(
 
 @router.delete("/{photo_id}")
 def delete_photo(photo_id: int, db: Session = Depends(get_db), user=Depends(require_pilot)):
+    from app.services.audit import log_action
     photo = db.query(Photo).filter(Photo.id == photo_id).first()
     if not photo:
         raise HTTPException(404, "Photo not found")
@@ -204,6 +246,7 @@ def delete_photo(photo_id: int, db: Session = Depends(get_db), user=Depends(requ
     if os.path.exists(photo_dir):
         shutil.rmtree(photo_dir)
 
+    log_action(db, user.id, user.display_name, "delete", "photo", photo_id, photo.original_filename)
     db.delete(photo)
     db.commit()
     return {"message": "Photo deleted"}

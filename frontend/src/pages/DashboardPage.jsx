@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '@/api/client'
-import { Plane, Clock, Users, Box, AlertTriangle, ClipboardCheck, ArrowRight, Wrench } from 'lucide-react'
+import { Clock, Users, Box, AlertTriangle, ClipboardCheck, ArrowRight, Wrench } from 'lucide-react'
+import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 import { formatDuration, formatHours } from '@/lib/utils'
 
 function StatCard({ title, value, subtitle, icon: Icon, color = 'primary', to }) {
@@ -121,7 +122,7 @@ export default function DashboardPage() {
         <StatCard
           title="Total Flights"
           value={stats?.total_flights || 0}
-          icon={Plane}
+          icon={QuadcopterIcon}
           color="primary"
           to="/flights"
         />

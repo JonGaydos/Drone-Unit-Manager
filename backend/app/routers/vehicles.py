@@ -100,16 +100,21 @@ def delete_vehicle(vehicle_id: int, db: Session = Depends(get_db), admin: User =
     return {"ok": True, "message": "Vehicle retired"}
 
 
+ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+
+
 @router.post("/{vehicle_id}/photo")
 async def upload_vehicle_photo(vehicle_id: int, file: UploadFile, db: Session = Depends(get_db), user: User = Depends(require_admin)):
     vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
     if not vehicle:
         raise HTTPException(404, "Vehicle not found")
+    ext = Path(file.filename).suffix.lower() or ".jpg"
+    if ext not in ALLOWED_IMAGE_EXTENSIONS:
+        raise HTTPException(400, f"File type '{ext}' not allowed.")
     upload_dir = Path(settings.UPLOAD_DIR) / "photos" / "vehicles" / str(vehicle_id)
     upload_dir.mkdir(parents=True, exist_ok=True)
     for old in upload_dir.glob("profile.*"):
         old.unlink()
-    ext = Path(file.filename).suffix or ".jpg"
     filepath = upload_dir / f"profile{ext}"
     content = await file.read()
     if len(content) > settings.MAX_UPLOAD_SIZE:
@@ -122,11 +127,16 @@ async def upload_vehicle_photo(vehicle_id: int, file: UploadFile, db: Session = 
 
 
 @router.get("/{vehicle_id}/photo/view")
-def view_vehicle_photo(vehicle_id: int, db: Session = Depends(get_db)):
+def view_vehicle_photo(vehicle_id: int, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
     vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
     if not vehicle:
         raise HTTPException(404)
     photo_dir = Path(settings.UPLOAD_DIR) / "photos" / "vehicles" / str(vehicle_id)
+    # Path traversal prevention
+    resolved_dir = photo_dir.resolve()
+    upload_root = Path(settings.UPLOAD_DIR).resolve()
+    if not str(resolved_dir).startswith(str(upload_root)):
+        raise HTTPException(403, "Access denied")
     for ext in [".jpg", ".jpeg", ".png", ".webp"]:
         p = photo_dir / f"profile{ext}"
         if p.exists():

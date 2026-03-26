@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { Plus, Edit, Trash2, Search, ChevronUp, ChevronDown, Download, Loader2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 
 function PilotModal({ pilot, onSave, onClose }) {
   const [form, setForm] = useState(pilot || {
@@ -113,6 +114,7 @@ export default function PilotsPage() {
   const [error, setError] = useState(null)
   const [sortKey, setSortKey] = useState('last_name')
   const [sortDir, setSortDir] = useState('asc')
+  const [confirmDelete, setConfirmDelete] = useState(null)
   const { isAdmin, isPilot, isSupervisor } = useAuth()
   const toast = useToast()
 
@@ -142,7 +144,6 @@ export default function PilotsPage() {
   }
 
   const handleDelete = async (pilot) => {
-    if (!window.confirm(`Are you sure you want to deactivate ${pilot.first_name} ${pilot.last_name}?`)) return
     try {
       await api.delete(`/pilots/${pilot.id}`)
       loadPilots()
@@ -260,7 +261,7 @@ export default function PilotsPage() {
                       <button onClick={() => setModal(p)} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent" aria-label="Edit">
                         <Edit className="w-4 h-4" />
                       </button>
-                      <button onClick={() => handleDelete(p)} className="p-1.5 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10" aria-label="Delete">
+                      <button onClick={() => setConfirmDelete(p)} className="p-1.5 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10" aria-label="Deactivate pilot">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
@@ -283,6 +284,15 @@ export default function PilotsPage() {
           onClose={() => setModal(null)}
         />
       )}
+
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={() => handleDelete(confirmDelete)}
+        title="Deactivate Pilot"
+        message={confirmDelete ? `Are you sure you want to deactivate ${confirmDelete.first_name} ${confirmDelete.last_name}?` : ''}
+        confirmLabel="Deactivate"
+      />
     </div>
   )
 }

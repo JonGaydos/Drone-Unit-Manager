@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.models.user import User
-from app.schemas.user import LoginRequest, LoginResponse, UserOut, UserCreate, UserUpdate, ChangePasswordRequest, AdminResetPasswordRequest
+from app.schemas.user import LoginRequest, LoginResponse, UserOut, UserCreate, UserUpdate, ChangePasswordRequest, AdminResetPasswordRequest, SetupRequest
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 security = HTTPBearer(auto_error=False)
@@ -107,16 +107,16 @@ def check_setup_required(db: Session = Depends(get_db)):
 
 
 @router.post("/setup")
-def initial_setup(data: dict, db: Session = Depends(get_db)):
+def initial_setup(data: SetupRequest, db: Session = Depends(get_db)):
     """Create the first admin account. Only works when no users exist."""
     user_count = db.query(User).count()
     if user_count > 0:
         raise HTTPException(403, "Setup already completed. Use the login page.")
 
-    username = data.get("username", "").strip()
-    password = data.get("password", "")
-    display_name = data.get("display_name", "").strip()
-    org_name = data.get("org_name", "").strip()
+    username = data.username.strip()
+    password = data.password
+    display_name = data.display_name.strip()
+    org_name = data.org_name.strip()
 
     if not username or len(username) < 3:
         raise HTTPException(400, "Username must be at least 3 characters")
