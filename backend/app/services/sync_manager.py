@@ -353,15 +353,15 @@ class SyncManager:
         # Prioritize new API flights (no pilot/vehicle), then older unenriched flights
         try:
             from app.integrations.skydio import _to_str
-            # Pass 1: New API flights missing pilot or vehicle (most urgent)
+            # Pass 1: All API flights missing pilot/vehicle/altitude (no limit — enrich all)
             urgent = db.query(Flight).filter(
                 Flight.external_id.isnot(None),
                 Flight.api_provider == "skydio",
                 (Flight.pilot_id.is_(None)) | (Flight.vehicle_id.is_(None)) | (Flight.max_altitude_m.is_(None)),
-            ).limit(200).all()
-            # Pass 2: Any remaining unenriched flights (Excel imports needing telemetry)
+            ).all()
+            # Pass 2: Excel imports needing telemetry (cap at 100 per sync to spread load)
             urgent_ids = {f.id for f in urgent}
-            remaining_slots = max(0, 200 - len(urgent))
+            remaining_slots = 100
             extra = []
             if remaining_slots > 0:
                 extra = db.query(Flight).filter(
