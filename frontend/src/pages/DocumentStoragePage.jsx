@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import {
   FolderOpen, FolderPlus, FileText, ChevronRight, ChevronDown,
   Upload, Trash2, Edit2, X, File, Search, Home, MoreVertical,
-  FileImage, FileSpreadsheet
+  FileImage, FileSpreadsheet, Save, FolderInput
 } from 'lucide-react'
 
 export default function DocumentStoragePage() {
@@ -19,9 +19,12 @@ export default function DocumentStoragePage() {
   const [newFolderParent, setNewFolderParent] = useState(null)
   const [editingFolder, setEditingFolder] = useState(null)
   const [editName, setEditName] = useState('')
+  const [editingDoc, setEditingDoc] = useState(null)
+  const [editDocTitle, setEditDocTitle] = useState('')
+  const [movingDoc, setMovingDoc] = useState(null)
   const [expandedFolders, setExpandedFolders] = useState(new Set())
   const [search, setSearch] = useState('')
-  const { isAdmin } = useAuth()
+  const { isAdmin, isPilot, isSupervisor } = useAuth()
 
   const loadFolders = useCallback(async () => {
     try {
@@ -144,8 +147,32 @@ export default function DocumentStoragePage() {
   const handleMoveDocument = async (docId, folderId) => {
     try {
       await api.patch(`/documents/${docId}`, { folder_id: folderId })
-      loadDocuments(selectedFolder)
+      setMovingDoc(null)
+      if (selectedFolder === 'unfiled') {
+        const docs = await api.get('/documents')
+        setDocuments((Array.isArray(docs) ? docs : []).filter(d => !d.folder_id))
+      } else {
+        loadDocuments(selectedFolder)
+      }
       loadFolders()
+      loadAllDocuments()
+    } catch (err) {
+      // silently catch
+    }
+  }
+
+  const handleRenameDocument = async (docId) => {
+    if (!editDocTitle.trim()) return
+    try {
+      await api.patch(`/documents/${docId}`, { title: editDocTitle.trim() })
+      setEditingDoc(null)
+      setEditDocTitle('')
+      if (selectedFolder === 'unfiled') {
+        const docs = await api.get('/documents')
+        setDocuments((Array.isArray(docs) ? docs : []).filter(d => !d.folder_id))
+      } else {
+        loadDocuments(selectedFolder)
+      }
       loadAllDocuments()
     } catch (err) {
       // silently catch
@@ -216,7 +243,7 @@ export default function DocumentStoragePage() {
           <FolderOpen className={`w-4 h-4 shrink-0 ${isSelected ? 'text-primary' : 'text-yellow-500'}`} />
           <span className="text-sm truncate flex-1">{folder.name}</span>
           <span className="text-xs text-muted-foreground shrink-0">{folder.document_count}</span>
-          {isAdmin && !folder.is_system && (
+          {isSupervisor && !folder.is_system && (
             <div className="hidden group-hover:flex items-center gap-0.5 shrink-0">
               <button
                 onClick={(e) => { e.stopPropagation(); setEditingFolder(folder.id); setEditName(folder.name) }}
@@ -246,7 +273,7 @@ export default function DocumentStoragePage() {
       <div className="w-64 shrink-0 bg-card border border-border rounded-xl flex flex-col overflow-hidden">
         <div className="flex items-center justify-between p-3 border-b border-border">
           <h2 className="text-sm font-semibold text-foreground">Folders</h2>
-          {isAdmin && (
+          {isSupervisor && (
             <button
               onClick={() => { setShowCreateFolder(true); setNewFolderParent(selectedFolder) }}
               className="p-1 text-muted-foreground hover:text-primary transition-colors"
@@ -411,12 +438,27 @@ export default function DocumentStoragePage() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         {getFileIcon(doc.mime_type)}
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-foreground truncate">{doc.title || doc.filename}</p>
-                          {doc.title && doc.filename && doc.title !== doc.filename && (
-                            <p className="text-xs text-muted-foreground truncate">{doc.filename}</p>
-                          )}
-                        </div>
+                        {editingDoc === doc.id ? (
+                          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                            <input
+                              autoFocus
+                              type="text"
+                              value={editDocTitle}
+                              onChange={(e) => setEditDocTitle(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === 'Enter') handleRenameDocument(doc.id); if (e.key === 'Escape') setEditingDoc(null) }}
+                              className="flex-1 px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                            />
+                            <button onClick={() => handleRenameDocument(doc.id)} className="p-1 text-primary hover:opacity-80"><Save className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => setEditingDoc(null)} className="p-1 text-muted-foreground hover:text-foreground"><X className="w-3.5 h-3.5" /></button>
+                          </div>
+                        ) : (
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-foreground truncate">{doc.title || doc.filename}</p>
+                            {doc.title && doc.filename && doc.title !== doc.filename && (
+                              <p className="text-xs text-muted-foreground truncate">{doc.filename}</p>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </td>
                     <td className="px-4 py-3">
@@ -431,14 +473,49 @@ export default function DocumentStoragePage() {
                       {formatDate(doc.uploaded_at)}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <a
-                        href={`${import.meta.env.VITE_API_URL || '/api'}/documents/${doc.id}/view`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-primary hover:opacity-80"
-                      >
-                        View
-                      </a>
+                      <div className="flex items-center justify-end gap-1">
+                        <a
+                          href={`${import.meta.env.VITE_API_URL || '/api'}/documents/${doc.id}/view`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-primary hover:opacity-80 px-1.5 py-1"
+                        >
+                          View
+                        </a>
+                        {isPilot && (
+                          <>
+                            <button
+                              onClick={() => { setEditingDoc(doc.id); setEditDocTitle(doc.title || doc.filename || '') }}
+                              className="p-1 text-muted-foreground hover:text-foreground rounded hover:bg-accent/30"
+                              title="Rename"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <div className="relative">
+                              <button
+                                onClick={() => setMovingDoc(movingDoc === doc.id ? null : doc.id)}
+                                className="p-1 text-muted-foreground hover:text-foreground rounded hover:bg-accent/30"
+                                title="Move to folder"
+                              >
+                                <FolderInput className="w-3.5 h-3.5" />
+                              </button>
+                              {movingDoc === doc.id && (
+                                <div className="absolute right-0 top-full mt-1 w-48 bg-card border border-border rounded-lg shadow-xl z-20 py-1 max-h-48 overflow-y-auto">
+                                  {folders.map(f => (
+                                    <button
+                                      key={f.id}
+                                      onClick={() => handleMoveDocument(doc.id, f.id)}
+                                      className={`w-full text-left px-3 py-1.5 text-sm hover:bg-accent/30 ${doc.folder_id === f.id ? 'text-primary font-medium' : 'text-foreground'}`}
+                                    >
+                                      {f.name}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

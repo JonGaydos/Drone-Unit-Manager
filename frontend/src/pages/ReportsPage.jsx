@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { normalizeDateValue } from '@/lib/utils'
-import { sortByName, sortVehicles } from '@/lib/formatters'
+import { sortByName, sortVehicles, sortPilotsActiveFirst } from '@/lib/formatters'
 import { FileBarChart, Upload, Loader2, Download, FileText, FileDown } from 'lucide-react'
 
 const REPORT_TYPES = [
@@ -192,7 +192,7 @@ export default function ReportsPage() {
                 <label className="block text-sm font-medium text-foreground mb-1">Pilots</label>
                 <div className="bg-secondary border border-border rounded-lg p-2 max-h-36 overflow-y-auto space-y-1">
                   {pilots.length === 0 && <p className="text-xs text-muted-foreground px-1">No pilots available</p>}
-                  {sortByName(pilots).map(p => (
+                  {sortPilotsActiveFirst(pilots).map(p => (
                     <label key={p.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-accent/30 cursor-pointer">
                       <input
                         type="checkbox"

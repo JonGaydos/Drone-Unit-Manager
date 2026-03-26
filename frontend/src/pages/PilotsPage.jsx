@@ -40,33 +40,23 @@ function PilotModal({ pilot, onSave, onClose }) {
           </div>
           {field('Email', 'email', 'email')}
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Phone</label>
-            <div className="flex gap-2">
-              <select
-                value={form.phone_type || 'work'}
-                onChange={(e) => setForm({ ...form, phone_type: e.target.value })}
-                className="px-2 py-2 bg-secondary border border-border rounded-lg text-sm w-32"
-              >
-                <option value="work">Work Cell</option>
-                <option value="personal">Personal Cell</option>
-              </select>
-              <input
-                type="tel"
-                value={form.phone || ''}
-                onChange={(e) => {
-                  const digits = e.target.value.replace(/\D/g, '').slice(0, 10)
-                  let formatted = digits
-                  if (digits.length > 3) formatted = digits.slice(0,3) + '-' + digits.slice(3)
-                  if (digits.length > 6) formatted = digits.slice(0,3) + '-' + digits.slice(3,6) + '-' + digits.slice(6)
-                  setForm({ ...form, phone: formatted })
-                }}
-                placeholder="###-###-####"
-                className="flex-1 px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-            </div>
+            <label className="block text-sm font-medium text-foreground mb-1">Personal Cell</label>
+            <input
+              type="tel"
+              value={form.phone || ''}
+              onChange={(e) => {
+                const digits = e.target.value.replace(/\D/g, '').slice(0, 10)
+                let formatted = digits
+                if (digits.length > 3) formatted = digits.slice(0,3) + '-' + digits.slice(3)
+                if (digits.length > 6) formatted = digits.slice(0,3) + '-' + digits.slice(3,6) + '-' + digits.slice(6)
+                setForm({ ...form, phone: formatted })
+              }}
+              placeholder="###-###-####"
+              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            />
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Work Phone</label>
+            <label className="block text-sm font-medium text-foreground mb-1">Work Cell</label>
             <input
               type="tel"
               value={form.phone_work || ''}
@@ -123,7 +113,7 @@ export default function PilotsPage() {
   const [error, setError] = useState(null)
   const [sortKey, setSortKey] = useState('last_name')
   const [sortDir, setSortDir] = useState('asc')
-  const { isAdmin } = useAuth()
+  const { isAdmin, isPilot, isSupervisor } = useAuth()
   const toast = useToast()
 
   const toggleSort = (key) => {
@@ -214,7 +204,7 @@ export default function PilotsPage() {
         >
           <Download className="w-4 h-4" /> Export CSV
         </button>
-        {isAdmin && (
+        {isSupervisor && (
           <button
             onClick={() => setModal('add')}
             className="flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90"
@@ -265,7 +255,7 @@ export default function PilotsPage() {
                   </span>
                 </td>
                 <td className="px-4 py-3 text-right">
-                  {isAdmin && (
+                  {isSupervisor && (
                     <div className="flex items-center justify-end gap-1">
                       <button onClick={() => setModal(p)} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent">
                         <Edit className="w-4 h-4" />

@@ -3,6 +3,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -29,6 +30,7 @@ async def upload_document(
     document_type: str = Form(...),
     title: str = Form(...),
     notes: str | None = Form(default=None),
+    folder_id: int | None = Form(default=None),
     db: Session = Depends(get_db),
     admin: User = Depends(require_pilot),
 ):
@@ -64,6 +66,7 @@ async def upload_document(
         mime_type=file.content_type or "application/octet-stream",
         file_size_bytes=len(contents),
         notes=notes,
+        folder_id=folder_id,
     )
     db.add(doc)
     db.commit()
@@ -91,7 +94,6 @@ def list_documents(
 def view_document(
     doc_id: int,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
 ):
     doc = db.query(Document).filter(Document.id == doc_id).first()
     if not doc:
@@ -121,27 +123,26 @@ def view_document(
     )
 
 
+class DocumentUpdate(BaseModel):
+    title: str | None = None
+    document_type: str | None = None
+    notes: str | None = None
+    folder_id: int | None = None
+
+
 @router.patch("/{doc_id}", response_model=DocumentOut)
 def update_document(
     doc_id: int,
-    title: str = None,
-    document_type: str = None,
-    notes: str = None,
-    folder_id: int | None = None,
+    data: DocumentUpdate,
     db: Session = Depends(get_db),
     user: User = Depends(require_pilot),
 ):
     doc = db.query(Document).filter(Document.id == doc_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
-    if title is not None:
-        doc.title = title
-    if document_type is not None:
-        doc.document_type = document_type
-    if notes is not None:
-        doc.notes = notes
-    if folder_id is not None:
-        doc.folder_id = folder_id
+    update_fields = data.model_dump(exclude_unset=True)
+    for key, value in update_fields.items():
+        setattr(doc, key, value)
     db.commit()
     db.refresh(doc)
     return _doc_to_out(doc)

@@ -357,7 +357,7 @@ export default function FleetPage() {
   const [sortKey, setSortKey] = useState('name')
   const [sortDir, setSortDir] = useState('asc')
   const [vehicleModels, setVehicleModels] = useState([])
-  const { isAdmin } = useAuth()
+  const { isAdmin, isPilot, isSupervisor } = useAuth()
   const toast = useToast()
 
   // Fetch unique vehicle models for combobox
@@ -384,7 +384,7 @@ export default function FleetPage() {
         const enriched = await Promise.all(data.map(async (v) => {
           try {
             const regs = await api.get(`/vehicles/${v.id}/registrations`)
-            const current = regs.find(r => r.is_current)
+            const current = [...regs].sort((a, b) => (b.registration_date || '').localeCompare(a.registration_date || ''))[0]
             return { ...v, _reg_expiry: current?.expiry_date || null, next_due: current?.expiry_date || '' }
           } catch { return { ...v, _reg_expiry: null, next_due: '' } }
         }))
@@ -498,7 +498,7 @@ export default function FleetPage() {
             <Download className="w-4 h-4" /> Export CSV
           </button>
         )}
-        {isAdmin && (
+        {isSupervisor && (
           <button
             onClick={() => setModal('add')}
             className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90"
@@ -517,7 +517,7 @@ export default function FleetPage() {
         <EquipmentTable
           items={filtered}
           columns={config.columns}
-          isAdmin={isAdmin}
+          isAdmin={isSupervisor}
           onEdit={(item) => setModal(item)}
           onDelete={handleDelete}
           emptyMessage={`No ${config.label.toLowerCase()} found`}

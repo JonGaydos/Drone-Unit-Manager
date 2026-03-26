@@ -5,6 +5,7 @@ import {
   Search, Upload, X, ChevronLeft, ChevronRight, Edit2, Trash2,
   Camera, Calendar, User, Info, ZoomIn, Image as ImageIcon
 } from 'lucide-react'
+import { sortPilotsActiveFirst } from '@/lib/formatters'
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
@@ -16,7 +17,7 @@ export default function MediaPage() {
   const [showUpload, setShowUpload] = useState(false)
   const [showEdit, setShowEdit] = useState(null)
   const [lightbox, setLightbox] = useState(null)
-  const { isAdmin } = useAuth()
+  const { isAdmin, isPilot, isSupervisor } = useAuth()
 
   const load = useCallback(() => {
     setLoading(true)
@@ -90,12 +91,14 @@ export default function MediaPage() {
               className="pl-9 pr-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring w-64"
             />
           </div>
-          <button
-            onClick={() => setShowUpload(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
-          >
-            <Upload className="w-4 h-4" /> Upload
-          </button>
+          {isPilot && (
+            <button
+              onClick={() => setShowUpload(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+            >
+              <Upload className="w-4 h-4" /> Upload
+            </button>
+          )}
         </div>
       </div>
 
@@ -107,12 +110,14 @@ export default function MediaPage() {
           <p className="text-muted-foreground max-w-md mx-auto mb-4">
             Upload photos from flights, training, or equipment inspections to build your gallery.
           </p>
-          <button
-            onClick={() => setShowUpload(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90"
-          >
-            <Upload className="w-4 h-4" /> Upload First Photo
-          </button>
+          {isPilot && (
+            <button
+              onClick={() => setShowUpload(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90"
+            >
+              <Upload className="w-4 h-4" /> Upload First Photo
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -155,7 +160,7 @@ export default function MediaPage() {
                     <span className="truncate">{photo.pilot_names.join(', ')}</span>
                   </div>
                 )}
-                {isAdmin && (
+                {isPilot && (
                   <div className="flex items-center gap-1 pt-1">
                     <button
                       onClick={(e) => { e.stopPropagation(); setShowEdit(photo) }}
@@ -389,7 +394,7 @@ function UploadModal({ pilots, onClose, onSuccess }) {
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">Associated Pilots</label>
             <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-2 bg-secondary border border-border rounded-lg">
-              {pilots.map(p => {
+              {sortPilotsActiveFirst(pilots).map(p => {
                 const name = `${p.first_name} ${p.last_name}`.trim()
                 const sel = selectedPilots.includes(p.id)
                 return (
@@ -498,7 +503,7 @@ function EditModal({ photo, pilots, onClose, onSuccess }) {
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">Associated Pilots</label>
             <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-2 bg-secondary border border-border rounded-lg">
-              {pilots.map(p => {
+              {sortPilotsActiveFirst(pilots).map(p => {
                 const name = `${p.first_name} ${p.last_name}`.trim()
                 const sel = selectedPilots.includes(p.id)
                 return (

@@ -390,7 +390,7 @@ export default function VehicleDetailPage() {
 
         {/* Current Registration Summary */}
         {(() => {
-          const current = registrations.find(r => r.is_current)
+          const current = [...registrations].sort((a, b) => (b.registration_date || '').localeCompare(a.registration_date || ''))[0]
           if (current) {
             const today = new Date()
             const expiry = current.expiry_date ? new Date(current.expiry_date) : null

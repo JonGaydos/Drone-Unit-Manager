@@ -6,6 +6,7 @@ import {
   ClipboardList, Plus, X, Loader2, CheckCircle, XCircle,
   GripVertical, Trash2, Edit2, Eye, ChevronDown, Download,
 } from 'lucide-react'
+import { sortPilotsActiveFirst } from '@/lib/formatters'
 
 // ─── Template Modal ──────────────────────────────────────────────
 
@@ -265,7 +266,7 @@ function CompleteModal({ templates, pilots, vehicles, onSave, onClose }) {
                 required
               >
                 <option value="">Select pilot...</option>
-                {pilots.map(p => <option key={p.id} value={p.id}>{p.first_name} {p.last_name}</option>)}
+                {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.first_name} {p.last_name}</option>)}
               </select>
             </div>
             <div>

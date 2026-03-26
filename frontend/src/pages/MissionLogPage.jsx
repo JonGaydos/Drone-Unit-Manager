@@ -4,13 +4,13 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { normalizeDateValue } from '@/lib/utils'
 import { MISSION_STATUS_COLORS } from '@/lib/constants'
-import { sortByName, sortVehicles, formatStatusText } from '@/lib/formatters'
+import { sortByName, sortVehicles, formatStatusText, sortPilotsActiveFirst } from '@/lib/formatters'
 import { Plus, Search, X, ChevronDown, ChevronUp, Trash2, Download, Loader2 } from 'lucide-react'
 
 const STATUS_OPTIONS = ['planned', 'in_progress', 'completed', 'cancelled']
 const ROLE_OPTIONS = ['PIC', 'Observer', 'Spotter', 'Visual Observer', 'Support']
 
-function MissionModal({ pilots, vehicles, onSave, onClose, initial }) {
+function MissionModal({ pilots, vehicles, purposes, onSave, onClose, initial }) {
   const [form, setForm] = useState(initial || {
     date: new Date().toISOString().slice(0, 10),
     title: '', description: '', reason: '', location: '',
@@ -72,8 +72,30 @@ function MissionModal({ pilots, vehicles, onSave, onClose, initial }) {
           </div>
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">Reason / Purpose</label>
-            <input type="text" value={form.reason || ''} onChange={e => setForm({...form, reason: e.target.value})}
-              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+            {purposes && purposes.length > 0 ? (
+              <div className="flex gap-2">
+                <select
+                  value={purposes.includes(form.reason) ? form.reason : (form.reason ? '__other__' : '')}
+                  onChange={e => {
+                    if (e.target.value === '__other__') setForm({...form, reason: ''})
+                    else setForm({...form, reason: e.target.value})
+                  }}
+                  className="flex-1 px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
+                >
+                  <option value="">Select purpose...</option>
+                  {purposes.map(p => <option key={p} value={p}>{p}</option>)}
+                  <option value="__other__">Other...</option>
+                </select>
+                {(!purposes.includes(form.reason) && form.reason !== '') && (
+                  <input type="text" value={form.reason || ''} onChange={e => setForm({...form, reason: e.target.value})}
+                    placeholder="Enter custom purpose..."
+                    className="flex-1 px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+                )}
+              </div>
+            ) : (
+              <input type="text" value={form.reason || ''} onChange={e => setForm({...form, reason: e.target.value})}
+                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -135,7 +157,7 @@ function MissionModal({ pilots, vehicles, onSave, onClose, initial }) {
                 <select value={pe.pilot_id} onChange={e => updatePilotEntry(i, 'pilot_id', e.target.value)}
                   className="flex-1 px-2 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm">
                   <option value="">Select pilot...</option>
-                  {sortByName(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+                  {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
                 </select>
                 <select value={pe.role} onChange={e => updatePilotEntry(i, 'role', e.target.value)}
                   className="w-32 px-2 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm">
@@ -168,6 +190,7 @@ export default function MissionLogPage() {
   const [missions, setMissions] = useState([])
   const [pilots, setPilots] = useState([])
   const [vehicles, setVehicles] = useState([])
+  const [missionPurposes, setMissionPurposes] = useState([])
   const [search, setSearch] = useState('')
   const [modal, setModal] = useState(false)
   const [editMission, setEditMission] = useState(null)
@@ -177,7 +200,7 @@ export default function MissionLogPage() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [filterPilot, setFilterPilot] = useState('')
-  const { isAdmin } = useAuth()
+  const { isAdmin, isPilot, isSupervisor } = useAuth()
   const toast = useToast()
 
   const load = () => {
@@ -190,8 +213,12 @@ export default function MissionLogPage() {
       api.get(`/mission-logs${qs}`),
       api.get('/pilots'),
       api.get('/vehicles'),
-    ]).then(([m, p, v]) => {
+      api.get('/settings/mission_purposes').catch(() => ({ value: '' })),
+    ]).then(([m, p, v, mp]) => {
       setMissions(m); setPilots(p); setVehicles(v)
+      if (mp.value) {
+        try { setMissionPurposes(JSON.parse(mp.value)) } catch {}
+      }
     }).catch(err => setError(err.message)).finally(() => setLoading(false))
   }
 
@@ -249,7 +276,7 @@ export default function MissionLogPage() {
           <select value={filterPilot} onChange={e => setFilterPilot(e.target.value)}
             className="px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
             <option value="">All Pilots</option>
-            {sortByName(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+            {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
           </select>
           <button
             onClick={() => api.download('/export/mission-logs/csv')}
@@ -257,7 +284,7 @@ export default function MissionLogPage() {
           >
             <Download className="w-4 h-4" /> Export CSV
           </button>
-          {isAdmin && (
+          {isPilot && (
             <button onClick={() => { setEditMission(null); setModal(true) }} className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
               <Plus className="w-4 h-4" /> Add Mission
             </button>
@@ -279,7 +306,7 @@ export default function MissionLogPage() {
               <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden lg:table-cell">Pilots</th>
               <th className="text-right px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Man Hours</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
-              {isAdmin && <th className="w-10 px-2"></th>}
+              {isPilot && <th className="w-10 px-2"></th>}
             </tr>
           </thead>
           <tbody>
@@ -304,7 +331,7 @@ export default function MissionLogPage() {
                       {formatStatusText(m.status)}
                     </span>
                   </td>
-                  {isAdmin && (
+                  {isPilot && (
                     <td className="px-2" onClick={e => e.stopPropagation()}>
                       <button onClick={() => handleDelete(m.id)} className="text-muted-foreground hover:text-destructive p-1">
                         <Trash2 className="w-4 h-4" />
@@ -314,7 +341,7 @@ export default function MissionLogPage() {
                 </tr>
                 {expanded === m.id && (
                   <tr key={`${m.id}-detail`} className="border-b border-border/50 bg-muted/10">
-                    <td colSpan={isAdmin ? 10 : 9} className="px-8 py-4">
+                    <td colSpan={isPilot ? 10 : 9} className="px-8 py-4">
                       <div className="grid grid-cols-2 gap-4 text-sm">
                         {m.description && <div><span className="text-muted-foreground">Description:</span> <span className="text-foreground">{m.description}</span></div>}
                         {m.case_number && <div><span className="text-muted-foreground">Case #:</span> <span className="text-foreground">{m.case_number}</span></div>}
@@ -334,7 +361,7 @@ export default function MissionLogPage() {
                           </div>
                         )}
                       </div>
-                      {isAdmin && (
+                      {isPilot && (
                         <button onClick={() => handleEdit(m)} className="mt-3 px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-xs hover:opacity-90">
                           Edit Mission
                         </button>
@@ -344,7 +371,7 @@ export default function MissionLogPage() {
                 )}
               </>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={isAdmin ? 10 : 9} className="px-4 py-12 text-center text-muted-foreground">No mission logs found</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={isPilot ? 10 : 9} className="px-4 py-12 text-center text-muted-foreground">No mission logs found</td></tr>}
           </tbody>
         </table>
         </div>
@@ -354,6 +381,7 @@ export default function MissionLogPage() {
         <MissionModal
           pilots={pilots}
           vehicles={vehicles}
+          purposes={missionPurposes}
           onSave={handleSave}
           onClose={() => { setModal(false); setEditMission(null) }}
           initial={editMission}

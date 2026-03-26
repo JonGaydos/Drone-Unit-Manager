@@ -4,7 +4,7 @@ import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { formatDuration, normalizeDateValue, metersToFeet, mpsToMph } from '@/lib/utils'
-import { sortByName, sortVehicles } from '@/lib/formatters'
+import { sortByName, sortVehicles, sortPilotsActiveFirst } from '@/lib/formatters'
 import { ArrowLeft, MapPin, Clock, Gauge, Battery, Plane, Save, RefreshCw, Loader2 } from 'lucide-react'
 import { FlightPathMap } from '@/components/FlightMap'
 import {
@@ -182,7 +182,7 @@ export default function FlightDetailPage() {
                 <select value={editForm.pilot_id} onChange={e => setEditForm({...editForm, pilot_id: e.target.value})}
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                   <option value="">Unassigned</option>
-                  {sortByName(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+                  {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
                 </select>
               </div>
               <div>

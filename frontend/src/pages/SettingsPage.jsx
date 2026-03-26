@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
-import { sortByName } from '@/lib/formatters'
-import { Save, TestTube, Loader2, Upload, FileSpreadsheet, RefreshCw, UserPlus, Key, Trash2, Shield, ShieldCheck, Eye, Image as ImageIcon, ChevronUp, ChevronDown, ExternalLink } from 'lucide-react'
+import { sortByName, sortPilotsActiveFirst } from '@/lib/formatters'
+import { Save, TestTube, Loader2, Upload, FileSpreadsheet, RefreshCw, UserPlus, Key, Trash2, Shield, ShieldCheck, Eye, Image as ImageIcon, ChevronUp, ChevronDown, ExternalLink, X } from 'lucide-react'
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState({})
@@ -30,6 +30,19 @@ export default function SettingsPage() {
   // Sidebar config state
   const [sidebarItems, setSidebarItems] = useState([])
   const [savingSidebar, setSavingSidebar] = useState(false)
+
+  // Certification status labels state
+  const [certLabels, setCertLabels] = useState({})
+  const [savingCertLabels, setSavingCertLabels] = useState(false)
+
+  // Weather thresholds state
+  const [weatherThresholds, setWeatherThresholds] = useState({})
+  const [savingWeatherThresholds, setSavingWeatherThresholds] = useState(false)
+
+  // Mission purposes state
+  const [missionPurposes, setMissionPurposes] = useState([])
+  const [newPurpose, setNewPurpose] = useState('')
+  const [savingPurposes, setSavingPurposes] = useState(false)
 
   // Unsaved changes state
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
@@ -105,6 +118,18 @@ export default function SettingsPage() {
         }
       } else {
         setSidebarItems(DEFAULT_SIDEBAR_ITEMS.map((item, i) => ({ ...item, visible: true, order: i })))
+      }
+      // Load cert status labels
+      if (map.cert_status_labels) {
+        try { setCertLabels(JSON.parse(map.cert_status_labels)) } catch {}
+      }
+      // Load weather thresholds
+      if (map.weather_thresholds) {
+        try { setWeatherThresholds(JSON.parse(map.weather_thresholds)) } catch {}
+      }
+      // Load mission purposes
+      if (map.mission_purposes) {
+        try { setMissionPurposes(JSON.parse(map.mission_purposes)) } catch {}
       }
     }).catch(console.error)
     if (isAdmin) {
@@ -479,6 +504,156 @@ export default function SettingsPage() {
         )}
       </div>
 
+      {/* Certification Status Labels - Admin Only */}
+      {isAdmin && (
+        <div className="bg-card border border-border rounded-xl p-6">
+          <h3 className="text-lg font-semibold text-foreground mb-1">Certification Status Labels</h3>
+          <p className="text-sm text-muted-foreground mb-3">Customize the display names for certification statuses.</p>
+          <div className="space-y-2">
+            {['not_issued', 'pending', 'complete', 'active', 'expired', 'not_eligible'].map(status => (
+              <div key={status} className="flex items-center gap-3">
+                <span className="text-sm text-muted-foreground w-28 shrink-0">{status.replace(/_/g, ' ')}</span>
+                <input
+                  type="text"
+                  defaultValue={certLabels[status] || ''}
+                  placeholder={status.replace(/_/g, ' ')}
+                  onBlur={e => setCertLabels(prev => ({ ...prev, [status]: e.target.value }))}
+                  className="flex-1 px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={async () => {
+              setSavingCertLabels(true)
+              try {
+                await api.put('/settings/bulk', [{ key: 'cert_status_labels', value: JSON.stringify(certLabels) }])
+                toast.success('Certification labels saved')
+              } catch (err) { toast.error(err.message) }
+              finally { setSavingCertLabels(false) }
+            }}
+            disabled={savingCertLabels}
+            className="mt-4 flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50"
+          >
+            {savingCertLabels ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            Save Labels
+          </button>
+        </div>
+      )}
+
+      {/* Weather Thresholds - Admin Only */}
+      {isAdmin && (
+        <div className="bg-card border border-border rounded-xl p-6">
+          <h3 className="text-lg font-semibold text-foreground mb-1">Weather Thresholds</h3>
+          <p className="text-sm text-muted-foreground mb-3">Customize weather advisory thresholds for GO / CAUTION / NO-GO.</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {[
+              { key: 'wind_sustained_go', label: 'Wind Sustained GO (mph)', default: 15 },
+              { key: 'wind_sustained_caution', label: 'Wind Sustained CAUTION (mph)', default: 25 },
+              { key: 'wind_gusts_go', label: 'Wind Gusts GO (mph)', default: 20 },
+              { key: 'wind_gusts_caution', label: 'Wind Gusts CAUTION (mph)', default: 30 },
+              { key: 'visibility_go', label: 'Visibility GO (miles)', default: 3 },
+              { key: 'visibility_caution', label: 'Visibility CAUTION (miles)', default: 1 },
+              { key: 'ceiling_go', label: 'Ceiling GO (ft AGL)', default: 500 },
+              { key: 'ceiling_caution', label: 'Ceiling CAUTION (ft AGL)', default: 200 },
+              { key: 'temp_low_go', label: 'Temp Low GO (F)', default: 32 },
+              { key: 'temp_low_caution', label: 'Temp Low CAUTION (F)', default: 20 },
+              { key: 'temp_high_go', label: 'Temp High GO (F)', default: 100 },
+              { key: 'precip_caution', label: 'Precip CAUTION (in)', default: 0.01 },
+            ].map(t => (
+              <div key={t.key}>
+                <label className="block text-xs text-muted-foreground mb-1">{t.label}</label>
+                <input
+                  type="number"
+                  step="any"
+                  defaultValue={weatherThresholds[t.key] ?? t.default}
+                  onBlur={e => {
+                    const val = parseFloat(e.target.value)
+                    if (!isNaN(val)) setWeatherThresholds(prev => ({ ...prev, [t.key]: val }))
+                  }}
+                  className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={async () => {
+              setSavingWeatherThresholds(true)
+              try {
+                await api.put('/settings/bulk', [{ key: 'weather_thresholds', value: JSON.stringify(weatherThresholds) }])
+                toast.success('Weather thresholds saved')
+              } catch (err) { toast.error(err.message) }
+              finally { setSavingWeatherThresholds(false) }
+            }}
+            disabled={savingWeatherThresholds}
+            className="mt-4 flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50"
+          >
+            {savingWeatherThresholds ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            Save Thresholds
+          </button>
+        </div>
+      )}
+
+      {/* Mission/Flight Purposes - Admin Only */}
+      {isAdmin && (
+        <div className="bg-card border border-border rounded-xl p-6">
+          <h3 className="text-lg font-semibold text-foreground mb-1">Mission / Flight Purposes</h3>
+          <p className="text-sm text-muted-foreground mb-3">Add or remove purpose options for missions and flights.</p>
+          <div className="flex flex-wrap gap-2 mb-3">
+            {missionPurposes.map((p, i) => (
+              <div key={i} className="flex items-center gap-1 px-3 py-1 bg-secondary border border-border rounded-full text-sm text-foreground">
+                <span>{p}</span>
+                <button onClick={() => setMissionPurposes(prev => prev.filter((_, idx) => idx !== i))} className="text-muted-foreground hover:text-destructive ml-1">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+            {missionPurposes.length === 0 && <p className="text-sm text-muted-foreground">No custom purposes configured. Default list will be used.</p>}
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={newPurpose}
+              onChange={e => setNewPurpose(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && newPurpose.trim()) {
+                  setMissionPurposes(prev => [...prev, newPurpose.trim()])
+                  setNewPurpose('')
+                }
+              }}
+              placeholder="Add a purpose..."
+              className="flex-1 px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+            <button
+              onClick={() => {
+                if (newPurpose.trim()) {
+                  setMissionPurposes(prev => [...prev, newPurpose.trim()])
+                  setNewPurpose('')
+                }
+              }}
+              className="px-3 py-2 bg-secondary border border-border rounded-lg text-sm text-foreground hover:bg-accent/30"
+            >
+              Add
+            </button>
+          </div>
+          <button
+            onClick={async () => {
+              setSavingPurposes(true)
+              try {
+                await api.put('/settings/bulk', [{ key: 'mission_purposes', value: JSON.stringify(missionPurposes) }])
+                toast.success('Mission purposes saved')
+              } catch (err) { toast.error(err.message) }
+              finally { setSavingPurposes(false) }
+            }}
+            disabled={savingPurposes}
+            className="mt-4 flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50"
+          >
+            {savingPurposes ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            Save Purposes
+          </button>
+        </div>
+      )}
+
       {/* Save */}
       {isAdmin && (
         <div className="flex items-center gap-4">
@@ -666,7 +841,7 @@ export default function SettingsPage() {
                   <select value={newUser.pilot_id} onChange={e => setNewUser({...newUser, pilot_id: e.target.value})}
                     className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                     <option value="">-- No pilot linked --</option>
-                    {sortByName(pilots).map(p => (
+                    {sortPilotsActiveFirst(pilots).map(p => (
                       <option key={p.id} value={p.id}>{p.full_name}{p.badge_number ? ` (Badge: ${p.badge_number})` : ''}</option>
                     ))}
                   </select>

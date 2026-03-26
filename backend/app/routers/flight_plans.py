@@ -170,6 +170,13 @@ def get_flight_plan(plan_id: int, db: Session = Depends(get_db), user: User = De
 
 @router.post("", response_model=FlightPlanOut)
 def create_flight_plan(data: FlightPlanCreate, db: Session = Depends(get_db), user: User = Depends(require_pilot)):
+    # Validate altitude (FAA Part 107: max 400ft AGL)
+    if data.max_altitude_planned is not None:
+        if data.max_altitude_planned < 0:
+            raise HTTPException(status_code=422, detail="Altitude cannot be negative")
+        if data.max_altitude_planned > 400:
+            raise HTTPException(status_code=422, detail="Altitude exceeds 400 ft AGL limit (FAA Part 107)")
+
     plan = FlightPlan(
         title=data.title,
         date_planned=_parse_datetime(data.date_planned),

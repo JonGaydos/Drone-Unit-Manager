@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { normalizeDateValue } from '@/lib/utils'
 import { CERT_STATUS_COLORS } from '@/lib/constants'
-import { sortByName } from '@/lib/formatters'
+import { sortByName, sortPilotsActiveFirst } from '@/lib/formatters'
 import { Plus, Edit, Trash2, ShieldCheck, Search, Filter, Download, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import DocumentUpload from '@/components/DocumentUpload'
 
@@ -112,7 +112,7 @@ function AssignCertModal({ pilots, certTypes, existingCert, onSave, onClose }) {
               disabled={isEditing}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm disabled:opacity-60">
               <option value="">Select pilot...</option>
-              {sortByName(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+              {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
             </select>
           </div>
           <div>
@@ -173,8 +173,11 @@ export default function CertificationsPage() {
   const [modal, setModal] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const { isAdmin } = useAuth()
+  const { isAdmin, isPilot, isSupervisor } = useAuth()
   const toast = useToast()
+
+  // Custom cert status labels
+  const [certStatusLabels, setCertStatusLabels] = useState({})
 
   // Filter state
   const [statusFilter, setStatusFilter] = useState('all')
@@ -187,8 +190,12 @@ export default function CertificationsPage() {
       api.get('/certification-types'),
       api.get('/certifications/matrix'),
       api.get('/pilots'),
-    ]).then(([ct, mx, p]) => {
+      api.get('/settings/cert_status_labels').catch(() => ({ value: '' })),
+    ]).then(([ct, mx, p, labels]) => {
       setCertTypes(ct); setMatrix(mx.matrix || []); setPilots(p)
+      if (labels.value) {
+        try { setCertStatusLabels(JSON.parse(labels.value)) } catch {}
+      }
     }).catch(err => setError(err.message)).finally(() => setLoading(false))
   }
   useEffect(() => { load() }, [])
@@ -295,12 +302,12 @@ export default function CertificationsPage() {
         >
           <Download className="w-4 h-4" /> Export CSV
         </button>
-        {isAdmin && tab === 'types' && (
+        {isSupervisor && tab === 'types' && (
           <button onClick={() => setModal('addType')} className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
             <Plus className="w-4 h-4" /> Add Type
           </button>
         )}
-        {isAdmin && tab === 'matrix' && (
+        {isSupervisor && tab === 'matrix' && (
           <button onClick={() => setModal('assign')} className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
             <Plus className="w-4 h-4" /> Assign Cert
           </button>
@@ -384,7 +391,7 @@ export default function CertificationsPage() {
                   {filteredCertTypes.map((ct, idx) => (
                     <th key={ct.id} className="text-center px-3 py-3 font-medium text-muted-foreground min-w-[100px] bg-card">
                       <div className="flex items-center justify-center gap-0.5">
-                        {isAdmin && (
+                        {isSupervisor && (
                           <button
                             onClick={() => handleReorderCertType(ct.id, 'left')}
                             disabled={idx === 0}
@@ -395,7 +402,7 @@ export default function CertificationsPage() {
                           </button>
                         )}
                         <span className="text-xs">{ct.name}</span>
-                        {isAdmin && (
+                        {isSupervisor && (
                           <button
                             onClick={() => handleReorderCertType(ct.id, 'right')}
                             disabled={idx === filteredCertTypes.length - 1}
@@ -443,7 +450,7 @@ export default function CertificationsPage() {
                             }
                           }}>
                           <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${CERT_STATUS_COLORS[status] || CERT_STATUS_COLORS.not_started}`}>
-                            {status.replace(/_/g, ' ')}
+                            {certStatusLabels[status] || status.replace(/_/g, ' ')}
                           </span>
                           {cert?.expiration_date && (
                             <div className="text-xs text-muted-foreground mt-0.5">{cert.expiration_date}</div>
@@ -474,7 +481,7 @@ export default function CertificationsPage() {
                   <ShieldCheck className="w-5 h-5 text-primary" />
                   <h3 className="font-semibold text-foreground">{ct.name}</h3>
                 </div>
-                {isAdmin && (
+                {isSupervisor && (
                   <div className="flex gap-1">
                     <button onClick={() => setModal(ct)} className="p-1 text-muted-foreground hover:text-foreground"><Edit className="w-3.5 h-3.5" /></button>
                     <button onClick={() => handleDeleteCertType(ct.id)} className="p-1 text-muted-foreground hover:text-destructive"><Trash2 className="w-3.5 h-3.5" /></button>

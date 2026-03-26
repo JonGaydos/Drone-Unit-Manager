@@ -1,11 +1,11 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { normalizeDateValue } from '@/lib/utils'
 import { FREQUENCY_COLORS } from '@/lib/constants'
-import { sortByName } from '@/lib/formatters'
+import { sortByName, sortPilotsActiveFirst } from '@/lib/formatters'
 import { Plus, Trash2, Search, Wrench, CalendarClock, History, Download, Edit, CheckCircle, Clock } from 'lucide-react'
 
 // Map entity_type to API endpoint
@@ -114,7 +114,7 @@ function MaintenanceModal({ record, onSave, onClose, entityLists, pilots }) {
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
               >
                 <option value="">Select pilot...</option>
-                {sortByName(pilots).map(p => (
+                {sortPilotsActiveFirst(pilots).map(p => (
                   <option key={p.id} value={p.full_name}>{p.full_name}</option>
                 ))}
               </select>
@@ -266,7 +266,7 @@ function ScheduleModal({ schedule, onSave, onClose }) {
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
               >
                 <option value="">Unassigned</option>
-                {sortByName(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+                {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
               </select>
             </div>
           </div>
@@ -309,14 +309,15 @@ function EntityRef({ entityType, entityId, entityLists }) {
 }
 
 export default function MaintenancePage() {
-  const [view, setView] = useState('upcoming')
-  const [records, setRecords] = useState([])
+  const [upcomingRecords, setUpcomingRecords] = useState([])
+  const [historyRecords, setHistoryRecords] = useState([])
   const [schedules, setSchedules] = useState([])
   const [search, setSearch] = useState('')
   const [modal, setModal] = useState(null)
   const [scheduleModal, setScheduleModal] = useState(null)
   const [loading, setLoading] = useState(true)
-  const { isAdmin } = useAuth()
+  const [showAllUpcoming, setShowAllUpcoming] = useState(false)
+  const { isAdmin, isPilot, isSupervisor } = useAuth()
   const toast = useToast()
 
   // Entity lists for name resolution and dropdowns
@@ -343,17 +344,20 @@ export default function MaintenancePage() {
     })
   }, [])
 
-  const load = () => {
+  const loadAll = () => {
     setLoading(true)
-    if (view === 'schedules') {
-      api.get('/maintenance/schedules?all=true').then(setSchedules).catch(console.error).finally(() => setLoading(false))
-    } else {
-      const endpoint = view === 'upcoming' ? '/maintenance?upcoming=true' : '/maintenance'
-      api.get(endpoint).then(setRecords).catch(console.error).finally(() => setLoading(false))
-    }
+    Promise.all([
+      api.get('/maintenance?upcoming=true').catch(() => []),
+      api.get('/maintenance').catch(() => []),
+      api.get('/maintenance/schedules?all=true').catch(() => []),
+    ]).then(([upcoming, history, sched]) => {
+      setUpcomingRecords(upcoming)
+      setHistoryRecords(history)
+      setSchedules(sched)
+    }).finally(() => setLoading(false))
   }
 
-  useEffect(() => { load() }, [view])
+  useEffect(() => { loadAll() }, [])
 
   const handleSave = async (data) => {
     try {
@@ -363,7 +367,7 @@ export default function MaintenancePage() {
         await api.post('/maintenance', data)
       }
       setModal(null)
-      await load()
+      loadAll()
     } catch (err) {
       toast.error(err.message)
     }
@@ -373,7 +377,7 @@ export default function MaintenancePage() {
     if (!window.confirm('Are you sure you want to delete this maintenance record?')) return
     try {
       await api.delete(`/maintenance/${id}`)
-      load()
+      loadAll()
     } catch (err) {
       toast.error(err.message)
     }
@@ -387,7 +391,7 @@ export default function MaintenancePage() {
         await api.post('/maintenance/schedules', data)
       }
       setScheduleModal(null)
-      await load()
+      loadAll()
     } catch (err) {
       toast.error(err.message)
     }
@@ -397,7 +401,7 @@ export default function MaintenancePage() {
     if (!window.confirm('Are you sure you want to delete this maintenance schedule?')) return
     try {
       await api.delete(`/maintenance/schedules/${id}`)
-      load()
+      loadAll()
     } catch (err) {
       toast.error(err.message)
     }
@@ -406,21 +410,24 @@ export default function MaintenancePage() {
   const handleScheduleComplete = async (id) => {
     try {
       await api.post(`/maintenance/schedules/${id}/complete`)
-      load()
+      loadAll()
     } catch (err) {
       toast.error(err.message)
     }
   }
 
-  const filtered = records.filter(r =>
+  const filterRecords = (recs) => recs.filter(r =>
     `${r.description || ''} ${r.entity_type || ''} ${r.performed_by || ''} ${r.maintenance_type || ''} ${resolveEntityName(r.entity_type, r.entity_id, entityLists)}`
       .toLowerCase().includes(search.toLowerCase())
   )
 
+  const filteredUpcoming = filterRecords(upcomingRecords)
+  const filteredHistory = filterRecords(historyRecords)
   const filteredSchedules = schedules.filter(s =>
     `${s.name || ''} ${s.entity_type || ''} ${s.frequency || ''} ${s.assigned_to_name || ''}`
       .toLowerCase().includes(search.toLowerCase())
   )
+  const displayedUpcoming = showAllUpcoming ? filteredUpcoming : filteredUpcoming.slice(0, 10)
 
   const TYPE_COLORS = {
     scheduled: 'bg-blue-500/15 text-blue-400',
@@ -433,18 +440,19 @@ export default function MaintenancePage() {
   }
 
   return (
-    <div className="space-y-4">
-      {/* Tabs + Controls */}
-      <div className="flex items-center gap-4 border-b border-border pb-2">
-        <button onClick={() => setView('upcoming')} className={`text-sm font-medium pb-2 border-b-2 transition-colors flex items-center gap-1.5 ${view === 'upcoming' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
-          <CalendarClock className="w-4 h-4" /> Upcoming
-        </button>
-        <button onClick={() => setView('history')} className={`text-sm font-medium pb-2 border-b-2 transition-colors flex items-center gap-1.5 ${view === 'history' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
-          <History className="w-4 h-4" /> History
-        </button>
-        <button onClick={() => setView('schedules')} className={`text-sm font-medium pb-2 border-b-2 transition-colors flex items-center gap-1.5 ${view === 'schedules' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
-          <Clock className="w-4 h-4" /> Schedules
-        </button>
+    <div className="space-y-6">
+      {/* Top Controls */}
+      <div className="flex items-center gap-4">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Search maintenance..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-9 pr-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+        </div>
         <div className="flex-1" />
         <button
           onClick={() => api.download('/export/maintenance/csv')}
@@ -452,74 +460,88 @@ export default function MaintenancePage() {
         >
           <Download className="w-4 h-4" /> Export CSV
         </button>
-        {isAdmin && view !== 'schedules' && (
+        {isPilot && (
           <button onClick={() => setModal('add')} className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
             <Plus className="w-4 h-4" /> Add Maintenance
           </button>
         )}
-        {isAdmin && view === 'schedules' && (
-          <button onClick={() => setScheduleModal('add')} className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
-            <Plus className="w-4 h-4" /> Add Schedule
-          </button>
+      </div>
+
+      {/* ── Upcoming Section ────────────────────────────────────────────── */}
+      <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CalendarClock className="w-4 h-4 text-primary" />
+            <h3 className="font-semibold text-foreground">Upcoming</h3>
+            <span className="text-xs text-muted-foreground">({filteredUpcoming.length})</span>
+          </div>
+        </div>
+        {displayedUpcoming.length > 0 ? (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
+              {displayedUpcoming.map(r => {
+                const dueDate = r.next_due_date ? new Date(r.next_due_date) : null
+                const now = new Date()
+                const daysUntil = dueDate ? Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24)) : null
+                const urgencyColor = daysUntil !== null
+                  ? daysUntil <= 0 ? 'text-red-400' : daysUntil <= 7 ? 'text-amber-400' : 'text-emerald-400'
+                  : 'text-muted-foreground'
+
+                return (
+                  <div key={r.id} className="bg-secondary/30 border border-border/50 rounded-lg p-3">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-2">
+                        <Wrench className="w-4 h-4 text-primary" />
+                        <h4 className="font-medium text-foreground text-sm">{r.description || 'Maintenance'}</h4>
+                      </div>
+                      {isPilot && (
+                        <button onClick={() => handleDelete(r.id)} className="p-1 text-muted-foreground hover:text-destructive">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                      <p>Entity: <EntityRef entityType={r.entity_type} entityId={r.entity_id} entityLists={entityLists} /></p>
+                      <p>Type: <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${TYPE_COLORS[r.maintenance_type] || 'bg-zinc-500/15 text-zinc-400'}`}>{r.maintenance_type}</span></p>
+                      <p>Next Due: <span className={`font-medium ${urgencyColor}`}>{r.next_due_date || 'N/A'}</span>
+                        {daysUntil !== null && <span className={`ml-1 ${urgencyColor}`}>({daysUntil <= 0 ? 'Overdue' : `${daysUntil}d`})</span>}
+                      </p>
+                      {r.performed_by && <p>By: <span className="text-foreground">{r.performed_by}</span></p>}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            {filteredUpcoming.length > 10 && !showAllUpcoming && (
+              <div className="px-4 pb-3">
+                <button onClick={() => setShowAllUpcoming(true)} className="text-sm text-primary hover:opacity-80 font-medium">
+                  Show all ({filteredUpcoming.length})
+                </button>
+              </div>
+            )}
+            {showAllUpcoming && filteredUpcoming.length > 10 && (
+              <div className="px-4 pb-3">
+                <button onClick={() => setShowAllUpcoming(false)} className="text-sm text-primary hover:opacity-80 font-medium">
+                  Show less
+                </button>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="px-4 py-8 text-center text-muted-foreground text-sm">No upcoming maintenance</div>
         )}
       </div>
 
-      {/* Search */}
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <input
-          type="text"
-          placeholder={view === 'schedules' ? 'Search schedules...' : 'Search maintenance...'}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-9 pr-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-        />
-      </div>
-
-      {/* Upcoming View - Cards */}
-      {view === 'upcoming' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map(r => {
-            const dueDate = r.next_due_date ? new Date(r.next_due_date) : null
-            const now = new Date()
-            const daysUntil = dueDate ? Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24)) : null
-            const urgencyColor = daysUntil !== null
-              ? daysUntil <= 0 ? 'text-red-400' : daysUntil <= 7 ? 'text-amber-400' : 'text-emerald-400'
-              : 'text-muted-foreground'
-
-            return (
-              <div key={r.id} className="bg-card border border-border rounded-xl p-4">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-2">
-                    <Wrench className="w-5 h-5 text-primary" />
-                    <h3 className="font-semibold text-foreground text-sm">{r.description || 'Maintenance'}</h3>
-                  </div>
-                  {isAdmin && (
-                    <button onClick={() => handleDelete(r.id)} className="p-1 text-muted-foreground hover:text-destructive">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-                <div className="mt-3 space-y-1.5 text-xs text-muted-foreground">
-                  <p>Entity: <EntityRef entityType={r.entity_type} entityId={r.entity_id} entityLists={entityLists} /></p>
-                  <p>Type: <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${TYPE_COLORS[r.maintenance_type] || 'bg-zinc-500/15 text-zinc-400'}`}>{r.maintenance_type}</span></p>
-                  <p>Next Due: <span className={`font-medium ${urgencyColor}`}>{r.next_due_date || 'N/A'}</span>
-                    {daysUntil !== null && <span className={`ml-1 ${urgencyColor}`}>({daysUntil <= 0 ? 'Overdue' : `${daysUntil}d`})</span>}
-                  </p>
-                  {r.performed_by && <p>Performed by: <span className="text-foreground">{r.performed_by}</span></p>}
-                </div>
-              </div>
-            )
-          })}
-          {filtered.length === 0 && (
-            <div className="col-span-full text-center py-12 text-muted-foreground">No upcoming maintenance found</div>
-          )}
+      {/* ── History Section ─────────────────────────────────────────────── */}
+      <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <History className="w-4 h-4 text-primary" />
+            <h3 className="font-semibold text-foreground">History</h3>
+            <span className="text-xs text-muted-foreground">({filteredHistory.length})</span>
+          </div>
         </div>
-      )}
-
-      {/* History View - Table */}
-      {view === 'history' && (
-        <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/30">
@@ -532,9 +554,9 @@ export default function MaintenancePage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map(r => (
+              {filteredHistory.map(r => (
                 <tr key={r.id} className="border-b border-border/50 hover:bg-accent/30 transition-colors">
-                  <td className="px-4 py-3 text-foreground">{r.description || '—'}</td>
+                  <td className="px-4 py-3 text-foreground">{r.description || '\u2014'}</td>
                   <td className="px-4 py-3">
                     <EntityRef entityType={r.entity_type} entityId={r.entity_id} entityLists={entityLists} />
                   </td>
@@ -543,34 +565,53 @@ export default function MaintenancePage() {
                       {r.maintenance_type}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground">{r.performed_by || '—'}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{r.performed_date || '—'}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{r.performed_by || '\u2014'}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{r.performed_date || '\u2014'}</td>
                   <td className="px-4 py-3 text-right">
-                    {isAdmin && (
-                      <button onClick={() => handleDelete(r.id)} className="p-1.5 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                    {isPilot && (
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => setModal(r)}
+                          className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent"
+                          title="Edit"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(r.id)}
+                          className="p-1.5 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     )}
                   </td>
                 </tr>
               ))}
-              {filtered.length === 0 && (
+              {filteredHistory.length === 0 && (
                 <tr><td colSpan={6} className="px-4 py-12 text-center text-muted-foreground">No maintenance records found</td></tr>
               )}
             </tbody>
           </table>
         </div>
-      )}
+      </div>
 
-      {/* Schedules View - Table */}
-      {view === 'schedules' && (
-        <>
-        <p className="text-sm text-muted-foreground mb-4">
-          Create recurring maintenance schedules for your equipment. When a schedule is due,
-          it will appear in the Upcoming tab and generate an alert.
-        </p>
-        <div className="bg-card border border-border rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
+      {/* ── Schedules Section ───────────────────────────────────────────── */}
+      <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4 text-primary" />
+            <h3 className="font-semibold text-foreground">Schedules</h3>
+            <span className="text-xs text-muted-foreground">({filteredSchedules.length})</span>
+          </div>
+          {isSupervisor && (
+            <button onClick={() => setScheduleModal('add')} className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:opacity-90">
+              <Plus className="w-3.5 h-3.5" /> Add Schedule
+            </button>
+          )}
+        </div>
+        <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/30">
@@ -620,7 +661,7 @@ export default function MaintenancePage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      {isAdmin && (
+                      {isSupervisor && (
                         <div className="flex items-center justify-end gap-1">
                           <button
                             onClick={() => handleScheduleComplete(s.id)}
@@ -652,10 +693,8 @@ export default function MaintenancePage() {
               )}
             </tbody>
           </table>
-          </div>
         </div>
-        </>
-      )}
+      </div>
 
       {modal && (
         <MaintenanceModal

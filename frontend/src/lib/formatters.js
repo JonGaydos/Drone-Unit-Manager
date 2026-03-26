@@ -24,6 +24,13 @@ export function sortByField(items, field = 'name') {
   )
 }
 
+export function sortPilotsActiveFirst(pilots) {
+  return [...pilots].sort((a, b) => {
+    if (a.status !== b.status) return a.status === 'active' ? -1 : 1
+    return (a.first_name || '').localeCompare(b.first_name || '')
+  })
+}
+
 export function formatStatusText(status) {
   if (!status) return ''
   return status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())

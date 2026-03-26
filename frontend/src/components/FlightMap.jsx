@@ -47,7 +47,7 @@ export function FlightPathMap({ telemetry = [], takeoffLat, takeoffLon, landingL
   const bounds = path.length > 1 ? path : takeoffLat ? [[takeoffLat, takeoffLon]] : null
 
   return (
-    <div style={{ height }} className="rounded-xl overflow-hidden border border-border">
+    <div style={{ height }} className="rounded-xl overflow-hidden border border-border relative z-0">
       <MapContainer center={center} zoom={15} style={{ height: '100%', width: '100%' }} scrollWheelZoom={true}>
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
@@ -76,7 +76,7 @@ export function LocationPickerMap({ lat, lon, onSelect, geofences = [], height =
   const center = lat && lon ? [lat, lon] : [30.32, -86.14]
 
   return (
-    <div style={{ height }} className="rounded-xl overflow-hidden border border-border">
+    <div style={{ height }} className="rounded-xl overflow-hidden border border-border relative z-0">
       <MapContainer center={center} zoom={12} style={{ height: '100%', width: '100%' }} scrollWheelZoom={true}>
         <TileLayer
           attribution='&copy; OpenStreetMap'
@@ -119,7 +119,7 @@ export function FlightLocationsMap({ flights = [], height = '400px' }) {
   const bounds = markers.length > 1 ? markers.map(m => [m.takeoff_lat, m.takeoff_lon]) : null
 
   return (
-    <div style={{ height }} className="rounded-xl overflow-hidden border border-border">
+    <div style={{ height }} className="rounded-xl overflow-hidden border border-border relative z-0">
       <MapContainer center={center} zoom={10} style={{ height: '100%', width: '100%' }} scrollWheelZoom={true}>
         <TileLayer
           attribution='&copy; OpenStreetMap'

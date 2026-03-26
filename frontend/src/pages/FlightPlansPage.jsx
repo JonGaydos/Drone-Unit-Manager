@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
-import { sortByName, sortVehicles } from '@/lib/formatters'
+import { sortByName, sortVehicles, sortPilotsActiveFirst } from '@/lib/formatters'
 import {
   ClipboardCheck, Plus, Filter, X, Loader2, Check, Ban, Clock,
   ChevronDown, ChevronUp, Cloud,
@@ -39,6 +39,14 @@ function PlanModal({ pilots, vehicles, currentUser, onSave, onClose }) {
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!form.title || !form.date_planned || !form.pilot_id) return
+    // Validate altitude
+    if (form.max_altitude_planned) {
+      const alt = parseFloat(form.max_altitude_planned)
+      if (alt < 0 || alt > 400) {
+        alert('Altitude must be between 0 and 400 ft AGL (FAA Part 107)')
+        return
+      }
+    }
     const data = { ...form }
     data.pilot_id = parseInt(data.pilot_id)
     if (data.vehicle_id) data.vehicle_id = parseInt(data.vehicle_id); else delete data.vehicle_id
@@ -70,7 +78,7 @@ function PlanModal({ pilots, vehicles, currentUser, onSave, onClose }) {
               <select value={form.pilot_id} onChange={e => setForm({ ...form, pilot_id: e.target.value })}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" required>
                 <option value="">Select pilot...</option>
-                {sortByName(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+                {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
               </select>
             </div>
           </div>
@@ -109,8 +117,8 @@ function PlanModal({ pilots, vehicles, currentUser, onSave, onClose }) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-foreground mb-1">Max Altitude (ft)</label>
-              <input type="number" value={form.max_altitude_planned} onChange={e => setForm({ ...form, max_altitude_planned: e.target.value })}
-                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              <input type="number" min="0" max="400" step="1" value={form.max_altitude_planned} onChange={e => setForm({ ...form, max_altitude_planned: e.target.value })}
+                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" placeholder="Max 400 ft AGL" />
             </div>
             <div>
               <label className="block text-sm font-medium text-foreground mb-1">Est. Duration (min)</label>

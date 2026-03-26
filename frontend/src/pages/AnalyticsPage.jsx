@@ -321,9 +321,9 @@ export default function AnalyticsPage() {
           )}
           <button
             onClick={clearFilters}
-            className="ml-auto text-xs text-muted-foreground hover:text-foreground transition-colors underline"
+            className="ml-auto px-3 py-1.5 bg-red-500/15 text-red-400 rounded-lg text-sm font-medium hover:bg-red-500/25 transition-colors"
           >
-            Clear all
+            Clear Filters
           </button>
         </div>
       )}

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
-import { sortByName, sortVehicles } from '@/lib/formatters'
+import { sortByName, sortVehicles, sortPilotsActiveFirst } from '@/lib/formatters'
 import {
   AlertTriangle, Plus, Filter, Search, ChevronDown, ChevronUp,
   X, Loader2, CheckCircle, Eye, Shield,
@@ -111,7 +111,7 @@ function IncidentModal({ pilots, vehicles, flights, onSave, onClose }) {
               <select value={form.pilot_id} onChange={e => setForm({ ...form, pilot_id: e.target.value })}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                 <option value="">Select...</option>
-                {sortByName(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+                {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
               </select>
             </div>
             <div>
@@ -237,9 +237,8 @@ export default function IncidentPage() {
   const [resolveTarget, setResolveTarget] = useState(null)
   const [expandedId, setExpandedId] = useState(null)
   const [filters, setFilters] = useState({ status: '', severity: '', category: '', date_from: '', date_to: '' })
-  const { user, isAdmin } = useAuth()
+  const { user, isAdmin, isPilot, isSupervisor } = useAuth()
   const toast = useToast()
-  const isSupervisor = user?.role === 'admin' || user?.role === 'supervisor'
 
   const load = async () => {
     setLoading(true)
@@ -358,10 +357,12 @@ export default function IncidentPage() {
             {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
           </select>
         </div>
-        <button onClick={() => setShowAdd(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
-          <Plus className="w-4 h-4" /> Report Incident
-        </button>
+        {isPilot && (
+          <button onClick={() => setShowAdd(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
+            <Plus className="w-4 h-4" /> Report Incident
+          </button>
+        )}
       </div>
 
       {/* Incidents Table */}

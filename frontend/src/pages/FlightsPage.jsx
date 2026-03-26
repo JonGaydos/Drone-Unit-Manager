@@ -3,7 +3,7 @@ import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { formatDuration, normalizeDateValue } from '@/lib/utils'
-import { sortByName, sortVehicles } from '@/lib/formatters'
+import { sortByName, sortVehicles, sortPilotsActiveFirst } from '@/lib/formatters'
 import { Plus, Search, CheckCircle, ChevronUp, ChevronDown, Pencil, X, Check, Download, Loader2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
@@ -39,7 +39,7 @@ function FlightModal({ pilots, vehicles, purposes, onSave, onClose }) {
               <select value={form.pilot_id} onChange={e => setForm({...form, pilot_id: e.target.value})}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                 <option value="">Select pilot...</option>
-                {sortByName(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+                {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
               </select>
             </div>
             <div>
@@ -103,7 +103,7 @@ export default function FlightsPage() {
   const [error, setError] = useState(null)
   const [sortKey, setSortKey] = useState('date')
   const [sortDir, setSortDir] = useState('desc')
-  const { isAdmin } = useAuth()
+  const { isAdmin, isPilot, isSupervisor } = useAuth()
   const toast = useToast()
 
   // Status filter: 'all' | 'needs_review' | 'reviewed'
@@ -293,7 +293,7 @@ export default function FlightsPage() {
           <label className="block text-xs text-muted-foreground mb-1">Pilot</label>
           <select value={filterPilotId} onChange={e => setFilterPilotId(e.target.value)} className={selectCls}>
             <option value="">All Pilots</option>
-            {sortByName(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+            {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
           </select>
         </div>
         <div>
@@ -324,7 +324,7 @@ export default function FlightsPage() {
             className="flex items-center gap-2 px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm font-medium hover:opacity-90">
             <Download className="w-4 h-4" /> Export CSV
           </button>
-          {needsReview.length > 0 && isAdmin && (
+          {needsReview.length > 0 && isSupervisor && (
             <button
               onClick={() => handleBulkApprove(needsReview.map(f => f.id))}
               className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:opacity-90"
@@ -332,7 +332,7 @@ export default function FlightsPage() {
               <CheckCircle className="w-4 h-4" /> Approve All ({needsReview.length})
             </button>
           )}
-          {isAdmin && (
+          {isPilot && (
             <button onClick={() => setModal(true)} className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
               <Plus className="w-4 h-4" /> Add Flight
             </button>
@@ -381,7 +381,7 @@ export default function FlightsPage() {
                   <select value={editForm.pilot_id} onChange={e => setEditForm({...editForm, pilot_id: e.target.value})}
                     className="w-full px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm">
                     <option value="">Unassigned</option>
-                    {sortByName(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+                    {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
                   </select>
                 </td>
                 <td className="px-4 py-2 hidden md:table-cell text-muted-foreground">{f.vehicle_name || '—'}</td>
@@ -437,7 +437,7 @@ export default function FlightsPage() {
                   }`}>{f.review_status === 'needs_review' ? 'Needs Review' : 'Reviewed'}</span>
                 </td>
                 <td className="px-4 py-3 text-right">
-                  {isAdmin && (
+                  {isPilot && (
                     <button onClick={() => startEditing(f)} title="Edit" className="p-1.5 text-muted-foreground hover:text-foreground rounded hover:bg-accent/30">
                       <Pencil className="w-4 h-4" />
                     </button>

@@ -138,34 +138,24 @@ export default function PilotDetailPage() {
                       className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">Phone</label>
-                    <div className="flex gap-2">
-                      <select
-                        value={editForm.phone_type || 'work'}
-                        onChange={(e) => setEditForm({...editForm, phone_type: e.target.value})}
-                        className="px-2 py-2 bg-secondary border border-border rounded-lg text-sm w-32"
-                      >
-                        <option value="work">Work Cell</option>
-                        <option value="personal">Personal Cell</option>
-                      </select>
-                      <input
-                        type="tel"
-                        value={editForm.phone || ''}
-                        onChange={(e) => {
-                          const digits = e.target.value.replace(/\D/g, '').slice(0, 10)
-                          let formatted = digits
-                          if (digits.length > 3) formatted = digits.slice(0,3) + '-' + digits.slice(3)
-                          if (digits.length > 6) formatted = digits.slice(0,3) + '-' + digits.slice(3,6) + '-' + digits.slice(6)
-                          setEditForm({...editForm, phone: formatted})
-                        }}
-                        placeholder="###-###-####"
-                        className="flex-1 px-3 py-2 bg-secondary border border-border rounded-lg text-sm"
-                      />
-                    </div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Personal Cell</label>
+                    <input
+                      type="tel"
+                      value={editForm.phone || ''}
+                      onChange={(e) => {
+                        const digits = e.target.value.replace(/\D/g, '').slice(0, 10)
+                        let formatted = digits
+                        if (digits.length > 3) formatted = digits.slice(0,3) + '-' + digits.slice(3)
+                        if (digits.length > 6) formatted = digits.slice(0,3) + '-' + digits.slice(3,6) + '-' + digits.slice(6)
+                        setEditForm({...editForm, phone: formatted})
+                      }}
+                      placeholder="###-###-####"
+                      className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-muted-foreground mb-1">Work Phone</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Work Cell</label>
                   <input
                     type="tel"
                     value={editForm.phone_work || ''}
@@ -222,8 +212,18 @@ export default function PilotDetailPage() {
                 </div>
                 <div className="flex flex-wrap gap-4 mt-2 text-sm text-muted-foreground">
                   {pilot.email && <span>{pilot.email}</span>}
-                  {pilot.phone && <span>{pilot.phone_type === 'personal' ? 'Personal' : 'Work'}: {pilot.phone}</span>}
-                  {pilot.phone_work && <span>Work Phone: {pilot.phone_work}</span>}
+                  {pilot.phone && (
+                    <div>
+                      <p className="text-xs text-muted-foreground">Personal Cell</p>
+                      <p className="text-foreground">{pilot.phone}</p>
+                    </div>
+                  )}
+                  {pilot.phone_work && (
+                    <div>
+                      <p className="text-xs text-muted-foreground">Work Cell</p>
+                      <p className="text-foreground">{pilot.phone_work}</p>
+                    </div>
+                  )}
                   {pilot.badge_number && <span>Badge: {pilot.badge_number}</span>}
                 </div>
                 <span className={`inline-flex mt-2 px-2 py-0.5 rounded-full text-xs font-medium ${

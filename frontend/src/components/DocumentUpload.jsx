@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { FileText, Upload, Trash2, Loader2, ExternalLink, Edit, Save, X } from 'lucide-react'
 
-export default function DocumentUpload({ entityType, entityId }) {
+export default function DocumentUpload({ entityType, entityId, folderId }) {
   const toast = useToast()
   const [documents, setDocuments] = useState([])
   const [uploading, setUploading] = useState(false)
@@ -44,6 +44,7 @@ export default function DocumentUpload({ entityType, entityId }) {
       formData.append('entity_id', entityId)
       formData.append('document_type', docType)
       formData.append('title', title || selectedFile.name)
+      if (folderId) formData.append('folder_id', folderId)
       await api.upload('/documents/upload', formData)
       setTitle('')
       setDocType('general')
@@ -80,10 +81,10 @@ export default function DocumentUpload({ entityType, entityId }) {
   const saveEditDoc = async (docId) => {
     setEditSaving(true)
     try {
-      const params = new URLSearchParams()
-      if (editForm.title) params.set('title', editForm.title)
-      if (editForm.document_type) params.set('document_type', editForm.document_type)
-      await api.patch(`/documents/${docId}?${params.toString()}`, {})
+      const body = {}
+      if (editForm.title) body.title = editForm.title
+      if (editForm.document_type) body.document_type = editForm.document_type
+      await api.patch(`/documents/${docId}`, body)
       setEditingDoc(null)
       setEditForm({ title: '', document_type: '' })
       fetchDocs()

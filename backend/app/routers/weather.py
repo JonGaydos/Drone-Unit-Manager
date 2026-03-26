@@ -1,7 +1,11 @@
 import httpx
+import json
 import logging
 from math import radians, sin, cos, sqrt, atan2
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy.orm import Session
+from app.database import get_db
+from app.models.setting import Setting
 from app.models.user import User
 from app.routers.auth import get_current_user
 
@@ -21,10 +25,23 @@ def _haversine(lat1, lon1, lat2, lon2):
     a = sin(dlat/2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon/2)**2
     return R * 2 * atan2(sqrt(a), sqrt(1-a))
 
+def _get_thresholds(db: Session):
+    """Read custom weather thresholds from DB settings, merged with defaults."""
+    setting = db.query(Setting).filter(Setting.key == "weather_thresholds").first()
+    if setting and setting.value:
+        try:
+            custom = json.loads(setting.value)
+            return {**DEFAULT_THRESHOLDS, **custom}
+        except Exception:
+            pass
+    return DEFAULT_THRESHOLDS
+
+
 @router.get("/briefing")
 def get_weather_briefing(
     lat: float = Query(...),
     lon: float = Query(...),
+    db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     """Get comprehensive weather briefing for a GPS location."""
@@ -143,16 +160,17 @@ def get_weather_briefing(
         logger.warning("Open-Meteo fetch failed: %s", exc)
 
     # 3. Compute GO / CAUTION / NO-GO advisory
-    advisory = _compute_advisory(result)
+    thresholds = _get_thresholds(db)
+    advisory = _compute_advisory(result, thresholds)
     result["advisory"] = advisory
 
     return result
 
 
 @router.get("/thresholds")
-def get_thresholds(user: User = Depends(get_current_user)):
-    """Return the current weather thresholds (could be configurable per org)."""
-    return DEFAULT_THRESHOLDS
+def get_thresholds(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Return the current weather thresholds (custom + defaults merged)."""
+    return _get_thresholds(db)
 
 
 DEFAULT_THRESHOLDS = {
@@ -170,7 +188,7 @@ DEFAULT_THRESHOLDS = {
     "precip_caution": 0.01,  # inches
 }
 
-def _compute_advisory(data):
+def _compute_advisory(data, thresholds=None):
     reasons = []
     status = "go"  # start optimistic
 
@@ -181,7 +199,7 @@ def _compute_advisory(data):
     wind = lw.get("wind_speed_mph") or (metar.get("wind_speed_kt", 0) or 0) * 1.151
     gusts = lw.get("wind_gusts_mph") or (metar.get("wind_gust_kt", 0) or 0) * 1.151
 
-    t = DEFAULT_THRESHOLDS
+    t = thresholds or DEFAULT_THRESHOLDS
     if wind > t["wind_sustained_caution"]:
         status = "no_go"
         reasons.append(f"Wind {wind:.0f} mph exceeds {t['wind_sustained_caution']} mph limit")
