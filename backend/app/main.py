@@ -23,7 +23,6 @@ from app.routers import (
 )
 from app.routers import vehicle_registrations
 from app.services.scheduler import start_scheduler, stop_scheduler
-from app.routers.auth import hash_password
 from app.database import SessionLocal
 from app.models.user import User
 from app.models.flight import FlightPurpose
@@ -41,20 +40,9 @@ DEFAULT_PURPOSES = [
 def seed_defaults():
     db = SessionLocal()
     try:
-        # Create default admin if no users exist
+        # Only seed defaults after initial setup (at least one user exists)
         if db.query(User).count() == 0:
-            import os
-            default_password = os.environ.get("ADMIN_DEFAULT_PASSWORD", "admin")
-            admin = User(
-                username="admin",
-                password_hash=hash_password(default_password),
-                display_name="Administrator",
-                role="admin",
-            )
-            db.add(admin)
-            db.commit()
-            if default_password == "admin":
-                logger.warning("WARNING: Default admin password in use. Set ADMIN_DEFAULT_PASSWORD env var.")
+            return
 
         # Seed default folders
         if db.query(Folder).count() == 0:

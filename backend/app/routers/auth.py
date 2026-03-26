@@ -99,6 +99,72 @@ def _validate_password(password: str):
         raise HTTPException(400, "Password must contain at least one number")
 
 
+@router.get("/setup-required")
+def check_setup_required(db: Session = Depends(get_db)):
+    """Check if initial setup is needed (no users exist)."""
+    user_count = db.query(User).count()
+    return {"setup_required": user_count == 0}
+
+
+@router.post("/setup")
+def initial_setup(data: dict, db: Session = Depends(get_db)):
+    """Create the first admin account. Only works when no users exist."""
+    user_count = db.query(User).count()
+    if user_count > 0:
+        raise HTTPException(403, "Setup already completed. Use the login page.")
+
+    username = data.get("username", "").strip()
+    password = data.get("password", "")
+    display_name = data.get("display_name", "").strip()
+    org_name = data.get("org_name", "").strip()
+
+    if not username or len(username) < 3:
+        raise HTTPException(400, "Username must be at least 3 characters")
+
+    _validate_password(password)
+
+    from app.models.setting import Setting
+    from app.models.folder import Folder
+    from app.models.flight import FlightPurpose
+
+    # Create admin user
+    admin = User(
+        username=username,
+        password_hash=hash_password(password),
+        display_name=display_name or username,
+        role="admin",
+    )
+    db.add(admin)
+
+    # Set org name if provided
+    if org_name:
+        db.add(Setting(key="org_name", value=org_name))
+
+    # Seed default folders
+    for name in ["General", "Certifications", "Insurance", "Maintenance", "Reports"]:
+        db.add(Folder(name=name, is_system=True))
+
+    # Seed default flight purposes
+    DEFAULT_PURPOSES = [
+        "Training", "Demonstration", "Manhunt", "Security", "Other Agency Assist",
+        "Search Warrant", "Missing Person", "Photograph Request", "Map Scan",
+        "CPTED", "Citizen Assist", "Fire", "Patrol", "Investigation",
+        "Search & Rescue", "Surveillance", "Mapping", "Inspection", "Other",
+    ]
+    for i, name in enumerate(DEFAULT_PURPOSES):
+        db.add(FlightPurpose(name=name, sort_order=i))
+
+    db.commit()
+    db.refresh(admin)
+
+    # Generate token so they're logged in immediately
+    token = create_token(admin.id)
+    return {
+        "token": token,
+        "user": {"id": admin.id, "username": admin.username, "display_name": admin.display_name, "role": admin.role}
+    }
+
+
 @router.post("/login", response_model=LoginResponse)
 def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
     _check_rate_limit(request)

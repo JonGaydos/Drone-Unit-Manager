@@ -1,10 +1,11 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import { ThemeProvider } from '@/contexts/ThemeContext'
 import { ToastProvider } from '@/contexts/ToastContext'
 import { Layout } from '@/components/layout/Layout'
 import { lazy, Suspense } from 'react'
+import { api } from '@/api/client'
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -32,6 +33,7 @@ class ErrorBoundary extends React.Component {
   }
 }
 
+const SetupPage = lazy(() => import('@/pages/SetupPage'))
 const LoginPage = lazy(() => import('@/pages/LoginPage'))
 const DashboardPage = lazy(() => import('@/pages/DashboardPage'))
 const AnalyticsPage = lazy(() => import('@/pages/AnalyticsPage'))
@@ -77,7 +79,14 @@ function ProtectedRoute({ children }) {
 
 function AppRoutes() {
   const { user, loading } = useAuth()
-  if (loading) return <div className="min-h-screen bg-background flex items-center justify-center"><Spinner /></div>
+  const [setupRequired, setSetupRequired] = useState(null)
+
+  useEffect(() => {
+    api.get('/auth/setup-required').then(d => setSetupRequired(d.setup_required)).catch(() => setSetupRequired(false))
+  }, [])
+
+  if (loading || setupRequired === null) return <div className="min-h-screen bg-background flex items-center justify-center"><Spinner /></div>
+  if (setupRequired) return <Suspense fallback={<Spinner />}><SetupPage /></Suspense>
 
   return (
     <Suspense fallback={<Spinner />}>
