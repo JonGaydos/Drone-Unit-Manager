@@ -69,7 +69,7 @@ export default function SetupPage() {
                   type="text"
                   value={form.org_name}
                   onChange={e => setForm({...form, org_name: e.target.value})}
-                  placeholder="e.g., Walton County Sheriff's Office"
+                  placeholder="e.g., Sheriff's Office"
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground"
                 />
               </div>
@@ -79,7 +79,7 @@ export default function SetupPage() {
                   type="text"
                   value={form.display_name}
                   onChange={e => setForm({...form, display_name: e.target.value})}
-                  placeholder="e.g., Jonathan Gaydos"
+                  placeholder="e.g., John Doe"
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground"
                 />
               </div>
