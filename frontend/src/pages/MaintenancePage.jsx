@@ -161,7 +161,7 @@ function ScheduleModal({ schedule, onSave, onClose }) {
   const [entities, setEntities] = useState([])
 
   useEffect(() => {
-    api.get('/pilots').then(p => setPilots(Array.isArray(p) ? p : p.pilots || [])).catch(console.error)
+    api.get('/pilots').then(p => setPilots(Array.isArray(p) ? p : p.pilots || [])).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -177,7 +177,7 @@ function ScheduleModal({ schedule, onSave, onClose }) {
     }
     const endpoint = endpointMap[form.entity_type]
     if (endpoint) {
-      api.get(endpoint).then(d => setEntities(Array.isArray(d) ? d : d.items || [])).catch(console.error)
+      api.get(endpoint).then(d => setEntities(Array.isArray(d) ? d : d.items || [])).catch(() => {})
     }
   }, [form.entity_type])
 

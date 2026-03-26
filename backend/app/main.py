@@ -1,7 +1,9 @@
 import logging
+import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 
 logger = logging.getLogger(__name__)
 from fastapi.middleware.cors import CORSMiddleware
@@ -136,14 +138,22 @@ def health_check():
 
 
 # Serve frontend static files in production (Docker)
-from pathlib import Path
+import os
 from fastapi.responses import FileResponse
 
-_static_dir = Path(__file__).parent.parent / "static"
-if _static_dir.exists():
-    @app.get("/{full_path:path}", include_in_schema=False)
-    async def serve_spa(full_path: str):
-        file_path = _static_dir / full_path
-        if file_path.is_file():
-            return FileResponse(file_path)
-        return FileResponse(_static_dir / "index.html")
+_static_dir = str(Path(__file__).parent.parent / "static")
+
+@app.get("/{full_path:path}", include_in_schema=False)
+def serve_spa(full_path: str):
+    if not _static_dir or not os.path.isdir(_static_dir):
+        raise HTTPException(404)
+    file_path = os.path.join(_static_dir, full_path)
+    resolved = os.path.realpath(file_path)
+    if not resolved.startswith(os.path.realpath(_static_dir)):
+        raise HTTPException(403, "Forbidden")
+    if os.path.isfile(resolved):
+        return FileResponse(resolved)
+    index = os.path.join(_static_dir, "index.html")
+    if os.path.isfile(index):
+        return FileResponse(index)
+    raise HTTPException(404)

@@ -74,12 +74,6 @@ def _upsert_flights(flights_data: list[dict], skydio_users: list[dict], db: Sess
         if existing:
             # Merge API data into existing flight — fill empty fields, don't overwrite
             updated = False
-            merge_fields = {
-                "vehicle_id": None, "takeoff_lat": None, "takeoff_lon": None,
-                "landing_lat": None, "landing_lon": None, "battery_serial": None,
-                "sensor_package": None, "carrier": None, "attachment_top": None,
-                "attachment_bottom": None, "attachment_left": None, "attachment_right": None,
-            }
             # Vehicle
             if not existing.vehicle_id and f_data.get("vehicle_serial"):
                 v = db.query(Vehicle).filter(
@@ -105,8 +99,6 @@ def _upsert_flights(flights_data: list[dict], skydio_users: list[dict], db: Sess
             if not existing.duration_seconds and f_data.get("duration_seconds"):
                 existing.duration_seconds = f_data["duration_seconds"]
                 updated = True
-            if updated:
-                result.flights_updated = getattr(result, 'flights_updated', 0) + 1
             result.flights_skipped += 1
             continue
 

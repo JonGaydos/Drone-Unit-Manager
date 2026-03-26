@@ -64,8 +64,11 @@ def upload_photo(
     photo_dir = os.path.join(UPLOAD_DIR, str(photo.id))
     _ensure_dir(photo_dir)
     file_path = os.path.join(photo_dir, stored_name)
+    content = file.file.read()
+    if len(content) > settings.MAX_UPLOAD_SIZE:
+        raise HTTPException(413, f"File too large. Maximum size is {settings.MAX_UPLOAD_SIZE // (1024*1024)}MB")
     with open(file_path, "wb") as f:
-        shutil.copyfileobj(file.file, f)
+        f.write(content)
 
     photo.file_size = os.path.getsize(file_path)
 

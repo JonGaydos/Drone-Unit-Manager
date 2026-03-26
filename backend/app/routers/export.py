@@ -17,6 +17,7 @@ from app.models.training_log import TrainingLog
 from app.models.training_log_pilot import TrainingLogPilot
 from app.models.mission_log import MissionLog
 from app.models.mission_log_pilot import MissionLogPilot
+from app.config import settings
 from app.routers.auth import get_current_user, require_admin
 
 router = APIRouter(prefix="/api/export", tags=["export"])
@@ -456,6 +457,8 @@ async def import_flights_csv(
         raise HTTPException(400, "Only CSV files are supported")
 
     content = await file.read()
+    if len(content) > settings.MAX_UPLOAD_SIZE:
+        raise HTTPException(413, f"File too large. Maximum size is {settings.MAX_UPLOAD_SIZE // (1024*1024)}MB")
     text = content.decode('utf-8-sig')
     reader = csv.DictReader(io.StringIO(text))
 
@@ -505,6 +508,8 @@ async def import_excel_file(
     if not file.filename.endswith(('.xlsx', '.xls')):
         raise HTTPException(400, "Only Excel files (.xlsx) are supported")
     content = await file.read()
+    if len(content) > settings.MAX_UPLOAD_SIZE:
+        raise HTTPException(413, f"File too large. Maximum size is {settings.MAX_UPLOAD_SIZE // (1024*1024)}MB")
     from app.services.excel_import import import_excel
     result = import_excel(db, content)
     return result

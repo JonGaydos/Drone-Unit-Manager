@@ -136,7 +136,7 @@ export default function ReportsPage() {
     const params = new URLSearchParams()
     if (dateFrom) params.set('date_from', dateFrom)
     if (dateTo) params.set('date_to', dateTo)
-    window.open(`/api/export/${type}/csv?${params.toString()}`, '_blank')
+    api.download(`/export/${type}/csv?${params.toString()}`)
   }
 
   if (loading) {

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react'
+import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react'
 import { X, CheckCircle, AlertTriangle, Info, XCircle } from 'lucide-react'
 
 const ToastContext = createContext()
@@ -9,16 +9,25 @@ export function useToast() {
 
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([])
+  const timeoutRef = useRef({})
+
+  useEffect(() => {
+    return () => {
+      Object.values(timeoutRef.current).forEach(clearTimeout)
+    }
+  }, [])
 
   const addToast = useCallback((message, type = 'info', duration = 5000) => {
     const id = Date.now()
     setToasts(prev => [...prev, { id, message, type }])
     if (duration > 0) {
-      setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), duration)
+      timeoutRef.current[id] = setTimeout(() => removeToast(id), duration)
     }
   }, [])
 
   const removeToast = useCallback((id) => {
+    clearTimeout(timeoutRef.current[id])
+    delete timeoutRef.current[id]
     setToasts(prev => prev.filter(t => t.id !== id))
   }, [])
 
@@ -47,7 +56,7 @@ export function ToastProvider({ children }) {
             <div key={t.id} className={`flex items-start gap-3 px-4 py-3 rounded-lg border ${colors[t.type]} shadow-lg animate-in slide-in-from-right`}>
               <Icon className="w-5 h-5 shrink-0 mt-0.5" />
               <p className="text-sm flex-1">{t.message}</p>
-              <button onClick={() => removeToast(t.id)} className="shrink-0"><X className="w-4 h-4" /></button>
+              <button onClick={() => removeToast(t.id)} className="shrink-0" aria-label="Close"><X className="w-4 h-4" /></button>
             </div>
           )
         })}

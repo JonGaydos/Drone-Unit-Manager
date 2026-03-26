@@ -1,5 +1,3 @@
-from typing import List
-
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -22,7 +20,7 @@ class ReorderItem(BaseModel):
 
 
 class ReorderRequest(BaseModel):
-    items: List[ReorderItem]
+    items: list[ReorderItem]
 
 router = APIRouter(tags=["certifications"])
 
@@ -104,7 +102,7 @@ def delete_certification_type(
     return {"ok": True}
 
 
-def _pilot_cert_to_out(pc: PilotCertification, db: Session) -> PilotCertificationOut:
+def _pilot_cert_to_out(pc: PilotCertification) -> PilotCertificationOut:
     out = PilotCertificationOut.model_validate(pc)
     if pc.pilot:
         out.pilot_name = pc.pilot.full_name
@@ -126,7 +124,7 @@ def list_pilot_certifications(
     if cert_type_id:
         q = q.filter(PilotCertification.certification_type_id == cert_type_id)
     rows = q.order_by(PilotCertification.pilot_id, PilotCertification.certification_type_id).all()
-    return [_pilot_cert_to_out(r, db) for r in rows]
+    return [_pilot_cert_to_out(r) for r in rows]
 
 
 @router.post("/api/pilot-certifications", response_model=PilotCertificationOut)
@@ -145,7 +143,7 @@ def create_pilot_certification(
                f"{pilot.full_name if pilot else 'Unknown'} - {ct.name if ct else 'Unknown'}")
     db.commit()
     db.refresh(pc)
-    return _pilot_cert_to_out(pc, db)
+    return _pilot_cert_to_out(pc)
 
 
 @router.patch("/api/pilot-certifications/{pc_id}", response_model=PilotCertificationOut)
@@ -167,7 +165,7 @@ def update_pilot_certification(
                f"{pilot.full_name if pilot else 'Unknown'} - {ct.name if ct else 'Unknown'}")
     db.commit()
     db.refresh(pc)
-    return _pilot_cert_to_out(pc, db)
+    return _pilot_cert_to_out(pc)
 
 
 @router.delete("/api/pilot-certifications/{pc_id}")

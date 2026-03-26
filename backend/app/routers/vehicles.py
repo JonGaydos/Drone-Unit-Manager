@@ -111,8 +111,10 @@ async def upload_vehicle_photo(vehicle_id: int, file: UploadFile, db: Session = 
         old.unlink()
     ext = Path(file.filename).suffix or ".jpg"
     filepath = upload_dir / f"profile{ext}"
+    content = await file.read()
+    if len(content) > settings.MAX_UPLOAD_SIZE:
+        raise HTTPException(413, f"File too large. Maximum size is {settings.MAX_UPLOAD_SIZE // (1024*1024)}MB")
     with open(filepath, "wb") as f:
-        content = await file.read()
         f.write(content)
     vehicle.photo_url = f"/api/vehicles/{vehicle_id}/photo/view"
     db.commit()

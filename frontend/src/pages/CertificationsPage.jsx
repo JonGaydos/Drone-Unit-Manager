@@ -483,8 +483,8 @@ export default function CertificationsPage() {
                 </div>
                 {isSupervisor && (
                   <div className="flex gap-1">
-                    <button onClick={() => setModal(ct)} className="p-1 text-muted-foreground hover:text-foreground"><Edit className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => handleDeleteCertType(ct.id)} className="p-1 text-muted-foreground hover:text-destructive"><Trash2 className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => setModal(ct)} className="p-1 text-muted-foreground hover:text-foreground" aria-label="Edit"><Edit className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => handleDeleteCertType(ct.id)} className="p-1 text-muted-foreground hover:text-destructive" aria-label="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
                   </div>
                 )}
               </div>

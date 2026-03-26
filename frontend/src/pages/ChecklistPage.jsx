@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import {
   ClipboardList, Plus, X, Loader2, CheckCircle, XCircle,
-  GripVertical, Trash2, Edit2, Eye, ChevronDown, Download,
+  Trash2, Edit2, Eye, ChevronDown, Download,
 } from 'lucide-react'
 import { sortPilotsActiveFirst } from '@/lib/formatters'
 
@@ -608,12 +608,14 @@ export default function ChecklistPage() {
                         <button
                           onClick={() => { setEditingTemplate(t); setShowTemplateModal(true) }}
                           className="p-1.5 text-muted-foreground hover:text-foreground"
+                          aria-label="Edit"
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleDeleteTemplate(t.id)}
                           className="p-1.5 text-muted-foreground hover:text-red-400"
+                          aria-label="Delete"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>

@@ -105,8 +105,10 @@ async def upload_pilot_photo(pilot_id: int, file: UploadFile, db: Session = Depe
         old.unlink()
     ext = Path(file.filename).suffix or ".jpg"
     filepath = upload_dir / f"profile{ext}"
+    content = await file.read()
+    if len(content) > settings.MAX_UPLOAD_SIZE:
+        raise HTTPException(413, f"File too large. Maximum size is {settings.MAX_UPLOAD_SIZE // (1024*1024)}MB")
     with open(filepath, "wb") as f:
-        content = await file.read()
         f.write(content)
     pilot.photo_url = f"/api/pilots/{pilot_id}/photo/view"
     db.commit()

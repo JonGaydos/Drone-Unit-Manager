@@ -47,6 +47,8 @@ async def upload_document(
         counter += 1
 
     contents = await file.read()
+    if len(contents) > settings.MAX_UPLOAD_SIZE:
+        raise HTTPException(413, f"File too large. Maximum size is {settings.MAX_UPLOAD_SIZE // (1024*1024)}MB")
     dest.write_bytes(contents)
 
     pilot_id = entity_id if entity_type == "pilot" else None

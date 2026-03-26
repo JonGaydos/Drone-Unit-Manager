@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     MEDIA_CACHE_DIR: Path = Path("")
     SESSION_EXPIRE_MINUTES: int = 1440  # 24 hours
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
+    MAX_UPLOAD_SIZE: int = 50 * 1024 * 1024  # 50MB
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

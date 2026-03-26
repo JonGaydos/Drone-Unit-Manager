@@ -16,7 +16,6 @@ from sqlalchemy import func
 router = APIRouter(prefix="/api/currency", tags=["currency"])
 
 
-# ── Schemas ──────────────────────────────────────────────────────────────
 
 class RuleCreate(BaseModel):
     name: str
@@ -50,8 +49,6 @@ class RuleOut(BaseModel):
     created_at: datetime
     model_config = {"from_attributes": True}
 
-
-# ── CRUD ─────────────────────────────────────────────────────────────────
 
 @router.get("/rules", response_model=list[RuleOut])
 def list_rules(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
@@ -88,8 +85,6 @@ def delete_rule(rule_id: int, db: Session = Depends(get_db), user: User = Depend
     db.commit()
     return {"ok": True}
 
-
-# ── Currency Status ──────────────────────────────────────────────────────
 
 def _pilot_currency(pilot: Pilot, rules: list[CurrencyRule], db: Session):
     """Evaluate currency for a single pilot against all active rules."""

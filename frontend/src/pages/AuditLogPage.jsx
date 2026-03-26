@@ -103,7 +103,7 @@ export default function AuditLogPage() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => window.open('/api/export/audit/csv', '_blank')}
+            onClick={() => api.download('/export/audit/csv')}
             className="flex items-center gap-2 px-3 py-2 bg-secondary border border-border rounded-lg text-sm text-foreground hover:bg-accent/30 transition-colors"
           >
             <Download className="w-4 h-4" /> Export CSV

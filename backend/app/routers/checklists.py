@@ -16,7 +16,6 @@ from app.routers.auth import get_current_user, require_pilot, require_supervisor
 router = APIRouter(prefix="/api/checklists", tags=["checklists"])
 
 
-# --- Schemas ---
 
 class ChecklistItemIn(BaseModel):
     label: str
@@ -53,8 +52,6 @@ class ChecklistCompleteIn(BaseModel):
     responses: list[ChecklistResponseIn]
     notes: Optional[str] = None
 
-
-# --- Template Endpoints ---
 
 @router.get("/templates")
 def list_templates(
@@ -135,8 +132,6 @@ def delete_template(
     return {"ok": True}
 
 
-# --- Completion Endpoints ---
-
 @router.post("/complete")
 def complete_checklist(
     data: ChecklistCompleteIn,
@@ -209,8 +204,6 @@ def get_completion(
         raise HTTPException(status_code=404, detail="Completion not found")
     return _completion_out(c, db)
 
-
-# --- Helpers ---
 
 def _template_out(t: ChecklistTemplate) -> dict:
     return {

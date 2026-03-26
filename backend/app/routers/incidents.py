@@ -17,7 +17,6 @@ from app.services.audit import log_action
 router = APIRouter(prefix="/api/incidents", tags=["incidents"])
 
 
-# --- Schemas ---
 
 class IncidentCreate(BaseModel):
     date: str
@@ -116,7 +115,6 @@ def _enrich(incident: Incident, db: Session) -> IncidentOut:
     return out
 
 
-# --- Routes ---
 
 @router.get("/stats")
 def incident_stats(db: Session = Depends(get_db), user: User = Depends(get_current_user)):

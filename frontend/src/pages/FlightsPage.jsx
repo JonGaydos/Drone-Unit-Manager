@@ -438,7 +438,7 @@ export default function FlightsPage() {
                 </td>
                 <td className="px-4 py-3 text-right">
                   {isPilot && (
-                    <button onClick={() => startEditing(f)} title="Edit" className="p-1.5 text-muted-foreground hover:text-foreground rounded hover:bg-accent/30">
+                    <button onClick={() => startEditing(f)} title="Edit" aria-label="Edit" className="p-1.5 text-muted-foreground hover:text-foreground rounded hover:bg-accent/30">
                       <Pencil className="w-4 h-4" />
                     </button>
                   )}

@@ -14,7 +14,6 @@ from app.services.audit import log_action
 router = APIRouter(prefix="/api/components", tags=["components"])
 
 
-# --- Schemas ---
 
 class ComponentCreate(BaseModel):
     name: str

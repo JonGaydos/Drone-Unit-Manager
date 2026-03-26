@@ -61,7 +61,7 @@ function StatCard({ icon: Icon, label, value, color, onClick }) {
 export default function CompliancePage() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
-  const { toast } = useToast()
+  const toast = useToast()
   const navigate = useNavigate()
 
   const load = async () => {
@@ -70,7 +70,7 @@ export default function CompliancePage() {
       const res = await api.get('/dashboard/compliance')
       setData(res)
     } catch (err) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+      toast.error(err.message)
     } finally {
       setLoading(false)
     }
@@ -176,7 +176,7 @@ export default function CompliancePage() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => window.open('/api/export/equipment-checkouts/csv', '_blank')}
+            onClick={() => api.download('/export/equipment-checkouts/csv')}
             className="flex items-center gap-2 px-3 py-2 text-sm bg-secondary border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors"
           >
             <Download className="w-4 h-4" /> Export CSV

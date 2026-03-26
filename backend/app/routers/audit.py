@@ -33,18 +33,18 @@ def list_audit_logs(
     return {
         "logs": [
             {
-                "id": l.id,
-                "user_id": l.user_id,
-                "user_name": l.user_name,
-                "action": l.action,
-                "entity_type": l.entity_type,
-                "entity_id": l.entity_id,
-                "entity_name": l.entity_name,
-                "changes": l.changes,
-                "details": l.details,
-                "created_at": l.created_at.isoformat() if l.created_at else None,
+                "id": entry.id,
+                "user_id": entry.user_id,
+                "user_name": entry.user_name,
+                "action": entry.action,
+                "entity_type": entry.entity_type,
+                "entity_id": entry.entity_id,
+                "entity_name": entry.entity_name,
+                "changes": entry.changes,
+                "details": entry.details,
+                "created_at": entry.created_at.isoformat() if entry.created_at else None,
             }
-            for l in logs
+            for entry in logs
         ],
         "total": total,
         "page": page,

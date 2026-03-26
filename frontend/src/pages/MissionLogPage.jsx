@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -311,8 +311,8 @@ export default function MissionLogPage() {
           </thead>
           <tbody>
             {filtered.map(m => (
-              <>
-                <tr key={m.id} className="border-b border-border/50 hover:bg-accent/30 transition-colors cursor-pointer"
+              <React.Fragment key={m.id}>
+                <tr className="border-b border-border/50 hover:bg-accent/30 transition-colors cursor-pointer"
                   onClick={() => setExpanded(expanded === m.id ? null : m.id)}>
                   <td className="px-2 text-muted-foreground">
                     {expanded === m.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -333,7 +333,7 @@ export default function MissionLogPage() {
                   </td>
                   {isPilot && (
                     <td className="px-2" onClick={e => e.stopPropagation()}>
-                      <button onClick={() => handleDelete(m.id)} className="text-muted-foreground hover:text-destructive p-1">
+                      <button onClick={() => handleDelete(m.id)} className="text-muted-foreground hover:text-destructive p-1" aria-label="Delete">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </td>
@@ -369,7 +369,7 @@ export default function MissionLogPage() {
                     </td>
                   </tr>
                 )}
-              </>
+              </React.Fragment>
             ))}
             {filtered.length === 0 && <tr><td colSpan={isPilot ? 10 : 9} className="px-4 py-12 text-center text-muted-foreground">No mission logs found</td></tr>}
           </tbody>

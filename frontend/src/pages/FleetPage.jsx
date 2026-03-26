@@ -119,10 +119,10 @@ function EquipmentTable({ items, columns, isAdmin, onEdit, onDelete, emptyMessag
               <td className="px-4 py-3 text-right">
                 {isAdmin && (
                   <div className="flex items-center justify-end gap-1">
-                    <button onClick={() => onEdit(item)} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent">
+                    <button onClick={() => onEdit(item)} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent" aria-label="Edit">
                       <Edit className="w-4 h-4" />
                     </button>
-                    <button onClick={() => onDelete(item.id)} className="p-1.5 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10">
+                    <button onClick={() => onDelete(item.id)} className="p-1.5 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10" aria-label="Delete">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>

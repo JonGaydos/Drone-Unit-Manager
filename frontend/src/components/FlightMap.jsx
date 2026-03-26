@@ -32,6 +32,8 @@ function ClickHandler({ onSelect }) {
   return null
 }
 
+const DEFAULT_CENTER = [30.32, -86.14]
+
 const ZONE_COLORS = {
   no_fly: '#ef4444',
   restricted: '#f59e0b',
@@ -43,7 +45,7 @@ export function FlightPathMap({ telemetry = [], takeoffLat, takeoffLon, landingL
   const path = telemetry.filter(p => p.lat && p.lon).map(p => [p.lat, p.lon])
   const center = takeoffLat && takeoffLon
     ? [takeoffLat, takeoffLon]
-    : path.length > 0 ? path[0] : [30.32, -86.14]
+    : path.length > 0 ? path[0] : DEFAULT_CENTER
   const bounds = path.length > 1 ? path : takeoffLat ? [[takeoffLat, takeoffLon]] : null
 
   return (
@@ -73,7 +75,7 @@ export function FlightPathMap({ telemetry = [], takeoffLat, takeoffLon, landingL
 }
 
 export function LocationPickerMap({ lat, lon, onSelect, geofences = [], height = '400px' }) {
-  const center = lat && lon ? [lat, lon] : [30.32, -86.14]
+  const center = lat && lon ? [lat, lon] : DEFAULT_CENTER
 
   return (
     <div style={{ height }} className="rounded-xl overflow-hidden border border-border relative z-0">
@@ -115,7 +117,7 @@ export function LocationPickerMap({ lat, lon, onSelect, geofences = [], height =
 
 export function FlightLocationsMap({ flights = [], height = '400px' }) {
   const markers = flights.filter(f => f.takeoff_lat && f.takeoff_lon)
-  const center = markers.length > 0 ? [markers[0].takeoff_lat, markers[0].takeoff_lon] : [30.32, -86.14]
+  const center = markers.length > 0 ? [markers[0].takeoff_lat, markers[0].takeoff_lon] : DEFAULT_CENTER
   const bounds = markers.length > 1 ? markers.map(m => [m.takeoff_lat, m.takeoff_lon]) : null
 
   return (

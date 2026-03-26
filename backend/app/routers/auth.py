@@ -1,7 +1,9 @@
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+from time import time
 
 import bcrypt
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from jose import jwt, JWTError
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
@@ -74,8 +76,32 @@ def require_manager(user: User = Depends(get_current_user)) -> User:
     return user
 
 
+_login_attempts = defaultdict(list)  # ip -> [timestamps]
+_RATE_LIMIT = 5  # max attempts
+_RATE_WINDOW = 60  # seconds
+
+
+def _check_rate_limit(request):
+    ip = request.client.host if request.client else "unknown"
+    now = time()
+    _login_attempts[ip] = [t for t in _login_attempts[ip] if now - t < _RATE_WINDOW]
+    if len(_login_attempts[ip]) >= _RATE_LIMIT:
+        raise HTTPException(status_code=429, detail="Too many login attempts. Try again later.")
+    _login_attempts[ip].append(now)
+
+
+def _validate_password(password: str):
+    if len(password) < 12:
+        raise HTTPException(400, "Password must be at least 12 characters")
+    if not any(c.isupper() for c in password):
+        raise HTTPException(400, "Password must contain at least one uppercase letter")
+    if not any(c.isdigit() for c in password):
+        raise HTTPException(400, "Password must contain at least one number")
+
+
 @router.post("/login", response_model=LoginResponse)
-def login(req: LoginRequest, db: Session = Depends(get_db)):
+def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
+    _check_rate_limit(request)
     from app.services.audit import log_action
     user = db.query(User).filter(User.username == req.username).first()
     if not user or not verify_password(req.password, user.password_hash):
@@ -109,6 +135,7 @@ def update_me(data: UserUpdate, user: User = Depends(get_current_user), db: Sess
 @router.post("/users", response_model=UserOut)
 def create_user(data: UserCreate, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     from app.services.audit import log_action
+    _validate_password(data.password)
     if db.query(User).filter(User.username == data.username).first():
         raise HTTPException(status_code=409, detail="Username already exists")
     user = User(
@@ -136,8 +163,7 @@ def change_password(req: ChangePasswordRequest, user: User = Depends(get_current
     from app.services.audit import log_action
     if not verify_password(req.current_password, user.password_hash):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
-    if len(req.new_password) < 6:
-        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    _validate_password(req.new_password)
     user.password_hash = hash_password(req.new_password)
     log_action(db, user.id, user.display_name, "password_change", "user", user.id, user.display_name)
     db.commit()
@@ -167,8 +193,7 @@ def admin_reset_password(user_id: int, req: AdminResetPasswordRequest, admin: Us
     target = db.query(User).filter(User.id == user_id).first()
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
-    if len(req.new_password) < 6:
-        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    _validate_password(req.new_password)
     target.password_hash = hash_password(req.new_password)
     db.commit()
     return {"ok": True, "message": f"Password reset for {target.username}"}

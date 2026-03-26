@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -426,7 +426,7 @@ export default function IncidentPage() {
           </select>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => window.open('/api/export/incidents/csv', '_blank')}
+          <button onClick={() => api.download('/export/incidents/csv')}
             className="flex items-center gap-2 px-3 py-2 bg-secondary border border-border text-secondary-foreground rounded-lg text-sm hover:bg-secondary/80">
             <Download className="w-4 h-4" /> Export CSV
           </button>
@@ -457,8 +457,8 @@ export default function IncidentPage() {
             </thead>
             <tbody>
               {incidents.map(inc => (
-                <>
-                  <tr key={inc.id} className="border-b border-border hover:bg-secondary/30 cursor-pointer"
+                <React.Fragment key={inc.id}>
+                  <tr className="border-b border-border hover:bg-secondary/30 cursor-pointer"
                     onClick={() => setExpandedId(expandedId === inc.id ? null : inc.id)}>
                     <td className="px-4 py-3 text-foreground whitespace-nowrap">{inc.date}</td>
                     <td className="px-4 py-3 text-foreground font-medium">{inc.title}</td>
@@ -558,7 +558,7 @@ export default function IncidentPage() {
                       </td>
                     </tr>
                   )}
-                </>
+                </React.Fragment>
               ))}
               {incidents.length === 0 && (
                 <tr>

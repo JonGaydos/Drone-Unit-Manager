@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/contexts/ToastContext'
 import {
   Search, Upload, X, ChevronLeft, ChevronRight, Edit2, Trash2,
   Camera, Calendar, User, Info, ZoomIn, Image as ImageIcon
@@ -181,6 +182,7 @@ export default function MediaPage() {
                               onClick={(e) => { e.stopPropagation(); setShowEdit(photo) }}
                               className="p-1.5 text-muted-foreground hover:text-primary rounded-md hover:bg-primary/10 transition-colors"
                               title="Edit"
+                              aria-label="Edit"
                             >
                               <Edit2 className="w-3.5 h-3.5" />
                             </button>
@@ -188,6 +190,7 @@ export default function MediaPage() {
                               onClick={(e) => { e.stopPropagation(); handleDelete(photo.id) }}
                               className="p-1.5 text-muted-foreground hover:text-destructive rounded-md hover:bg-destructive/10 transition-colors"
                               title="Delete"
+                              aria-label="Delete"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -255,6 +258,7 @@ function LightboxModal({ photos, index, onClose, onPrev, onNext, formatDate, for
         <button
           onClick={(e) => { e.stopPropagation(); onClose() }}
           className="p-2 text-white/70 hover:text-white bg-black/40 rounded-lg transition-colors"
+          aria-label="Close"
         >
           <X className="w-5 h-5" />
         </button>
@@ -310,6 +314,7 @@ function LightboxModal({ photos, index, onClose, onPrev, onNext, formatDate, for
 }
 
 function UploadModal({ pilots, onClose, onSuccess }) {
+  const toast = useToast()
   const [files, setFiles] = useState([])
   const [preview, setPreview] = useState(null)
   const [title, setTitle] = useState('')
@@ -348,7 +353,7 @@ function UploadModal({ pilots, onClose, onSuccess }) {
       }
       onSuccess()
     } catch (err) {
-      alert('Error uploading: ' + (err.message || 'Unknown error'))
+      toast.error('Error uploading: ' + (err.message || 'Unknown error'))
     } finally {
       setUploading(false)
       setUploadProgress('')
@@ -483,15 +488,25 @@ function EditModal({ photo, pilots, onClose, onSuccess }) {
       fd.append('pilot_ids', selectedPilots.join(','))
 
       const token = localStorage.getItem('token')
-      const API = import.meta.env.VITE_API_URL || '/api'
-      await fetch(`${API}/photos/${photo.id}`, {
+      const API_URL = import.meta.env.VITE_API_URL || '/api'
+      const res = await fetch(`${API_URL}/photos/${photo.id}`, {
         method: 'PATCH',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: fd,
       })
+      if (res.status === 401) {
+        localStorage.removeItem('token')
+        localStorage.removeItem('user')
+        window.location.href = '/login'
+        throw new Error('Unauthorized')
+      }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.detail || 'Update failed')
+      }
       onSuccess()
     } catch (err) {
-      // silently catch
+      // Error is handled by caller
     } finally {
       setSaving(false)
     }

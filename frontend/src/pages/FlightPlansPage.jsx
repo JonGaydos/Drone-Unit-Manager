@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -19,6 +19,7 @@ const STATUS_COLORS = {
 const STATUSES = ['pending', 'approved', 'denied', 'cancelled', 'completed']
 
 function PlanModal({ pilots, vehicles, currentUser, onSave, onClose }) {
+  const toast = useToast()
   const autoFillPilotId = currentUser?.pilot_id || ''
   const [form, setForm] = useState({
     title: '',
@@ -43,7 +44,7 @@ function PlanModal({ pilots, vehicles, currentUser, onSave, onClose }) {
     if (form.max_altitude_planned) {
       const alt = parseFloat(form.max_altitude_planned)
       if (alt < 0 || alt > 400) {
-        alert('Altitude must be between 0 and 400 ft AGL (FAA Part 107)')
+        toast.error('Altitude must be between 0 and 400 ft AGL (FAA Part 107)')
         return
       }
     }
@@ -342,7 +343,7 @@ export default function FlightPlansPage() {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => window.open('/api/export/flight-plans/csv', '_blank')}
+          <button onClick={() => api.download('/export/flight-plans/csv')}
             className="flex items-center gap-2 px-3 py-2 bg-secondary border border-border text-secondary-foreground rounded-lg text-sm hover:bg-secondary/80">
             <Download className="w-4 h-4" /> Export CSV
           </button>
@@ -371,8 +372,8 @@ export default function FlightPlansPage() {
             </thead>
             <tbody>
               {plans.map(plan => (
-                <>
-                  <tr key={plan.id} className="border-b border-border hover:bg-secondary/30 cursor-pointer"
+                <React.Fragment key={plan.id}>
+                  <tr className="border-b border-border hover:bg-secondary/30 cursor-pointer"
                     onClick={() => setExpandedId(expandedId === plan.id ? null : plan.id)}>
                     <td className="px-4 py-3 text-foreground whitespace-nowrap">{formatDT(plan.date_planned)}</td>
                     <td className="px-4 py-3 text-foreground font-medium">{plan.title}</td>
@@ -489,7 +490,7 @@ export default function FlightPlansPage() {
                       </td>
                     </tr>
                   )}
-                </>
+                </React.Fragment>
               ))}
               {plans.length === 0 && (
                 <tr>

@@ -73,8 +73,10 @@ async def upload_logo(file: UploadFile, db: Session = Depends(get_db), user: Use
         old.unlink()
     ext = Path(file.filename).suffix or ".png"
     filepath = upload_dir / f"logo{ext}"
+    content = await file.read()
+    if len(content) > app_settings.MAX_UPLOAD_SIZE:
+        raise HTTPException(413, f"File too large. Maximum size is {app_settings.MAX_UPLOAD_SIZE // (1024*1024)}MB")
     with open(filepath, "wb") as f:
-        content = await file.read()
         f.write(content)
     setting = db.query(Setting).filter(Setting.key == "org_logo").first()
     if setting:

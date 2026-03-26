@@ -13,7 +13,6 @@ from app.routers.auth import get_current_user, require_pilot, require_supervisor
 router = APIRouter(prefix="/api/equipment-checkouts", tags=["equipment-checkouts"])
 
 
-# ── Schemas ──────────────────────────────────────────────────────────────
 
 class CheckoutCreate(BaseModel):
     entity_type: str  # vehicle, battery, controller
@@ -51,8 +50,6 @@ class CheckoutOut(BaseModel):
     checked_in_by_name: Optional[str] = None
     model_config = {"from_attributes": True}
 
-
-# ── Endpoints ────────────────────────────────────────────────────────────
 
 @router.get("")
 def list_checkouts(
@@ -151,8 +148,6 @@ def delete_checkout(
     db.commit()
     return {"ok": True}
 
-
-# ── Helpers ──────────────────────────────────────────────────────────────
 
 def _enrich(checkout: EquipmentCheckout, db: Session) -> dict:
     """Add pilot names to the checkout record."""

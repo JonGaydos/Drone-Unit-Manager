@@ -14,7 +14,6 @@ from app.services.audit import log_action
 router = APIRouter(prefix="/api/geofences", tags=["geofences"])
 
 
-# --- Schemas ---
 
 class GeofenceCreate(BaseModel):
     name: str

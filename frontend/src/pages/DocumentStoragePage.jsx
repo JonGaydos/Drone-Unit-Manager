@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/contexts/ToastContext'
 import {
   FolderOpen, FolderPlus, FileText, ChevronRight, ChevronDown,
-  Upload, Trash2, Edit2, X, File, Search, Home, MoreVertical,
+  Upload, Trash2, Edit2, X, File, Search, Home,
   FileImage, FileSpreadsheet, Save, FolderInput
 } from 'lucide-react'
 
@@ -25,6 +26,7 @@ export default function DocumentStoragePage() {
   const [expandedFolders, setExpandedFolders] = useState(new Set())
   const [search, setSearch] = useState('')
   const { isAdmin, isPilot, isSupervisor } = useAuth()
+  const toast = useToast()
 
   const loadFolders = useCallback(async () => {
     try {
@@ -33,7 +35,7 @@ export default function DocumentStoragePage() {
       // Expand all folders by default
       setExpandedFolders(new Set(f.map(folder => folder.id)))
     } catch (err) {
-      // silently catch
+      toast.error(err.message || 'An error occurred')
     }
   }, [])
 
@@ -47,7 +49,7 @@ export default function DocumentStoragePage() {
         setDocuments([])
       }
     } catch (err) {
-      // silently catch
+      toast.error(err.message || 'An error occurred')
     } finally {
       setDocsLoading(false)
     }
@@ -73,7 +75,7 @@ export default function DocumentStoragePage() {
       api.get('/documents').then(docs => {
         const unfiled = (Array.isArray(docs) ? docs : []).filter(d => !d.folder_id)
         setDocuments(unfiled)
-      }).catch(() => {}).finally(() => setDocsLoading(false))
+      }).catch(err => toast.error(err.message || 'An error occurred')).finally(() => setDocsLoading(false))
     } else if (selectedFolder) {
       loadDocuments(selectedFolder)
     } else {
@@ -117,7 +119,7 @@ export default function DocumentStoragePage() {
       setNewFolderParent(null)
       loadFolders()
     } catch (err) {
-      // silently catch
+      toast.error(err.message || 'An error occurred')
     }
   }
 
@@ -129,7 +131,7 @@ export default function DocumentStoragePage() {
       setEditName('')
       loadFolders()
     } catch (err) {
-      // silently catch
+      toast.error(err.message || 'An error occurred')
     }
   }
 
@@ -140,7 +142,7 @@ export default function DocumentStoragePage() {
       if (selectedFolder === id) setSelectedFolder(null)
       loadFolders()
     } catch (err) {
-      // silently catch
+      toast.error(err.message || 'An error occurred')
     }
   }
 
@@ -157,7 +159,7 @@ export default function DocumentStoragePage() {
       loadFolders()
       loadAllDocuments()
     } catch (err) {
-      // silently catch
+      toast.error(err.message || 'An error occurred')
     }
   }
 
@@ -175,7 +177,7 @@ export default function DocumentStoragePage() {
       }
       loadAllDocuments()
     } catch (err) {
-      // silently catch
+      toast.error(err.message || 'An error occurred')
     }
   }
 
@@ -248,12 +250,14 @@ export default function DocumentStoragePage() {
               <button
                 onClick={(e) => { e.stopPropagation(); setEditingFolder(folder.id); setEditName(folder.name) }}
                 className="p-0.5 text-muted-foreground hover:text-primary"
+                aria-label="Edit"
               >
                 <Edit2 className="w-3 h-3" />
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); handleDeleteFolder(folder.id) }}
                 className="p-0.5 text-muted-foreground hover:text-destructive"
+                aria-label="Delete"
               >
                 <Trash2 className="w-3 h-3" />
               </button>
@@ -488,6 +492,7 @@ export default function DocumentStoragePage() {
                               onClick={() => { setEditingDoc(doc.id); setEditDocTitle(doc.title || doc.filename || '') }}
                               className="p-1 text-muted-foreground hover:text-foreground rounded hover:bg-accent/30"
                               title="Rename"
+                              aria-label="Edit"
                             >
                               <Edit2 className="w-3.5 h-3.5" />
                             </button>
