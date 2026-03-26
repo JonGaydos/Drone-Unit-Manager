@@ -5,7 +5,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { sortByName, sortVehicles, sortPilotsActiveFirst } from '@/lib/formatters'
 import {
   ClipboardCheck, Plus, Filter, X, Loader2, Check, Ban, Clock,
-  ChevronDown, ChevronUp, Cloud,
+  ChevronDown, ChevronUp, Cloud, Download,
 } from 'lucide-react'
 
 const STATUS_COLORS = {
@@ -276,6 +276,16 @@ export default function FlightPlansPage() {
     }
   }
 
+  const handleAdminEdit = async (id) => {
+    try {
+      await api.patch(`/flight-plans/${id}`, { status: 'pending' })
+      toast.success('Plan reopened as pending for editing')
+      load()
+    } catch (err) {
+      toast.error(err.message)
+    }
+  }
+
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this flight plan?')) return
     try {
@@ -331,10 +341,16 @@ export default function FlightPlansPage() {
             </span>
           )}
         </div>
-        <button onClick={() => setShowAdd(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
-          <Plus className="w-4 h-4" /> Submit Plan
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => window.open('/api/export/flight-plans/csv', '_blank')}
+            className="flex items-center gap-2 px-3 py-2 bg-secondary border border-border text-secondary-foreground rounded-lg text-sm hover:bg-secondary/80">
+            <Download className="w-4 h-4" /> Export CSV
+          </button>
+          <button onClick={() => setShowAdd(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
+            <Plus className="w-4 h-4" /> Submit Plan
+          </button>
+        </div>
       </div>
 
       {/* Table */}
@@ -391,6 +407,12 @@ export default function FlightPlansPage() {
                           <button onClick={() => handleCancel(plan.id)}
                             className="p-1.5 text-muted-foreground hover:text-amber-400 rounded-lg hover:bg-amber-500/10" title="Cancel">
                             <X className="w-4 h-4" />
+                          </button>
+                        )}
+                        {isAdmin && (plan.status === 'cancelled' || plan.status === 'denied') && (
+                          <button onClick={() => { /* Admin override edit - reopen plan */ handleAdminEdit(plan.id) }}
+                            className="p-1.5 text-muted-foreground hover:text-primary rounded-lg hover:bg-primary/10" title="Edit (Admin Override)">
+                            <ClipboardCheck className="w-4 h-4" />
                           </button>
                         )}
                         {isSupervisor && (

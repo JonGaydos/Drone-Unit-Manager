@@ -12,6 +12,8 @@ const REPORT_TYPES = [
   { value: 'pilot_certifications', label: 'Pilot Certifications' },
   { value: 'battery_status', label: 'Battery Status' },
   { value: 'maintenance_history', label: 'Maintenance History' },
+  { value: 'pilot_activity_summary', label: 'Pilot Activity Summary' },
+  { value: 'annual_unit_report', label: 'Annual Unit Report' },
 ]
 
 export default function ReportsPage() {
@@ -287,6 +289,12 @@ export default function ReportsPage() {
                   </button>
                   <button onClick={() => handleExportCSV('vehicles')} className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-foreground hover:bg-accent rounded-lg">
                     <Download className="w-3.5 h-3.5" /> Export Vehicles CSV
+                  </button>
+                  <button onClick={() => handleExportCSV('incidents')} className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-foreground hover:bg-accent rounded-lg">
+                    <Download className="w-3.5 h-3.5" /> Export Incidents CSV
+                  </button>
+                  <button onClick={() => handleExportCSV('flight-plans')} className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-foreground hover:bg-accent rounded-lg">
+                    <Download className="w-3.5 h-3.5" /> Export Flight Plans CSV
                   </button>
                 </div>
               </div>

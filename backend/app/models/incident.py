@@ -28,5 +28,8 @@ class Incident(Base):
     corrective_actions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     estimated_cost: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    report_type: Mapped[str] = mapped_column(String(30), default="incident")  # "incident" or "success"
+    impact_level: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # For successes: lives_saved, arrest, evidence, community
+    outcome_description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

@@ -5,7 +5,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { sortByName, sortVehicles, sortPilotsActiveFirst } from '@/lib/formatters'
 import {
   AlertTriangle, Plus, Filter, Search, ChevronDown, ChevronUp,
-  X, Loader2, CheckCircle, Eye, Shield,
+  X, Loader2, CheckCircle, Eye, Shield, Download,
 } from 'lucide-react'
 
 const SEVERITY_COLORS = {
@@ -31,6 +31,22 @@ const CATEGORIES = [
   { value: 'other', label: 'Other' },
 ]
 
+const SUCCESS_CATEGORIES = [
+  { value: 'missing_person_found', label: 'Missing Person Found' },
+  { value: 'suspect_located', label: 'Suspect Located' },
+  { value: 'evidence_collected', label: 'Evidence Collected' },
+  { value: 'community_event', label: 'Community Event' },
+  { value: 'training_success', label: 'Training Success' },
+  { value: 'other_success', label: 'Other Success' },
+]
+
+const IMPACT_LEVELS = [
+  { value: 'lives_saved', label: 'Lives Saved' },
+  { value: 'arrest', label: 'Arrest Made' },
+  { value: 'evidence', label: 'Evidence Secured' },
+  { value: 'community', label: 'Community Impact' },
+]
+
 const SEVERITIES = ['minor', 'moderate', 'major', 'critical']
 const STATUSES = ['open', 'investigating', 'resolved', 'closed']
 
@@ -44,6 +60,7 @@ function IncidentModal({ pilots, vehicles, flights, onSave, onClose }) {
     title: '', severity: 'minor', category: 'other', description: '',
     location: '', lat: '', lon: '', flight_id: '', pilot_id: '', vehicle_id: '',
     equipment_grounded: false, damage_description: '', estimated_cost: '', notes: '',
+    report_type: 'incident', impact_level: '', outcome_description: '',
   })
   const [saving, setSaving] = useState(false)
 
@@ -65,21 +82,45 @@ function IncidentModal({ pilots, vehicles, flights, onSave, onClose }) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-card border border-border rounded-xl p-6 w-full max-w-2xl shadow-xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <h2 className="text-lg font-semibold text-foreground mb-4">Report Incident</h2>
+        <h2 className="text-lg font-semibold text-foreground mb-4">
+          {form.report_type === 'success' ? 'Report Success' : 'Report Incident'}
+        </h2>
         <form onSubmit={handleSubmit} className="space-y-3">
+          {/* Report Type Toggle */}
+          <div className="flex items-center bg-secondary rounded-lg border border-border w-fit">
+            <button type="button" onClick={() => setForm({ ...form, report_type: 'incident', category: 'other', severity: 'minor' })}
+              className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${form.report_type === 'incident' ? 'bg-red-500/20 text-red-400 font-medium' : 'text-muted-foreground hover:text-foreground'}`}>
+              Incident
+            </button>
+            <button type="button" onClick={() => setForm({ ...form, report_type: 'success', category: 'other_success', severity: 'minor' })}
+              className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${form.report_type === 'success' ? 'bg-emerald-500/20 text-emerald-400 font-medium' : 'text-muted-foreground hover:text-foreground'}`}>
+              Success
+            </button>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-foreground mb-1">Date *</label>
               <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" required />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Severity *</label>
-              <select value={form.severity} onChange={e => setForm({ ...form, severity: e.target.value })}
-                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
-                {SEVERITIES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
-              </select>
-            </div>
+            {form.report_type === 'incident' ? (
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Severity *</label>
+                <select value={form.severity} onChange={e => setForm({ ...form, severity: e.target.value })}
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
+                  {SEVERITIES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+                </select>
+              </div>
+            ) : (
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Impact Level</label>
+                <select value={form.impact_level} onChange={e => setForm({ ...form, impact_level: e.target.value })}
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
+                  <option value="">Select...</option>
+                  {IMPACT_LEVELS.map(il => <option key={il.value} value={il.value}>{il.label}</option>)}
+                </select>
+              </div>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">Title *</label>
@@ -91,7 +132,7 @@ function IncidentModal({ pilots, vehicles, flights, onSave, onClose }) {
               <label className="block text-sm font-medium text-foreground mb-1">Category *</label>
               <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
-                {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                {(form.report_type === 'success' ? SUCCESS_CATEGORIES : CATEGORIES).map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
               </select>
             </div>
             <div>
@@ -149,6 +190,14 @@ function IncidentModal({ pilots, vehicles, flights, onSave, onClose }) {
               className="rounded border-border" />
             <label htmlFor="equip_grounded" className="text-sm text-foreground">Equipment Grounded</label>
           </div>
+          {form.report_type === 'success' && (
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">Outcome Description</label>
+              <textarea value={form.outcome_description} onChange={e => setForm({ ...form, outcome_description: e.target.value })}
+                rows={3} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm resize-none"
+                placeholder="Describe the positive outcome..." />
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-foreground mb-1">Notes</label>
             <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })}
@@ -156,8 +205,8 @@ function IncidentModal({ pilots, vehicles, flights, onSave, onClose }) {
           </div>
           <div className="flex gap-2 pt-2">
             <button type="submit" disabled={saving}
-              className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2">
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Report Incident'}
+              className={`flex-1 py-2 rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2 ${form.report_type === 'success' ? 'bg-emerald-600 text-white' : 'bg-primary text-primary-foreground'}`}>
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : (form.report_type === 'success' ? 'Report Success' : 'Report Incident')}
             </button>
             <button type="button" onClick={onClose}
               className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm">Cancel</button>
@@ -236,7 +285,7 @@ export default function IncidentPage() {
   const [showAdd, setShowAdd] = useState(false)
   const [resolveTarget, setResolveTarget] = useState(null)
   const [expandedId, setExpandedId] = useState(null)
-  const [filters, setFilters] = useState({ status: '', severity: '', category: '', date_from: '', date_to: '' })
+  const [filters, setFilters] = useState({ status: '', severity: '', category: '', date_from: '', date_to: '', report_type: '' })
   const { user, isAdmin, isPilot, isSupervisor } = useAuth()
   const toast = useToast()
 
@@ -249,6 +298,7 @@ export default function IncidentPage() {
       if (filters.category) params.set('category', filters.category)
       if (filters.date_from) params.set('date_from', filters.date_from)
       if (filters.date_to) params.set('date_to', filters.date_to)
+      if (filters.report_type) params.set('report_type', filters.report_type)
       const qs = params.toString() ? `?${params}` : ''
       const [inc, st, p, v, f] = await Promise.all([
         api.get(`/incidents${qs}`),
@@ -269,7 +319,7 @@ export default function IncidentPage() {
     }
   }
 
-  useEffect(() => { load() }, [filters.status, filters.severity, filters.category])
+  useEffect(() => { load() }, [filters.status, filters.severity, filters.category, filters.report_type])
 
   const handleCreate = async (data) => {
     try {
@@ -335,6 +385,24 @@ export default function IncidentPage() {
         </div>
       </div>
 
+      {/* Report Type Toggle */}
+      <div className="flex items-center gap-3">
+        <div className="flex items-center bg-secondary rounded-lg border border-border">
+          <button onClick={() => setFilters({ ...filters, report_type: '' })}
+            className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${!filters.report_type ? 'bg-primary text-primary-foreground font-medium' : 'text-muted-foreground hover:text-foreground'}`}>
+            All
+          </button>
+          <button onClick={() => setFilters({ ...filters, report_type: 'incident' })}
+            className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${filters.report_type === 'incident' ? 'bg-red-500/20 text-red-400 font-medium' : 'text-muted-foreground hover:text-foreground'}`}>
+            Incidents
+          </button>
+          <button onClick={() => setFilters({ ...filters, report_type: 'success' })}
+            className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${filters.report_type === 'success' ? 'bg-emerald-500/20 text-emerald-400 font-medium' : 'text-muted-foreground hover:text-foreground'}`}>
+            Successes
+          </button>
+        </div>
+      </div>
+
       {/* Header + Filters */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3 flex-wrap">
@@ -357,12 +425,18 @@ export default function IncidentPage() {
             {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
           </select>
         </div>
-        {isPilot && (
-          <button onClick={() => setShowAdd(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
-            <Plus className="w-4 h-4" /> Report Incident
+        <div className="flex items-center gap-2">
+          <button onClick={() => window.open('/api/export/incidents/csv', '_blank')}
+            className="flex items-center gap-2 px-3 py-2 bg-secondary border border-border text-secondary-foreground rounded-lg text-sm hover:bg-secondary/80">
+            <Download className="w-4 h-4" /> Export CSV
           </button>
-        )}
+          {isPilot && (
+            <button onClick={() => setShowAdd(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
+              <Plus className="w-4 h-4" /> New Report
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Incidents Table */}
@@ -389,9 +463,15 @@ export default function IncidentPage() {
                     <td className="px-4 py-3 text-foreground whitespace-nowrap">{inc.date}</td>
                     <td className="px-4 py-3 text-foreground font-medium">{inc.title}</td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium border ${SEVERITY_COLORS[inc.severity] || ''}`}>
-                        {inc.severity}
-                      </span>
+                      {inc.report_type === 'success' ? (
+                        <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium border bg-emerald-500/15 text-emerald-400 border-emerald-500/30">
+                          success
+                        </span>
+                      ) : (
+                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium border ${SEVERITY_COLORS[inc.severity] || ''}`}>
+                          {inc.severity}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-foreground">{formatCategory(inc.category)}</td>
                     <td className="px-4 py-3 text-muted-foreground">{inc.pilot_name || '—'}</td>

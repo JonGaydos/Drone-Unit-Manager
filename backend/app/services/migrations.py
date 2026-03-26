@@ -44,6 +44,10 @@ def run_migrations():
         ("mission_logs", "modified_by_id", "ALTER TABLE mission_logs ADD COLUMN modified_by_id INTEGER REFERENCES users(id)"),
         ("training_logs", "created_by_id", "ALTER TABLE training_logs ADD COLUMN created_by_id INTEGER REFERENCES users(id)"),
         ("training_logs", "modified_by_id", "ALTER TABLE training_logs ADD COLUMN modified_by_id INTEGER REFERENCES users(id)"),
+        # Incident -> Activity Reports: report_type, impact_level, outcome_description
+        ("incidents", "report_type", "ALTER TABLE incidents ADD COLUMN report_type VARCHAR(30) DEFAULT 'incident'"),
+        ("incidents", "impact_level", "ALTER TABLE incidents ADD COLUMN impact_level VARCHAR(50)"),
+        ("incidents", "outcome_description", "ALTER TABLE incidents ADD COLUMN outcome_description TEXT"),
         # Cost tracking fields
         ("flights", "operating_cost", "ALTER TABLE flights ADD COLUMN operating_cost REAL"),
         ("mission_logs", "total_cost", "ALTER TABLE mission_logs ADD COLUMN total_cost REAL"),

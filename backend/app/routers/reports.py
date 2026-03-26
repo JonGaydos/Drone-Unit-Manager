@@ -19,6 +19,10 @@ from app.models.certification import CertificationType, PilotCertification
 from app.models.battery import Battery
 from app.models.maintenance import MaintenanceRecord
 from app.models.setting import Setting
+from app.models.mission_log import MissionLog
+from app.models.mission_log_pilot import MissionLogPilot
+from app.models.training_log import TrainingLog
+from app.models.training_log_pilot import TrainingLogPilot
 from app.routers.auth import get_current_user, require_pilot
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
@@ -51,6 +55,10 @@ def generate_report(config: ReportConfig, db: Session = Depends(get_db), user: U
         return _battery_status(config, db)
     elif config.report_type == "maintenance_history":
         return _maintenance_history(config, db)
+    elif config.report_type == "pilot_activity_summary":
+        return _pilot_activity_summary(config, db)
+    elif config.report_type == "annual_unit_report":
+        return _annual_unit_report(config, db)
     return {"error": "Unknown report type"}
 
 
@@ -80,6 +88,10 @@ def generate_report_pdf(config: ReportConfig, db: Session = Depends(get_db), use
         data = _battery_status(config, db)
     elif config.report_type == "maintenance_history":
         data = _maintenance_history(config, db)
+    elif config.report_type == "pilot_activity_summary":
+        data = _pilot_activity_summary(config, db)
+    elif config.report_type == "annual_unit_report":
+        data = _annual_unit_report(config, db)
     else:
         data = {"title": "Unknown Report", "summary": {}, "rows": [], "columns": []}
 
@@ -89,11 +101,20 @@ def generate_report_pdf(config: ReportConfig, db: Session = Depends(get_db), use
 
     logo_path = None
     if logo_setting and logo_setting.value:
+        # First try exact extension matches
         for ext in ["png", "jpg", "jpeg", "gif", "webp"]:
             candidate = os.path.join(str(settings.UPLOAD_DIR), "org", f"logo.{ext}")
             if os.path.exists(candidate):
                 logo_path = candidate
                 break
+        # If not found, scan the org directory for any file starting with "logo"
+        if not logo_path:
+            logo_dir = os.path.join(str(settings.UPLOAD_DIR), "org")
+            if os.path.isdir(logo_dir):
+                for f in os.listdir(logo_dir):
+                    if f.lower().startswith("logo"):
+                        logo_path = os.path.join(logo_dir, f)
+                        break
 
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -300,6 +321,40 @@ def _generate_chart(report_type: str, data: dict) -> io.BytesIO | None:
             ax.set_ylabel("Count", fontsize=9)
             ax.set_title("Certification Status", fontsize=11, fontweight="bold", color="#334155")
 
+        elif report_type == "pilot_activity_summary":
+            labels = [r.get("pilot", "?") for r in rows][:10]
+            flight_hrs = [r.get("flight_hours", 0) for r in rows][:10]
+            mission_hrs = [r.get("mission_hours", 0) for r in rows][:10]
+            training_hrs = [r.get("training_hours", 0) for r in rows][:10]
+            import numpy as np
+            x = np.arange(len(labels))
+            width = 0.25
+            ax.bar(x - width, flight_hrs, width, label="Flight", color="#3b82f6", edgecolor="white", linewidth=0.5)
+            ax.bar(x, mission_hrs, width, label="Mission", color="#10b981", edgecolor="white", linewidth=0.5)
+            ax.bar(x + width, training_hrs, width, label="Training", color="#f59e0b", edgecolor="white", linewidth=0.5)
+            ax.set_xticks(x)
+            ax.set_xticklabels(labels, rotation=30, ha="right", fontsize=8)
+            ax.set_ylabel("Hours", fontsize=9)
+            ax.set_title("Hours by Pilot (Flight / Mission / Training)", fontsize=11, fontweight="bold", color="#334155")
+            ax.legend(fontsize=8)
+
+        elif report_type == "annual_unit_report":
+            labels = [str(r.get("year", "?")) for r in rows][:15]
+            flight_hrs = [r.get("flight_hours", 0) for r in rows][:15]
+            mission_hrs = [r.get("mission_hours", 0) for r in rows][:15]
+            training_hrs = [r.get("training_hours", 0) for r in rows][:15]
+            import numpy as np
+            x = np.arange(len(labels))
+            width = 0.25
+            ax.bar(x - width, flight_hrs, width, label="Flight", color="#3b82f6", edgecolor="white", linewidth=0.5)
+            ax.bar(x, mission_hrs, width, label="Mission", color="#10b981", edgecolor="white", linewidth=0.5)
+            ax.bar(x + width, training_hrs, width, label="Training", color="#f59e0b", edgecolor="white", linewidth=0.5)
+            ax.set_xticks(x)
+            ax.set_xticklabels(labels, fontsize=8)
+            ax.set_ylabel("Hours", fontsize=9)
+            ax.set_title("Year-over-Year Activity Hours", fontsize=11, fontweight="bold", color="#334155")
+            ax.legend(fontsize=8)
+
         else:
             plt.close(fig)
             return None
@@ -361,17 +416,28 @@ def _flight_summary(config: ReportConfig, db: Session):
 
 
 def _pilot_hours(config: ReportConfig, db: Session):
+    from sqlalchemy import outerjoin, and_
+
+    # Build date filter conditions for the outer join
+    join_conditions = [Flight.pilot_id == Pilot.id]
+    if config.date_from:
+        join_conditions.append(Flight.date >= config.date_from)
+    if config.date_to:
+        join_conditions.append(Flight.date <= config.date_to)
+
     q = db.query(
+        Pilot.id,
         Pilot.first_name, Pilot.last_name,
         func.count(Flight.id).label("flights"),
         func.coalesce(func.sum(Flight.duration_seconds), 0).label("seconds"),
-    ).join(Pilot, Flight.pilot_id == Pilot.id)
-    if config.date_from:
-        q = q.filter(Flight.date >= config.date_from)
-    if config.date_to:
-        q = q.filter(Flight.date <= config.date_to)
+    ).outerjoin(Flight, and_(*join_conditions))
+
     if config.pilot_ids:
-        q = q.filter(Flight.pilot_id.in_(config.pilot_ids))
+        q = q.filter(Pilot.id.in_(config.pilot_ids))
+
+    # Only include active pilots when no specific pilots are filtered
+    if not config.pilot_ids:
+        q = q.filter(Pilot.status == "active")
 
     rows = []
     for r in q.group_by(Pilot.id).order_by(func.sum(Flight.duration_seconds).desc()).all():
@@ -567,5 +633,146 @@ def _maintenance_history(config: ReportConfig, db: Session):
             "date_range": f"{config.date_from or 'All'} to {config.date_to or 'Present'}",
         },
         "columns": ["Date", "Entity Type", "Description", "Type", "Performed By", "Cost"],
+        "rows": rows,
+    }
+
+
+def _pilot_activity_summary(config: ReportConfig, db: Session):
+    pilots = db.query(Pilot).filter(Pilot.status == "active").order_by(Pilot.last_name).all()
+
+    rows = []
+    total_flight_hrs = 0
+    total_mission_hrs = 0
+    total_training_hrs = 0
+
+    for pilot in pilots:
+        # Flight hours
+        fq = db.query(func.coalesce(func.sum(Flight.duration_seconds), 0)).filter(Flight.pilot_id == pilot.id)
+        if config.date_from:
+            fq = fq.filter(Flight.date >= config.date_from)
+        if config.date_to:
+            fq = fq.filter(Flight.date <= config.date_to)
+        flight_secs = fq.scalar() or 0
+        flight_hrs = round(flight_secs / 3600, 1)
+
+        # Mission man-hours
+        mq = db.query(func.coalesce(func.sum(MissionLogPilot.hours), 0)).filter(MissionLogPilot.pilot_id == pilot.id)
+        if config.date_from or config.date_to:
+            mq = mq.join(MissionLog, MissionLogPilot.mission_log_id == MissionLog.id)
+            if config.date_from:
+                mq = mq.filter(MissionLog.date >= config.date_from)
+            if config.date_to:
+                mq = mq.filter(MissionLog.date <= config.date_to)
+        mission_hrs = round(mq.scalar() or 0, 1)
+
+        # Training hours
+        tq = db.query(func.coalesce(func.sum(TrainingLogPilot.hours), 0)).filter(TrainingLogPilot.pilot_id == pilot.id)
+        if config.date_from or config.date_to:
+            tq = tq.join(TrainingLog, TrainingLogPilot.training_log_id == TrainingLog.id)
+            if config.date_from:
+                tq = tq.filter(TrainingLog.date >= config.date_from)
+            if config.date_to:
+                tq = tq.filter(TrainingLog.date <= config.date_to)
+        training_hrs = round(tq.scalar() or 0, 1)
+
+        total_hrs = round(flight_hrs + mission_hrs + training_hrs, 1)
+        total_flight_hrs += flight_hrs
+        total_mission_hrs += mission_hrs
+        total_training_hrs += training_hrs
+
+        rows.append({
+            "pilot": pilot.full_name,
+            "flight_hours": flight_hrs,
+            "mission_hours": mission_hrs,
+            "training_hours": training_hrs,
+            "total_hours": total_hrs,
+        })
+
+    rows.sort(key=lambda r: r["total_hours"], reverse=True)
+
+    return {
+        "report_type": "pilot_activity_summary",
+        "title": "Pilot Activity Summary",
+        "summary": {
+            "total_pilots": len(rows),
+            "total_flight_hours": round(total_flight_hrs, 1),
+            "total_mission_hours": round(total_mission_hrs, 1),
+            "total_training_hours": round(total_training_hrs, 1),
+            "date_range": f"{config.date_from or 'All'} to {config.date_to or 'Present'}",
+        },
+        "columns": ["Pilot", "Flight Hours", "Mission Hours", "Training Hours", "Total Hours"],
+        "rows": rows,
+    }
+
+
+def _annual_unit_report(config: ReportConfig, db: Session):
+    from sqlalchemy import extract
+
+    # Get year range from flights
+    min_year_q = db.query(func.min(extract("year", Flight.date))).scalar()
+    max_year_q = db.query(func.max(extract("year", Flight.date))).scalar()
+    if not min_year_q or not max_year_q:
+        return {
+            "report_type": "annual_unit_report",
+            "title": "Annual Unit Report",
+            "summary": {},
+            "columns": [],
+            "rows": [],
+        }
+
+    min_year = int(min_year_q)
+    max_year = int(max_year_q)
+
+    rows = []
+    for year in range(min_year, max_year + 1):
+        # Flights
+        flight_q = db.query(
+            func.count(Flight.id),
+            func.coalesce(func.sum(Flight.duration_seconds), 0),
+        ).filter(extract("year", Flight.date) == year)
+        flight_count, flight_secs = flight_q.one()
+
+        # Mission hours
+        mission_hrs = db.query(func.coalesce(func.sum(MissionLog.man_hours), 0)).filter(
+            extract("year", MissionLog.date) == year
+        ).scalar() or 0
+
+        # Training hours
+        training_hrs = db.query(func.coalesce(func.sum(TrainingLog.man_hours), 0)).filter(
+            extract("year", TrainingLog.date) == year
+        ).scalar() or 0
+
+        # Unique pilots
+        unique_pilots = db.query(func.count(func.distinct(Flight.pilot_id))).filter(
+            extract("year", Flight.date) == year
+        ).scalar() or 0
+
+        # Unique vehicles
+        unique_vehicles = db.query(func.count(func.distinct(Flight.vehicle_id))).filter(
+            extract("year", Flight.date) == year
+        ).scalar() or 0
+
+        rows.append({
+            "year": year,
+            "flights": flight_count or 0,
+            "flight_hours": round((flight_secs or 0) / 3600, 1),
+            "mission_hours": round(mission_hrs, 1),
+            "training_hours": round(training_hrs, 1),
+            "unique_pilots": unique_pilots,
+            "unique_vehicles": unique_vehicles,
+        })
+
+    total_flights = sum(r["flights"] for r in rows)
+    total_flight_hrs = sum(r["flight_hours"] for r in rows)
+
+    return {
+        "report_type": "annual_unit_report",
+        "title": "Annual Unit Report",
+        "summary": {
+            "years_covered": f"{min_year} - {max_year}",
+            "total_flights": total_flights,
+            "total_flight_hours": round(total_flight_hrs, 1),
+        },
+        "columns": ["Year", "Flights", "Flight Hours", "Mission Hours", "Training Hours", "Unique Pilots", "Unique Vehicles"],
         "rows": rows,
     }

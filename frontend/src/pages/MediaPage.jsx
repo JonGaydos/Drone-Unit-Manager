@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import {
@@ -36,6 +36,20 @@ export default function MediaPage() {
     const text = `${p.title || ''} ${p.filename || ''} ${(p.pilot_names || []).join(' ')}`.toLowerCase()
     return text.includes(search.toLowerCase())
   })
+
+  const grouped = useMemo(() => {
+    const groups = {}
+    filtered.forEach(p => {
+      const dateStr = p.date_taken ? new Date(p.date_taken).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'Undated'
+      if (!groups[dateStr]) groups[dateStr] = []
+      groups[dateStr].push(p)
+    })
+    return Object.entries(groups).sort((a, b) => {
+      if (a[0] === 'Undated') return 1
+      if (b[0] === 'Undated') return -1
+      return new Date(b[0]) - new Date(a[0])
+    })
+  }, [filtered])
 
   // Lightbox keyboard nav
   useEffect(() => {
@@ -120,64 +134,69 @@ export default function MediaPage() {
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-          {filtered.map((photo, idx) => (
-            <div
-              key={photo.id}
-              className="group bg-card border border-border rounded-xl overflow-hidden hover:border-primary/50 transition-all hover:shadow-lg hover:shadow-primary/5"
-            >
-              {/* Thumbnail */}
-              <div
-                className="aspect-[4/3] bg-muted/30 relative cursor-pointer overflow-hidden"
-                onClick={() => setLightbox(idx)}
-              >
-                <img
-                  src={`${API_BASE}/photos/${photo.id}/thumbnail`}
-                  alt={photo.title || photo.filename}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  loading="lazy"
-                />
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-                  <ZoomIn className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />
-                </div>
-              </div>
-              {/* Info */}
-              <div className="p-3 space-y-1.5">
-                <p className="text-sm font-medium text-foreground truncate" title={photo.title || photo.filename}>
-                  {photo.title || photo.filename}
-                </p>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  {photo.date_taken && (
-                    <span className="flex items-center gap-1">
-                      <Calendar className="w-3 h-3" /> {formatDate(photo.date_taken)}
-                    </span>
-                  )}
-                  {photo.file_size && <span>{formatSize(photo.file_size)}</span>}
-                </div>
-                {photo.pilot_names && photo.pilot_names.length > 0 && (
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <User className="w-3 h-3 shrink-0" />
-                    <span className="truncate">{photo.pilot_names.join(', ')}</span>
-                  </div>
-                )}
-                {isPilot && (
-                  <div className="flex items-center gap-1 pt-1">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setShowEdit(photo) }}
-                      className="p-1.5 text-muted-foreground hover:text-primary rounded-md hover:bg-primary/10 transition-colors"
-                      title="Edit"
+        <div>
+          {grouped.map(([dateLabel, datePhotos]) => (
+            <div key={dateLabel}>
+              <h3 className="text-sm font-medium text-muted-foreground mb-2 mt-4">{dateLabel}</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                {datePhotos.map((photo) => {
+                  const idx = filtered.indexOf(photo)
+                  return (
+                    <div
+                      key={photo.id}
+                      className="group bg-card border border-border rounded-xl overflow-hidden hover:border-primary/50 transition-all hover:shadow-lg hover:shadow-primary/5"
                     >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleDelete(photo.id) }}
-                      className="p-1.5 text-muted-foreground hover:text-destructive rounded-md hover:bg-destructive/10 transition-colors"
-                      title="Delete"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                )}
+                      {/* Thumbnail */}
+                      <div
+                        className="aspect-[4/3] bg-muted/30 relative cursor-pointer overflow-hidden"
+                        onClick={() => setLightbox(idx)}
+                      >
+                        <img
+                          src={`${API_BASE}/photos/${photo.id}/thumbnail`}
+                          alt={photo.title || photo.filename}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          loading="lazy"
+                        />
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                          <ZoomIn className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />
+                        </div>
+                      </div>
+                      {/* Info */}
+                      <div className="p-3 space-y-1.5">
+                        <p className="text-sm font-medium text-foreground truncate" title={photo.title || photo.filename}>
+                          {photo.title || photo.filename}
+                        </p>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          {photo.file_size && <span>{formatSize(photo.file_size)}</span>}
+                        </div>
+                        {photo.pilot_names && photo.pilot_names.length > 0 && (
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <User className="w-3 h-3 shrink-0" />
+                            <span className="truncate">{photo.pilot_names.join(', ')}</span>
+                          </div>
+                        )}
+                        {isPilot && (
+                          <div className="flex items-center gap-1 pt-1">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setShowEdit(photo) }}
+                              className="p-1.5 text-muted-foreground hover:text-primary rounded-md hover:bg-primary/10 transition-colors"
+                              title="Edit"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleDelete(photo.id) }}
+                              className="p-1.5 text-muted-foreground hover:text-destructive rounded-md hover:bg-destructive/10 transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           ))}
@@ -291,42 +310,48 @@ function LightboxModal({ photos, index, onClose, onPrev, onNext, formatDate, for
 }
 
 function UploadModal({ pilots, onClose, onSuccess }) {
-  const [file, setFile] = useState(null)
+  const [files, setFiles] = useState([])
   const [preview, setPreview] = useState(null)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [dateTaken, setDateTaken] = useState('')
   const [selectedPilots, setSelectedPilots] = useState([])
   const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState('')
   const fileRef = useRef(null)
 
-  const handleFile = (f) => {
-    setFile(f)
-    if (f) {
+  const handleFiles = (fileList) => {
+    const arr = Array.from(fileList)
+    setFiles(arr)
+    if (arr.length > 0) {
       const reader = new FileReader()
       reader.onload = (e) => setPreview(e.target.result)
-      reader.readAsDataURL(f)
+      reader.readAsDataURL(arr[0])
     } else {
       setPreview(null)
     }
   }
 
   const handleSubmit = async () => {
-    if (!file) return
+    if (files.length === 0) return
     setUploading(true)
     try {
-      const fd = new FormData()
-      fd.append('file', file)
-      if (title) fd.append('title', title)
-      if (description) fd.append('description', description)
-      if (dateTaken) fd.append('date_taken', dateTaken)
-      if (selectedPilots.length > 0) fd.append('pilot_ids', selectedPilots.join(','))
-      await api.upload('/photos/upload', fd)
+      for (let i = 0; i < files.length; i++) {
+        setUploadProgress(`Uploading ${i + 1} of ${files.length}...`)
+        const fd = new FormData()
+        fd.append('file', files[i])
+        fd.append('title', title || files[i].name)
+        if (description) fd.append('description', description)
+        if (dateTaken) fd.append('date_taken', dateTaken)
+        if (selectedPilots.length > 0) fd.append('pilot_ids', selectedPilots.join(','))
+        await api.upload('/photos/upload', fd)
+      }
       onSuccess()
     } catch (err) {
-      // silently catch
+      alert('Error uploading: ' + (err.message || 'Unknown error'))
     } finally {
       setUploading(false)
+      setUploadProgress('')
     }
   }
 
@@ -353,14 +378,19 @@ function UploadModal({ pilots, onClose, onSuccess }) {
             className="border-2 border-dashed border-border rounded-xl p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
           >
             {preview ? (
-              <img src={preview} alt="Preview" className="max-h-48 mx-auto rounded-lg object-contain" />
+              <div>
+                <img src={preview} alt="Preview" className="max-h-48 mx-auto rounded-lg object-contain" />
+                {files.length > 1 && (
+                  <p className="text-xs text-muted-foreground mt-2">{files.length} files selected</p>
+                )}
+              </div>
             ) : (
               <div className="space-y-2">
                 <Camera className="w-10 h-10 mx-auto text-muted-foreground/50" />
-                <p className="text-sm text-muted-foreground">Click to select a photo</p>
+                <p className="text-sm text-muted-foreground">Click to select photos (multiple supported)</p>
               </div>
             )}
-            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => handleFile(e.target.files[0])} />
+            <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} />
           </div>
 
           <div>
@@ -419,10 +449,10 @@ function UploadModal({ pilots, onClose, onSuccess }) {
           <button onClick={onClose} className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
           <button
             onClick={handleSubmit}
-            disabled={!file || uploading}
+            disabled={files.length === 0 || uploading}
             className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
           >
-            {uploading ? 'Uploading...' : 'Upload'}
+            {uploading ? (uploadProgress || 'Uploading...') : (files.length > 1 ? `Upload ${files.length} Photos` : 'Upload')}
           </button>
         </div>
       </div>

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
-import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Filter, ScrollText } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Filter, ScrollText, Download } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
 const ENTITY_TYPES = [
@@ -101,16 +101,24 @@ export default function AuditLogPage() {
             <p className="text-sm text-muted-foreground">{total} total entries</p>
           </div>
         </div>
-        <button
-          onClick={() => setShowFilters(!showFilters)}
-          className="flex items-center gap-2 px-3 py-2 bg-secondary border border-border rounded-lg text-sm text-foreground hover:bg-accent/30 transition-colors"
-        >
-          <Filter className="w-4 h-4" />
-          Filters
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => window.open('/api/export/audit/csv', '_blank')}
+            className="flex items-center gap-2 px-3 py-2 bg-secondary border border-border rounded-lg text-sm text-foreground hover:bg-accent/30 transition-colors"
+          >
+            <Download className="w-4 h-4" /> Export CSV
+          </button>
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className="flex items-center gap-2 px-3 py-2 bg-secondary border border-border rounded-lg text-sm text-foreground hover:bg-accent/30 transition-colors"
+          >
+            <Filter className="w-4 h-4" />
+            Filters
           {(entityType || action) && (
             <span className="w-2 h-2 rounded-full bg-primary" />
           )}
         </button>
+        </div>
       </div>
 
       {/* Filters */}

@@ -49,7 +49,7 @@ const navItems = [
   { to: '/reports', icon: FileText, label: 'Reports' },
   { to: '/compliance', icon: Shield, label: 'Compliance' },
   { to: '/alerts', icon: Bell, label: 'Alerts' },
-  { to: '/incidents', icon: AlertTriangle, label: 'Incidents' },
+  { to: '/incidents', icon: AlertTriangle, label: 'Activity Reports' },
   { to: '/settings', icon: Settings, label: 'Settings' },
   { to: '/audit-log', icon: ScrollText, label: 'Audit Log', adminOnly: true },
 ]

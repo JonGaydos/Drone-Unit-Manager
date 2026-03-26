@@ -114,7 +114,7 @@ export default function VehicleDetailPage() {
     { key: 'batteries', label: 'Batteries', icon: Battery },
     { key: 'controllers', label: 'Controllers', icon: Gamepad2 },
     { key: 'sensors', label: 'Sensors', icon: Cpu },
-    { key: 'attachments', label: 'Attachments', icon: Paperclip },
+    { key: 'attachments', label: 'Mounted Accessories', icon: Paperclip },
   ]
 
   return (

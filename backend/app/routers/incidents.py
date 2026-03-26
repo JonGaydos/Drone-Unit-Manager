@@ -35,6 +35,9 @@ class IncidentCreate(BaseModel):
     damage_description: Optional[str] = None
     estimated_cost: Optional[float] = None
     notes: Optional[str] = None
+    report_type: str = "incident"
+    impact_level: Optional[str] = None
+    outcome_description: Optional[str] = None
 
 
 class IncidentUpdate(BaseModel):
@@ -57,6 +60,9 @@ class IncidentUpdate(BaseModel):
     corrective_actions: Optional[str] = None
     estimated_cost: Optional[float] = None
     notes: Optional[str] = None
+    report_type: Optional[str] = None
+    impact_level: Optional[str] = None
+    outcome_description: Optional[str] = None
 
 
 class IncidentOut(BaseModel):
@@ -81,6 +87,9 @@ class IncidentOut(BaseModel):
     corrective_actions: Optional[str]
     estimated_cost: Optional[float]
     notes: Optional[str]
+    report_type: Optional[str] = "incident"
+    impact_level: Optional[str] = None
+    outcome_description: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     pilot_name: Optional[str] = None
@@ -140,6 +149,7 @@ def list_incidents(
     vehicle_id: int | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
+    report_type: str | None = None,
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=50, le=200),
     db: Session = Depends(get_db),
@@ -152,6 +162,8 @@ def list_incidents(
         q = q.filter(Incident.severity == severity)
     if category:
         q = q.filter(Incident.category == category)
+    if report_type:
+        q = q.filter(Incident.report_type == report_type)
     if pilot_id:
         q = q.filter(Incident.pilot_id == pilot_id)
     if vehicle_id:
@@ -195,6 +207,9 @@ def create_incident(data: IncidentCreate, db: Session = Depends(get_db), user: U
         damage_description=data.damage_description,
         estimated_cost=data.estimated_cost,
         notes=data.notes,
+        report_type=data.report_type,
+        impact_level=data.impact_level,
+        outcome_description=data.outcome_description,
     )
     db.add(incident)
     db.flush()

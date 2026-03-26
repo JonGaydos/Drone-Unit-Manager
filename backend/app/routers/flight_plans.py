@@ -52,6 +52,7 @@ class FlightPlanUpdate(BaseModel):
     checklist_completed: Optional[bool] = None
     linked_flight_id: Optional[int] = None
     notes: Optional[str] = None
+    status: Optional[str] = None
 
 
 class ApproveRequest(BaseModel):
@@ -210,7 +211,7 @@ def update_flight_plan(plan_id: int, data: FlightPlanUpdate, db: Session = Depen
         raise HTTPException(status_code=404, detail="Flight plan not found")
     if user.role not in ("admin", "supervisor") and plan.submitted_by_id != user.id:
         raise HTTPException(status_code=403, detail="You can only edit your own flight plans")
-    if plan.status not in ("pending", "denied"):
+    if plan.status not in ("pending", "denied") and user.role != "admin":
         raise HTTPException(status_code=400, detail="Can only edit pending or denied plans")
     update_data = data.model_dump(exclude_unset=True)
     if "date_planned" in update_data and update_data["date_planned"] is not None:

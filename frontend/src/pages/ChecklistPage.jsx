@@ -458,7 +458,7 @@ export default function ChecklistPage() {
   const [showCompleteModal, setShowCompleteModal] = useState(false)
   const [viewCompletion, setViewCompletion] = useState(null)
   const { isSupervisor } = useAuth()
-  const { toast } = useToast()
+  const toast = useToast()
 
   const load = async () => {
     setLoading(true)
@@ -474,7 +474,7 @@ export default function ChecklistPage() {
       setPilots(Array.isArray(p) ? p : p.pilots || p.items || [])
       setVehicles(Array.isArray(v) ? v : v.vehicles || v.items || [])
     } catch (err) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+      toast.error(err.message)
     } finally {
       setLoading(false)
     }
@@ -486,16 +486,16 @@ export default function ChecklistPage() {
     try {
       if (editingTemplate) {
         await api.patch(`/checklists/templates/${editingTemplate.id}`, data)
-        toast({ title: 'Template updated' })
+        toast.success('Template updated')
       } else {
         await api.post('/checklists/templates', data)
-        toast({ title: 'Template created' })
+        toast.success('Template created')
       }
       setShowTemplateModal(false)
       setEditingTemplate(null)
       await load()
     } catch (err) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+      toast.error(err.message)
     }
   }
 
@@ -503,22 +503,22 @@ export default function ChecklistPage() {
     if (!confirm('Delete this template?')) return
     try {
       await api.delete(`/checklists/templates/${id}`)
-      toast({ title: 'Template deleted' })
+      toast.success('Template deleted')
       load()
     } catch (err) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+      toast.error(err.message)
     }
   }
 
   const handleComplete = async (data) => {
     try {
       await api.post('/checklists/complete', data)
-      toast({ title: 'Checklist submitted' })
+      toast.success('Checklist submitted')
       setShowCompleteModal(false)
       setTab('completions')
       await load()
     } catch (err) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+      toast.error(err.message)
     }
   }
 

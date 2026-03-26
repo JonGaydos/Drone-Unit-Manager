@@ -4,7 +4,7 @@ import { api } from '@/api/client'
 import { useToast } from '@/contexts/ToastContext'
 import {
   ShieldCheck, AlertTriangle, Clock, Wrench, Plane, FileText,
-  ClipboardCheck, Loader2, ChevronRight, RefreshCw,
+  ClipboardCheck, Loader2, ChevronRight, RefreshCw, Download,
 } from 'lucide-react'
 
 function ScoreCircle({ score }) {
@@ -174,13 +174,21 @@ export default function CompliancePage() {
           <ShieldCheck className="w-7 h-7 text-primary" />
           <h1 className="text-2xl font-bold text-foreground">Compliance Dashboard</h1>
         </div>
-        <button
-          onClick={load}
-          className="flex items-center gap-2 px-3 py-2 text-sm bg-secondary border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <RefreshCw className="w-4 h-4" />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => window.open('/api/export/equipment-checkouts/csv', '_blank')}
+            className="flex items-center gap-2 px-3 py-2 text-sm bg-secondary border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Download className="w-4 h-4" /> Export CSV
+          </button>
+          <button
+            onClick={load}
+            className="flex items-center gap-2 px-3 py-2 text-sm bg-secondary border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* Score + Stats Row */}

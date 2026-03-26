@@ -284,6 +284,168 @@ def export_mission_logs_csv(
     )
 
 
+@router.get("/incidents/csv")
+def export_incidents_csv(
+    date_from: date | None = None,
+    date_to: date | None = None,
+    report_type: str | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    from app.models.incident import Incident
+    q = db.query(Incident)
+    if date_from:
+        q = q.filter(Incident.date >= date_from)
+    if date_to:
+        q = q.filter(Incident.date <= date_to)
+    if report_type:
+        q = q.filter(Incident.report_type == report_type)
+    incidents = q.order_by(Incident.date.desc()).all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "Date", "Title", "Report Type", "Severity", "Category", "Description",
+        "Location", "Status", "Resolution", "Equipment Grounded",
+        "Damage Description", "Estimated Cost", "Notes",
+    ])
+    for inc in incidents:
+        pilot = db.query(Pilot).filter(Pilot.id == inc.pilot_id).first() if inc.pilot_id else None
+        writer.writerow([
+            inc.date, inc.title, getattr(inc, 'report_type', 'incident') or 'incident',
+            inc.severity, inc.category, inc.description or "",
+            inc.location or "", inc.status, inc.resolution or "",
+            "Yes" if inc.equipment_grounded else "No",
+            inc.damage_description or "", inc.estimated_cost or "", inc.notes or "",
+        ])
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=incidents_export.csv"},
+    )
+
+
+@router.get("/flight-plans/csv")
+def export_flight_plans_csv(
+    date_from: date | None = None,
+    date_to: date | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    from app.models.flight_approval import FlightPlan
+    from sqlalchemy import func as sqlfunc
+    q = db.query(FlightPlan)
+    if date_from:
+        q = q.filter(sqlfunc.date(FlightPlan.date_planned) >= date_from)
+    if date_to:
+        q = q.filter(sqlfunc.date(FlightPlan.date_planned) <= date_to)
+    plans = q.order_by(FlightPlan.date_planned.desc()).all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "Title", "Date Planned", "Pilot", "Vehicle", "Location", "Purpose",
+        "Case Number", "Status", "Max Altitude", "Est Duration (min)", "Notes",
+    ])
+    for p in plans:
+        pilot = db.query(Pilot).filter(Pilot.id == p.pilot_id).first() if p.pilot_id else None
+        vehicle = db.query(Vehicle).filter(Vehicle.id == p.vehicle_id).first() if p.vehicle_id else None
+        writer.writerow([
+            p.title, p.date_planned,
+            pilot.full_name if pilot else "",
+            f"{vehicle.manufacturer} {vehicle.model}" if vehicle else "",
+            p.location or "", p.purpose or "", p.case_number or "",
+            p.status, p.max_altitude_planned or "", p.estimated_duration_min or "",
+            p.notes or "",
+        ])
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=flight_plans_export.csv"},
+    )
+
+
+@router.get("/audit/csv")
+def export_audit_csv(
+    date_from: date | None = None,
+    date_to: date | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    from app.models.audit_log import AuditLog
+    from sqlalchemy import func as sqlfunc
+    q = db.query(AuditLog)
+    if date_from:
+        q = q.filter(sqlfunc.date(AuditLog.created_at) >= date_from)
+    if date_to:
+        q = q.filter(sqlfunc.date(AuditLog.created_at) <= date_to)
+    logs = q.order_by(AuditLog.created_at.desc()).limit(5000).all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "Timestamp", "User", "Action", "Entity Type", "Entity ID",
+        "Entity Name", "Details", "IP Address",
+    ])
+    for log in logs:
+        writer.writerow([
+            log.created_at.strftime("%Y-%m-%d %H:%M:%S") if log.created_at else "",
+            log.user_name or "", log.action, log.entity_type,
+            log.entity_id or "", log.entity_name or "",
+            log.details or "", log.ip_address or "",
+        ])
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=audit_log_export.csv"},
+    )
+
+
+@router.get("/equipment-checkouts/csv")
+def export_equipment_checkouts_csv(
+    date_from: date | None = None,
+    date_to: date | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    from app.models.equipment_checkout import EquipmentCheckout
+    from sqlalchemy import func as sqlfunc
+    q = db.query(EquipmentCheckout)
+    if date_from:
+        q = q.filter(sqlfunc.date(EquipmentCheckout.checked_out_at) >= date_from)
+    if date_to:
+        q = q.filter(sqlfunc.date(EquipmentCheckout.checked_out_at) <= date_to)
+    checkouts = q.order_by(EquipmentCheckout.checked_out_at.desc()).all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "Entity Type", "Entity Name", "Checked Out By", "Checked Out At",
+        "Expected Return", "Checked In At", "Condition Out", "Condition In",
+        "Notes Out", "Notes In",
+    ])
+    for c in checkouts:
+        pilot_out = db.query(Pilot).filter(Pilot.id == c.checked_out_by_id).first() if c.checked_out_by_id else None
+        writer.writerow([
+            c.entity_type, c.entity_name or "",
+            pilot_out.full_name if pilot_out else "",
+            c.checked_out_at.strftime("%Y-%m-%d %H:%M") if c.checked_out_at else "",
+            c.expected_return.strftime("%Y-%m-%d %H:%M") if c.expected_return else "",
+            c.checked_in_at.strftime("%Y-%m-%d %H:%M") if c.checked_in_at else "",
+            c.condition_out or "", c.condition_in or "",
+            c.notes_out or "", c.notes_in or "",
+        ])
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=equipment_checkouts_export.csv"},
+    )
+
+
 @router.post("/flights/import")
 async def import_flights_csv(
     file: UploadFile = File(...),
