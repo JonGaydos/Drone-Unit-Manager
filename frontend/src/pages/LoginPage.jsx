@@ -65,6 +65,7 @@ export default function LoginPage() {
               placeholder="••••••••"
               required
             />
+            <p className="text-xs text-muted-foreground mt-2">Username and password are case-sensitive.</p>
           </div>
 
           <button

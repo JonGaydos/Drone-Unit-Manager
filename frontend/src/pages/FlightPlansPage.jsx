@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
-import { sortByName, sortVehicles, sortPilotsActiveFirst } from '@/lib/formatters'
+import { sortByName, sortVehicles, sortPilotsActiveFirst, vehicleDisplayName } from '@/lib/formatters'
 import {
   ClipboardCheck, Plus, Filter, X, Loader2, Check, Ban, Clock,
   ChevronDown, ChevronUp, Cloud, Download,
@@ -89,7 +89,7 @@ function PlanModal({ pilots, vehicles, currentUser, onSave, onClose }) {
               <select value={form.vehicle_id} onChange={e => setForm({ ...form, vehicle_id: e.target.value })}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                 <option value="">Select vehicle...</option>
-                {sortVehicles(vehicles).map(v => <option key={v.id} value={v.id}>{v.manufacturer} {v.model}</option>)}
+                {sortVehicles(vehicles).map(v => <option key={v.id} value={v.id}>{vehicleDisplayName(v)}</option>)}
               </select>
             </div>
             <div>
@@ -204,7 +204,7 @@ export default function FlightPlansPage() {
   const [expandedId, setExpandedId] = useState(null)
   const [viewMode, setViewMode] = useState('all') // 'all' or 'mine'
   const [statusFilter, setStatusFilter] = useState('')
-  const { user, isAdmin } = useAuth()
+  const { user, isAdmin, isPilot } = useAuth()
   const toast = useToast()
   const isSupervisor = user?.role === 'admin' || user?.role === 'supervisor'
 
@@ -347,10 +347,12 @@ export default function FlightPlansPage() {
             className="flex items-center gap-2 px-3 py-2 bg-secondary border border-border text-secondary-foreground rounded-lg text-sm hover:bg-secondary/80">
             <Download className="w-4 h-4" /> Export CSV
           </button>
-          <button onClick={() => setShowAdd(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
-            <Plus className="w-4 h-4" /> Submit Plan
-          </button>
+          {isPilot && (
+            <button onClick={() => setShowAdd(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
+              <Plus className="w-4 h-4" /> Submit Plan
+            </button>
+          )}
         </div>
       </div>
 

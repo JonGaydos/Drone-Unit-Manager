@@ -4,7 +4,7 @@ import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { formatDuration, normalizeDateValue, metersToFeet, mpsToMph } from '@/lib/utils'
-import { sortByName, sortVehicles, sortPilotsActiveFirst } from '@/lib/formatters'
+import { sortByName, sortVehicles, sortPilotsActiveFirst, vehicleDisplayName } from '@/lib/formatters'
 import { ArrowLeft, MapPin, Clock, Gauge, Battery, Plane, Save, RefreshCw, Loader2 } from 'lucide-react'
 import { FlightPathMap } from '@/components/FlightMap'
 import {
@@ -190,7 +190,7 @@ export default function FlightDetailPage() {
                 <select value={editForm.vehicle_id} onChange={e => setEditForm({...editForm, vehicle_id: e.target.value})}
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                   <option value="">Unassigned</option>
-                  {sortVehicles(vehicles).map(v => <option key={v.id} value={v.id}>{v.manufacturer} {v.model}</option>)}
+                  {sortVehicles(vehicles).map(v => <option key={v.id} value={v.id}>{vehicleDisplayName(v)}</option>)}
                 </select>
               </div>
             </div>
@@ -306,6 +306,14 @@ export default function FlightDetailPage() {
             <div><p className="text-xs text-muted-foreground">Vehicle</p><p className="text-sm text-foreground">{flight.vehicle_name || '—'}</p></div>
             <div><p className="text-xs text-muted-foreground">Purpose</p><p className="text-sm text-foreground">{flight.purpose || '—'}</p></div>
             <div><p className="text-xs text-muted-foreground">Duration</p><p className="text-sm text-foreground">{formatDuration(flight.duration_seconds)}</p></div>
+            <div>
+              <p className="text-xs text-muted-foreground">Takeoff Time</p>
+              <p className="text-foreground">{flight.takeoff_time ? new Date(flight.takeoff_time).toLocaleTimeString() : '—'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Landing Time</p>
+              <p className="text-foreground">{flight.landing_time ? new Date(flight.landing_time).toLocaleTimeString() : '—'}</p>
+            </div>
             <div><p className="text-xs text-muted-foreground">Takeoff</p><p className="text-sm text-foreground">{flight.takeoff_address || '—'}</p></div>
             <div><p className="text-xs text-muted-foreground">Max Altitude</p><p className="text-sm text-foreground">{flight.max_altitude_m ? `${metersToFeet(flight.max_altitude_m)} ft` : '—'}</p></div>
             <div><p className="text-xs text-muted-foreground">Max Speed</p><p className="text-sm text-foreground">{flight.max_speed_mps ? `${mpsToMph(flight.max_speed_mps)} mph` : '—'}</p></div>

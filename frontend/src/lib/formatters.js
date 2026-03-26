@@ -31,6 +31,14 @@ export function sortPilotsActiveFirst(pilots) {
   })
 }
 
+export function vehicleDisplayName(v) {
+  return v.nickname || `${v.manufacturer || ''} ${v.model || ''}`.trim() || v.serial_number || 'Unknown'
+}
+
+export function equipmentDisplayName(item) {
+  return item.nickname || item.serial_number || `${item.manufacturer || ''} ${item.model || ''}`.trim() || 'Unknown'
+}
+
 export function formatStatusText(status) {
   if (!status) return ''
   return status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())

@@ -14,8 +14,18 @@ import DocumentUpload from '@/components/DocumentUpload'
 
 export default function PilotDetailPage() {
   const { id } = useParams()
-  const { isAdmin } = useAuth()
+  const { isAdmin, isPilot, isSupervisor, user } = useAuth()
   const toast = useToast()
+
+  // Auto-file documents to General folder
+  const [generalFolderId, setGeneralFolderId] = useState(null)
+  useEffect(() => {
+    api.get('/folders').then(folders => {
+      const f = (Array.isArray(folders) ? folders : folders.folders || []).find(f => f.name === 'General')
+      if (f) setGeneralFolderId(f.id)
+    }).catch(() => {})
+  }, [])
+
   const [pilot, setPilot] = useState(null)
   const [stats, setStats] = useState(null)
   const [flights, setFlights] = useState([])
@@ -205,10 +215,12 @@ export default function PilotDetailPage() {
               <>
                 <div className="flex items-center gap-3">
                   <h2 className="text-xl font-bold text-foreground">{pilot.full_name}</h2>
-                  <button onClick={startEditing}
-                    className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent transition-colors">
-                    <Edit className="w-4 h-4" />
-                  </button>
+                  {(isSupervisor || (isPilot && user?.pilot_id === parseInt(id))) && (
+                    <button onClick={startEditing}
+                      className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent transition-colors">
+                      <Edit className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-4 mt-2 text-sm text-muted-foreground">
                   {pilot.email && <span>{pilot.email}</span>}
@@ -476,7 +488,7 @@ export default function PilotDetailPage() {
       )}
 
       {/* Documents */}
-      <DocumentUpload entityType="pilot" entityId={id} />
+      <DocumentUpload entityType="pilot" entityId={id} folderId={generalFolderId} />
     </div>
   )
 }

@@ -53,6 +53,7 @@ class Flight(Base):
     attachment_right: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     carrier: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     has_telemetry: Mapped[bool] = mapped_column(Boolean, default=False)
+    telemetry_synced: Mapped[bool] = mapped_column(Boolean, default=False)
     review_status: Mapped[str] = mapped_column(String(20), default="reviewed")  # needs_review, reviewed
     pilot_confirmed: Mapped[bool] = mapped_column(Boolean, default=True)
     operating_cost: Mapped[Optional[float]] = mapped_column(Float, nullable=True)

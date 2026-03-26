@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { normalizeDateValue } from '@/lib/utils'
 import { FREQUENCY_COLORS } from '@/lib/constants'
-import { sortByName, sortPilotsActiveFirst } from '@/lib/formatters'
+import { sortByName, sortPilotsActiveFirst, vehicleDisplayName, equipmentDisplayName } from '@/lib/formatters'
 import { Plus, Trash2, Search, Wrench, CalendarClock, History, Download, Edit, CheckCircle, Clock } from 'lucide-react'
 
 // Map entity_type to API endpoint
@@ -19,9 +19,8 @@ const ENTITY_ENDPOINTS = {
 // Get display name for an entity from its data
 function getEntityName(entity, entityType) {
   if (!entity) return '—'
-  if (entityType === 'vehicle') return entity.nickname || entity.serial_number || `Vehicle #${entity.id}`
-  if (entityType === 'battery') return entity.serial_number || `Battery #${entity.id}`
-  if (entityType === 'controller') return entity.serial_number || `Controller #${entity.id}`
+  if (entityType === 'vehicle') return vehicleDisplayName(entity)
+  if (entityType === 'battery' || entityType === 'controller') return equipmentDisplayName(entity)
   if (entityType === 'dock') return entity.name || entity.serial_number || `Dock #${entity.id}`
   return `#${entity.id}`
 }
@@ -43,12 +42,23 @@ function MaintenanceModal({ record, onSave, onClose, entityLists, pilots }) {
     }
   }, [form.entity_type, entityLists, record])
 
-  const handleSubmit = (e) => {
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState(null)
+
+  const handleSubmit = async (e) => {
     e.preventDefault()
+    setSubmitError(null)
     const data = { ...form }
     if (data.entity_id) data.entity_id = parseInt(data.entity_id)
     Object.keys(data).forEach(k => { if (data[k] === '') delete data[k] })
-    onSave(data)
+    setSubmitting(true)
+    try {
+      await onSave(data)
+    } catch (err) {
+      setSubmitError(err?.message || String(err) || 'Failed to save maintenance record')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -138,9 +148,10 @@ function MaintenanceModal({ record, onSave, onClose, entityLists, pilots }) {
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm h-20 resize-none"
             />
           </div>
+          {submitError && <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg p-2">{submitError}</div>}
           <div className="flex gap-2 pt-2">
-            <button type="submit" className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
-              {record ? 'Update' : 'Add Maintenance'}
+            <button type="submit" disabled={submitting} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50">
+              {submitting ? 'Saving...' : (record ? 'Update' : 'Add Maintenance')}
             </button>
             <button type="button" onClick={onClose} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90">
               Cancel
@@ -181,14 +192,25 @@ function ScheduleModal({ schedule, onSave, onClose }) {
     }
   }, [form.entity_type])
 
-  const handleSubmit = (e) => {
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState(null)
+
+  const handleSubmit = async (e) => {
     e.preventDefault()
+    setSubmitError(null)
     const data = { ...form }
     if (data.entity_id) data.entity_id = parseInt(data.entity_id)
     else data.entity_id = null
     if (data.assigned_to_id) data.assigned_to_id = parseInt(data.assigned_to_id)
     else data.assigned_to_id = null
-    onSave(data)
+    setSubmitting(true)
+    try {
+      await onSave(data)
+    } catch (err) {
+      setSubmitError(err?.message || String(err) || 'Failed to create schedule')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const getEntityLabel = (entity) => {
@@ -278,9 +300,10 @@ function ScheduleModal({ schedule, onSave, onClose }) {
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm h-20 resize-none"
             />
           </div>
+          {submitError && <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg p-2">{submitError}</div>}
           <div className="flex gap-2 pt-2">
-            <button type="submit" className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
-              {schedule ? 'Update' : 'Add Schedule'}
+            <button type="submit" disabled={submitting} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50">
+              {submitting ? 'Saving...' : (schedule ? 'Update' : 'Add Schedule')}
             </button>
             <button type="button" onClick={onClose} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90">
               Cancel
@@ -369,7 +392,8 @@ export default function MaintenancePage() {
       setModal(null)
       loadAll()
     } catch (err) {
-      toast.error(err.message)
+      toast.error(err.message || 'Failed to save maintenance record')
+      throw err
     }
   }
 
@@ -393,7 +417,8 @@ export default function MaintenancePage() {
       setScheduleModal(null)
       loadAll()
     } catch (err) {
-      toast.error(err.message)
+      toast.error(err.message || 'Failed to save schedule')
+      throw err
     }
   }
 

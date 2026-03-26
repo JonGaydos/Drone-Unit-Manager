@@ -75,7 +75,7 @@ function CertTypeModal({ certType, onSave, onClose }) {
   )
 }
 
-function AssignCertModal({ pilots, certTypes, existingCert, onSave, onClose }) {
+function AssignCertModal({ pilots, certTypes, existingCert, onSave, onClose, certFolderId }) {
   const [form, setForm] = useState(existingCert ? {
     pilot_id: String(existingCert.pilot_id || ''),
     certification_type_id: String(existingCert.certification_type_id || ''),
@@ -157,7 +157,7 @@ function AssignCertModal({ pilots, certTypes, existingCert, onSave, onClose }) {
         </form>
         {isEditing && existingCert?.id && (
           <div className="mt-4">
-            <DocumentUpload entityType="certification" entityId={existingCert.id} />
+            <DocumentUpload entityType="certification" entityId={existingCert.id} folderId={certFolderId} />
           </div>
         )}
       </div>
@@ -175,6 +175,15 @@ export default function CertificationsPage() {
   const [error, setError] = useState(null)
   const { isAdmin, isPilot, isSupervisor } = useAuth()
   const toast = useToast()
+
+  // Auto-file documents to Certifications folder
+  const [certFolderId, setCertFolderId] = useState(null)
+  useEffect(() => {
+    api.get('/folders').then(folders => {
+      const f = (Array.isArray(folders) ? folders : folders.folders || []).find(f => f.name === 'Certifications')
+      if (f) setCertFolderId(f.id)
+    }).catch(() => {})
+  }, [])
 
   // Custom cert status labels
   const [certStatusLabels, setCertStatusLabels] = useState({})
@@ -503,8 +512,8 @@ export default function CertificationsPage() {
 
       {/* Modals */}
       {modal === 'addType' && <CertTypeModal onSave={handleSaveCertType} onClose={() => setModal(null)} />}
-      {modal === 'assign' && <AssignCertModal pilots={pilots} certTypes={certTypes} onSave={handleAssignCert} onClose={() => { setModal(null); setEditCert(null) }} />}
-      {modal === 'editCert' && editCert && <AssignCertModal pilots={pilots} certTypes={certTypes} existingCert={editCert} onSave={handleAssignCert} onClose={() => { setModal(null); setEditCert(null) }} />}
+      {modal === 'assign' && <AssignCertModal pilots={pilots} certTypes={certTypes} onSave={handleAssignCert} onClose={() => { setModal(null); setEditCert(null) }} certFolderId={certFolderId} />}
+      {modal === 'editCert' && editCert && <AssignCertModal pilots={pilots} certTypes={certTypes} existingCert={editCert} onSave={handleAssignCert} onClose={() => { setModal(null); setEditCert(null) }} certFolderId={certFolderId} />}
       {modal && typeof modal === 'object' && modal.name && <CertTypeModal certType={modal} onSave={handleSaveCertType} onClose={() => setModal(null)} />}
     </div>
   )

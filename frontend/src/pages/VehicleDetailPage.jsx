@@ -37,6 +37,9 @@ export default function VehicleDetailPage() {
   const [checkoutForm, setCheckoutForm] = useState({ pilot_id: '', condition_out: 'good', notes_out: '' })
   const [checkinForm, setCheckinForm] = useState({ condition_in: 'good', notes_in: '' })
   const [showCheckinForm, setShowCheckinForm] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [editForm, setEditForm] = useState({})
+  const [saving, setSaving] = useState(false)
   const [components, setComponents] = useState([])
   const [showComponentForm, setShowComponentForm] = useState(false)
   const [componentForm, setComponentForm] = useState({
@@ -44,6 +47,15 @@ export default function VehicleDetailPage() {
     status: 'active', install_date: '', flight_hours: 0, max_flight_hours: '', warranty_expiry: '',
     replacement_cost: '', notes: ''
   })
+
+  // Auto-file documents to Maintenance folder
+  const [maintenanceFolderId, setMaintenanceFolderId] = useState(null)
+  useEffect(() => {
+    api.get('/folders').then(folders => {
+      const f = (Array.isArray(folders) ? folders : folders.folders || []).find(f => f.name === 'Maintenance')
+      if (f) setMaintenanceFolderId(f.id)
+    }).catch(() => {})
+  }, [])
 
   const loadRegistrations = () => {
     api.get(`/vehicles/${id}/registrations`).then(setRegistrations).catch(() => [])
@@ -90,6 +102,37 @@ export default function VehicleDetailPage() {
       setComponents(comp)
     }).catch(() => {}).finally(() => setLoading(false))
   }, [id])
+
+  const startEditing = () => {
+    setEditForm({
+      nickname: vehicle.nickname || '',
+      manufacturer: vehicle.manufacturer || '',
+      model: vehicle.model || '',
+      serial_number: vehicle.serial_number || '',
+      faa_registration: vehicle.faa_registration || '',
+      status: vehicle.status || 'active',
+      notes: vehicle.notes || '',
+    })
+    setEditing(true)
+  }
+
+  const cancelEditing = () => {
+    setEditForm({})
+    setEditing(false)
+  }
+
+  const handleSaveEdit = async () => {
+    setSaving(true)
+    try {
+      const updated = await api.patch(`/vehicles/${id}`, editForm)
+      setVehicle(updated)
+      setEditing(false)
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>
   if (!vehicle) return <div className="text-center text-muted-foreground py-12">Vehicle not found</div>
@@ -153,22 +196,81 @@ export default function VehicleDetailPage() {
             )}
           </div>
           <div className="flex-1">
-            <div className="flex items-center gap-3">
-              <h2 className="text-xl font-bold text-foreground">{displayName || 'Unnamed Vehicle'}</h2>
-              {isAdmin && (
-                <Link to={`/fleet`} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent">
-                  <Edit className="w-4 h-4" />
-                </Link>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-4 mt-2 text-sm text-muted-foreground">
-              {vehicle.serial_number && <span>S/N: {vehicle.serial_number}</span>}
-              {vehicle.faa_registration && <span>FAA: {vehicle.faa_registration}</span>}
-              {vehicle.acquired_date && <span>Acquired: {vehicle.acquired_date}</span>}
-            </div>
-            <span className={`inline-flex mt-2 px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[vehicle.status] || 'bg-zinc-500/15 text-zinc-400'}`}>
-              {vehicle.status || 'unknown'}
-            </span>
+            {editing ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Nickname</label>
+                    <input type="text" value={editForm.nickname} onChange={e => setEditForm({...editForm, nickname: e.target.value})}
+                      className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Manufacturer</label>
+                    <input type="text" value={editForm.manufacturer} onChange={e => setEditForm({...editForm, manufacturer: e.target.value})}
+                      className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Model</label>
+                    <input type="text" value={editForm.model} onChange={e => setEditForm({...editForm, model: e.target.value})}
+                      className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Serial Number</label>
+                    <input type="text" value={editForm.serial_number} onChange={e => setEditForm({...editForm, serial_number: e.target.value})}
+                      className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">FAA Registration</label>
+                    <input type="text" value={editForm.faa_registration} onChange={e => setEditForm({...editForm, faa_registration: e.target.value})}
+                      className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Status</label>
+                    <select value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})}
+                      className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm">
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                      <option value="maintenance">Maintenance</option>
+                      <option value="retired">Retired</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Notes</label>
+                  <textarea value={editForm.notes} onChange={e => setEditForm({...editForm, notes: e.target.value})}
+                    className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm h-16 resize-none focus:outline-none focus:ring-2 focus:ring-ring" />
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={handleSaveEdit} disabled={saving}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50">
+                    {saving ? <div className="w-4 h-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" /> : <Save className="w-4 h-4" />} Save
+                  </button>
+                  <button onClick={cancelEditing}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90">
+                    <X className="w-4 h-4" /> Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-3">
+                  <h2 className="text-xl font-bold text-foreground">{displayName || 'Unnamed Vehicle'}</h2>
+                  {isAdmin && (
+                    <button onClick={startEditing} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent" aria-label="Edit">
+                      <Edit className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-4 mt-2 text-sm text-muted-foreground">
+                  {vehicle.serial_number && <span>S/N: {vehicle.serial_number}</span>}
+                  {vehicle.faa_registration && <span>FAA: {vehicle.faa_registration}</span>}
+                  {vehicle.acquired_date && <span>Acquired: {vehicle.acquired_date}</span>}
+                </div>
+                <span className={`inline-flex mt-2 px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[vehicle.status] || 'bg-zinc-500/15 text-zinc-400'}`}>
+                  {vehicle.status || 'unknown'}
+                </span>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -985,7 +1087,7 @@ export default function VehicleDetailPage() {
       </div>
 
       {/* Documents */}
-      <DocumentUpload entityType="vehicle" entityId={id} />
+      <DocumentUpload entityType="vehicle" entityId={id} folderId={maintenanceFolderId} />
     </div>
   )
 }

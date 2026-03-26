@@ -10,7 +10,7 @@ from app.database import get_db
 from app.models.pilot import Pilot
 from app.models.flight import Flight
 from app.models.user import User
-from app.routers.auth import get_current_user, require_admin, require_supervisor
+from app.routers.auth import get_current_user, require_admin, require_pilot, require_supervisor
 from app.schemas.pilot import PilotCreate, PilotUpdate, PilotOut, PilotStats
 
 router = APIRouter(prefix="/api/pilots", tags=["pilots"])
@@ -66,17 +66,20 @@ def create_pilot(data: PilotCreate, db: Session = Depends(get_db), admin: User =
 
 
 @router.patch("/{pilot_id}", response_model=PilotOut)
-def update_pilot(pilot_id: int, data: PilotUpdate, db: Session = Depends(get_db), admin: User = Depends(require_supervisor)):
+def update_pilot(pilot_id: int, data: PilotUpdate, db: Session = Depends(get_db), user: User = Depends(require_pilot)):
     from app.services.audit import log_action, compute_changes
     pilot = db.query(Pilot).filter(Pilot.id == pilot_id).first()
     if not pilot:
         raise HTTPException(status_code=404, detail="Pilot not found")
+    # Pilots can only edit their own profile; supervisors/admins can edit any
+    if user.role == "pilot" and user.pilot_id != pilot_id:
+        raise HTTPException(status_code=403, detail="You can only edit your own profile")
     update_data = data.model_dump(exclude_unset=True)
     changes = compute_changes(pilot, update_data, ["first_name", "last_name", "email", "status", "badge_number"])
     for key, value in update_data.items():
         setattr(pilot, key, value)
     if changes:
-        log_action(db, admin.id, admin.display_name, "update", "pilot", pilot.id, f"{pilot.first_name} {pilot.last_name}", changes=changes)
+        log_action(db, user.id, user.display_name, "update", "pilot", pilot.id, f"{pilot.first_name} {pilot.last_name}", changes=changes)
     db.commit()
     db.refresh(pilot)
     return PilotOut.model_validate(pilot)

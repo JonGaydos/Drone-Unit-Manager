@@ -6,7 +6,7 @@ import {
   ClipboardList, Plus, X, Loader2, CheckCircle, XCircle,
   Trash2, Edit2, Eye, ChevronDown, Download,
 } from 'lucide-react'
-import { sortPilotsActiveFirst } from '@/lib/formatters'
+import { sortPilotsActiveFirst, vehicleDisplayName } from '@/lib/formatters'
 
 // ─── Template Modal ──────────────────────────────────────────────
 
@@ -279,7 +279,7 @@ function CompleteModal({ templates, pilots, vehicles, onSave, onClose }) {
                 <option value="">Select vehicle...</option>
                 {vehicles.map(v => (
                   <option key={v.id} value={v.id}>
-                    {v.nickname || `${v.manufacturer} ${v.model}`}
+                    {vehicleDisplayName(v)}
                   </option>
                 ))}
               </select>
@@ -457,7 +457,7 @@ export default function ChecklistPage() {
   const [editingTemplate, setEditingTemplate] = useState(null)
   const [showCompleteModal, setShowCompleteModal] = useState(false)
   const [viewCompletion, setViewCompletion] = useState(null)
-  const { isSupervisor } = useAuth()
+  const { isSupervisor, isPilot } = useAuth()
   const toast = useToast()
 
   const load = async () => {
@@ -538,13 +538,15 @@ export default function ChecklistPage() {
             <Download className="w-4 h-4" />
             Export CSV
           </button>
-          <button
-            onClick={() => setShowCompleteModal(true)}
-            className="flex items-center gap-2 px-3 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
-          >
-            <CheckCircle className="w-4 h-4" />
-            Complete Checklist
-          </button>
+          {isPilot && (
+            <button
+              onClick={() => setShowCompleteModal(true)}
+              className="flex items-center gap-2 px-3 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
+            >
+              <CheckCircle className="w-4 h-4" />
+              Complete Checklist
+            </button>
+          )}
         </div>
       </div>
 

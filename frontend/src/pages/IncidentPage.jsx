@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
-import { sortByName, sortVehicles, sortPilotsActiveFirst } from '@/lib/formatters'
+import { sortByName, sortVehicles, sortPilotsActiveFirst, vehicleDisplayName } from '@/lib/formatters'
 import {
   AlertTriangle, Plus, Filter, Search, ChevronDown, ChevronUp,
   X, Loader2, CheckCircle, Eye, Shield, Download,
@@ -160,7 +160,7 @@ function IncidentModal({ pilots, vehicles, flights, onSave, onClose }) {
               <select value={form.vehicle_id} onChange={e => setForm({ ...form, vehicle_id: e.target.value })}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                 <option value="">Select...</option>
-                {sortVehicles(vehicles).map(v => <option key={v.id} value={v.id}>{v.manufacturer} {v.model}</option>)}
+                {sortVehicles(vehicles).map(v => <option key={v.id} value={v.id}>{vehicleDisplayName(v)}</option>)}
               </select>
             </div>
             <div>

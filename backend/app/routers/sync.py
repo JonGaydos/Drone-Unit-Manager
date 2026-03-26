@@ -81,6 +81,75 @@ def sync_now(
     return SyncResultResponse(**asdict(result))
 
 
+@router.post("/telemetry")
+def sync_telemetry_batch(db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    """Fetch telemetry for up to 10 flights that don't have it yet."""
+    from sqlalchemy import func
+    from app.integrations.skydio import SkydioProvider
+    from app.services.sync_manager import _build_creds
+    from app.models.telemetry import TelemetryPoint
+    from app.models.flight import Flight
+    from app.database import TelemetrySessionLocal
+
+    creds = _build_creds(db, "skydio")
+    if not creds.api_token:
+        from fastapi import HTTPException
+        raise HTTPException(400, "API token not configured")
+
+    provider = SkydioProvider()
+
+    flights = db.query(Flight).filter(
+        Flight.telemetry_synced.is_(False),
+        Flight.external_id.isnot(None),
+    ).order_by(Flight.date.desc().nulls_last()).limit(10).all()
+
+    remaining = db.query(func.count(Flight.id)).filter(
+        Flight.telemetry_synced.is_(False),
+        Flight.external_id.isnot(None),
+    ).scalar() - len(flights)
+
+    synced = 0
+    for flight in flights:
+        try:
+            telemetry_data = provider.get_flight_telemetry(creds, flight.external_id)
+            if telemetry_data and len(telemetry_data) > 0:
+                tdb = TelemetrySessionLocal()
+                try:
+                    tdb.query(TelemetryPoint).filter(TelemetryPoint.flight_id == flight.id).delete()
+                    max_alt = 0
+                    max_speed = 0
+                    for point in telemetry_data:
+                        alt = point.get("altitude_m") or point.get("height_above_takeoff") or 0
+                        speed = point.get("speed_mps") or 0
+                        tp = TelemetryPoint(
+                            flight_id=flight.id,
+                            timestamp_ms=point.get("timestamp_ms", 0),
+                            lat=point.get("lat"),
+                            lon=point.get("lon"),
+                            altitude_m=float(alt),
+                            speed_mps=float(speed),
+                            battery_pct=point.get("battery_pct"),
+                            heading_deg=point.get("heading_deg"),
+                        )
+                        tdb.add(tp)
+                        if float(alt) > max_alt:
+                            max_alt = float(alt)
+                        if float(speed) > max_speed:
+                            max_speed = float(speed)
+                    tdb.commit()
+                    flight.max_altitude_m = max_alt
+                    flight.max_speed_mps = max_speed
+                finally:
+                    tdb.close()
+            flight.telemetry_synced = True
+            synced += 1
+        except Exception as exc:
+            logger.warning("Telemetry sync failed for flight %s: %s", flight.external_id, exc)
+
+    db.commit()
+    return {"synced": synced, "remaining": max(0, remaining)}
+
+
 @router.post("/deep", response_model=SyncResultResponse)
 def sync_deep(
     db: Session = Depends(get_db),

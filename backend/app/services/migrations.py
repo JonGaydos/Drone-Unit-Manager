@@ -53,6 +53,8 @@ def run_migrations():
         ("mission_logs", "total_cost", "ALTER TABLE mission_logs ADD COLUMN total_cost REAL"),
         ("mission_logs", "cost_breakdown", "ALTER TABLE mission_logs ADD COLUMN cost_breakdown TEXT"),
         ("training_logs", "total_cost", "ALTER TABLE training_logs ADD COLUMN total_cost REAL"),
+        # Telemetry sync tracking
+        ("flights", "telemetry_synced", "ALTER TABLE flights ADD COLUMN telemetry_synced BOOLEAN DEFAULT 0"),
     ]
 
     with engine.connect() as conn:

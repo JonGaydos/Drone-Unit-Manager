@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { normalizeDateValue } from '@/lib/utils'
 import { MISSION_STATUS_COLORS } from '@/lib/constants'
-import { sortByName, sortVehicles, formatStatusText, sortPilotsActiveFirst } from '@/lib/formatters'
+import { sortByName, sortVehicles, formatStatusText, sortPilotsActiveFirst, vehicleDisplayName } from '@/lib/formatters'
 import { Plus, Search, X, ChevronDown, ChevronUp, Trash2, Download, Loader2 } from 'lucide-react'
 
 const STATUS_OPTIONS = ['planned', 'in_progress', 'completed', 'cancelled']
@@ -131,7 +131,7 @@ function MissionModal({ pilots, vehicles, purposes, onSave, onClose, initial }) 
             <select value={form.vehicle_id} onChange={e => setForm({...form, vehicle_id: e.target.value})}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
               <option value="">Select vehicle...</option>
-              {sortVehicles(vehicles).map(v => <option key={v.id} value={v.id}>{v.manufacturer} {v.model}{v.nickname ? ` (${v.nickname})` : ''}</option>)}
+              {sortVehicles(vehicles).map(v => <option key={v.id} value={v.id}>{vehicleDisplayName(v)}</option>)}
             </select>
           </div>
           <div>

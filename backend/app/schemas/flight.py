@@ -110,6 +110,7 @@ class FlightOut(BaseModel):
     carrier: str | None = None
     operating_cost: float | None = None
     has_telemetry: bool = False
+    telemetry_synced: bool = False
     review_status: str = "reviewed"
     pilot_confirmed: bool = True
     notes: str | None = None

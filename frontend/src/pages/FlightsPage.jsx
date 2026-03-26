@@ -3,7 +3,7 @@ import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { formatDuration, normalizeDateValue } from '@/lib/utils'
-import { sortByName, sortVehicles, sortPilotsActiveFirst } from '@/lib/formatters'
+import { sortByName, sortVehicles, sortPilotsActiveFirst, vehicleDisplayName } from '@/lib/formatters'
 import { Plus, Search, CheckCircle, ChevronUp, ChevronDown, Pencil, X, Check, Download, Loader2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
@@ -47,7 +47,7 @@ function FlightModal({ pilots, vehicles, purposes, onSave, onClose }) {
               <select value={form.vehicle_id} onChange={e => setForm({...form, vehicle_id: e.target.value})}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                 <option value="">Select vehicle...</option>
-                {sortVehicles(vehicles).map(v => <option key={v.id} value={v.id}>{v.manufacturer} {v.model}</option>)}
+                {sortVehicles(vehicles).map(v => <option key={v.id} value={v.id}>{vehicleDisplayName(v)}</option>)}
               </select>
             </div>
           </div>
@@ -300,7 +300,7 @@ export default function FlightsPage() {
           <label className="block text-xs text-muted-foreground mb-1">Vehicle</label>
           <select value={filterVehicleId} onChange={e => setFilterVehicleId(e.target.value)} className={selectCls}>
             <option value="">All Vehicles</option>
-            {sortVehicles(vehicles).map(v => <option key={v.id} value={v.id}>{v.manufacturer} {v.model}</option>)}
+            {sortVehicles(vehicles).map(v => <option key={v.id} value={v.id}>{vehicleDisplayName(v)}</option>)}
           </select>
         </div>
         <div>
@@ -345,7 +345,7 @@ export default function FlightsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/30">
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden lg:table-cell">Flight ID</th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Flight ID</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none" onClick={() => toggleSort('date')}>
                 Date{sortKey === 'date' && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />)}
               </th>
@@ -371,7 +371,7 @@ export default function FlightsPage() {
           <tbody>
             {filtered.map(f => editingId === f.id ? (
               <tr key={f.id} className="border-b border-border/50 bg-accent/20">
-                <td className="px-4 py-2 hidden lg:table-cell text-muted-foreground text-xs font-mono" title={f.external_id || ''}>{f.external_id ? f.external_id.slice(0, 8) : '—'}</td>
+                <td className="px-4 py-2 text-muted-foreground text-xs font-mono" title={f.external_id || ''}>{f.external_id ? f.external_id.slice(0, 8) : '—'}</td>
                 <td className="px-4 py-2">
                   <input type="date" value={editForm.date} onChange={e => setEditForm({...editForm, date: e.target.value})}
                     onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) setEditForm(prev => ({...prev, date: n})) }}
@@ -418,10 +418,10 @@ export default function FlightsPage() {
               </tr>
             ) : (
               <tr key={f.id} className="border-b border-border/50 hover:bg-accent/30 transition-colors">
-                <td className="px-4 py-3 hidden lg:table-cell text-muted-foreground text-xs font-mono" title={f.external_id || ''}>{f.external_id ? f.external_id.slice(0, 8) : '—'}</td>
-                <td className="px-4 py-3">
-                  <Link to={`/flights/${f.id}`} className="text-foreground hover:text-primary">{f.date || '—'}</Link>
+                <td className="px-4 py-3 text-xs font-mono" title={f.external_id || ''}>
+                  <Link to={`/flights/${f.id}`} className="text-primary hover:underline">{f.external_id ? f.external_id.slice(0, 8) : `#${f.id}`}</Link>
                 </td>
+                <td className="px-4 py-3 text-foreground">{f.date || '—'}</td>
                 <td className="px-4 py-3 text-foreground">
                   {f.pilot_id ? <Link to={`/pilots/${f.pilot_id}`} className="hover:text-primary">{f.pilot_name}</Link> : (f.pilot_name || <span className="text-amber-400">Unassigned</span>)}
                 </td>
@@ -435,6 +435,12 @@ export default function FlightsPage() {
                   <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
                     f.review_status === 'needs_review' ? 'bg-amber-500/15 text-amber-400' : 'bg-emerald-500/15 text-emerald-400'
                   }`}>{f.review_status === 'needs_review' ? 'Needs Review' : 'Reviewed'}</span>
+                  {' '}
+                  {f.telemetry_synced ? (
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" title="Telemetry synced" />
+                  ) : f.external_id ? (
+                    <span className="w-2 h-2 rounded-full bg-zinc-500 inline-block" title="Telemetry pending" />
+                  ) : null}
                 </td>
                 <td className="px-4 py-3 text-right">
                   {isPilot && (

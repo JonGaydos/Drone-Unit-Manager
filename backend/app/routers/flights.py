@@ -342,6 +342,10 @@ def refresh_flight_from_api(flight_id: int, db: Session = Depends(get_db), admin
         finally:
             tdb.close()
 
+    # Mark telemetry as synced if we got telemetry data
+    if telemetry_points > 0:
+        flight.telemetry_synced = True
+
     db.commit()
 
     logger.info("Refreshed flight %s: updated %s", flight.external_id, updated_fields)

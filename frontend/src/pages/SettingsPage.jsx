@@ -3,7 +3,7 @@ import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { sortByName, sortPilotsActiveFirst } from '@/lib/formatters'
-import { Save, TestTube, Loader2, Upload, FileSpreadsheet, RefreshCw, UserPlus, Key, Trash2, Shield, ShieldCheck, Eye, Image as ImageIcon, ChevronUp, ChevronDown, ExternalLink, X } from 'lucide-react'
+import { Save, TestTube, Loader2, Upload, FileSpreadsheet, RefreshCw, UserPlus, Key, Trash2, Shield, ShieldCheck, Eye, Image as ImageIcon, ChevronUp, ChevronDown, ExternalLink, X, Edit2 } from 'lucide-react'
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState({})
@@ -61,6 +61,34 @@ export default function SettingsPage() {
   const [pwForm, setPwForm] = useState({ current_password: '', new_password: '', confirm_password: '' })
   const [pwMsg, setPwMsg] = useState(null)
   const [changingPw, setChangingPw] = useState(false)
+
+  // Edit user state
+  const [editUser, setEditUser] = useState(null)
+  const [editUserForm, setEditUserForm] = useState({ display_name: '', role: '', pilot_id: '' })
+  const [savingEditUser, setSavingEditUser] = useState(false)
+
+  const openEditUser = (u) => {
+    setEditUser(u)
+    setEditUserForm({
+      display_name: u.display_name || '',
+      role: u.role || 'viewer',
+      pilot_id: u.pilot_id ? String(u.pilot_id) : '',
+    })
+  }
+
+  const handleSaveEditUser = async () => {
+    if (!editUser) return
+    setSavingEditUser(true)
+    try {
+      const payload = { display_name: editUserForm.display_name, role: editUserForm.role }
+      payload.pilot_id = editUserForm.pilot_id ? parseInt(editUserForm.pilot_id) : 0
+      const updated = await api.patch(`/auth/users/${editUser.id}`, payload)
+      setUsers(users.map(x => x.id === editUser.id ? updated : x))
+      setEditUser(null)
+      toast.success('User updated')
+    } catch (err) { toast.error(err.message) }
+    finally { setSavingEditUser(false) }
+  }
 
   // Reset password state
   const [resetUserId, setResetUserId] = useState(null)
@@ -267,6 +295,19 @@ export default function SettingsPage() {
     }
   }
 
+  const handleSyncTelemetry = async () => {
+    setSyncing(true)
+    try {
+      const result = await api.post('/sync/telemetry', {})
+      const msg = `Synced telemetry for ${result.synced} flights. ${result.remaining > 0 ? `${result.remaining} remaining.` : 'All caught up!'}`
+      setTestResult({ ok: true, message: msg })
+    } catch (err) {
+      setTestResult({ ok: false, message: err.message })
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   const handleExcelImport = async (e) => {
     const file = e.target.files[0]
     if (!file) return
@@ -389,6 +430,7 @@ export default function SettingsPage() {
               <option value="weekly">Weekly</option>
             </select>
           </div>
+          <p className="text-xs text-amber-400/80 mt-2 mb-3">Ensure all pilots have email addresses in their profile for automatic pilot matching during sync.</p>
         </div>
         <div className="flex gap-2 mt-4">
           <button
@@ -415,6 +457,15 @@ export default function SettingsPage() {
           >
             {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
             Sync All
+          </button>
+          <button
+            onClick={handleSyncTelemetry}
+            disabled={syncing || !isAdmin}
+            className="flex items-center gap-2 px-4 py-2 border border-border text-foreground rounded-lg text-sm hover:bg-secondary disabled:opacity-50"
+            title="Fetch telemetry data for up to 10 flights at a time"
+          >
+            {syncing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            Sync Telemetry (10)
           </button>
         </div>
         {testResult && (
@@ -471,6 +522,7 @@ export default function SettingsPage() {
             />
           </label>
         )}
+        <p className="text-xs text-amber-400/80 mt-2">After importing, add email addresses to pilot profiles for API sync matching.</p>
 
         {importResult && (
           <div className={`mt-4 p-4 rounded-lg border text-sm ${
@@ -825,6 +877,7 @@ export default function SettingsPage() {
                   <label className="block text-sm font-medium text-foreground mb-1">Password</label>
                   <input type="password" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} required minLength={6}
                     className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                  <p className="text-xs text-muted-foreground mt-2">Username and password are case-sensitive.</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-1">Role</label>
@@ -905,6 +958,10 @@ export default function SettingsPage() {
                           </div>
                         ) : (
                           <>
+                            <button onClick={() => openEditUser(u)} title="Edit user"
+                              className="p-1.5 text-muted-foreground hover:text-foreground rounded hover:bg-accent/30">
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
                             <button onClick={() => setResetUserId(u.id)} title="Reset password"
                               className="p-1.5 text-muted-foreground hover:text-foreground rounded hover:bg-accent/30">
                               <Key className="w-3.5 h-3.5" />
@@ -923,6 +980,53 @@ export default function SettingsPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Edit User Modal */}
+      {editUser && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setEditUser(null)}>
+          <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold text-foreground mb-4">Edit User: {editUser.username}</h2>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Display Name</label>
+                <input type="text" value={editUserForm.display_name} onChange={e => setEditUserForm({...editUserForm, display_name: e.target.value})}
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Role</label>
+                <select value={editUserForm.role} onChange={e => setEditUserForm({...editUserForm, role: e.target.value})}
+                  disabled={editUser.id === currentUser?.id}
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm disabled:opacity-50">
+                  <option value="admin">Admin</option>
+                  <option value="supervisor">Supervisor</option>
+                  <option value="pilot">Pilot</option>
+                  <option value="viewer">Viewer</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Link to Pilot</label>
+                <select value={editUserForm.pilot_id} onChange={e => setEditUserForm({...editUserForm, pilot_id: e.target.value})}
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
+                  <option value="">-- No pilot linked --</option>
+                  {sortPilotsActiveFirst(pilots).map(p => (
+                    <option key={p.id} value={p.id}>{p.full_name}{p.badge_number ? ` (Badge: ${p.badge_number})` : ''}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button onClick={handleSaveEditUser} disabled={savingEditUser}
+                  className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2">
+                  {savingEditUser ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save'}
+                </button>
+                <button onClick={() => setEditUser(null)}
+                  className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90">
+                  Cancel
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
