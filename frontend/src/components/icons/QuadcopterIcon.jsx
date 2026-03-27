@@ -1,3 +1,10 @@
+/**
+ * Custom SVG icon depicting a quadcopter drone.
+ * Renders a top-down view with four arms, motor mounts, and propeller arcs.
+ * @param {Object} props
+ * @param {string} [props.className] - CSS classes for sizing and color.
+ * @param {Object} [props...rest] - Additional SVG attributes passed through.
+ */
 export function QuadcopterIcon({ className, ...props }) {
   return (
     <svg

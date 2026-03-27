@@ -1,3 +1,5 @@
+"""Pilot CRUD endpoints with flight statistics and profile photo management."""
+
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
@@ -22,6 +24,14 @@ def list_pilots(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    """List all pilots with optional status filtering.
+
+    Args:
+        status: Filter by pilot status (active, inactive).
+
+    Returns:
+        List of pilot records sorted by name.
+    """
     q = db.query(Pilot)
     if status:
         q = q.filter(Pilot.status == status)
@@ -30,6 +40,7 @@ def list_pilots(
 
 @router.get("/{pilot_id}", response_model=PilotOut)
 def get_pilot(pilot_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Retrieve a single pilot by ID."""
     pilot = db.query(Pilot).filter(Pilot.id == pilot_id).first()
     if not pilot:
         raise HTTPException(status_code=404, detail="Pilot not found")
@@ -38,6 +49,7 @@ def get_pilot(pilot_id: int, db: Session = Depends(get_db), user: User = Depends
 
 @router.get("/{pilot_id}/stats", response_model=PilotStats)
 def get_pilot_stats(pilot_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Get aggregated flight statistics for a pilot (total flights, hours, avg duration)."""
     pilot = db.query(Pilot).filter(Pilot.id == pilot_id).first()
     if not pilot:
         raise HTTPException(status_code=404, detail="Pilot not found")
@@ -55,6 +67,7 @@ def get_pilot_stats(pilot_id: int, db: Session = Depends(get_db), user: User = D
 
 @router.post("", response_model=PilotOut)
 def create_pilot(data: PilotCreate, db: Session = Depends(get_db), admin: User = Depends(require_supervisor)):
+    """Create a new pilot record. Supervisor or admin only."""
     from app.services.audit import log_action
     pilot = Pilot(**data.model_dump())
     db.add(pilot)
@@ -67,6 +80,7 @@ def create_pilot(data: PilotCreate, db: Session = Depends(get_db), admin: User =
 
 @router.patch("/{pilot_id}", response_model=PilotOut)
 def update_pilot(pilot_id: int, data: PilotUpdate, db: Session = Depends(get_db), user: User = Depends(require_pilot)):
+    """Update a pilot's profile. Pilots can only edit their own; supervisors/admins can edit any."""
     from app.services.audit import log_action, compute_changes
     pilot = db.query(Pilot).filter(Pilot.id == pilot_id).first()
     if not pilot:
@@ -87,6 +101,7 @@ def update_pilot(pilot_id: int, data: PilotUpdate, db: Session = Depends(get_db)
 
 @router.delete("/{pilot_id}")
 def delete_pilot(pilot_id: int, db: Session = Depends(get_db), admin: User = Depends(require_supervisor)):
+    """Soft-delete a pilot by setting status to inactive. Supervisor or admin only."""
     from app.services.audit import log_action
     pilot = db.query(Pilot).filter(Pilot.id == pilot_id).first()
     if not pilot:
@@ -102,6 +117,7 @@ ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 
 @router.post("/{pilot_id}/photo")
 async def upload_pilot_photo(pilot_id: int, file: UploadFile, db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    """Upload or replace a pilot's profile photo. Admin only."""
     pilot = db.query(Pilot).filter(Pilot.id == pilot_id).first()
     if not pilot:
         raise HTTPException(404, "Pilot not found")
@@ -125,6 +141,7 @@ async def upload_pilot_photo(pilot_id: int, file: UploadFile, db: Session = Depe
 
 @router.get("/{pilot_id}/photo/view")
 def view_pilot_photo(pilot_id: int, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
+    """Serve a pilot's profile photo with path-traversal prevention."""
     pilot = db.query(Pilot).filter(Pilot.id == pilot_id).first()
     if not pilot:
         raise HTTPException(404)

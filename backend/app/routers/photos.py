@@ -1,4 +1,9 @@
-"""Photo gallery CRUD router."""
+"""Photo gallery CRUD router for uploading, browsing, and managing drone photos.
+
+Handles image uploads with automatic thumbnail generation, pilot tagging,
+and secure file serving with path-traversal prevention.
+"""
+
 import os
 import uuid
 import shutil
@@ -23,12 +28,13 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/photos", tags=["photos"])
 
 UPLOAD_DIR = str(Path(settings.UPLOAD_DIR) / "photos")
-THUMB_WIDTH = 400
+THUMB_WIDTH = 400  # Maximum thumbnail width in pixels
 
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif"}
 
 
 def _ensure_dir(path: str):
+    """Create the directory (and parents) if it does not already exist."""
     os.makedirs(path, exist_ok=True)
 
 
@@ -51,6 +57,23 @@ def upload_photo(
     db: Session = Depends(get_db),
     user=Depends(require_pilot),
 ):
+    """Upload a photo with optional metadata and pilot associations.
+
+    Generates a JPEG thumbnail automatically. Files are stored in
+    per-photo subdirectories with UUID-based filenames.
+
+    Args:
+        file: The image file to upload.
+        title: Optional display title.
+        description: Optional description text.
+        date_taken: ISO 8601 date string for when the photo was taken.
+        pilot_ids: Comma-separated pilot IDs to tag in the photo.
+        db: Database session.
+        user: Authenticated user (pilot role or higher).
+
+    Returns:
+        Dict with the new photo ID and success message.
+    """
     # Validate file extension
     ext = os.path.splitext(file.filename or "photo.jpg")[1].lower()
     if ext not in ALLOWED_IMAGE_EXTENSIONS:
@@ -122,6 +145,13 @@ def upload_photo(
 
 @router.get("")
 def list_photos(db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    """List all photos with their tagged pilot names.
+
+    Uses batch loading for pilot associations to avoid N+1 query issues.
+
+    Returns:
+        List of photo metadata dicts ordered by date taken (newest first).
+    """
     photos = db.query(Photo).order_by(Photo.date_taken.desc().nullslast(), Photo.created_at.desc()).all()
 
     # Batch-load all pilot associations to avoid N+1 queries
@@ -168,6 +198,7 @@ def list_photos(db: Session = Depends(get_db), _user=Depends(get_current_user)):
 
 @router.get("/{photo_id}/view")
 def view_photo(photo_id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    """Serve the full-resolution photo file."""
     photo = db.query(Photo).filter(Photo.id == photo_id).first()
     if not photo:
         raise HTTPException(404, "Photo not found")
@@ -180,6 +211,7 @@ def view_photo(photo_id: int, db: Session = Depends(get_db), _user=Depends(get_c
 
 @router.get("/{photo_id}/thumbnail")
 def view_thumbnail(photo_id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
+    """Serve the photo thumbnail, falling back to the full image if unavailable."""
     photo = db.query(Photo).filter(Photo.id == photo_id).first()
     if not photo:
         raise HTTPException(404, "Photo not found")
@@ -205,6 +237,18 @@ def update_photo(
     db: Session = Depends(get_db),
     user=Depends(require_pilot),
 ):
+    """Update photo metadata and/or replace pilot associations.
+
+    Args:
+        photo_id: The photo record ID.
+        title: New title (or None to keep existing).
+        description: New description (or None to keep existing).
+        date_taken: New date-taken ISO string (or None to keep existing).
+        pilot_ids: Comma-separated pilot IDs (replaces all existing associations).
+
+    Returns:
+        Success message dict.
+    """
     photo = db.query(Photo).filter(Photo.id == photo_id).first()
     if not photo:
         raise HTTPException(404, "Photo not found")
@@ -233,6 +277,7 @@ def update_photo(
 
 @router.delete("/{photo_id}")
 def delete_photo(photo_id: int, db: Session = Depends(get_db), user=Depends(require_pilot)):
+    """Delete a photo, its thumbnail, pilot associations, and on-disk files."""
     from app.services.audit import log_action
     photo = db.query(Photo).filter(Photo.id == photo_id).first()
     if not photo:

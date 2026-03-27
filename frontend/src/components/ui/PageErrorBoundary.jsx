@@ -1,6 +1,16 @@
+/**
+ * Page-level error boundary that catches rendering errors and displays a recovery UI.
+ */
 import React from 'react'
 import { AlertTriangle } from 'lucide-react'
 
+/**
+ * React error boundary for individual pages.
+ * Catches JavaScript errors in child components and renders a fallback UI
+ * with the error message and a "Try Again" button to reset the error state.
+ * @param {Object} props
+ * @param {React.ReactNode} props.children - Page content to wrap.
+ */
 export class PageErrorBoundary extends React.Component {
   constructor(props) {
     super(props)

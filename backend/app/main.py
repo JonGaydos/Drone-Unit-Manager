@@ -1,3 +1,9 @@
+"""FastAPI application entry point for Drone Unit Manager.
+
+Configures the app, registers routers, seeds default data, and serves
+the React SPA in production.
+"""
+
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -29,7 +35,7 @@ from app.models.user import User
 from app.models.flight import FlightPurpose
 from app.models.folder import Folder
 
-
+# Law-enforcement-specific flight purpose categories seeded on first run
 DEFAULT_PURPOSES = [
     "Training", "Demonstration", "Manhunt", "Security", "Other Agency Assist",
     "Search Warrant", "Missing Person", "Photograph Request", "Map Scan",
@@ -39,6 +45,10 @@ DEFAULT_PURPOSES = [
 
 
 def seed_defaults():
+    """Populate default folders and flight purposes if the database is empty.
+
+    Skips seeding when no users exist yet (initial setup not completed).
+    """
     db = SessionLocal()
     try:
         # Only seed defaults after initial setup (at least one user exists)
@@ -62,6 +72,7 @@ def seed_defaults():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Application lifespan handler: create tables, run migrations, seed data, start scheduler."""
     # Create tables
     Base.metadata.create_all(bind=engine)
     TelemetryBase.metadata.create_all(bind=telemetry_engine)
@@ -157,6 +168,17 @@ _static_dir = str(Path(__file__).parent.parent / "static")
 
 @app.get("/{full_path:path}", include_in_schema=False)
 def serve_spa(full_path: str):
+    """Serve the React SPA and its static assets in production (Docker).
+
+    Serves the requested file if it exists, otherwise falls back to
+    index.html for client-side routing. Includes path-traversal prevention.
+
+    Args:
+        full_path: The URL path requested by the client.
+
+    Returns:
+        The matching static file or index.html.
+    """
     if not _static_dir or not os.path.isdir(_static_dir):
         raise HTTPException(404)
     file_path = os.path.join(_static_dir, full_path)

@@ -1,7 +1,16 @@
+/**
+ * Top navigation bar displaying the current page title and a theme selector dropdown.
+ */
 import { useTheme, THEMES } from '@/contexts/ThemeContext'
 import { Palette } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 
+/**
+ * Sticky top bar with page title and theme picker dropdown.
+ * Closes the dropdown when clicking outside via a mousedown listener.
+ * @param {Object} props
+ * @param {string} props.title - Page title to display.
+ */
 export function TopBar({ title }) {
   const { theme, setTheme } = useTheme()
   const [open, setOpen] = useState(false)

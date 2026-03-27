@@ -1,3 +1,6 @@
+/**
+ * Root application component with routing, providers, lazy-loaded pages, and error boundaries.
+ */
 import React, { useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from '@/contexts/AuthContext'
@@ -7,6 +10,10 @@ import { Layout } from '@/components/layout/Layout'
 import { lazy, Suspense } from 'react'
 import { api } from '@/api/client'
 
+/**
+ * Top-level error boundary that catches unhandled rendering errors.
+ * Displays a full-screen fallback with a reload button.
+ */
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props)
@@ -63,6 +70,7 @@ const ChecklistPage = lazy(() => import('@/pages/ChecklistPage'))
 const CompliancePage = lazy(() => import('@/pages/CompliancePage'))
 const UserManualPage = lazy(() => import('@/pages/UserManualPage'))
 
+/** Loading spinner displayed during lazy-loaded page transitions. */
 function Spinner() {
   return (
     <div className="flex items-center justify-center h-64">
@@ -71,6 +79,12 @@ function Spinner() {
   )
 }
 
+/**
+ * Route guard that redirects unauthenticated users to /login.
+ * Shows a spinner while the auth state is being resolved.
+ * @param {Object} props
+ * @param {React.ReactNode} props.children - Protected page content.
+ */
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth()
   if (loading) return <div className="min-h-screen bg-background flex items-center justify-center"><Spinner /></div>
@@ -78,6 +92,10 @@ function ProtectedRoute({ children }) {
   return children
 }
 
+/**
+ * Defines all application routes with lazy-loaded page components.
+ * Checks for first-time setup requirement before rendering the main app.
+ */
 function AppRoutes() {
   const { user, loading } = useAuth()
   const [setupRequired, setSetupRequired] = useState(null)
@@ -134,6 +152,10 @@ function AppRoutes() {
   )
 }
 
+/**
+ * Root App component that composes all providers (Router, Theme, Auth, Toast)
+ * and wraps the application in a top-level error boundary.
+ */
 export default function App() {
   return (
     <BrowserRouter>

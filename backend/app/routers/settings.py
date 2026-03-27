@@ -1,3 +1,9 @@
+"""Application settings endpoints for managing organization configuration.
+
+Supports key-value settings with an allowlist, secret masking for API tokens,
+organization logo upload, and bulk updates.
+"""
+
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
@@ -13,7 +19,7 @@ from app.routers.auth import get_current_user, require_admin
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
-# Whitelist of allowed setting keys
+# Whitelist of setting keys that can be read/written via the API
 ALLOWED_SETTING_KEYS = {
     "org_name", "org_logo", "skydio_api_token", "skydio_token_id",
     "sync_interval", "sidebar_config", "weather_wind_threshold",
@@ -24,23 +30,26 @@ ALLOWED_SETTING_KEYS = {
 
 
 class SettingValue(BaseModel):
+    """Request schema for creating or updating a single setting."""
     key: str
     value: str
 
 
 class SettingOut(BaseModel):
+    """Response schema for a setting (values in MASKED_KEYS are partially redacted)."""
     key: str
     value: str
 
     model_config = {"from_attributes": True}
 
 
-# Keys that should be masked in the response (contain secrets)
+# Keys whose values contain secrets and must be partially redacted in responses
 MASKED_KEYS = {"skydio_api_token"}
 
 
 @router.get("", response_model=list[SettingOut])
 def list_settings(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """List all settings. Secret values are partially masked in the response."""
     settings = db.query(Setting).all()
     result = []
     for s in settings:
@@ -53,6 +62,7 @@ def list_settings(db: Session = Depends(get_db), user: User = Depends(get_curren
 
 @router.get("/{key}", response_model=SettingOut)
 def get_setting(key: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Retrieve a single setting by key. Returns empty value if not found."""
     setting = db.query(Setting).filter(Setting.key == key).first()
     if not setting:
         return SettingOut(key=key, value="")
@@ -64,6 +74,7 @@ def get_setting(key: str, db: Session = Depends(get_db), user: User = Depends(ge
 
 @router.put("")
 def set_setting(data: SettingValue, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """Create or update a single setting. Admin only. Key must be in ALLOWED_SETTING_KEYS."""
     if data.key not in ALLOWED_SETTING_KEYS:
         raise HTTPException(400, f"Setting key '{data.key}' is not allowed")
     from app.services.audit import log_action
@@ -83,6 +94,7 @@ ALLOWED_LOGO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".svg"}
 
 @router.post("/logo")
 async def upload_logo(file: UploadFile, db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    """Upload or replace the organization logo. Admin only."""
     upload_dir = Path(app_settings.UPLOAD_DIR) / "org"
     upload_dir.mkdir(parents=True, exist_ok=True)
     ext = Path(file.filename).suffix.lower() or ".png"
@@ -107,6 +119,7 @@ async def upload_logo(file: UploadFile, db: Session = Depends(get_db), user: Use
 
 @router.get("/logo/view")
 def view_logo():
+    """Serve the organization logo image file."""
     logo_dir = Path(app_settings.UPLOAD_DIR) / "org"
     for ext in [".png", ".jpg", ".jpeg", ".webp", ".svg"]:
         p = logo_dir / f"logo{ext}"
@@ -117,6 +130,11 @@ def view_logo():
 
 @router.put("/bulk")
 def set_settings_bulk(data: list[SettingValue], db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """Update multiple settings in a single request. Admin only.
+
+    Skips keys not in ALLOWED_SETTING_KEYS and ignores masked placeholder
+    values to avoid overwriting real secrets with redacted strings.
+    """
     for item in data:
         if item.key not in ALLOWED_SETTING_KEYS:
             continue

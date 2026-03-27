@@ -1,12 +1,27 @@
+/**
+ * Toast notification system with auto-dismiss and type-based styling.
+ * Renders floating notifications in the bottom-right corner of the viewport.
+ */
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react'
 import { X, CheckCircle, AlertTriangle, Info, XCircle } from 'lucide-react'
 
 const ToastContext = createContext()
 
+/**
+ * Hook to access toast notification methods.
+ * @returns {{ success: Function, error: Function, warning: Function, info: Function }}
+ */
 export function useToast() {
   return useContext(ToastContext)
 }
 
+/**
+ * Provides toast notification functionality to the component tree.
+ * Manages a stack of toast messages with automatic timeout removal.
+ * @param {Object} props
+ * @param {React.ReactNode} props.children - Child components.
+ * @returns {JSX.Element}
+ */
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([])
   const timeoutRef = useRef({})
@@ -17,6 +32,12 @@ export function ToastProvider({ children }) {
     }
   }, [])
 
+  /**
+   * Add a new toast notification to the stack.
+   * @param {string} message - Text to display.
+   * @param {'info'|'success'|'warning'|'error'} [type='info'] - Toast severity.
+   * @param {number} [duration=5000] - Auto-dismiss delay in ms (0 to persist).
+   */
   const addToast = useCallback((message, type = 'info', duration = 5000) => {
     const id = Date.now()
     setToasts(prev => [...prev, { id, message, type }])
@@ -25,6 +46,10 @@ export function ToastProvider({ children }) {
     }
   }, [])
 
+  /**
+   * Remove a toast by its ID and clear its timeout.
+   * @param {number} id - Toast identifier.
+   */
   const removeToast = useCallback((id) => {
     clearTimeout(timeoutRef.current[id])
     delete timeoutRef.current[id]

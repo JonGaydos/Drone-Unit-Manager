@@ -1,3 +1,6 @@
+/**
+ * Application shell layout with responsive sidebar, top bar, and page content area.
+ */
 import { Outlet } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
@@ -6,6 +9,7 @@ import { useLocation } from 'react-router-dom'
 import { Menu } from 'lucide-react'
 import { PageErrorBoundary } from '@/components/ui/PageErrorBoundary'
 
+/** @type {Record<string, string>} Maps route paths to page header titles. */
 const pageTitles = {
   '/': 'Dashboard',
   '/analytics': 'Analytics',
@@ -23,6 +27,12 @@ const pageTitles = {
   '/manual': 'User Manual',
 }
 
+/**
+ * Main layout component that wraps all authenticated pages.
+ * Includes a collapsible sidebar, mobile hamburger menu, top bar with page title,
+ * and an error boundary around the routed page content.
+ * @returns {JSX.Element}
+ */
 export function Layout() {
   const location = useLocation()
   const title = pageTitles[location.pathname] || 'Drone Unit Manager'

@@ -1,6 +1,16 @@
+/**
+ * Sortable, paginated data table component with customizable column rendering.
+ */
 import { cn } from '@/lib/utils'
 import { ChevronUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight } from 'lucide-react'
 
+/**
+ * Renders the appropriate sort direction indicator for a table column header.
+ * @param {Object} props
+ * @param {string} props.columnKey - The column this icon belongs to.
+ * @param {string} props.sortKey - The currently sorted column key.
+ * @param {'asc'|'desc'} props.sortDir - Current sort direction.
+ */
 function SortIcon({ columnKey, sortKey, sortDir }) {
   if (sortKey !== columnKey) {
     return <ChevronsUpDown className="h-3.5 w-3.5 text-muted-foreground/50" />
@@ -12,6 +22,19 @@ function SortIcon({ columnKey, sortKey, sortDir }) {
   )
 }
 
+/**
+ * Generic data table with sortable column headers and pagination controls.
+ * @param {Object} props
+ * @param {Array<{key: string, label: string, sortable?: boolean, render?: Function}>} props.columns - Column definitions.
+ * @param {Array<Object>} props.data - Row data to display.
+ * @param {Function} [props.onSort] - Callback when a sortable column header is clicked.
+ * @param {string} [props.sortKey] - Currently sorted column key.
+ * @param {'asc'|'desc'} [props.sortDir] - Current sort direction.
+ * @param {number} [props.page] - Current page number (1-based).
+ * @param {number} [props.totalPages] - Total number of pages.
+ * @param {Function} [props.onPageChange] - Callback when page navigation buttons are clicked.
+ * @param {string} [props.className] - Additional CSS classes for the table container.
+ */
 function DataTable({
   columns = [],
   data = [],

@@ -1,7 +1,20 @@
+/**
+ * Accessible modal dialog with backdrop overlay, focus trap, and keyboard dismissal.
+ */
 import { useEffect, useRef, useCallback } from 'react'
 import { cn } from '@/lib/utils'
 import { X } from 'lucide-react'
 
+/**
+ * Modal dialog component with backdrop, focus trap, and Escape key support.
+ * Locks body scroll while open and auto-focuses the first focusable element.
+ * @param {Object} props
+ * @param {boolean} props.open - Whether the modal is visible.
+ * @param {Function} props.onClose - Callback when the modal is dismissed.
+ * @param {string} [props.title] - Optional title displayed in the header.
+ * @param {React.ReactNode} props.children - Modal body content.
+ * @param {string} [props.className] - Additional CSS classes for the modal container.
+ */
 function Modal({ open, onClose, title, children, className }) {
   const overlayRef = useRef(null)
   const modalRef = useRef(null)

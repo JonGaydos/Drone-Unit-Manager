@@ -1,3 +1,6 @@
+/**
+ * Collapsible sidebar navigation with role-based filtering and configurable item order.
+ */
 import { useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { cn } from '@/lib/utils'
@@ -31,6 +34,7 @@ import {
 import { useEffect } from 'react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 
+/** @type {Array<{to: string, icon: Function, label: string, badge?: string, adminOnly?: boolean}>} Navigation menu items. */
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/weather', icon: CloudSun, label: 'Weather' },
@@ -54,6 +58,14 @@ const navItems = [
   { to: '/audit-log', icon: ScrollText, label: 'Audit Log', adminOnly: true },
 ]
 
+/**
+ * Sidebar navigation component with collapse toggle and mobile slide-in support.
+ * Fetches badge counts for flights needing review and pending flight plans.
+ * Supports server-side configuration for item visibility and ordering.
+ * @param {Object} props
+ * @param {boolean} props.mobileOpen - Whether the mobile sidebar drawer is open.
+ * @param {Function} props.onMobileClose - Callback to close the mobile sidebar.
+ */
 export function Sidebar({ mobileOpen, onMobileClose }) {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('sidebar-collapsed') === 'true')
   const [reviewCount, setReviewCount] = useState(0)

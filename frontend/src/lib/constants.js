@@ -1,6 +1,13 @@
-// Unified status color maps - imported across all pages
-// Use with: STATUS_COLORS[status] || STATUS_COLORS._default
+/**
+ * Unified color constants for status badges, outcomes, and frequencies.
+ * Each value is a Tailwind CSS class string for background and text color.
+ * Usage: STATUS_COLORS[status] || STATUS_COLORS._default
+ */
 
+/**
+ * General-purpose status color map for entities like pilots, vehicles, and flights.
+ * @type {Record<string, string>}
+ */
 export const STATUS_COLORS = {
   // General statuses
   active: 'bg-emerald-500/15 text-emerald-400',
@@ -27,6 +34,7 @@ export const STATUS_COLORS = {
   _default: 'bg-zinc-500/15 text-zinc-400',
 }
 
+/** @type {Record<string, string>} Color map for certification lifecycle statuses. */
 export const CERT_STATUS_COLORS = {
   not_issued: 'bg-zinc-500/15 text-zinc-400',
   not_eligible: 'bg-zinc-500/15 text-zinc-400',
@@ -38,12 +46,14 @@ export const CERT_STATUS_COLORS = {
   expired: 'bg-red-500/15 text-red-400',
 }
 
+/** @type {Record<string, string>} Color map for flight/mission outcome statuses. */
 export const OUTCOME_COLORS = {
   completed: 'bg-emerald-500/15 text-emerald-400',
   incomplete: 'bg-amber-500/15 text-amber-400',
   failed: 'bg-red-500/15 text-red-400',
 }
 
+/** @type {Record<string, string>} Color map for mission planning statuses. */
 export const MISSION_STATUS_COLORS = {
   planned: 'bg-blue-500/15 text-blue-400',
   in_progress: 'bg-amber-500/15 text-amber-400',
@@ -51,6 +61,7 @@ export const MISSION_STATUS_COLORS = {
   cancelled: 'bg-red-500/15 text-red-400',
 }
 
+/** @type {Record<string, string>} Color map for recurring schedule frequencies. */
 export const FREQUENCY_COLORS = {
   monthly: 'bg-blue-500/15 text-blue-400',
   quarterly: 'bg-violet-500/15 text-violet-400',

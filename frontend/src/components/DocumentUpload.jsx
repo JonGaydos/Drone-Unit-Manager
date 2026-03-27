@@ -1,3 +1,7 @@
+/**
+ * Document upload and management panel for attaching files to any entity.
+ * Supports upload, inline editing of title/type, viewing, and deletion.
+ */
 import { useState, useEffect, useCallback } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
@@ -6,6 +10,14 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { useConfirm } from '@/hooks/useConfirm'
 import { FileText, Upload, Trash2, Loader2, ExternalLink, Edit, Save, X } from 'lucide-react'
 
+/**
+ * Renders a document list with upload, edit, view, and delete capabilities.
+ * Admin-only actions are gated by the current user's role.
+ * @param {Object} props
+ * @param {string} props.entityType - Parent entity type (e.g. "pilot", "vehicle").
+ * @param {number|string} props.entityId - Parent entity ID.
+ * @param {number|string} [props.folderId] - Optional folder ID for organization.
+ */
 export default function DocumentUpload({ entityType, entityId, folderId }) {
   const toast = useToast()
   const [documents, setDocuments] = useState([])

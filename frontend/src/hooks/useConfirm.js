@@ -1,13 +1,18 @@
+/**
+ * Custom hook for managing confirmation dialog state.
+ */
 import { useState, useCallback } from 'react'
 
 /**
  * Hook for managing confirmation dialogs.
- * Returns [confirmState, requestConfirm, ConfirmDialogProps]
+ * Returns a tuple of [ConfirmDialog props, requestConfirm trigger function].
  *
- * Usage:
+ * @example
  *   const [confirm, requestConfirm] = useConfirm()
  *   // In handler: requestConfirm({ title, message, onConfirm: () => doThing() })
  *   // In render: <ConfirmDialog {...confirm} />
+ *
+ * @returns {[Object, Function]} Props to spread on ConfirmDialog, and a function to open it.
  */
 export function useConfirm() {
   const [state, setState] = useState({

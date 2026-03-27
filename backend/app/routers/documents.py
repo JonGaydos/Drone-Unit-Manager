@@ -1,3 +1,9 @@
+"""Document management endpoints for uploading, viewing, and organizing files.
+
+Supports attaching documents to pilots, vehicles, and certifications with
+file-type validation and path-traversal protection.
+"""
+
 import os
 from pathlib import Path
 
@@ -15,6 +21,7 @@ from app.schemas.document import DocumentOut
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
+# Whitelist of permitted file extensions for document uploads
 ALLOWED_DOCUMENT_EXTENSIONS = {
     ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".csv", ".txt", ".rtf",
     ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif",
@@ -23,6 +30,7 @@ ALLOWED_DOCUMENT_EXTENSIONS = {
 
 
 def _doc_to_out(doc: Document) -> DocumentOut:
+    """Convert a Document ORM instance to its API response schema with a view URL."""
     out = DocumentOut.model_validate(doc)
     out.view_url = f"/api/documents/{doc.id}/view"
     return out
@@ -40,6 +48,22 @@ async def upload_document(
     db: Session = Depends(get_db),
     admin: User = Depends(require_pilot),
 ):
+    """Upload a document and attach it to a pilot, vehicle, or certification.
+
+    Args:
+        file: The uploaded file.
+        entity_type: Parent entity type (pilot, vehicle, certification).
+        entity_id: ID of the parent entity.
+        document_type: Classification label (e.g., "insurance", "manual").
+        title: Human-readable document title.
+        notes: Optional free-text notes.
+        folder_id: Optional folder for organization.
+        db: Database session.
+        admin: Authenticated user (pilot role or higher).
+
+    Returns:
+        The created document record.
+    """
     filename = file.filename or "upload"
 
     # Validate file extension
@@ -51,6 +75,7 @@ async def upload_document(
     upload_dir.mkdir(parents=True, exist_ok=True)
 
     dest = upload_dir / filename
+    # Deduplicate filenames by appending a counter suffix
     counter = 1
     while dest.exists():
         stem = Path(filename).stem
@@ -63,6 +88,7 @@ async def upload_document(
         raise HTTPException(413, f"File too large. Maximum size is {settings.MAX_UPLOAD_SIZE // (1024*1024)}MB")
     dest.write_bytes(contents)
 
+    # Map entity_type to the appropriate foreign key column
     pilot_id = entity_id if entity_type == "pilot" else None
     vehicle_id = entity_id if entity_type == "vehicle" else None
     certification_id = entity_id if entity_type == "certification" else None
@@ -95,6 +121,15 @@ def list_documents(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    """List documents with optional filtering by entity type and ID.
+
+    Args:
+        entity_type: Filter by parent entity type (pilot, vehicle, certification).
+        entity_id: Filter by parent entity ID.
+
+    Returns:
+        List of document records, newest first.
+    """
     q = db.query(Document)
     if entity_type:
         q = q.filter(Document.entity_type == entity_type)
@@ -110,6 +145,17 @@ def view_document(
     db: Session = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
+    """Serve a document file for viewing or download.
+
+    PDFs are served inline; all other types as attachments.
+    Includes path-traversal prevention.
+
+    Args:
+        doc_id: The document record ID.
+
+    Returns:
+        FileResponse with the document contents.
+    """
     doc = db.query(Document).filter(Document.id == doc_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -139,6 +185,7 @@ def view_document(
 
 
 class DocumentUpdate(BaseModel):
+    """Schema for partial document metadata updates."""
     title: str | None = None
     document_type: str | None = None
     notes: str | None = None
@@ -152,6 +199,15 @@ def update_document(
     db: Session = Depends(get_db),
     user: User = Depends(require_pilot),
 ):
+    """Update a document's metadata (title, type, notes, folder).
+
+    Args:
+        doc_id: The document record ID.
+        data: Fields to update (only provided fields are changed).
+
+    Returns:
+        The updated document record.
+    """
     doc = db.query(Document).filter(Document.id == doc_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -169,6 +225,7 @@ def delete_document(
     db: Session = Depends(get_db),
     admin: User = Depends(require_pilot),
 ):
+    """Delete a document record and remove the file from disk."""
     from app.services.audit import log_action
     doc = db.query(Document).filter(Document.id == doc_id).first()
     if not doc:

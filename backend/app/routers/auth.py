@@ -1,3 +1,9 @@
+"""Authentication, authorization, and user management endpoints.
+
+Provides JWT-based auth, role-based access control, rate-limited login,
+password policy enforcement, and full CRUD for user accounts.
+"""
+
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from time import time
@@ -20,14 +26,39 @@ ALGORITHM = "HS256"
 
 
 def hash_password(password: str) -> str:
+    """Hash a plaintext password using bcrypt.
+
+    Args:
+        password: The plaintext password to hash.
+
+    Returns:
+        The bcrypt hash as a UTF-8 string.
+    """
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 
 def verify_password(password: str, hashed: str) -> bool:
+    """Verify a plaintext password against a bcrypt hash.
+
+    Args:
+        password: The plaintext password to check.
+        hashed: The stored bcrypt hash.
+
+    Returns:
+        True if the password matches the hash.
+    """
     return bcrypt.checkpw(password.encode(), hashed.encode())
 
 
 def create_token(user_id: int) -> str:
+    """Create a signed JWT access token for the given user.
+
+    Args:
+        user_id: The database ID of the authenticated user.
+
+    Returns:
+        An encoded JWT string with the user ID and expiration claim.
+    """
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.SESSION_EXPIRE_MINUTES)
     return jwt.encode({"sub": str(user_id), "exp": expire}, settings.SECRET_KEY, algorithm=ALGORITHM)
 
@@ -36,6 +67,18 @@ def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
     db: Session = Depends(get_db),
 ) -> User:
+    """FastAPI dependency that extracts and validates the current user from the JWT.
+
+    Args:
+        credentials: The Bearer token from the Authorization header.
+        db: Database session.
+
+    Returns:
+        The authenticated User ORM object.
+
+    Raises:
+        HTTPException: 401 if the token is missing, invalid, or the user is inactive.
+    """
     if not credentials:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     try:
@@ -50,6 +93,7 @@ def get_current_user(
 
 
 def require_admin(user: User = Depends(get_current_user)) -> User:
+    """Dependency that restricts access to admin-role users only."""
     if user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     return user
@@ -76,14 +120,24 @@ def require_manager(user: User = Depends(get_current_user)) -> User:
     return user
 
 
+# In-memory rate limiter for login attempts (per IP, sliding window)
 _login_attempts = defaultdict(list)  # ip -> [timestamps]
-_RATE_LIMIT = 5  # max attempts
-_RATE_WINDOW = 60  # seconds
+_RATE_LIMIT = 5  # max attempts per window
+_RATE_WINDOW = 60  # window size in seconds
 
 
 def _check_rate_limit(request):
+    """Enforce per-IP login rate limiting using a sliding time window.
+
+    Args:
+        request: The incoming FastAPI Request (used to extract client IP).
+
+    Raises:
+        HTTPException: 429 if the IP has exceeded the allowed attempts.
+    """
     ip = request.client.host if request.client else "unknown"
     now = time()
+    # Prune expired timestamps outside the current window
     _login_attempts[ip] = [t for t in _login_attempts[ip] if now - t < _RATE_WINDOW]
     if len(_login_attempts[ip]) >= _RATE_LIMIT:
         raise HTTPException(status_code=429, detail="Too many login attempts. Try again later.")
@@ -91,6 +145,14 @@ def _check_rate_limit(request):
 
 
 def _validate_password(password: str):
+    """Enforce password complexity requirements (min 12 chars, uppercase, digit).
+
+    Args:
+        password: The candidate password string.
+
+    Raises:
+        HTTPException: 400 if any policy requirement is not met.
+    """
     if len(password) < 12:
         raise HTTPException(400, "Password must be at least 12 characters")
     if not any(c.isupper() for c in password):
@@ -167,6 +229,19 @@ def initial_setup(data: SetupRequest, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=LoginResponse)
 def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
+    """Authenticate a user with username and password.
+
+    Applies rate limiting, logs success/failure to the audit trail,
+    and returns a JWT on success.
+
+    Args:
+        req: Login credentials (username, password).
+        request: FastAPI request (for rate-limit IP extraction).
+        db: Database session.
+
+    Returns:
+        LoginResponse with JWT token and user profile.
+    """
     _check_rate_limit(request)
     from app.services.audit import log_action
     user = db.query(User).filter(User.username == req.username).first()
@@ -184,11 +259,13 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
 
 @router.get("/me", response_model=UserOut)
 def get_me(user: User = Depends(get_current_user)):
+    """Return the currently authenticated user's profile."""
     return UserOut.model_validate(user)
 
 
 @router.patch("/me", response_model=UserOut)
 def update_me(data: UserUpdate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Update the current user's own profile (theme, display name)."""
     if data.theme is not None:
         user.theme = data.theme
     if data.display_name is not None:
@@ -200,6 +277,16 @@ def update_me(data: UserUpdate, user: User = Depends(get_current_user), db: Sess
 
 @router.post("/users", response_model=UserOut)
 def create_user(data: UserCreate, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    """Create a new user account. Admin only.
+
+    Args:
+        data: New user details (username, password, role, etc.).
+        admin: The authenticated admin performing the action.
+        db: Database session.
+
+    Returns:
+        The newly created user profile.
+    """
     from app.services.audit import log_action
     _validate_password(data.password)
     if db.query(User).filter(User.username == data.username).first():
@@ -221,11 +308,13 @@ def create_user(data: UserCreate, admin: User = Depends(require_admin), db: Sess
 
 @router.get("/users", response_model=list[UserOut])
 def list_users(admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    """List all user accounts. Admin only."""
     return [UserOut.model_validate(u) for u in db.query(User).all()]
 
 
 @router.post("/change-password")
 def change_password(req: ChangePasswordRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Change the current user's own password after verifying the old one."""
     from app.services.audit import log_action
     if not verify_password(req.current_password, user.password_hash):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
@@ -238,6 +327,7 @@ def change_password(req: ChangePasswordRequest, user: User = Depends(get_current
 
 @router.patch("/users/{user_id}", response_model=UserOut)
 def update_user(user_id: int, data: UserUpdate, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    """Update a user's profile, role, or active status. Admin only."""
     target = db.query(User).filter(User.id == user_id).first()
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
@@ -256,6 +346,7 @@ def update_user(user_id: int, data: UserUpdate, admin: User = Depends(require_ad
 
 @router.post("/users/{user_id}/reset-password")
 def admin_reset_password(user_id: int, req: AdminResetPasswordRequest, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    """Reset another user's password without requiring the old one. Admin only."""
     target = db.query(User).filter(User.id == user_id).first()
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
@@ -267,6 +358,7 @@ def admin_reset_password(user_id: int, req: AdminResetPasswordRequest, admin: Us
 
 @router.delete("/users/{user_id}")
 def delete_user(user_id: int, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    """Permanently delete a user account. Admin only. Cannot delete self."""
     from app.services.audit import log_action
     target = db.query(User).filter(User.id == user_id).first()
     if not target:

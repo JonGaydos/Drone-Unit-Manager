@@ -1,3 +1,5 @@
+"""Vehicle (drone) CRUD endpoints with flight statistics and profile photo management."""
+
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
@@ -21,6 +23,15 @@ def list_vehicles(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    """List all vehicles with optional filtering by status and manufacturer.
+
+    Args:
+        status: Filter by vehicle status (active, grounded, retired).
+        manufacturer: Filter by manufacturer name.
+
+    Returns:
+        List of vehicle records sorted by nickname/serial number.
+    """
     q = db.query(Vehicle)
     if status:
         q = q.filter(Vehicle.status == status)
@@ -31,6 +42,7 @@ def list_vehicles(
 
 @router.get("/{vehicle_id}", response_model=VehicleOut)
 def get_vehicle(vehicle_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Retrieve a single vehicle by ID."""
     vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found")
@@ -39,6 +51,7 @@ def get_vehicle(vehicle_id: int, db: Session = Depends(get_db), user: User = Dep
 
 @router.get("/{vehicle_id}/stats")
 def get_vehicle_stats(vehicle_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Get aggregated flight statistics for a vehicle (total flights, hours, last flight date)."""
     from sqlalchemy import func
     from app.models.flight import Flight
 
@@ -59,6 +72,7 @@ def get_vehicle_stats(vehicle_id: int, db: Session = Depends(get_db), user: User
 
 @router.post("", response_model=VehicleOut)
 def create_vehicle(data: VehicleCreate, db: Session = Depends(get_db), admin: User = Depends(require_supervisor)):
+    """Create a new vehicle record. Enforces unique serial numbers. Supervisor or admin only."""
     from app.services.audit import log_action
     if db.query(Vehicle).filter(Vehicle.serial_number == data.serial_number).first():
         raise HTTPException(status_code=400, detail="Vehicle with this serial number already exists")
@@ -73,6 +87,7 @@ def create_vehicle(data: VehicleCreate, db: Session = Depends(get_db), admin: Us
 
 @router.patch("/{vehicle_id}", response_model=VehicleOut)
 def update_vehicle(vehicle_id: int, data: VehicleUpdate, db: Session = Depends(get_db), admin: User = Depends(require_supervisor)):
+    """Update a vehicle's details with audit-logged change tracking. Supervisor or admin only."""
     from app.services.audit import log_action, compute_changes
     vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
     if not vehicle:
@@ -90,6 +105,7 @@ def update_vehicle(vehicle_id: int, data: VehicleUpdate, db: Session = Depends(g
 
 @router.delete("/{vehicle_id}")
 def delete_vehicle(vehicle_id: int, db: Session = Depends(get_db), admin: User = Depends(require_supervisor)):
+    """Soft-delete a vehicle by setting status to retired. Supervisor or admin only."""
     from app.services.audit import log_action
     vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
     if not vehicle:
@@ -105,6 +121,7 @@ ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 
 @router.post("/{vehicle_id}/photo")
 async def upload_vehicle_photo(vehicle_id: int, file: UploadFile, db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    """Upload or replace a vehicle's profile photo. Admin only."""
     vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
     if not vehicle:
         raise HTTPException(404, "Vehicle not found")
@@ -128,6 +145,7 @@ async def upload_vehicle_photo(vehicle_id: int, file: UploadFile, db: Session = 
 
 @router.get("/{vehicle_id}/photo/view")
 def view_vehicle_photo(vehicle_id: int, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
+    """Serve a vehicle's profile photo with path-traversal prevention."""
     vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
     if not vehicle:
         raise HTTPException(404)

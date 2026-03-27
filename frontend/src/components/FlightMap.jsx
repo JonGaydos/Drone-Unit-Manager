@@ -1,7 +1,12 @@
+/**
+ * Leaflet map components for flight path visualization, location picking, and flight location overview.
+ * Uses OpenStreetMap tiles and react-leaflet for rendering.
+ */
 import { MapContainer, TileLayer, Polyline, Marker, Popup, Circle, Polygon, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { useEffect } from 'react'
 
+// Fix default marker icon paths for bundled Leaflet builds
 delete L.Icon.Default.prototype._getIconUrl
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
@@ -9,6 +14,11 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 })
 
+/**
+ * Helper component that adjusts the map viewport to fit the given bounds.
+ * @param {Object} props
+ * @param {Array<[number, number]>} props.bounds - Array of [lat, lng] coordinates to fit.
+ */
 function FitBounds({ bounds }) {
   const map = useMap()
   useEffect(() => {
@@ -21,6 +31,11 @@ function FitBounds({ bounds }) {
   return null
 }
 
+/**
+ * Invisible component that registers a click handler on the map for location selection.
+ * @param {Object} props
+ * @param {Function} props.onSelect - Callback invoked with (lat, lng) on map click.
+ */
 function ClickHandler({ onSelect }) {
   const map = useMap()
   useEffect(() => {
@@ -32,8 +47,10 @@ function ClickHandler({ onSelect }) {
   return null
 }
 
+/** @type {[number, number]} Default map center coordinates (lat, lng). */
 const DEFAULT_CENTER = [30.32, -86.14]
 
+/** @type {Record<string, string>} Geofence zone type to color mapping. */
 const ZONE_COLORS = {
   no_fly: '#ef4444',
   restricted: '#f59e0b',
@@ -41,6 +58,17 @@ const ZONE_COLORS = {
   authorized: '#22c55e',
 }
 
+/**
+ * Displays a flight path polyline with takeoff and landing markers.
+ * Auto-fits the map to the telemetry bounds.
+ * @param {Object} props
+ * @param {Array<{lat: number, lon: number}>} [props.telemetry=[]] - Telemetry data points.
+ * @param {number} [props.takeoffLat] - Takeoff latitude.
+ * @param {number} [props.takeoffLon] - Takeoff longitude.
+ * @param {number} [props.landingLat] - Landing latitude.
+ * @param {number} [props.landingLon] - Landing longitude.
+ * @param {string} [props.height='400px'] - Map container height.
+ */
 export function FlightPathMap({ telemetry = [], takeoffLat, takeoffLon, landingLat, landingLon, height = '400px' }) {
   const path = telemetry.filter(p => p.lat && p.lon).map(p => [p.lat, p.lon])
   const center = takeoffLat && takeoffLon
@@ -74,6 +102,16 @@ export function FlightPathMap({ telemetry = [], takeoffLat, takeoffLon, landingL
   )
 }
 
+/**
+ * Interactive map for selecting a geographic location by clicking.
+ * Renders geofence zones as circles or polygons with color-coded overlays.
+ * @param {Object} props
+ * @param {number} [props.lat] - Currently selected latitude.
+ * @param {number} [props.lon] - Currently selected longitude.
+ * @param {Function} [props.onSelect] - Callback invoked with (lat, lng) on map click.
+ * @param {Array<Object>} [props.geofences=[]] - Geofence zone objects to display.
+ * @param {string} [props.height='400px'] - Map container height.
+ */
 export function LocationPickerMap({ lat, lon, onSelect, geofences = [], height = '400px' }) {
   const center = lat && lon ? [lat, lon] : DEFAULT_CENTER
 
@@ -115,6 +153,13 @@ export function LocationPickerMap({ lat, lon, onSelect, geofences = [], height =
   )
 }
 
+/**
+ * Overview map showing takeoff locations for multiple flights as markers.
+ * Each marker popup links to the flight detail page.
+ * @param {Object} props
+ * @param {Array<Object>} [props.flights=[]] - Flight objects with takeoff_lat/takeoff_lon.
+ * @param {string} [props.height='400px'] - Map container height.
+ */
 export function FlightLocationsMap({ flights = [], height = '400px' }) {
   const markers = flights.filter(f => f.takeoff_lat && f.takeoff_lon)
   const center = markers.length > 0 ? [markers[0].takeoff_lat, markers[0].takeoff_lon] : DEFAULT_CENTER
