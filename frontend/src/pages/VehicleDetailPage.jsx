@@ -8,11 +8,12 @@ import { useConfirm } from '@/hooks/useConfirm'
 import { formatHours, formatDuration, normalizeDateValue } from '@/lib/utils'
 import { STATUS_COLORS } from '@/lib/constants'
 import {
-  ArrowLeft, Plane, Clock, Calendar, Battery, Edit,
+  ArrowLeft, Clock, Calendar, Battery, Edit,
   FileText, Wrench, Gamepad2, Cpu, Paperclip, Camera,
   ShieldCheck, Plus, Trash2, AlertTriangle, LogIn, LogOut,
   CheckCircle, User, Cog, X, Save
 } from 'lucide-react'
+import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 import DocumentUpload from '@/components/DocumentUpload'
 
 export default function VehicleDetailPage() {
@@ -178,7 +179,7 @@ export default function VehicleDetailPage() {
                 className="w-16 h-16 rounded-2xl object-cover" />
             ) : (
               <div className="w-16 h-16 rounded-2xl bg-primary/15 flex items-center justify-center text-primary">
-                <Plane className="w-8 h-8" />
+                <QuadcopterIcon className="w-8 h-8" />
               </div>
             )}
             {isAdmin && (
@@ -281,7 +282,7 @@ export default function VehicleDetailPage() {
       {/* Stats Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center text-primary"><Plane className="w-5 h-5" /></div>
+          <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center text-primary"><QuadcopterIcon className="w-5 h-5" /></div>
           <div><p className="text-2xl font-bold text-foreground">{stats?.total_flights || 0}</p><p className="text-xs text-muted-foreground">Total Flights</p></div>
         </div>
         <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">

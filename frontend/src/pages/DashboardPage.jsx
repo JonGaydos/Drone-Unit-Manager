@@ -345,7 +345,7 @@ export default function DashboardPage() {
             </div>
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-blue-500/15 flex items-center justify-center text-blue-400">
-                <Plane className="w-5 h-5" />
+                <QuadcopterIcon className="w-5 h-5" />
               </div>
               <div>
                 {(() => {

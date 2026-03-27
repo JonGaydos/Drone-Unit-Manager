@@ -6,8 +6,9 @@ import { useToast } from '@/contexts/ToastContext'
 import { formatHours, formatDuration } from '@/lib/utils'
 import { STATUS_COLORS } from '@/lib/constants'
 import {
-  ArrowLeft, Battery, Clock, Plane, Wrench, Edit, Zap, Activity, Save, X, Loader2
+  ArrowLeft, Battery, Clock, Wrench, Edit, Zap, Activity, Save, X, Loader2
 } from 'lucide-react'
+import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 import DocumentUpload from '@/components/DocumentUpload'
 
 export default function BatteryDetailPage() {
@@ -209,7 +210,7 @@ export default function BatteryDetailPage() {
           <div><p className="text-2xl font-bold text-foreground">{battery.health_pct != null ? `${battery.health_pct}%` : '--'}</p><p className="text-xs text-muted-foreground">Health</p></div>
         </div>
         <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-500/15 flex items-center justify-center text-blue-400"><Plane className="w-5 h-5" /></div>
+          <div className="w-10 h-10 rounded-xl bg-blue-500/15 flex items-center justify-center text-blue-400"><QuadcopterIcon className="w-5 h-5" /></div>
           <div><p className="text-2xl font-bold text-foreground">{stats?.total_flights || 0}</p><p className="text-xs text-muted-foreground">Total Flights</p></div>
         </div>
         <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">

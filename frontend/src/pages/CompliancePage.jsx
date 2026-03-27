@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useToast } from '@/contexts/ToastContext'
 import {
-  ShieldCheck, AlertTriangle, Clock, Wrench, Plane, FileText,
+  ShieldCheck, AlertTriangle, Clock, Wrench, FileText,
   ClipboardCheck, Loader2, ChevronRight, RefreshCw, Download,
 } from 'lucide-react'
+import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 
 function ScoreCircle({ score }) {
   const color = score > 80 ? 'text-emerald-400' : score > 60 ? 'text-amber-400' : 'text-red-400'
@@ -244,7 +245,7 @@ export default function CompliancePage() {
             onClick={() => navigate('/flight-plans')}
           />
           <StatCard
-            icon={Plane}
+            icon={QuadcopterIcon}
             label="Unreviewed Flights"
             value={data.unreviewed_flights}
             color={data.unreviewed_flights > 0 ? 'amber' : 'emerald'}
