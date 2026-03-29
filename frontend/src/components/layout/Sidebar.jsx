@@ -31,7 +31,6 @@ import {
   Shield,
   BookOpen,
   Radar,
-  Plug,
 } from 'lucide-react'
 import { useEffect } from 'react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
@@ -58,7 +57,6 @@ const navItems = [
   { to: '/alerts', icon: Bell, label: 'Alerts' },
   { to: '/incidents', icon: AlertTriangle, label: 'Activity Reports' },
   { to: '/settings', icon: Settings, label: 'Settings' },
-  { to: '/integrations', icon: Plug, label: 'Integrations', adminOnly: true },
   { to: '/audit-log', icon: ScrollText, label: 'Audit Log', adminOnly: true },
 ]
 

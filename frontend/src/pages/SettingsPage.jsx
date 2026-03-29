@@ -7,7 +7,10 @@ import { useConfirm } from '@/hooks/useConfirm'
 import { sortByName, sortPilotsActiveFirst } from '@/lib/formatters'
 import { Save, TestTube, Loader2, Upload, FileSpreadsheet, RefreshCw, UserPlus, Key, Trash2, Shield, ShieldCheck, Eye, Image as ImageIcon, ChevronUp, ChevronDown, ExternalLink, X, Edit2 } from 'lucide-react'
 
+const IntegrationsContent = React.lazy(() => import('@/pages/IntegrationsPage'))
+
 export default function SettingsPage() {
+  const [activeTab, setActiveTab] = useState('general')
   const [settings, setSettings] = useState({})
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
@@ -371,8 +374,48 @@ export default function SettingsPage() {
     )
   }
 
+  const TABS = [
+    { id: 'general', label: 'General' },
+    ...(isAdmin ? [{ id: 'users', label: 'Users' }] : []),
+    ...(isAdmin ? [{ id: 'integrations', label: 'Integrations' }] : []),
+  ]
+
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6">
+      {/* Tab Navigation */}
+      <div className="flex gap-1 border-b border-border">
+        {TABS.map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
+              activeTab === tab.id
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Integrations Tab */}
+      {activeTab === 'integrations' && isAdmin && (
+        <React.Suspense fallback={<div className="flex items-center justify-center h-32"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}>
+          <IntegrationsContent />
+        </React.Suspense>
+      )}
+
+      {/* Users Tab */}
+      {activeTab === 'users' && isAdmin && (
+        <div className="max-w-2xl space-y-6">
+          {/* User Management section - moved here */}
+        </div>
+      )}
+
+      {/* General Tab */}
+      {activeTab !== 'integrations' && activeTab !== 'users' && (
+      <div className="space-y-6 max-w-2xl">
       {/* Organization */}
       <div className="bg-card border border-border rounded-xl p-6">
         <h3 className="text-lg font-semibold text-foreground mb-4">Organization</h3>
@@ -1037,6 +1080,8 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
+      )}
+      </div>
       )}
       <ConfirmDialog {...confirmProps} />
     </div>

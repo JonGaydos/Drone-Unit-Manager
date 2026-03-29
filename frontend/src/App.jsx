@@ -70,7 +70,6 @@ const ChecklistPage = lazy(() => import('@/pages/ChecklistPage'))
 const CompliancePage = lazy(() => import('@/pages/CompliancePage'))
 const UserManualPage = lazy(() => import('@/pages/UserManualPage'))
 const AirspacePage = lazy(() => import('@/pages/AirspacePage'))
-const IntegrationsPage = lazy(() => import('@/pages/IntegrationsPage'))
 
 /** Loading spinner displayed during lazy-loaded page transitions. */
 function Spinner() {
@@ -148,7 +147,6 @@ function AppRoutes() {
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/audit-log" element={<AuditLogPage />} />
           <Route path="/manual" element={<UserManualPage />} />
-          <Route path="/integrations" element={<IntegrationsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

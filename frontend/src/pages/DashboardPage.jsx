@@ -180,6 +180,7 @@ export default function DashboardPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-left">
+                    <th className="px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Flight ID</th>
                     <th className="px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Date</th>
                     <th className="px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Pilot</th>
                     <th className="px-5 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell">Vehicle</th>
@@ -191,12 +192,15 @@ export default function DashboardPage() {
                 <tbody className="divide-y divide-border">
                   {recentFlights.map((flight) => (
                     <tr key={flight.id} className="hover:bg-muted/50 transition-colors">
-                      <td className="px-5 py-3">
-                        <Link to={`/flights/${flight.id}`} className="text-foreground hover:text-primary transition-colors">
-                          {flight.date
-                            ? new Date(flight.date + 'T00:00:00').toLocaleDateString()
-                            : '—'}
+                      <td className="px-5 py-3 text-xs font-mono">
+                        <Link to={`/flights/${flight.id}`} className="text-primary hover:underline">
+                          {flight.external_id ? flight.external_id.slice(0, 8) : `#${flight.id}`}
                         </Link>
+                      </td>
+                      <td className="px-5 py-3 text-foreground">
+                        {flight.date
+                          ? new Date(flight.date + 'T00:00:00').toLocaleDateString()
+                          : '—'}
                       </td>
                       <td className="px-5 py-3 text-muted-foreground">
                         {flight.pilot_id

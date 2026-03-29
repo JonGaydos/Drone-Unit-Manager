@@ -74,7 +74,8 @@ function ProviderCard({ provider, settings, onSave, onTest, onSync }) {
     }
   }, [settings, provider])
 
-  const isConnected = token && token.length > 10 && !token.includes('...')
+  // A masked token (e.g. "abc12345...xyz9") means it IS configured
+  const isConnected = token && token.length > 0
   const Icon = provider.icon
 
   const handleTest = async () => {
@@ -324,13 +325,30 @@ function FlightLogImport() {
     try {
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('format', format)
-      const res = await api.upload('/export/flights/import/log', formData)
+
+      let res
+      if (format === 'skydio_csv') {
+        // Use the existing Skydio CSV import endpoint
+        res = await api.upload('/export/flights/import', formData)
+        // Normalize response shape
+        res = { ...res, flight_id: null, points_imported: res.imported || 0, format_detected: 'skydio_csv', error: res.errors?.length ? res.errors.join(', ') : null }
+      } else if (format === 'excel') {
+        // Use the existing Excel import endpoint
+        res = await api.upload('/export/excel/import', formData)
+        res = { ...res, flight_id: null, points_imported: res.flights_imported || 0, format_detected: 'excel', error: res.errors?.length ? res.errors.join(', ') : null }
+      } else {
+        // DJI/Litchi/Airdata/auto → flight log import
+        formData.append('format', format)
+        res = await api.upload('/export/flights/import/log', formData)
+      }
+
       setResult(res)
       if (res.error) {
         toast.error(res.error)
-      } else {
+      } else if (res.flight_id) {
         toast.success(`Imported flight #${res.flight_id} with ${res.points_imported} telemetry points`)
+      } else {
+        toast.success(`Imported ${res.points_imported || res.imported || 0} flights successfully`)
       }
     } catch (err) {
       toast.error(err.message)
@@ -347,7 +365,7 @@ function FlightLogImport() {
         </div>
         <div>
           <h3 className="text-sm font-semibold text-foreground">Flight Log Import</h3>
-          <p className="text-xs text-muted-foreground">Import flight logs from DJI .txt, Litchi CSV, or Airdata CSV files.</p>
+          <p className="text-xs text-muted-foreground">Import flight logs from Skydio CSV, DJI .txt, Litchi CSV, Airdata CSV, or Excel files.</p>
         </div>
       </div>
 
@@ -356,7 +374,7 @@ function FlightLogImport() {
           <label className="block text-xs font-medium text-muted-foreground mb-1">Flight Log File</label>
           <input
             type="file"
-            accept=".txt,.csv"
+            accept=".txt,.csv,.xlsx,.xls"
             onChange={e => { setFile(e.target.files[0]); setResult(null) }}
             className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm file:mr-3 file:bg-primary file:text-primary-foreground file:border-0 file:rounded file:px-2 file:py-1 file:text-xs file:font-medium"
           />
@@ -369,6 +387,8 @@ function FlightLogImport() {
             className="px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
           >
             <option value="auto">Auto-detect</option>
+            <option value="skydio_csv">Skydio CSV</option>
+            <option value="excel">Excel (Skydio)</option>
             <option value="dji">DJI .txt</option>
             <option value="litchi">Litchi CSV</option>
             <option value="airdata">Airdata CSV</option>

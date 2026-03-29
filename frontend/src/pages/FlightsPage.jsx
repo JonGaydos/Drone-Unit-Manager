@@ -439,9 +439,17 @@ export default function FlightsPage() {
                   }`}>{f.review_status === 'needs_review' ? 'Needs Review' : 'Reviewed'}</span>
                   {' '}
                   {f.telemetry_synced ? (
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" title="Telemetry synced" />
+                    isSupervisor ? (
+                      <button onClick={async (e) => { e.stopPropagation(); try { await api.patch(`/flights/${f.id}/telemetry-status`, { telemetry_synced: false }); load() } catch (err) { toast.error(err.message) } }} className="w-2 h-2 rounded-full bg-emerald-400 inline-block cursor-pointer" title="Telemetry synced (click to unset)" />
+                    ) : (
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" title="Telemetry synced" />
+                    )
                   ) : f.external_id ? (
-                    <span className="w-2 h-2 rounded-full bg-zinc-500 inline-block" title="Telemetry pending" />
+                    isSupervisor ? (
+                      <button onClick={async (e) => { e.stopPropagation(); try { await api.patch(`/flights/${f.id}/telemetry-status`, { telemetry_synced: true }); load() } catch (err) { toast.error(err.message) } }} className="w-2 h-2 rounded-full bg-zinc-500 inline-block cursor-pointer" title="Telemetry pending (click to mark synced)" />
+                    ) : (
+                      <span className="w-2 h-2 rounded-full bg-zinc-500 inline-block" title="Telemetry pending" />
+                    )
                   ) : null}
                 </td>
                 <td className="px-4 py-3 text-right">

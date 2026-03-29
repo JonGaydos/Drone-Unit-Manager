@@ -23,7 +23,6 @@ const pageTitles = {
   '/reports': 'Reports',
   '/alerts': 'Alerts',
   '/settings': 'Settings',
-  '/integrations': 'Integrations',
   '/airspace': 'Nearby Aircraft',
   '/audit-log': 'Audit Log',
   '/manual': 'User Manual',
