@@ -521,17 +521,12 @@ class SkydioProvider(DroneProvider):
                 if battery is not None and battery <= 1.0:
                     battery = round(battery * 100, 1)
 
-                # Altitude: prefer height_above_takeoff (relative to launch) over gps_altitude (absolute)
-                # Skip zero values for height_above_takeoff — these indicate sensor dropout,
-                # not actual ground level, and cause erratic chart oscillation
-                alt_hat = p.get("height_above_takeoff")
-                alt_gps = p.get("gps_altitude")
-                if alt_hat is not None and alt_hat != 0:
-                    alt = alt_hat
-                elif alt_gps is not None:
-                    alt = alt_gps
-                else:
-                    alt = None
+                # Altitude: Use height_above_takeoff exclusively (AGL — Above Ground Level)
+                # This is the altitude relative to the launch point, matching what the
+                # pilot sees on the drone's display (e.g., "200 ft AGL").
+                # gps_altitude is MSL (above sea level) and must NOT be mixed in,
+                # as it inflates the chart by the launch site's elevation.
+                alt = p.get("height_above_takeoff")
 
                 # Speed: calculate from gps_velocity [vx, vy, vz]
                 import math

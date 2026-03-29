@@ -80,22 +80,23 @@ def _batch_sync_telemetry(db: Session, limit: int = 10) -> int:
                     max_alt = 0
                     max_speed = 0
                     for point in telemetry_data:
-                        alt = point.get("altitude_m") or point.get("height_above_takeoff") or 0
-                        speed = point.get("speed_mps") or 0
+                        # altitude_m is already AGL from the provider (height_above_takeoff)
+                        alt = point.get("altitude_m")
+                        speed = point.get("speed_mps")
                         tp = TelemetryPoint(
                             flight_id=flight.id,
                             timestamp_ms=point.get("timestamp_ms", 0),
                             lat=point.get("lat"),
                             lon=point.get("lon"),
-                            altitude_m=float(alt),
-                            speed_mps=float(speed),
+                            altitude_m=float(alt) if alt is not None else None,
+                            speed_mps=float(speed) if speed is not None else None,
                             battery_pct=point.get("battery_pct"),
                             heading_deg=point.get("heading_deg"),
                         )
                         tdb.add(tp)
-                        if float(alt) > max_alt:
+                        if alt is not None and float(alt) > max_alt:
                             max_alt = float(alt)
-                        if float(speed) > max_speed:
+                        if speed is not None and float(speed) > max_speed:
                             max_speed = float(speed)
                     tdb.commit()
                     flight.max_altitude_m = max_alt
