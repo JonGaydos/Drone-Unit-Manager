@@ -158,6 +158,52 @@ def sync_now(
     return SyncResultResponse(**asdict(result))
 
 
+@router.get("/telemetry-debug/{flight_id}")
+def debug_telemetry(flight_id: int, db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    """Debug: fetch raw telemetry from Skydio API for a single flight and return first 3 points unprocessed."""
+    from app.integrations.skydio import SkydioProvider, TELEMETRY_BASE
+    from app.services.sync_manager import _build_creds
+    from app.models.flight import Flight
+
+    flight = db.query(Flight).filter(Flight.id == flight_id).first()
+    if not flight or not flight.external_id:
+        from fastapi import HTTPException
+        raise HTTPException(404, "Flight not found or no external_id")
+
+    creds = _build_creds(db, "skydio")
+    provider = SkydioProvider()
+
+    # Fetch raw response
+    resp = provider._request("GET", f"{TELEMETRY_BASE}/flight/{flight.external_id}/telemetry", creds, timeout=60.0)
+    body = resp.json()
+
+    # Unwrap to get the telemetry list
+    raw = body
+    if isinstance(raw, dict) and "data" in raw:
+        raw = raw["data"]
+    if isinstance(raw, dict):
+        for key in ("flight_telemetry", "telemetry", "points", "data"):
+            val = raw.get(key)
+            if isinstance(val, list):
+                raw = val
+                break
+
+    # Return first 3 raw points with ALL their fields
+    sample = raw[:3] if isinstance(raw, list) else []
+    all_keys = set()
+    for p in sample:
+        if isinstance(p, dict):
+            all_keys.update(p.keys())
+
+    return {
+        "flight_id": flight_id,
+        "external_id": flight.external_id,
+        "total_points": len(raw) if isinstance(raw, list) else 0,
+        "all_field_names": sorted(all_keys),
+        "sample_points": sample,
+    }
+
+
 @router.post("/telemetry")
 def sync_telemetry_batch(db: Session = Depends(get_db), user: User = Depends(require_admin)):
     """Fetch telemetry for up to 10 flights that don't have it yet."""
