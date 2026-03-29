@@ -51,6 +51,20 @@ def test_connection(
     return TestConnectionResponse(ok=ok, message=message, user_info=user_info)
 
 
+def _parse_timestamp_ms(ts) -> int:
+    """Parse a timestamp value (ISO string or epoch ms) to integer milliseconds."""
+    if isinstance(ts, str):
+        try:
+            from datetime import datetime as dt
+            parsed = dt.fromisoformat(ts.replace("Z", "+00:00"))
+            return int(parsed.timestamp() * 1000)
+        except (ValueError, AttributeError):
+            return 0
+    elif isinstance(ts, (int, float)):
+        return int(ts)
+    return 0
+
+
 def _batch_sync_telemetry(db: Session, limit: int = 10) -> int:
     """Fetch telemetry for up to `limit` flights without it. Returns count synced."""
     from app.integrations.skydio import SkydioProvider
@@ -80,12 +94,13 @@ def _batch_sync_telemetry(db: Session, limit: int = 10) -> int:
                     max_alt = 0
                     max_speed = 0
                     for point in telemetry_data:
-                        # altitude_m is already AGL from the provider (height_above_takeoff)
                         alt = point.get("altitude_m")
                         speed = point.get("speed_mps")
+                        # Parse timestamp — Skydio returns ISO strings, not epoch ms
+                        timestamp_ms = _parse_timestamp_ms(point.get("timestamp_ms"))
                         tp = TelemetryPoint(
                             flight_id=flight.id,
-                            timestamp_ms=point.get("timestamp_ms", 0),
+                            timestamp_ms=timestamp_ms,
                             lat=point.get("lat"),
                             lon=point.get("lon"),
                             altitude_m=float(alt) if alt is not None else None,
@@ -104,6 +119,7 @@ def _batch_sync_telemetry(db: Session, limit: int = 10) -> int:
                 finally:
                     tdb.close()
             flight.telemetry_synced = True
+            flight.has_telemetry = True
             synced += 1
         except Exception as exc:
             logger.warning("Telemetry sync failed for flight %s: %s", flight.external_id, exc)
