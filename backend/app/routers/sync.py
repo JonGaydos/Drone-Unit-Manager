@@ -177,30 +177,43 @@ def debug_telemetry(flight_id: int, db: Session = Depends(get_db), user: User = 
     resp = provider._request("GET", f"{TELEMETRY_BASE}/flight/{flight.external_id}/telemetry", creds, timeout=60.0)
     body = resp.json()
 
-    # Unwrap to get the telemetry list
-    raw = body
-    if isinstance(raw, dict) and "data" in raw:
-        raw = raw["data"]
-    if isinstance(raw, dict):
+    # Return the raw structure so we can see what Skydio actually sends
+    # Truncate to avoid huge responses
+    raw_keys = list(body.keys()) if isinstance(body, dict) else f"type={type(body).__name__}"
+
+    # Try to find the telemetry list
+    unwrapped = body
+    unwrap_path = []
+    if isinstance(unwrapped, dict) and "data" in unwrapped:
+        unwrapped = unwrapped["data"]
+        unwrap_path.append("data")
+    if isinstance(unwrapped, dict):
         for key in ("flight_telemetry", "telemetry", "points", "data"):
-            val = raw.get(key)
+            val = unwrapped.get(key)
             if isinstance(val, list):
-                raw = val
+                unwrapped = val
+                unwrap_path.append(key)
                 break
 
-    # Return first 3 raw points with ALL their fields
-    sample = raw[:3] if isinstance(raw, list) else []
+    sample = unwrapped[:3] if isinstance(unwrapped, list) else []
     all_keys = set()
     for p in sample:
         if isinstance(p, dict):
             all_keys.update(p.keys())
 
+    # Also try the processed provider path
+    processed = provider.get_flight_telemetry(creds, flight.external_id)
+
     return {
         "flight_id": flight_id,
         "external_id": flight.external_id,
-        "total_points": len(raw) if isinstance(raw, list) else 0,
+        "raw_top_keys": raw_keys,
+        "unwrap_path": unwrap_path,
+        "total_raw_points": len(unwrapped) if isinstance(unwrapped, list) else 0,
         "all_field_names": sorted(all_keys),
-        "sample_points": sample,
+        "sample_raw_points": sample,
+        "processed_count": len(processed) if isinstance(processed, list) else 0,
+        "processed_sample": processed[:3] if isinstance(processed, list) else [],
     }
 
 
