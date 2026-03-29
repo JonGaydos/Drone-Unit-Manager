@@ -215,7 +215,7 @@ export default function DashboardPage() {
                         }
                       </td>
                       <td className="px-5 py-3 text-muted-foreground hidden md:table-cell">
-                        {flight.purpose || flight.flight_purpose || '—'}
+                        {(flight.purpose || flight.flight_purpose) ? <Link to={`/flights?purpose=${encodeURIComponent(flight.purpose || flight.flight_purpose)}`} className="text-primary hover:underline">{flight.purpose || flight.flight_purpose}</Link> : '—'}
                       </td>
                       <td className="px-5 py-3 text-muted-foreground">
                         {flight.duration_seconds

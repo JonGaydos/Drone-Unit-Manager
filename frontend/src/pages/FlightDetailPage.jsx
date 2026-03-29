@@ -373,7 +373,7 @@ export default function FlightDetailPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 border-t border-border pt-4">
             <div><p className="text-xs text-muted-foreground">Pilot</p><p className="text-sm text-foreground">{flight.pilot_id ? <Link to={`/pilots/${flight.pilot_id}`} className="text-primary hover:underline">{flight.pilot_name || 'Unassigned'}</Link> : (flight.pilot_name || 'Unassigned')}</p></div>
             <div><p className="text-xs text-muted-foreground">Vehicle</p><p className="text-sm text-foreground">{flight.vehicle_id ? <Link to={`/fleet/vehicles/${flight.vehicle_id}`} className="text-primary hover:underline">{flight.vehicle_name || '—'}</Link> : (flight.vehicle_name || '—')}</p></div>
-            <div><p className="text-xs text-muted-foreground">Purpose</p><p className="text-sm text-foreground">{flight.purpose || '—'}</p></div>
+            <div><p className="text-xs text-muted-foreground">Purpose</p><p className="text-sm text-foreground">{flight.purpose ? <Link to={`/flights?purpose=${encodeURIComponent(flight.purpose)}`} className="text-primary hover:underline">{flight.purpose}</Link> : '—'}</p></div>
             <div><p className="text-xs text-muted-foreground">Duration</p><p className="text-sm text-foreground">{formatDuration(flight.duration_seconds)}</p></div>
             <div>
               <p className="text-xs text-muted-foreground">Takeoff Time</p>
@@ -391,15 +391,18 @@ export default function FlightDetailPage() {
               const bat = batteries.find(b => b.serial_number === flight.battery_serial)
               return bat ? <Link to={`/fleet/batteries/${bat.id}`} className="text-primary hover:underline">{flight.battery_serial}</Link> : flight.battery_serial
             })() : '—'}</p></div>
-            <div><p className="text-xs text-muted-foreground">Sensor Package</p><p className="text-sm text-foreground">{flight.sensor_package || '—'}</p></div>
+            <div><p className="text-xs text-muted-foreground">Sensor Package</p><p className="text-sm text-foreground">{flight.sensor_package ? (() => {
+              const sen = sensors.find(s => s.serial_number === flight.sensor_package)
+              return <Link to={sen ? `/fleet?tab=sensors` : `/fleet?tab=sensors`} className="text-primary hover:underline">{flight.sensor_package}</Link>
+            })() : '—'}</p></div>
             <div><p className="text-xs text-muted-foreground">Carrier(s)</p><p className="text-sm text-foreground">{flight.carrier || '—'}</p></div>
             <div><p className="text-xs text-muted-foreground">&nbsp;</p></div>
             {(flight.attachment_top || flight.attachment_bottom || flight.attachment_left || flight.attachment_right) && (
               <>
-                <div><p className="text-xs text-muted-foreground">Attachment (TOP)</p><p className="text-sm text-foreground">{flight.attachment_top || '—'}</p></div>
-                <div><p className="text-xs text-muted-foreground">Attachment (BOTTOM)</p><p className="text-sm text-foreground">{flight.attachment_bottom || '—'}</p></div>
-                <div><p className="text-xs text-muted-foreground">Attachment (LEFT)</p><p className="text-sm text-foreground">{flight.attachment_left || '—'}</p></div>
-                <div><p className="text-xs text-muted-foreground">Attachment (RIGHT)</p><p className="text-sm text-foreground">{flight.attachment_right || '—'}</p></div>
+                <div><p className="text-xs text-muted-foreground">Attachment (TOP)</p><p className="text-sm text-foreground">{flight.attachment_top ? <Link to="/fleet?tab=attachments" className="text-primary hover:underline">{flight.attachment_top}</Link> : '—'}</p></div>
+                <div><p className="text-xs text-muted-foreground">Attachment (BOTTOM)</p><p className="text-sm text-foreground">{flight.attachment_bottom ? <Link to="/fleet?tab=attachments" className="text-primary hover:underline">{flight.attachment_bottom}</Link> : '—'}</p></div>
+                <div><p className="text-xs text-muted-foreground">Attachment (LEFT)</p><p className="text-sm text-foreground">{flight.attachment_left ? <Link to="/fleet?tab=attachments" className="text-primary hover:underline">{flight.attachment_left}</Link> : '—'}</p></div>
+                <div><p className="text-xs text-muted-foreground">Attachment (RIGHT)</p><p className="text-sm text-foreground">{flight.attachment_right ? <Link to="/fleet?tab=attachments" className="text-primary hover:underline">{flight.attachment_right}</Link> : '—'}</p></div>
               </>
             )}
             {flight.notes && <div className="col-span-2 md:col-span-4"><p className="text-xs text-muted-foreground">Notes</p><p className="text-sm text-foreground">{flight.notes}</p></div>}

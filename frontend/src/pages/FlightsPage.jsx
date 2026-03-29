@@ -158,7 +158,9 @@ export default function FlightsPage() {
   const [filterDateTo, setFilterDateTo] = useState('')
   const [filterPilotId, setFilterPilotId] = useState('')
   const [filterVehicleId, setFilterVehicleId] = useState('')
-  const [filterPurpose, setFilterPurpose] = useState('')
+  const [filterPurpose, setFilterPurpose] = useState(() => {
+    try { return new URLSearchParams(window.location.search).get('purpose') || '' } catch { return '' }
+  })
 
   // Pagination state
   const [page, setPage] = useState(1)

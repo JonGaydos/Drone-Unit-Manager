@@ -356,7 +356,11 @@ const TAB_CONFIGS = {
 // ─── Main Component ─────────────────────────────────────────────────────────
 
 export default function FleetPage() {
-  const [activeTab, setActiveTab] = useState('vehicles')
+  // Read tab from URL query param (e.g., /fleet?tab=attachments)
+  const initialTab = (() => {
+    try { return new URLSearchParams(window.location.search).get('tab') || 'vehicles' } catch { return 'vehicles' }
+  })()
+  const [activeTab, setActiveTab] = useState(initialTab)
   const [items, setItems] = useState([])
   const [search, setSearch] = useState('')
   const [modal, setModal] = useState(null)
