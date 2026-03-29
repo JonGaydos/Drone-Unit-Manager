@@ -198,6 +198,25 @@ def debug_telemetry(flight_id: int, db: Session = Depends(get_db), user: User = 
                 elif isinstance(v, dict):
                     structure[f"data.{k}_keys"] = list(v.keys())
 
+    # Dig into aligned_telemetry to get raw field names and sample
+    raw_sample = []
+    raw_field_names = []
+    if isinstance(body, dict) and "data" in body:
+        ft = body["data"].get("flight_telemetry", {})
+        if isinstance(ft, dict):
+            at = ft.get("aligned_telemetry", [])
+            if isinstance(at, list) and len(at) > 0:
+                # Get a sample from the MIDDLE of the flight (not takeoff/landing)
+                mid_idx = len(at) // 2
+                raw_sample = at[mid_idx:mid_idx+3]
+                raw_field_names = sorted(at[0].keys()) if isinstance(at[0], dict) else []
+                # Count how many have height_above_takeoff
+                hat_count = sum(1 for p in at if isinstance(p, dict) and p.get("height_above_takeoff") is not None)
+                gps_alt_count = sum(1 for p in at if isinstance(p, dict) and p.get("gps_altitude") is not None)
+                structure["hat_count"] = hat_count
+                structure["gps_alt_count"] = gps_alt_count
+                structure["total_aligned_points"] = len(at)
+
     # Also get processed output with altitude stats
     processed = provider.get_flight_telemetry(creds, flight.external_id)
     alt_values = [p.get("altitude_m") for p in processed if p.get("altitude_m") is not None and p.get("altitude_m") != 0]
@@ -214,7 +233,8 @@ def debug_telemetry(flight_id: int, db: Session = Depends(get_db), user: User = 
             "max": round(max(alt_values), 2) if alt_values else None,
             "avg": round(sum(alt_values) / len(alt_values), 2) if alt_values else None,
         },
-        "processed_sample_mid": processed[len(processed)//2:len(processed)//2+3] if len(processed) > 10 else processed[:3],
+        "raw_field_names": raw_field_names,
+        "raw_sample_mid": raw_sample,
     }
 
 
