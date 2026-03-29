@@ -404,6 +404,8 @@ function FlightLogImport() {
         </button>
       </div>
 
+      <p className="text-xs text-amber-400/80">After importing, add email addresses to pilot profiles for API sync matching.</p>
+
       {result && !result.error && (
         <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-lg p-3 text-sm">
           Flight #{result.flight_id} imported successfully — {result.points_imported} telemetry points, format: {result.format_detected}

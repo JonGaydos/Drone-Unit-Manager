@@ -8,10 +8,11 @@ import { Plus, Search, CheckCircle, ChevronUp, ChevronDown, Pencil, X, Check, Do
 import { Link } from 'react-router-dom'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 
-function FlightModal({ pilots, vehicles, purposes, onSave, onClose }) {
+function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachments, onSave, onClose }) {
   const [form, setForm] = useState({
     pilot_id: '', vehicle_id: '', date: '', takeoff_time: '', landing_time: '',
-    duration_seconds: '', purpose: '', takeoff_address: '', case_number: '', notes: ''
+    duration_seconds: '', purpose: '', takeoff_address: '', case_number: '', notes: '',
+    battery_serial: '', sensor_package: '', attachment_top: '', attachment_bottom: '',
   })
   const [saving, setSaving] = useState(false)
 
@@ -83,6 +84,41 @@ function FlightModal({ pilots, vehicles, purposes, onSave, onClose }) {
             <input type="text" value={form.case_number} onChange={e => setForm({...form, case_number: e.target.value})}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">Battery</label>
+              <input list="battery-list" value={form.battery_serial} onChange={e => setForm({...form, battery_serial: e.target.value})}
+                placeholder="Select or type..."
+                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              <datalist id="battery-list">
+                {(batteries || []).map(b => <option key={b.id} value={b.serial_number}>{b.nickname || b.serial_number}</option>)}
+              </datalist>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">Sensor Package</label>
+              <input list="sensor-list" value={form.sensor_package} onChange={e => setForm({...form, sensor_package: e.target.value})}
+                placeholder="Select or type..."
+                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              <datalist id="sensor-list">
+                {(sensors || []).map(s => <option key={s.id} value={s.serial_number}>{s.name || s.serial_number}</option>)}
+              </datalist>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">Attachment (Top)</label>
+              <input list="attach-list" value={form.attachment_top} onChange={e => setForm({...form, attachment_top: e.target.value})}
+                placeholder="Select or type..."
+                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              <datalist id="attach-list">
+                {(attachments || []).map(a => <option key={a.id} value={a.serial_number}>{a.name || a.serial_number}</option>)}
+              </datalist>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">Attachment (Bottom)</label>
+              <input list="attach-list" value={form.attachment_bottom} onChange={e => setForm({...form, attachment_bottom: e.target.value})}
+                placeholder="Select or type..."
+                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+            </div>
+          </div>
           <div className="flex gap-2 pt-2">
             <button type="submit" disabled={saving} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2">{saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Add Flight'}</button>
             <button type="button" onClick={onClose} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm">Cancel</button>
@@ -98,6 +134,9 @@ export default function FlightsPage() {
   const [pilots, setPilots] = useState([])
   const [vehicles, setVehicles] = useState([])
   const [purposes, setPurposes] = useState([])
+  const [batteries, setBatteries] = useState([])
+  const [sensors, setSensors] = useState([])
+  const [attachments, setAttachments] = useState([])
   const [search, setSearch] = useState('')
   const [modal, setModal] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -152,11 +191,14 @@ export default function FlightsPage() {
       api.get('/vehicles'),
       api.get('/flights/purposes/list'),
       api.get('/flights/count?review_status=needs_review'),
-    ]).then(([data, p, v, pu, rc]) => {
+      api.get('/batteries').catch(() => []),
+      api.get('/sensors').catch(() => []),
+      api.get('/attachments').catch(() => []),
+    ]).then(([data, p, v, pu, rc, bats, sens, atts]) => {
       setFlights(data.flights || [])
       setTotal(data.total || 0)
       setTotalPages(data.total_pages || 1)
-      setPilots(p); setVehicles(v); setPurposes(pu)
+      setPilots(p); setVehicles(v); setPurposes(pu); setBatteries(bats); setSensors(sens); setAttachments(atts)
       setReviewCount(rc.count || 0)
     }).catch(err => setError(err.message)).finally(() => setLoading(false))
   }
@@ -477,7 +519,7 @@ export default function FlightsPage() {
         </div>
       </div>
 
-      {modal && <FlightModal pilots={pilots} vehicles={vehicles} purposes={purposes} onSave={handleSave} onClose={() => setModal(false)} />}
+      {modal && <FlightModal pilots={pilots} vehicles={vehicles} purposes={purposes} batteries={batteries} sensors={sensors} attachments={attachments} onSave={handleSave} onClose={() => setModal(false)} />}
 
       <ConfirmDialog
         open={showBulkApproveConfirm}
