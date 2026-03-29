@@ -63,6 +63,7 @@ function ProviderCard({ provider, settings, onSave, onTest, onSync }) {
   const [tokenId, setTokenId] = useState('')
   const [testing, setTesting] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [syncingTelemetry, setSyncingTelemetry] = useState(false)
   const toast = useToast()
 
   useEffect(() => {
@@ -100,6 +101,18 @@ function ProviderCard({ provider, settings, onSave, onTest, onSync }) {
       toast.error(err.message)
     } finally {
       setSyncing(false)
+    }
+  }
+
+  const handleSyncTelemetry = async () => {
+    setSyncingTelemetry(true)
+    try {
+      const res = await api.post('/sync/telemetry')
+      toast.success(`Telemetry synced for ${res.synced} flights (${res.remaining} remaining)`)
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setSyncingTelemetry(false)
     }
   }
 
@@ -184,6 +197,9 @@ function ProviderCard({ provider, settings, onSave, onTest, onSync }) {
             </button>
             <button onClick={() => handleSync(true)} disabled={syncing} className="px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90 flex items-center gap-1.5 disabled:opacity-50">
               <RefreshCw className="w-3.5 h-3.5" /> Full Sync
+            </button>
+            <button onClick={handleSyncTelemetry} disabled={syncingTelemetry} className="px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90 flex items-center gap-1.5 disabled:opacity-50" title="Fetch detailed telemetry data for up to 10 flights at a time">
+              {syncingTelemetry ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />} Sync Telemetry (10)
             </button>
           </div>
         </div>

@@ -521,10 +521,17 @@ class SkydioProvider(DroneProvider):
                 if battery is not None and battery <= 1.0:
                     battery = round(battery * 100, 1)
 
-                # Altitude: prefer height_above_takeoff over gps_altitude
+                # Altitude: prefer height_above_takeoff (relative to launch) over gps_altitude (absolute)
+                # Skip zero values for height_above_takeoff — these indicate sensor dropout,
+                # not actual ground level, and cause erratic chart oscillation
                 alt_hat = p.get("height_above_takeoff")
                 alt_gps = p.get("gps_altitude")
-                alt = alt_hat if alt_hat is not None else alt_gps
+                if alt_hat is not None and alt_hat != 0:
+                    alt = alt_hat
+                elif alt_gps is not None:
+                    alt = alt_gps
+                else:
+                    alt = None
 
                 # Speed: calculate from gps_velocity [vx, vy, vz]
                 import math

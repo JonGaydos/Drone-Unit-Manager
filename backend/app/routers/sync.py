@@ -51,40 +51,8 @@ def test_connection(
     return TestConnectionResponse(ok=ok, message=message, user_info=user_info)
 
 
-@router.post("/now", response_model=SyncResultResponse)
-def sync_now(
-    full: bool = False,
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
-):
-    from app.services.audit import log_action
-    logger.info("Manual sync triggered by admin (full=%s)", full)
-    result = SyncManager.sync_all("skydio", db, full_sync=full)
-
-    if full:
-        # After full sync, clean up any flights with no useful data
-        from app.models.flight import Flight
-        empty = db.query(Flight).filter(
-            Flight.date.is_(None),
-            Flight.duration_seconds.is_(None),
-        ).all()
-        if empty:
-            for f in empty:
-                db.delete(f)
-            db.commit()
-            logger.info("Auto-cleanup: removed %d empty flights", len(empty))
-            result.errors.append(f"Auto-cleaned {len(empty)} flights with no data")
-
-    log_action(db, admin.id, admin.display_name, "sync", "system",
-               details=f"{'Full' if full else 'Incremental'} sync: {result.flights_new} new flights, {result.vehicles_synced} vehicles")
-    db.commit()
-    return SyncResultResponse(**asdict(result))
-
-
-@router.post("/telemetry")
-def sync_telemetry_batch(db: Session = Depends(get_db), user: User = Depends(require_admin)):
-    """Fetch telemetry for up to 10 flights that don't have it yet."""
-    from sqlalchemy import func
+def _batch_sync_telemetry(db: Session, limit: int = 10) -> int:
+    """Fetch telemetry for up to `limit` flights without it. Returns count synced."""
     from app.integrations.skydio import SkydioProvider
     from app.services.sync_manager import _build_creds
     from app.models.telemetry import TelemetryPoint
@@ -93,20 +61,13 @@ def sync_telemetry_batch(db: Session = Depends(get_db), user: User = Depends(req
 
     creds = _build_creds(db, "skydio")
     if not creds.api_token:
-        from fastapi import HTTPException
-        raise HTTPException(400, "API token not configured")
+        return 0
 
     provider = SkydioProvider()
-
     flights = db.query(Flight).filter(
         Flight.telemetry_synced.is_(False),
         Flight.external_id.isnot(None),
-    ).order_by(Flight.date.desc().nulls_last()).limit(10).all()
-
-    remaining = db.query(func.count(Flight.id)).filter(
-        Flight.telemetry_synced.is_(False),
-        Flight.external_id.isnot(None),
-    ).scalar() - len(flights)
+    ).order_by(Flight.date.desc().nulls_last()).limit(limit).all()
 
     synced = 0
     for flight in flights:
@@ -147,6 +108,68 @@ def sync_telemetry_batch(db: Session = Depends(get_db), user: User = Depends(req
             logger.warning("Telemetry sync failed for flight %s: %s", flight.external_id, exc)
 
     db.commit()
+    return synced
+
+
+@router.post("/now", response_model=SyncResultResponse)
+def sync_now(
+    full: bool = False,
+    sync_telemetry: bool = True,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Run a sync, optionally followed by batch telemetry fetch.
+
+    Args:
+        full: If True, fetch all flights and clean up empties.
+        sync_telemetry: If True (default), auto-fetch telemetry for up to 10 un-synced flights after sync.
+    """
+    from app.services.audit import log_action
+    logger.info("Manual sync triggered by admin (full=%s, sync_telemetry=%s)", full, sync_telemetry)
+    result = SyncManager.sync_all("skydio", db, full_sync=full)
+
+    if full:
+        # After full sync, clean up any flights with no useful data
+        from app.models.flight import Flight
+        empty = db.query(Flight).filter(
+            Flight.date.is_(None),
+            Flight.duration_seconds.is_(None),
+        ).all()
+        if empty:
+            for f in empty:
+                db.delete(f)
+            db.commit()
+            logger.info("Auto-cleanup: removed %d empty flights", len(empty))
+            result.errors.append(f"Auto-cleaned {len(empty)} flights with no data")
+
+    # Auto-fetch telemetry for newly synced flights
+    if sync_telemetry and result.flights_new > 0:
+        try:
+            telemetry_result = _batch_sync_telemetry(db, limit=10)
+            if telemetry_result > 0:
+                logger.info("Auto-synced telemetry for %d flights", telemetry_result)
+        except Exception as e:
+            logger.warning("Auto telemetry sync failed: %s", e)
+
+    log_action(db, admin.id, admin.display_name, "sync", "system",
+               details=f"{'Full' if full else 'Incremental'} sync: {result.flights_new} new flights, {result.vehicles_synced} vehicles")
+    db.commit()
+    return SyncResultResponse(**asdict(result))
+
+
+@router.post("/telemetry")
+def sync_telemetry_batch(db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    """Fetch telemetry for up to 10 flights that don't have it yet."""
+    from sqlalchemy import func
+    from app.models.flight import Flight
+
+    synced = _batch_sync_telemetry(db, limit=10)
+
+    remaining = db.query(func.count(Flight.id)).filter(
+        Flight.telemetry_synced.is_(False),
+        Flight.external_id.isnot(None),
+    ).scalar()
+
     return {"synced": synced, "remaining": max(0, remaining)}
 
 

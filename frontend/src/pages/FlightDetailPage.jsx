@@ -409,7 +409,7 @@ export default function FlightDetailPage() {
                 <XAxis dataKey="elapsed_s" stroke="var(--muted-fg)" fontSize={11} label={{ value: 'seconds', position: 'bottom', fill: 'var(--muted-fg)', fontSize: 11 }} />
                 <YAxis stroke="var(--muted-fg)" fontSize={11} />
                 <Tooltip {...tooltipStyle} />
-                <Line type="monotone" dataKey="altitude_ft" stroke="#6366f1" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="altitude_ft" stroke="#6366f1" strokeWidth={2} dot={false} connectNulls={true} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -422,7 +422,7 @@ export default function FlightDetailPage() {
                   <XAxis dataKey="elapsed_s" stroke="var(--muted-fg)" fontSize={11} />
                   <YAxis stroke="var(--muted-fg)" fontSize={11} />
                   <Tooltip {...tooltipStyle} />
-                  <Line type="monotone" dataKey="speed_mph" stroke="#3b82f6" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="speed_mph" stroke="#3b82f6" strokeWidth={2} dot={false} connectNulls={true} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
