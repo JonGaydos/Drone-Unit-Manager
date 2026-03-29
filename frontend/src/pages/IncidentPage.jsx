@@ -5,6 +5,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { useConfirm } from '@/hooks/useConfirm'
 import { sortByName, sortVehicles, sortPilotsActiveFirst, vehicleDisplayName } from '@/lib/formatters'
+import { Link } from 'react-router-dom'
 import {
   AlertTriangle, Plus, Filter, Search, ChevronDown, ChevronUp,
   X, Loader2, CheckCircle, Eye, Shield, Download,
@@ -482,8 +483,8 @@ export default function IncidentPage() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-foreground">{formatCategory(inc.category)}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{inc.pilot_name || '—'}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{inc.vehicle_name || '—'}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{inc.pilot_id ? <Link to={`/pilots/${inc.pilot_id}`} className="text-primary hover:underline">{inc.pilot_name}</Link> : (inc.pilot_name || '—')}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{inc.vehicle_id ? <Link to={`/fleet/vehicles/${inc.vehicle_id}`} className="text-primary hover:underline">{inc.vehicle_name}</Link> : (inc.vehicle_name || '—')}</td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium border ${STATUS_COLORS[inc.status] || ''}`}>
                         {inc.status}
@@ -559,7 +560,7 @@ export default function IncidentPage() {
                               <p className="text-xs text-muted-foreground mt-3">Reported by: {inc.reported_by_name}</p>
                             )}
                             {inc.flight_id && (
-                              <p className="text-xs text-muted-foreground mt-1">Linked Flight: #{inc.flight_id}</p>
+                              <p className="text-xs text-muted-foreground mt-1">Linked Flight: <Link to={`/flights/${inc.flight_id}`} className="text-primary hover:underline">#{inc.flight_id}</Link></p>
                             )}
                           </div>
                         </div>

@@ -434,7 +434,10 @@ export default function VehicleDetailPage() {
                 </td>
                 <td className="px-4 py-2 text-muted-foreground hidden md:table-cell">{f.purpose || '—'}</td>
                 <td className="px-4 py-2 text-muted-foreground">{formatDuration(f.duration_seconds)}</td>
-                <td className="px-4 py-2 text-muted-foreground hidden md:table-cell">{f.battery_serial || '—'}</td>
+                <td className="px-4 py-2 text-muted-foreground hidden md:table-cell">{f.battery_serial ? (() => {
+                  const bat = batteries.find(b => b.serial_number === f.battery_serial)
+                  return bat ? <Link to={`/fleet/batteries/${bat.id}`} className="text-primary hover:underline">{f.battery_serial}</Link> : f.battery_serial
+                })() : '—'}</td>
                 <td className="px-4 py-2 text-muted-foreground truncate max-w-[200px] hidden lg:table-cell">{f.takeoff_address || '—'}</td>
               </tr>
             ))}

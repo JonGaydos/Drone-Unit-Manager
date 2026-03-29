@@ -368,7 +368,7 @@ export default function PilotDetailPage() {
             {flights.map(f => (
               <tr key={f.id} className="border-b border-border/50 hover:bg-accent/30">
                 <td className="px-4 py-2 text-foreground"><Link to={`/flights/${f.id}`} className="hover:text-primary">{f.date || '—'}</Link></td>
-                <td className="px-4 py-2 text-muted-foreground">{f.vehicle_name || '—'}</td>
+                <td className="px-4 py-2 text-muted-foreground">{f.vehicle_id ? <Link to={`/fleet/vehicles/${f.vehicle_id}`} className="text-primary hover:underline">{f.vehicle_name || '—'}</Link> : (f.vehicle_name || '—')}</td>
                 <td className="px-4 py-2 text-muted-foreground hidden md:table-cell">{f.purpose || '—'}</td>
                 <td className="px-4 py-2 text-muted-foreground">{formatDuration(f.duration_seconds)}</td>
                 <td className="px-4 py-2 text-muted-foreground truncate max-w-[200px] hidden md:table-cell">{f.takeoff_address || '—'}</td>

@@ -7,6 +7,7 @@ import { useConfirm } from '@/hooks/useConfirm'
 import { normalizeDateValue } from '@/lib/utils'
 import { MISSION_STATUS_COLORS } from '@/lib/constants'
 import { sortByName, sortVehicles, formatStatusText, sortPilotsActiveFirst, vehicleDisplayName } from '@/lib/formatters'
+import { Link } from 'react-router-dom'
 import { Plus, Search, X, ChevronDown, ChevronUp, Trash2, Download, Loader2 } from 'lucide-react'
 
 const STATUS_OPTIONS = ['planned', 'in_progress', 'completed', 'cancelled']
@@ -329,9 +330,11 @@ export default function MissionLogPage() {
                   <td className="px-4 py-3 text-foreground font-medium">{m.title}</td>
                   <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{m.reason || '—'}</td>
                   <td className="px-4 py-3 text-muted-foreground truncate max-w-[150px] hidden lg:table-cell">{m.location || '—'}</td>
-                  <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{m.vehicle_name || '—'}</td>
+                  <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{m.vehicle_id ? <Link to={`/fleet/vehicles/${m.vehicle_id}`} className="text-primary hover:underline">{m.vehicle_name || '—'}</Link> : (m.vehicle_name || '—')}</td>
                   <td className="px-4 py-3 text-muted-foreground hidden lg:table-cell">
-                    {m.pilots?.length > 0 ? m.pilots.map(p => p.pilot_name).join(', ') : '—'}
+                    {m.pilots?.length > 0 ? m.pilots.map((p, i) => (
+                      <span key={p.pilot_id || i}>{i > 0 && ', '}{p.pilot_id ? <Link to={`/pilots/${p.pilot_id}`} className="text-primary hover:underline">{p.pilot_name}</Link> : p.pilot_name}</span>
+                    )) : '—'}
                   </td>
                   <td className="px-4 py-3 text-right text-foreground hidden md:table-cell">{m.man_hours || 0}</td>
                   <td className="px-4 py-3">
@@ -362,7 +365,7 @@ export default function MissionLogPage() {
                             <div className="space-y-1">
                               {m.pilots.map(p => (
                                 <div key={p.id} className="text-foreground">
-                                  {p.pilot_name} {p.role && <span className="text-muted-foreground">({p.role})</span>} — {p.hours}h
+                                  {p.pilot_id ? <Link to={`/pilots/${p.pilot_id}`} className="text-primary hover:underline">{p.pilot_name}</Link> : p.pilot_name} {p.role && <span className="text-muted-foreground">({p.role})</span>} — {p.hours}h
                                 </div>
                               ))}
                             </div>

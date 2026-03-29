@@ -7,6 +7,7 @@ import { useConfirm } from '@/hooks/useConfirm'
 import { normalizeDateValue } from '@/lib/utils'
 import { OUTCOME_COLORS } from '@/lib/constants'
 import { sortByName, sortVehicles, sortPilotsActiveFirst, vehicleDisplayName } from '@/lib/formatters'
+import { Link } from 'react-router-dom'
 import { Plus, Search, X, ChevronDown, ChevronUp, Trash2, Download, Loader2 } from 'lucide-react'
 
 const TRAINING_TYPES = ['Initial', 'Recurrent', 'Proficiency', 'Special']
@@ -323,7 +324,9 @@ export default function TrainingLogPage() {
                   <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{t.instructor || '—'}</td>
                   <td className="px-4 py-3 text-muted-foreground truncate max-w-[150px] hidden lg:table-cell">{t.location || '—'}</td>
                   <td className="px-4 py-3 text-muted-foreground hidden lg:table-cell">
-                    {t.pilots?.length > 0 ? t.pilots.map(p => p.pilot_name).join(', ') : '—'}
+                    {t.pilots?.length > 0 ? t.pilots.map((p, i) => (
+                      <span key={p.pilot_id || i}>{i > 0 && ', '}{p.pilot_id ? <Link to={`/pilots/${p.pilot_id}`} className="text-primary hover:underline">{p.pilot_name}</Link> : p.pilot_name}</span>
+                    )) : '—'}
                   </td>
                   <td className="px-4 py-3 text-right text-foreground hidden md:table-cell">{t.man_hours || 0}</td>
                   <td className="px-4 py-3">
@@ -344,7 +347,7 @@ export default function TrainingLogPage() {
                     <td colSpan={isPilot ? 10 : 9} className="px-8 py-4">
                       <div className="grid grid-cols-2 gap-4 text-sm">
                         {t.description && <div><span className="text-muted-foreground">Description:</span> <span className="text-foreground">{t.description}</span></div>}
-                        {t.vehicle_name && <div><span className="text-muted-foreground">Drone:</span> <span className="text-foreground">{t.vehicle_name}</span></div>}
+                        {t.vehicle_name && <div><span className="text-muted-foreground">Drone:</span> <span className="text-foreground">{t.vehicle_id ? <Link to={`/fleet/vehicles/${t.vehicle_id}`} className="text-primary hover:underline">{t.vehicle_name}</Link> : t.vehicle_name}</span></div>}
                         {t.objectives && <div className="col-span-2"><span className="text-muted-foreground">Objectives:</span> <span className="text-foreground">{t.objectives}</span></div>}
                         {t.start_time && <div><span className="text-muted-foreground">Start:</span> <span className="text-foreground">{new Date(t.start_time).toLocaleString()}</span></div>}
                         {t.end_time && <div><span className="text-muted-foreground">End:</span> <span className="text-foreground">{new Date(t.end_time).toLocaleString()}</span></div>}
@@ -355,7 +358,7 @@ export default function TrainingLogPage() {
                             <div className="space-y-1">
                               {t.pilots.map(p => (
                                 <div key={p.id} className="text-foreground">
-                                  {p.pilot_name} {p.role && <span className="text-muted-foreground">({p.role})</span>} — {p.hours}h
+                                  {p.pilot_id ? <Link to={`/pilots/${p.pilot_id}`} className="text-primary hover:underline">{p.pilot_name}</Link> : p.pilot_name} {p.role && <span className="text-muted-foreground">({p.role})</span>} — {p.hours}h
                                 </div>
                               ))}
                             </div>
