@@ -177,43 +177,44 @@ def debug_telemetry(flight_id: int, db: Session = Depends(get_db), user: User = 
     resp = provider._request("GET", f"{TELEMETRY_BASE}/flight/{flight.external_id}/telemetry", creds, timeout=60.0)
     body = resp.json()
 
-    # Return the raw structure so we can see what Skydio actually sends
-    # Truncate to avoid huge responses
+    # Fetch raw response and inspect the full structure
+    resp = provider._request("GET", f"{TELEMETRY_BASE}/flight/{flight.external_id}/telemetry", creds, timeout=60.0)
+    body = resp.json()
+
     raw_keys = list(body.keys()) if isinstance(body, dict) else f"type={type(body).__name__}"
 
-    # Try to find the telemetry list
-    unwrapped = body
-    unwrap_path = []
-    if isinstance(unwrapped, dict) and "data" in unwrapped:
-        unwrapped = unwrapped["data"]
-        unwrap_path.append("data")
-    if isinstance(unwrapped, dict):
-        for key in ("flight_telemetry", "telemetry", "points", "data"):
-            val = unwrapped.get(key)
-            if isinstance(val, list):
-                unwrapped = val
-                unwrap_path.append(key)
-                break
+    # Dive into nested structure and report what we find at each level
+    structure = {}
+    if isinstance(body, dict) and "data" in body:
+        data_val = body["data"]
+        if isinstance(data_val, dict):
+            structure["data_keys"] = list(data_val.keys())
+            structure["data_types"] = {k: f"{type(v).__name__}({len(v)})" if isinstance(v, (list, dict)) else type(v).__name__ for k, v in data_val.items()}
+            # Look deeper into each key
+            for k, v in data_val.items():
+                if isinstance(v, list) and len(v) > 0 and isinstance(v[0], dict):
+                    structure[f"data.{k}_fields"] = sorted(v[0].keys())
+                    structure[f"data.{k}_sample"] = v[0]
+                elif isinstance(v, dict):
+                    structure[f"data.{k}_keys"] = list(v.keys())
 
-    sample = unwrapped[:3] if isinstance(unwrapped, list) else []
-    all_keys = set()
-    for p in sample:
-        if isinstance(p, dict):
-            all_keys.update(p.keys())
-
-    # Also try the processed provider path
+    # Also get processed output with altitude stats
     processed = provider.get_flight_telemetry(creds, flight.external_id)
+    alt_values = [p.get("altitude_m") for p in processed if p.get("altitude_m") is not None and p.get("altitude_m") != 0]
 
     return {
         "flight_id": flight_id,
         "external_id": flight.external_id,
         "raw_top_keys": raw_keys,
-        "unwrap_path": unwrap_path,
-        "total_raw_points": len(unwrapped) if isinstance(unwrapped, list) else 0,
-        "all_field_names": sorted(all_keys),
-        "sample_raw_points": sample,
-        "processed_count": len(processed) if isinstance(processed, list) else 0,
-        "processed_sample": processed[:3] if isinstance(processed, list) else [],
+        "structure": structure,
+        "processed_count": len(processed),
+        "altitude_stats": {
+            "non_null_non_zero_count": len(alt_values),
+            "min": round(min(alt_values), 2) if alt_values else None,
+            "max": round(max(alt_values), 2) if alt_values else None,
+            "avg": round(sum(alt_values) / len(alt_values), 2) if alt_values else None,
+        },
+        "processed_sample_mid": processed[len(processed)//2:len(processed)//2+3] if len(processed) > 10 else processed[:3],
     }
 
 
