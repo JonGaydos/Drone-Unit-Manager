@@ -84,6 +84,8 @@ class FlightOut(BaseModel):
     id: int
     external_id: str | None = None
     api_provider: str | None = None
+    data_source: str | None = None
+    tags: str | None = None
     pilot_id: int | None = None
     vehicle_id: int | None = None
     date: DateType | None = None

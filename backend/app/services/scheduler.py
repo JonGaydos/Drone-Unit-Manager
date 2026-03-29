@@ -226,12 +226,12 @@ def start_scheduler():
     # Always run digest check every 30 minutes
     _scheduler.add_job(
         _run_digest_job,
-        trigger=IntervalTrigger(minutes=30),
+        trigger=IntervalTrigger(minutes=10),
         id=DIGEST_JOB_ID,
         replace_existing=True,
         max_instances=1,
     )
-    logger.info("Email digest scheduler started (checks every 30 minutes)")
+    logger.info("Email digest scheduler started (checks every 10 minutes)")
 
 
 def stop_scheduler():

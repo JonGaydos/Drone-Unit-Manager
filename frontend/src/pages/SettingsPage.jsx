@@ -416,7 +416,183 @@ export default function SettingsPage() {
       {/* Users Tab */}
       {activeTab === 'users' && isAdmin && (
         <div className="max-w-2xl space-y-6">
-          {/* User Management section - moved here */}
+          {/* Change Password */}
+          <div className="bg-card border border-border rounded-xl p-6">
+            <form onSubmit={handleChangePassword}>
+              <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+                <Key className="w-5 h-5" /> Change Password
+              </h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">Current Password</label>
+                  <input type="password" value={pwForm.current_password} onChange={e => setPwForm({...pwForm, current_password: e.target.value})} required
+                    className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">New Password</label>
+                  <input type="password" value={pwForm.new_password} onChange={e => setPwForm({...pwForm, new_password: e.target.value})} required minLength={12}
+                    className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">Confirm New Password</label>
+                  <input type="password" value={pwForm.confirm_password} onChange={e => setPwForm({...pwForm, confirm_password: e.target.value})} required minLength={6}
+                    className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                </div>
+                <button type="submit" disabled={changingPw}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50">
+                  {changingPw ? <Loader2 className="w-4 h-4 animate-spin" /> : <Key className="w-4 h-4" />}
+                  Change Password
+                </button>
+                {pwMsg && (
+                  <p className={`text-sm ${pwMsg.ok ? 'text-emerald-400' : 'text-destructive'}`}>{pwMsg.message}</p>
+                )}
+              </div>
+            </form>
+          </div>
+
+          {/* User Management */}
+          <div className="bg-card border border-border rounded-xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                <Shield className="w-5 h-5" /> User Management
+              </h3>
+              <button onClick={() => setShowAddUser(!showAddUser)}
+                className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
+                <UserPlus className="w-4 h-4" /> Add User
+              </button>
+            </div>
+
+            {/* Role descriptions */}
+            <div className="mb-4 p-3 bg-muted/30 rounded-lg text-xs text-muted-foreground space-y-1">
+              <p><span className="font-medium text-foreground">Admin:</span> Full access — settings, API keys, user management, audit logs</p>
+              <p><span className="font-medium text-foreground">Supervisor:</span> Manage pilots, vehicles, certifications, approve flights</p>
+              <p><span className="font-medium text-foreground">Pilot:</span> Create flights, missions, training logs, maintenance, upload photos/docs</p>
+              <p><span className="font-medium text-foreground">Viewer:</span> Read-only access to all data and reports</p>
+            </div>
+
+            {/* Add user form */}
+            {showAddUser && (
+              <form onSubmit={handleAddUser} className="mb-4 p-4 bg-muted/20 rounded-lg border border-border space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-1">Username</label>
+                    <input type="text" value={newUser.username} onChange={e => setNewUser({...newUser, username: e.target.value})} required
+                      className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-1">Display Name</label>
+                    <input type="text" value={newUser.display_name} onChange={e => setNewUser({...newUser, display_name: e.target.value})} required
+                      className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-1">Password</label>
+                    <input type="password" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} required minLength={6}
+                      className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                    <p className="text-xs text-muted-foreground mt-2">Username and password are case-sensitive.</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-1">Role</label>
+                    <select value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value})}
+                      className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
+                      <option value="admin">Admin</option>
+                      <option value="supervisor">Supervisor</option>
+                      <option value="pilot">Pilot</option>
+                      <option value="viewer">Viewer</option>
+                    </select>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-sm font-medium text-foreground mb-1">Link to Pilot</label>
+                    <select value={newUser.pilot_id} onChange={e => setNewUser({...newUser, pilot_id: e.target.value})}
+                      className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
+                      <option value="">-- No pilot linked --</option>
+                      {sortPilotsActiveFirst(pilots).map(p => (
+                        <option key={p.id} value={p.id}>{p.full_name}{p.badge_number ? ` (Badge: ${p.badge_number})` : ''}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button type="submit" disabled={addingUser}
+                    className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50">
+                    {addingUser ? 'Creating...' : 'Create User'}
+                  </button>
+                  <button type="button" onClick={() => setShowAddUser(false)}
+                    className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90">
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* User list */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">User</th>
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">Role</th>
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">Status</th>
+                    <th className="text-right px-3 py-2 font-medium text-muted-foreground">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map(u => (
+                    <tr key={u.id} className="border-b border-border/50">
+                      <td className="px-3 py-2">
+                        <div className="font-medium text-foreground">{u.display_name}</div>
+                        <div className="text-xs text-muted-foreground">{u.username}</div>
+                      </td>
+                      <td className="px-3 py-2">
+                        <select value={u.role} onChange={e => handleChangeRole(u, e.target.value)}
+                          disabled={u.id === currentUser?.id}
+                          className="px-2 py-1 bg-secondary border border-border rounded text-xs text-foreground disabled:opacity-50">
+                          <option value="admin">Admin</option>
+                          <option value="supervisor">Supervisor</option>
+                          <option value="pilot">Pilot</option>
+                          <option value="viewer">Viewer</option>
+                        </select>
+                      </td>
+                      <td className="px-3 py-2">
+                        <button onClick={() => handleToggleActive(u)} disabled={u.id === currentUser?.id}
+                          className={`px-2 py-0.5 rounded-full text-xs font-medium ${u.is_active ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'} disabled:opacity-50`}>
+                          {u.is_active ? 'Active' : 'Disabled'}
+                        </button>
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          {resetUserId === u.id ? (
+                            <div className="flex items-center gap-1">
+                              <input type="password" placeholder="New password" value={resetPw} onChange={e => setResetPw(e.target.value)}
+                                className="w-28 px-2 py-1 bg-secondary border border-border rounded text-xs text-foreground" />
+                              <button onClick={() => handleResetPassword(u.id)} className="px-2 py-1 bg-primary text-primary-foreground rounded text-xs">Set</button>
+                              <button onClick={() => { setResetUserId(null); setResetPw('') }} className="px-2 py-1 bg-secondary text-secondary-foreground rounded text-xs">Cancel</button>
+                            </div>
+                          ) : (
+                            <>
+                              <button onClick={() => openEditUser(u)} title="Edit user"
+                                className="p-1.5 text-muted-foreground hover:text-foreground rounded hover:bg-accent/30">
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button onClick={() => setResetUserId(u.id)} title="Reset password"
+                                className="p-1.5 text-muted-foreground hover:text-foreground rounded hover:bg-accent/30">
+                                <Key className="w-3.5 h-3.5" />
+                              </button>
+                              {u.id !== currentUser?.id && (
+                                <button onClick={() => handleDeleteUser(u.id)} title="Delete user"
+                                  className="p-1.5 text-muted-foreground hover:text-destructive rounded hover:bg-accent/30">
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
 
@@ -715,182 +891,7 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* Change Password */}
-      <div className="bg-card border border-border rounded-xl p-6">
-        <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
-          <Key className="w-5 h-5" /> Change Password
-        </h3>
-        <form onSubmit={handleChangePassword} className="space-y-3 max-w-sm">
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Current Password</label>
-            <input type="password" value={pwForm.current_password} onChange={e => setPwForm({...pwForm, current_password: e.target.value})} required
-              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1">New Password</label>
-            <input type="password" value={pwForm.new_password} onChange={e => setPwForm({...pwForm, new_password: e.target.value})} required minLength={6}
-              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Confirm New Password</label>
-            <input type="password" value={pwForm.confirm_password} onChange={e => setPwForm({...pwForm, confirm_password: e.target.value})} required minLength={6}
-              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
-          </div>
-          <button type="submit" disabled={changingPw}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50">
-            {changingPw ? <Loader2 className="w-4 h-4 animate-spin" /> : <Key className="w-4 h-4" />}
-            Change Password
-          </button>
-          {pwMsg && (
-            <p className={`text-sm ${pwMsg.ok ? 'text-emerald-400' : 'text-destructive'}`}>{pwMsg.message}</p>
-          )}
-        </form>
       </div>
-
-      {/* User Management - Admin Only */}
-      {isAdmin && (
-        <div className="bg-card border border-border rounded-xl p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
-              <Shield className="w-5 h-5" /> User Management
-            </h3>
-            <button onClick={() => setShowAddUser(!showAddUser)}
-              className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
-              <UserPlus className="w-4 h-4" /> Add User
-            </button>
-          </div>
-
-          {/* Role descriptions */}
-          <div className="mb-4 p-3 bg-muted/30 rounded-lg text-xs text-muted-foreground space-y-1">
-            <p><span className="font-medium text-foreground">Admin:</span> Full access — settings, API keys, user management, audit logs</p>
-            <p><span className="font-medium text-foreground">Supervisor:</span> Manage pilots, vehicles, certifications, approve flights</p>
-            <p><span className="font-medium text-foreground">Pilot:</span> Create flights, missions, training logs, maintenance, upload photos/docs</p>
-            <p><span className="font-medium text-foreground">Viewer:</span> Read-only access to all data and reports</p>
-          </div>
-
-          {/* Add user form */}
-          {showAddUser && (
-            <form onSubmit={handleAddUser} className="mb-4 p-4 bg-muted/20 rounded-lg border border-border space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-1">Username</label>
-                  <input type="text" value={newUser.username} onChange={e => setNewUser({...newUser, username: e.target.value})} required
-                    className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-1">Display Name</label>
-                  <input type="text" value={newUser.display_name} onChange={e => setNewUser({...newUser, display_name: e.target.value})} required
-                    className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-1">Password</label>
-                  <input type="password" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} required minLength={6}
-                    className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
-                  <p className="text-xs text-muted-foreground mt-2">Username and password are case-sensitive.</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-1">Role</label>
-                  <select value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value})}
-                    className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
-                    <option value="admin">Admin</option>
-                    <option value="supervisor">Supervisor</option>
-                    <option value="pilot">Pilot</option>
-                    <option value="viewer">Viewer</option>
-                  </select>
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="block text-sm font-medium text-foreground mb-1">Link to Pilot</label>
-                  <select value={newUser.pilot_id} onChange={e => setNewUser({...newUser, pilot_id: e.target.value})}
-                    className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
-                    <option value="">-- No pilot linked --</option>
-                    {sortPilotsActiveFirst(pilots).map(p => (
-                      <option key={p.id} value={p.id}>{p.full_name}{p.badge_number ? ` (Badge: ${p.badge_number})` : ''}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <button type="submit" disabled={addingUser}
-                  className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50">
-                  {addingUser ? 'Creating...' : 'Create User'}
-                </button>
-                <button type="button" onClick={() => setShowAddUser(false)}
-                  className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90">
-                  Cancel
-                </button>
-              </div>
-            </form>
-          )}
-
-          {/* User list */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="text-left px-3 py-2 font-medium text-muted-foreground">User</th>
-                  <th className="text-left px-3 py-2 font-medium text-muted-foreground">Role</th>
-                  <th className="text-left px-3 py-2 font-medium text-muted-foreground">Status</th>
-                  <th className="text-right px-3 py-2 font-medium text-muted-foreground">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map(u => (
-                  <tr key={u.id} className="border-b border-border/50">
-                    <td className="px-3 py-2">
-                      <div className="font-medium text-foreground">{u.display_name}</div>
-                      <div className="text-xs text-muted-foreground">{u.username}</div>
-                    </td>
-                    <td className="px-3 py-2">
-                      <select value={u.role} onChange={e => handleChangeRole(u, e.target.value)}
-                        disabled={u.id === currentUser?.id}
-                        className="px-2 py-1 bg-secondary border border-border rounded text-xs text-foreground disabled:opacity-50">
-                        <option value="admin">Admin</option>
-                        <option value="supervisor">Supervisor</option>
-                        <option value="pilot">Pilot</option>
-                        <option value="viewer">Viewer</option>
-                      </select>
-                    </td>
-                    <td className="px-3 py-2">
-                      <button onClick={() => handleToggleActive(u)} disabled={u.id === currentUser?.id}
-                        className={`px-2 py-0.5 rounded-full text-xs font-medium ${u.is_active ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'} disabled:opacity-50`}>
-                        {u.is_active ? 'Active' : 'Disabled'}
-                      </button>
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        {resetUserId === u.id ? (
-                          <div className="flex items-center gap-1">
-                            <input type="password" placeholder="New password" value={resetPw} onChange={e => setResetPw(e.target.value)}
-                              className="w-28 px-2 py-1 bg-secondary border border-border rounded text-xs text-foreground" />
-                            <button onClick={() => handleResetPassword(u.id)} className="px-2 py-1 bg-primary text-primary-foreground rounded text-xs">Set</button>
-                            <button onClick={() => { setResetUserId(null); setResetPw('') }} className="px-2 py-1 bg-secondary text-secondary-foreground rounded text-xs">Cancel</button>
-                          </div>
-                        ) : (
-                          <>
-                            <button onClick={() => openEditUser(u)} title="Edit user"
-                              className="p-1.5 text-muted-foreground hover:text-foreground rounded hover:bg-accent/30">
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
-                            <button onClick={() => setResetUserId(u.id)} title="Reset password"
-                              className="p-1.5 text-muted-foreground hover:text-foreground rounded hover:bg-accent/30">
-                              <Key className="w-3.5 h-3.5" />
-                            </button>
-                            {u.id !== currentUser?.id && (
-                              <button onClick={() => handleDeleteUser(u.id)} title="Delete user"
-                                className="p-1.5 text-muted-foreground hover:text-destructive rounded hover:bg-accent/30">
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
       )}
 
       {/* Edit User Modal */}
@@ -939,8 +940,7 @@ export default function SettingsPage() {
           </div>
         </div>
       )}
-      </div>
-      )}
+
       <ConfirmDialog {...confirmProps} />
     </div>
   )

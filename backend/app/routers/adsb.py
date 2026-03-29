@@ -6,6 +6,7 @@ to respect rate limits and avoid CORS issues.
 
 import logging
 import time
+import threading
 from typing import Optional
 
 import httpx
@@ -18,6 +19,7 @@ router = APIRouter(prefix="/api/adsb", tags=["adsb"])
 
 # In-memory cache to respect airplanes.live 1 req/sec rate limit
 _cache = {"data": None, "timestamp": 0, "key": ""}
+_cache_lock = threading.Lock()
 _CACHE_TTL = 5  # seconds
 
 
@@ -46,14 +48,15 @@ def get_nearby_aircraft(
     cache_key = f"{lat:.2f},{lon:.2f},{radius_nm}"
     now = time.time()
 
-    # Return cached data if fresh enough
-    if _cache["key"] == cache_key and (now - _cache["timestamp"]) < _CACHE_TTL:
-        return {
-            "aircraft": _cache["data"],
-            "count": len(_cache["data"]),
-            "cached": True,
-            "cache_age_seconds": round(now - _cache["timestamp"], 1),
-        }
+    # Return cached data if fresh enough (thread-safe read)
+    with _cache_lock:
+        if _cache["key"] == cache_key and (now - _cache["timestamp"]) < _CACHE_TTL:
+            return {
+                "aircraft": _cache["data"],
+                "count": len(_cache["data"]),
+                "cached": True,
+                "cache_age_seconds": round(now - _cache["timestamp"], 1),
+            }
 
     # Fetch from airplanes.live API
     url = f"https://api.airplanes.live/v2/point/{lat}/{lon}/{radius_nm}"
@@ -97,8 +100,9 @@ def get_nearby_aircraft(
             "seen": ac.get("seen", 0),  # Seconds since last message
         })
 
-    # Update cache
-    _cache = {"data": aircraft, "timestamp": now, "key": cache_key}
+    # Update cache (thread-safe write)
+    with _cache_lock:
+        _cache = {"data": aircraft, "timestamp": now, "key": cache_key}
 
     return {
         "aircraft": aircraft,

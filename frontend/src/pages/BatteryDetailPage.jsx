@@ -6,8 +6,9 @@ import { useToast } from '@/contexts/ToastContext'
 import { formatHours, formatDuration } from '@/lib/utils'
 import { STATUS_COLORS } from '@/lib/constants'
 import {
-  ArrowLeft, Battery, Clock, Wrench, Edit, Zap, Activity, Save, X, Loader2
+  ArrowLeft, Battery, Clock, Wrench, Edit, Zap, Activity, Save, X, Loader2, Plus
 } from 'lucide-react'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 import DocumentUpload from '@/components/DocumentUpload'
 
@@ -24,6 +25,10 @@ export default function BatteryDetailPage() {
   const [editing, setEditing] = useState(false)
   const [editForm, setEditForm] = useState({})
   const [saving, setSaving] = useState(false)
+  const [healthHistory, setHealthHistory] = useState([])
+  const [showReadingForm, setShowReadingForm] = useState(false)
+  const [readingForm, setReadingForm] = useState({ health_pct: '', cycle_count: '', voltage: '', notes: '' })
+  const [savingReading, setSavingReading] = useState(false)
 
   useEffect(() => {
     Promise.all([
@@ -32,7 +37,8 @@ export default function BatteryDetailPage() {
       api.get('/flights?per_page=1000').catch(() => ({ flights: [] })),
       api.get(`/maintenance?entity_type=battery&entity_id=${id}`).catch(() => []),
       api.get('/vehicles').catch(() => []),
-    ]).then(([b, s, fResp, m, v]) => {
+      api.get(`/batteries/${id}/health-history`).catch(() => []),
+    ]).then(([b, s, fResp, m, v, healthData]) => {
       setBattery(b)
       setStats(s)
       // Handle paginated response
@@ -41,6 +47,7 @@ export default function BatteryDetailPage() {
       setFlights(batteryFlights)
       setMaintenance(m)
       setVehicles(v)
+      setHealthHistory(healthData)
     }).catch(() => {}).finally(() => setLoading(false))
   }, [id])
 
@@ -318,6 +325,105 @@ export default function BatteryDetailPage() {
 
       {/* Documents */}
       <DocumentUpload entityType="battery" entityId={id} />
+
+      {/* Battery Health History */}
+      <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <div className="flex items-center justify-between p-5 border-b border-border">
+          <h3 className="font-semibold text-foreground">Health History</h3>
+          {isAdmin && (
+            <button
+              onClick={() => setShowReadingForm(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90"
+            >
+              <Plus className="w-4 h-4" /> Record Reading
+            </button>
+          )}
+        </div>
+        {healthHistory.length > 0 ? (
+          <div className="p-5">
+            <ResponsiveContainer width="100%" height={250}>
+              <LineChart data={healthHistory.map(r => ({
+                date: r.recorded_at ? new Date(r.recorded_at).toLocaleDateString() : '',
+                health: r.health_pct,
+                cycles: r.cycle_count,
+              }))}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
+                <XAxis dataKey="date" tick={{ fill: 'var(--muted-fg)', fontSize: 12 }} />
+                <YAxis yAxisId="left" domain={[0, 100]} tick={{ fill: 'var(--muted-fg)', fontSize: 12 }} label={{ value: 'Health %', angle: -90, position: 'insideLeft', fill: 'var(--muted-fg)', fontSize: 12 }} />
+                <YAxis yAxisId="right" orientation="right" tick={{ fill: 'var(--muted-fg)', fontSize: 12 }} label={{ value: 'Cycles', angle: 90, position: 'insideRight', fill: 'var(--muted-fg)', fontSize: 12 }} />
+                <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--fg)' }} />
+                <Legend />
+                <Line yAxisId="left" type="monotone" dataKey="health" stroke="#10b981" strokeWidth={2} dot={{ r: 4 }} name="Health %" />
+                <Line yAxisId="right" type="monotone" dataKey="cycles" stroke="#3b82f6" strokeWidth={2} dot={{ r: 4 }} name="Cycles" />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <div className="p-8 text-center text-muted-foreground text-sm">
+            No health readings recorded yet. Click "Record Reading" to add one.
+          </div>
+        )}
+      </div>
+
+      {showReadingForm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowReadingForm(false)}>
+          <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold text-foreground mb-4">Record Battery Health Reading</h2>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Health %</label>
+                <input type="number" min="0" max="100" value={readingForm.health_pct} onChange={e => setReadingForm({...readingForm, health_pct: e.target.value})}
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" placeholder="0-100" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Cycle Count</label>
+                <input type="number" min="0" value={readingForm.cycle_count} onChange={e => setReadingForm({...readingForm, cycle_count: e.target.value})}
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Voltage</label>
+                <input type="number" step="0.1" value={readingForm.voltage} onChange={e => setReadingForm({...readingForm, voltage: e.target.value})}
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Notes</label>
+                <input type="text" value={readingForm.notes} onChange={e => setReadingForm({...readingForm, notes: e.target.value})}
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={async () => {
+                  setSavingReading(true)
+                  try {
+                    const data = {}
+                    if (readingForm.health_pct) data.health_pct = parseFloat(readingForm.health_pct)
+                    if (readingForm.cycle_count) data.cycle_count = parseInt(readingForm.cycle_count)
+                    if (readingForm.voltage) data.voltage = parseFloat(readingForm.voltage)
+                    if (readingForm.notes) data.notes = readingForm.notes
+                    await api.post(`/batteries/${id}/readings`, data)
+                    toast.success('Health reading recorded')
+                    setShowReadingForm(false)
+                    setReadingForm({ health_pct: '', cycle_count: '', voltage: '', notes: '' })
+                    // Reload health history
+                    const hh = await api.get(`/batteries/${id}/health-history`).catch(() => [])
+                    setHealthHistory(hh)
+                    // Reload battery (health_pct may have updated)
+                    const b = await api.get(`/batteries/${id}`)
+                    setBattery(b)
+                  } catch (err) { toast.error(err.message) }
+                  finally { setSavingReading(false) }
+                }}
+                disabled={savingReading}
+                className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {savingReading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save Reading'}
+              </button>
+              <button onClick={() => setShowReadingForm(false)} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

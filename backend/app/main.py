@@ -11,7 +11,8 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
 from fastapi.middleware.cors import CORSMiddleware
@@ -86,7 +87,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Drone Unit Manager",
-    version="2.0.0",
+    version="3.0.0",
     lifespan=lifespan,
 )
 
@@ -148,23 +149,21 @@ app.include_router(notifications.router)
 @app.get("/api/health")
 def health_check():
     """Health check that verifies database connectivity."""
+    db = SessionLocal()
     try:
-        db = SessionLocal()
         db.execute(text("SELECT 1"))
-        db.close()
-        return {"status": "ok", "app": "Drone Unit Manager", "database": "connected"}
+        return {"status": "ok", "app": "Drone Unit Manager", "version": "3.0.0", "database": "connected"}
     except Exception as e:
         logger.error("Health check failed: %s", e)
         return JSONResponse(
             status_code=503,
             content={"status": "unhealthy", "app": "Drone Unit Manager", "database": "disconnected"},
         )
+    finally:
+        db.close()
 
-
-from sqlalchemy import text
 
 # Serve frontend static files in production (Docker)
-from fastapi.responses import FileResponse
 
 _static_dir = str(Path(__file__).parent.parent / "static")
 

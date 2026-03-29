@@ -95,7 +95,7 @@ export default function AirspacePage() {
     saved.lat && saved.lon ? [saved.lat, saved.lon] : null
   )
   const [radius, setRadius] = useState(saved.radius || 100)
-  const [interval, setInterval_] = useState(saved.interval ?? 10000)
+  const [refreshInterval, setRefreshInterval] = useState(saved.refreshInterval ?? 10000)
   const [aircraft, setAircraft] = useState([])
   const [loading, setLoading] = useState(false)
   const [cached, setCached] = useState(false)
@@ -109,10 +109,10 @@ export default function AirspacePage() {
   useEffect(() => {
     if (selectedPoint) {
       localStorage.setItem('airspace-settings', JSON.stringify({
-        lat: selectedPoint[0], lon: selectedPoint[1], radius, interval
+        lat: selectedPoint[0], lon: selectedPoint[1], radius, refreshInterval
       }))
     }
-  }, [selectedPoint, radius, interval])
+  }, [selectedPoint, radius, refreshInterval])
 
   // Load default location from app settings on mount (only if no saved point)
   useEffect(() => {
@@ -154,13 +154,13 @@ export default function AirspacePage() {
       clearInterval(intervalRef.current)
       intervalRef.current = null
     }
-    if (interval > 0 && selectedPoint) {
-      intervalRef.current = setInterval(() => fetchAircraft(), interval)
+    if (refreshInterval > 0 && selectedPoint) {
+      intervalRef.current = setInterval(() => fetchAircraft(), refreshInterval)
     }
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current)
     }
-  }, [interval, fetchAircraft, selectedPoint])
+  }, [refreshInterval, fetchAircraft, selectedPoint])
 
   const handleMapClick = (lat, lng) => {
     const point = [lat, lng]
@@ -204,8 +204,8 @@ export default function AirspacePage() {
           <div className="flex items-center gap-2">
             <label className="text-xs font-medium text-muted-foreground">Refresh</label>
             <select
-              value={interval}
-              onChange={e => setInterval_(Number(e.target.value))}
+              value={refreshInterval}
+              onChange={e => setRefreshInterval(Number(e.target.value))}
               className="px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             >
               {INTERVAL_OPTIONS.map(o => (

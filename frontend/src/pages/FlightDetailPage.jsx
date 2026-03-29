@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { formatDuration, normalizeDateValue, metersToFeet, mpsToMph } from '@/lib/utils'
 import { sortByName, sortVehicles, sortPilotsActiveFirst, vehicleDisplayName } from '@/lib/formatters'
-import { ArrowLeft, MapPin, Clock, Gauge, Battery, Save, RefreshCw, Loader2 } from 'lucide-react'
+import { ArrowLeft, MapPin, Clock, Gauge, Battery, Save, RefreshCw, Loader2, Download } from 'lucide-react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 import { FlightPathMap } from '@/components/FlightMap'
 import {
@@ -29,7 +29,7 @@ export default function FlightDetailPage() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [refreshResult, setRefreshResult] = useState(null)
-  const { isAdmin } = useAuth()
+  const { isAdmin, isSupervisor } = useAuth()
 
   const initEditForm = (f) => {
     setEditForm({
@@ -105,6 +105,24 @@ export default function FlightDetailPage() {
           <ArrowLeft className="w-4 h-4" /> Back to Flights
         </Link>
         <div className="flex gap-2">
+          {flight.has_telemetry && (
+            <>
+              <button
+                onClick={() => api.download(`/export/flights/${flight.id}/gpx`)}
+                className="flex items-center gap-1.5 px-3 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90"
+                title="Download flight path as GPX"
+              >
+                <Download className="w-4 h-4" /> GPX
+              </button>
+              <button
+                onClick={() => api.download(`/export/flights/${flight.id}/kml`)}
+                className="flex items-center gap-1.5 px-3 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90"
+                title="Download flight path as KML for Google Earth"
+              >
+                <Download className="w-4 h-4" /> KML
+              </button>
+            </>
+          )}
           {flight.review_status === 'needs_review' && isAdmin && (
             <button onClick={handleApprove} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:opacity-90">
               Approve Flight
@@ -170,6 +188,32 @@ export default function FlightDetailPage() {
               <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
                 flight.review_status === 'needs_review' ? 'bg-amber-500/15 text-amber-400' : 'bg-emerald-500/15 text-emerald-400'
               }`}>{flight.review_status === 'needs_review' ? 'Needs Review' : 'Reviewed'}</span>
+              {isSupervisor && (
+                <button
+                  onClick={async () => {
+                    try {
+                      await api.patch(`/flights/${flight.id}/telemetry-status`, { telemetry_synced: !flight.telemetry_synced })
+                      const updated = await api.get(`/flights/${id}`)
+                      setFlight(updated)
+                      toast.success(`Telemetry ${!flight.telemetry_synced ? 'marked as synced' : 'marked as pending'}`)
+                    } catch (err) { toast.error(err.message) }
+                  }}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium cursor-pointer transition-colors ${
+                    flight.telemetry_synced
+                      ? 'bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25'
+                      : 'bg-zinc-500/15 text-zinc-400 hover:bg-zinc-500/25'
+                  }`}
+                  title={flight.telemetry_synced ? 'Click to mark telemetry as pending' : 'Click to mark telemetry as synced'}
+                >
+                  <span className={`w-2 h-2 rounded-full ${flight.telemetry_synced ? 'bg-emerald-400' : 'bg-zinc-500'}`} />
+                  {flight.telemetry_synced ? 'Telemetry Synced' : 'Telemetry Pending'}
+                </button>
+              )}
+              {flight.data_source && (
+                <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/15 text-blue-400">
+                  {flight.data_source.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                </span>
+              )}
               {flight.api_provider && <span>Source: {flight.api_provider}</span>}
             </div>
           </div>
