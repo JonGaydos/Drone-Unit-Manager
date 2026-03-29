@@ -1,6 +1,7 @@
 import csv
 import io
-from datetime import date
+import xml.etree.ElementTree as ET
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from fastapi.responses import StreamingResponse
@@ -513,3 +514,180 @@ async def import_excel_file(
     from app.services.excel_import import import_excel
     result = import_excel(db, content)
     return result
+
+
+@router.post("/flights/import/log")
+async def import_flight_log(
+    file: UploadFile = File(...),
+    format: str = "auto",
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Import a flight log file (DJI .txt, Litchi CSV, Airdata CSV).
+
+    Auto-detects format from file content, or use the format parameter
+    to specify explicitly. Creates a Flight record and TelemetryPoints.
+
+    Args:
+        file: The flight log file (.txt or .csv).
+        format: Format hint - "auto", "dji", "litchi", or "airdata".
+
+    Returns:
+        Import result with flight_id, points_imported, and format_detected.
+    """
+    if not file.filename.endswith(('.txt', '.csv')):
+        raise HTTPException(400, "Only .txt and .csv files are supported")
+
+    content = await file.read()
+    if len(content) > settings.MAX_UPLOAD_SIZE:
+        raise HTTPException(413, f"File too large. Maximum size is {settings.MAX_UPLOAD_SIZE // (1024*1024)}MB")
+
+    from app.services.dji_import import import_flight_log as do_import
+    from app.database import get_telemetry_db
+
+    telemetry_db = next(get_telemetry_db())
+    try:
+        result = do_import(content, db, telemetry_db, format_hint=format, user_id=admin.id)
+    finally:
+        telemetry_db.close()
+
+    if result.get("error"):
+        raise HTTPException(400, result["error"])
+
+    return result
+
+
+@router.get("/flights/{flight_id}/gpx")
+def export_flight_gpx(
+    flight_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Export a flight's telemetry as a GPX file for Google Earth / GPS tools."""
+    from app.database import get_telemetry_db
+    from app.models.telemetry import TelemetryPoint
+
+    flight = db.query(Flight).filter(Flight.id == flight_id).first()
+    if not flight:
+        raise HTTPException(404, "Flight not found")
+
+    tel_db = next(get_telemetry_db())
+    try:
+        points = tel_db.query(TelemetryPoint).filter(
+            TelemetryPoint.flight_id == flight_id
+        ).order_by(TelemetryPoint.timestamp_ms).all()
+    finally:
+        tel_db.close()
+
+    if not points:
+        raise HTTPException(404, "No telemetry data for this flight")
+
+    gpx = ET.Element("gpx", version="1.1", creator="Drone Unit Manager",
+                     xmlns="http://www.topografix.com/GPX/1/1")
+
+    metadata = ET.SubElement(gpx, "metadata")
+    ET.SubElement(metadata, "name").text = f"Flight {flight.external_id or flight.id}"
+    ET.SubElement(metadata, "time").text = (flight.takeoff_time or flight.created_at).isoformat()
+
+    trk = ET.SubElement(gpx, "trk")
+    ET.SubElement(trk, "name").text = f"Flight {flight.external_id or flight.id}"
+    if flight.purpose:
+        ET.SubElement(trk, "desc").text = flight.purpose
+
+    trkseg = ET.SubElement(trk, "trkseg")
+    for pt in points:
+        if pt.lat is None or pt.lon is None:
+            continue
+        trkpt = ET.SubElement(trkseg, "trkpt", lat=str(pt.lat), lon=str(pt.lon))
+        if pt.altitude_m is not None:
+            ET.SubElement(trkpt, "ele").text = str(round(pt.altitude_m, 2))
+        ts = datetime.fromtimestamp(pt.timestamp_ms / 1000, tz=timezone.utc)
+        ET.SubElement(trkpt, "time").text = ts.isoformat()
+        if pt.speed_mps is not None:
+            extensions = ET.SubElement(trkpt, "extensions")
+            ET.SubElement(extensions, "speed").text = str(round(pt.speed_mps, 2))
+
+    xml_bytes = ET.tostring(gpx, encoding="unicode", xml_declaration=True)
+    flight_date = flight.date.isoformat() if flight.date else "unknown"
+    filename = f"flight_{flight_id}_{flight_date}.gpx"
+
+    return StreamingResponse(
+        io.BytesIO(xml_bytes.encode("utf-8")),
+        media_type="application/gpx+xml",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@router.get("/flights/{flight_id}/kml")
+def export_flight_kml(
+    flight_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Export a flight's telemetry as a KML file for Google Earth."""
+    from app.database import get_telemetry_db
+    from app.models.telemetry import TelemetryPoint
+
+    flight = db.query(Flight).filter(Flight.id == flight_id).first()
+    if not flight:
+        raise HTTPException(404, "Flight not found")
+
+    tel_db = next(get_telemetry_db())
+    try:
+        points = tel_db.query(TelemetryPoint).filter(
+            TelemetryPoint.flight_id == flight_id
+        ).order_by(TelemetryPoint.timestamp_ms).all()
+    finally:
+        tel_db.close()
+
+    if not points:
+        raise HTTPException(404, "No telemetry data for this flight")
+
+    kml_ns = "http://www.opengis.net/kml/2.2"
+    kml = ET.Element("kml", xmlns=kml_ns)
+    doc = ET.SubElement(kml, "Document")
+    ET.SubElement(doc, "name").text = f"Flight {flight.external_id or flight.id}"
+
+    desc_parts = []
+    if flight.purpose:
+        desc_parts.append(f"Purpose: {flight.purpose}")
+    if flight.date:
+        desc_parts.append(f"Date: {flight.date.isoformat()}")
+    if flight.duration_seconds:
+        mins = flight.duration_seconds // 60
+        secs = flight.duration_seconds % 60
+        desc_parts.append(f"Duration: {mins}m {secs}s")
+    if desc_parts:
+        ET.SubElement(doc, "description").text = "\n".join(desc_parts)
+
+    # Style for the flight path line
+    style = ET.SubElement(doc, "Style", id="flightPath")
+    line_style = ET.SubElement(style, "LineStyle")
+    ET.SubElement(line_style, "color").text = "ff0000ff"  # Red in ABGR
+    ET.SubElement(line_style, "width").text = "3"
+
+    placemark = ET.SubElement(doc, "Placemark")
+    ET.SubElement(placemark, "name").text = "Flight Path"
+    ET.SubElement(placemark, "styleUrl").text = "#flightPath"
+
+    linestring = ET.SubElement(placemark, "LineString")
+    ET.SubElement(linestring, "altitudeMode").text = "absolute"
+
+    coords = []
+    for pt in points:
+        if pt.lat is None or pt.lon is None:
+            continue
+        alt = pt.altitude_m if pt.altitude_m is not None else 0
+        coords.append(f"{pt.lon},{pt.lat},{alt}")
+
+    ET.SubElement(linestring, "coordinates").text = "\n".join(coords)
+
+    xml_bytes = ET.tostring(kml, encoding="unicode", xml_declaration=True)
+    flight_date = flight.date.isoformat() if flight.date else "unknown"
+    filename = f"flight_{flight_id}_{flight_date}.kml"
+
+    return StreamingResponse(
+        io.BytesIO(xml_bytes.encode("utf-8")),
+        media_type="application/vnd.google-earth.kml+xml",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )

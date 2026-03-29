@@ -253,7 +253,7 @@ def enrich_flights(
         vehicle_serial = detail.get("vehicle_serial") or detail.get("serial_number") or detail.get("vehicle_id")
         if vehicle_serial and not flight.vehicle_id:
             vehicle = db.query(Vehicle).filter(
-                (Vehicle.skydio_vehicle_serial == vehicle_serial) | (Vehicle.serial_number == vehicle_serial)
+                (Vehicle.provider_serial == vehicle_serial) | (Vehicle.serial_number == vehicle_serial)
             ).first()
             if vehicle:
                 flight.vehicle_id = vehicle.id

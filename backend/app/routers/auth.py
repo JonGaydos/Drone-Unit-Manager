@@ -270,6 +270,8 @@ def update_me(data: UserUpdate, user: User = Depends(get_current_user), db: Sess
         user.theme = data.theme
     if data.display_name is not None:
         user.display_name = data.display_name
+    if data.email is not None:
+        user.email = data.email
     db.commit()
     db.refresh(user)
     return UserOut.model_validate(user)
@@ -297,6 +299,7 @@ def create_user(data: UserCreate, admin: User = Depends(require_admin), db: Sess
         display_name=data.display_name,
         role=data.role,
         pilot_id=data.pilot_id,
+        email=data.email,
     )
     db.add(user)
     db.flush()
@@ -339,6 +342,8 @@ def update_user(user_id: int, data: UserUpdate, admin: User = Depends(require_ad
         target.is_active = data.is_active
     if data.pilot_id is not None:
         target.pilot_id = data.pilot_id if data.pilot_id != 0 else None
+    if data.email is not None:
+        target.email = data.email
     db.commit()
     db.refresh(target)
     return UserOut.model_validate(target)

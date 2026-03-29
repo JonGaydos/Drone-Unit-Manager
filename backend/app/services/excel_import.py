@@ -210,6 +210,7 @@ def import_excel(db: Session, file_bytes: bytes) -> dict:
                     carrier=row.get("Carrier(s)", "") or None,
                     review_status="reviewed",
                     pilot_confirmed=True,
+                    data_source="excel_import",
                 )
                 db.add(flight)
                 result["flights_imported"] += 1

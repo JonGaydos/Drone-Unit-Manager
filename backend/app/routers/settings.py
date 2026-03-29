@@ -26,6 +26,9 @@ ALLOWED_SETTING_KEYS = {
     "weather_visibility_threshold", "weather_ceiling_threshold",
     "weather_temp_min", "weather_temp_max", "weather_location",
     "cert_types_config", "cert_status_labels",
+    "adsb_default_lat", "adsb_default_lon", "adsb_radius_nm", "adsb_refresh_seconds",
+    "smtp_host", "smtp_port", "smtp_username", "smtp_password",
+    "smtp_from_address", "smtp_from_name", "smtp_tls", "smtp_enabled",
 }
 
 
@@ -44,7 +47,7 @@ class SettingOut(BaseModel):
 
 
 # Keys whose values contain secrets and must be partially redacted in responses
-MASKED_KEYS = {"skydio_api_token"}
+MASKED_KEYS = {"skydio_api_token", "smtp_password"}
 
 
 @router.get("", response_model=list[SettingOut])
@@ -149,3 +152,24 @@ def set_settings_bulk(data: list[SettingValue], db: Session = Depends(get_db), a
             db.add(setting)
     db.commit()
     return {"ok": True}
+
+
+@router.post("/smtp/test")
+def test_smtp(db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """Send a test email to verify SMTP configuration."""
+    from app.services.email_digest import send_email
+
+    admin_email = admin.email
+    if not admin_email:
+        raise HTTPException(400, "Set your email address in your user profile first")
+
+    success = send_email(
+        admin_email,
+        "Drone Unit Manager — SMTP Test",
+        "<h2>SMTP Test Successful</h2><p>Your email configuration is working correctly.</p>",
+        db,
+    )
+    if success:
+        return {"ok": True, "message": f"Test email sent to {admin_email}"}
+    else:
+        raise HTTPException(500, "Failed to send test email. Check your SMTP settings.")

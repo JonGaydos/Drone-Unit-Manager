@@ -17,6 +17,7 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(20), default="viewer")  # "admin", "supervisor", "pilot", or "viewer"
     is_active: Mapped[bool] = mapped_column(default=True)
     theme: Mapped[str] = mapped_column(String(30), default="dark")
+    email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     pilot_id: Mapped[Optional[int]] = mapped_column(ForeignKey("pilots.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())

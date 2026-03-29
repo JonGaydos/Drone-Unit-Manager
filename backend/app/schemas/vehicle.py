@@ -37,7 +37,7 @@ class VehicleOut(BaseModel):
     status: str
     total_flight_hours: float
     total_flights: int
-    skydio_vehicle_serial: Optional[str]
+    provider_serial: Optional[str]
     api_provider: Optional[str]
     acquired_date: Optional[date]
     photo_url: Optional[str] = None

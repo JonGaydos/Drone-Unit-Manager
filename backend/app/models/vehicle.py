@@ -19,7 +19,7 @@ class Vehicle(Base):
     status: Mapped[str] = mapped_column(String(30), default="active")  # active, maintenance, retired
     total_flight_hours: Mapped[float] = mapped_column(Float, default=0.0)
     total_flights: Mapped[int] = mapped_column(Integer, default=0)
-    skydio_vehicle_serial: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    provider_serial: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     api_provider: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     acquired_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     photo_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)

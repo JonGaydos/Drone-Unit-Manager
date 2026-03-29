@@ -1,6 +1,6 @@
 from typing import Optional
 
-from sqlalchemy import Integer, Float, BigInteger, Index
+from sqlalchemy import Integer, Float, BigInteger, Index, Text, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -27,3 +27,5 @@ class TelemetryPoint(TelemetryBase):
     pitch_deg: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     roll_deg: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     satellites: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    extra_data: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    source: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)

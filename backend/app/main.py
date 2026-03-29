@@ -27,7 +27,7 @@ from app.routers import (
     equipment, reports, export, mission_logs, training_logs, maintenance_schedules,
     photos, folders, audit, incidents, flight_plans,
     weather, currency, equipment_checkouts, checklists,
-    components, geofences,
+    components, geofences, adsb, notifications,
 )
 from app.routers import vehicle_registrations
 from app.services.scheduler import start_scheduler, stop_scheduler
@@ -141,6 +141,8 @@ app.include_router(equipment_checkouts.router)
 app.include_router(checklists.router)
 app.include_router(components.router)
 app.include_router(geofences.router)
+app.include_router(adsb.router)
+app.include_router(notifications.router)
 
 
 @app.get("/api/health")

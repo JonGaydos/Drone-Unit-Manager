@@ -2,6 +2,7 @@ from datetime import date
 from math import ceil
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
@@ -257,7 +258,7 @@ def refresh_flight_from_api(flight_id: int, db: Session = Depends(get_db), admin
     vs = detail.get("vehicle_serial") or detail.get("vehicle", {}).get("serial_number") if isinstance(detail.get("vehicle"), dict) else detail.get("vehicle_serial")
     if vs and not flight.vehicle_id:
         vehicle = db.query(Vehicle).filter(
-            (Vehicle.skydio_vehicle_serial == str(vs)) |
+            (Vehicle.provider_serial == str(vs)) |
             (Vehicle.serial_number == str(vs))
         ).first()
         if vehicle:
@@ -363,7 +364,7 @@ def refresh_flight_from_api(flight_id: int, db: Session = Depends(get_db), admin
 @router.post("", response_model=FlightOut)
 def create_flight(data: FlightCreate, db: Session = Depends(get_db), admin: User = Depends(require_pilot)):
     from app.services.audit import log_action
-    flight = Flight(**data.model_dump(), review_status="reviewed", pilot_confirmed=True)
+    flight = Flight(**data.model_dump(), review_status="reviewed", pilot_confirmed=True, data_source="manual")
     db.add(flight)
     db.flush()
     log_action(db, admin.id, admin.display_name, "create", "flight", flight.id, f"Flight {flight.external_id or flight.id}")
@@ -406,6 +407,29 @@ def bulk_update_flights(data: FlightBulkUpdate, db: Session = Depends(get_db), a
     log_action(db, admin.id, admin.display_name, action, "flight", details=f"Updated {len(flights)} flights")
     db.commit()
     return {"ok": True, "updated": len(flights)}
+
+
+class TelemetryStatusUpdate(BaseModel):
+    telemetry_synced: bool
+
+
+@router.patch("/{flight_id}/telemetry-status")
+def update_telemetry_status(
+    flight_id: int,
+    data: TelemetryStatusUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_supervisor),
+):
+    """Toggle the telemetry synced flag on a flight."""
+    from app.services.audit import log_action
+    flight = db.query(Flight).filter(Flight.id == flight_id).first()
+    if not flight:
+        raise HTTPException(404, "Flight not found")
+    flight.telemetry_synced = data.telemetry_synced
+    log_action(db, user.id, user.display_name, "update", "flight", flight_id,
+               details=f"Telemetry synced set to {data.telemetry_synced}")
+    db.commit()
+    return {"ok": True, "telemetry_synced": flight.telemetry_synced}
 
 
 @router.delete("/{flight_id}")

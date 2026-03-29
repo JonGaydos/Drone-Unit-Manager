@@ -105,6 +105,69 @@ def get_battery_stats(bid: int, db: Session = Depends(get_db), user: User = Depe
     return {"total_flights": flight_count, "total_hours": round(total_seconds / 3600, 2)}
 
 
+class BatteryReadingCreate(BaseModel):
+    """Schema for manually recording a battery health reading."""
+    health_pct: Optional[float] = Field(None, ge=0, le=100)
+    cycle_count: Optional[int] = Field(None, ge=0)
+    voltage: Optional[float] = None
+    capacity_mah: Optional[float] = None
+    temperature_c: Optional[float] = None
+    notes: Optional[str] = None
+
+
+@router.get("/batteries/{bid}/health-history")
+def get_battery_health_history(bid: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Get historical health readings for a battery, ordered by date."""
+    from app.models.battery_reading import BatteryReading
+    b = db.query(Battery).filter(Battery.id == bid).first()
+    if not b:
+        raise HTTPException(404, "Battery not found")
+    readings = db.query(BatteryReading).filter(
+        BatteryReading.battery_id == bid
+    ).order_by(BatteryReading.recorded_at).all()
+    return [
+        {
+            "id": r.id,
+            "recorded_at": r.recorded_at.isoformat() if r.recorded_at else None,
+            "health_pct": r.health_pct,
+            "cycle_count": r.cycle_count,
+            "voltage": r.voltage,
+            "capacity_mah": r.capacity_mah,
+            "temperature_c": r.temperature_c,
+            "source": r.source,
+            "notes": r.notes,
+        }
+        for r in readings
+    ]
+
+
+@router.post("/batteries/{bid}/readings")
+def add_battery_reading(bid: int, data: BatteryReadingCreate, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """Manually record a battery health reading."""
+    from app.models.battery_reading import BatteryReading
+    b = db.query(Battery).filter(Battery.id == bid).first()
+    if not b:
+        raise HTTPException(404, "Battery not found")
+    reading = BatteryReading(
+        battery_id=bid,
+        health_pct=data.health_pct,
+        cycle_count=data.cycle_count,
+        voltage=data.voltage,
+        capacity_mah=data.capacity_mah,
+        temperature_c=data.temperature_c,
+        source="manual",
+        notes=data.notes,
+    )
+    db.add(reading)
+    # Also update the battery's current values
+    if data.health_pct is not None:
+        b.health_pct = data.health_pct
+    if data.cycle_count is not None:
+        b.cycle_count = data.cycle_count
+    db.commit()
+    return {"ok": True, "id": reading.id}
+
+
 class ControllerCreate(BaseModel):
     serial_number: str
     nickname: Optional[str] = None

@@ -10,6 +10,7 @@ class UserCreate(BaseModel):
     display_name: str
     role: str = "viewer"
     pilot_id: Optional[int] = None
+    email: Optional[str] = None
 
 
 class UserUpdate(BaseModel):
@@ -18,6 +19,7 @@ class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
     theme: Optional[str] = None
     pilot_id: Optional[int] = None
+    email: Optional[str] = None
 
 
 class ChangePasswordRequest(BaseModel):
@@ -37,6 +39,7 @@ class UserOut(BaseModel):
     is_active: bool
     theme: str
     pilot_id: Optional[int] = None
+    email: Optional[str] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

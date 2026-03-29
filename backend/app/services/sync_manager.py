@@ -77,7 +77,7 @@ def _upsert_flights(flights_data: list[dict], skydio_users: list[dict], db: Sess
             # Vehicle
             if not existing.vehicle_id and f_data.get("vehicle_serial"):
                 v = db.query(Vehicle).filter(
-                    Vehicle.skydio_vehicle_serial == f_data["vehicle_serial"]
+                    Vehicle.provider_serial == f_data["vehicle_serial"]
                 ).first()
                 if v:
                     existing.vehicle_id = v.id
@@ -107,7 +107,7 @@ def _upsert_flights(flights_data: list[dict], skydio_users: list[dict], db: Sess
         vehicle_serial = f_data.get("vehicle_serial")
         if vehicle_serial:
             vehicle = db.query(Vehicle).filter(
-                Vehicle.skydio_vehicle_serial == vehicle_serial
+                Vehicle.provider_serial == vehicle_serial
             ).first()
             if vehicle:
                 vehicle_id = vehicle.id
@@ -156,6 +156,7 @@ def _upsert_flights(flights_data: list[dict], skydio_users: list[dict], db: Sess
             carrier=f_data.get("carrier"),
             review_status="needs_review",
             pilot_confirmed=False,
+            data_source="skydio_api",
         )
         db.add(flight)
         result.flights_new += 1
@@ -298,12 +299,12 @@ class SyncManager:
         try:
             vehicles_data = provider.sync_vehicles(creds)
             for v_data in vehicles_data:
-                serial = v_data.get("skydio_vehicle_serial") or v_data.get("serial_number", "")
+                serial = v_data.get("provider_serial") or v_data.get("serial_number", "")
                 if not serial:
                     continue
 
                 existing = db.query(Vehicle).filter(
-                    (Vehicle.skydio_vehicle_serial == serial) |
+                    (Vehicle.provider_serial == serial) |
                     (Vehicle.serial_number == serial)
                 ).first()
 
@@ -318,7 +319,7 @@ class SyncManager:
                         serial_number=v_data.get("serial_number", serial),
                         manufacturer=v_data.get("manufacturer", "Skydio"),
                         model=v_data.get("model", "Unknown"),
-                        skydio_vehicle_serial=serial,
+                        provider_serial=serial,
                         api_provider=v_data.get("api_provider", "skydio"),
                         nickname=v_data.get("nickname"),
                     )
@@ -442,7 +443,7 @@ class SyncManager:
                     vs = detail.get("vehicle_serial")
                     if vs and not flight.vehicle_id:
                         vehicle = db.query(Vehicle).filter(
-                            (Vehicle.skydio_vehicle_serial == str(vs)) | (Vehicle.serial_number == str(vs))
+                            (Vehicle.provider_serial == str(vs)) | (Vehicle.serial_number == str(vs))
                         ).first()
                         if vehicle:
                             flight.vehicle_id = vehicle.id
@@ -757,12 +758,12 @@ class SyncManager:
         try:
             vehicles_data = provider.sync_vehicles(creds)
             for v_data in vehicles_data:
-                serial = v_data.get("skydio_vehicle_serial") or v_data.get("serial_number", "")
+                serial = v_data.get("provider_serial") or v_data.get("serial_number", "")
                 if not serial:
                     continue
 
                 existing = db.query(Vehicle).filter(
-                    (Vehicle.skydio_vehicle_serial == serial) |
+                    (Vehicle.provider_serial == serial) |
                     (Vehicle.serial_number == serial)
                 ).first()
 
@@ -777,7 +778,7 @@ class SyncManager:
                         serial_number=v_data.get("serial_number", serial),
                         manufacturer=v_data.get("manufacturer", "Skydio"),
                         model=v_data.get("model", "Unknown"),
-                        skydio_vehicle_serial=serial,
+                        provider_serial=serial,
                         api_provider=v_data.get("api_provider", "skydio"),
                         nickname=v_data.get("nickname"),
                     )

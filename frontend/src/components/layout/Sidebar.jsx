@@ -30,6 +30,8 @@ import {
   ClipboardList,
   Shield,
   BookOpen,
+  Radar,
+  Plug,
 } from 'lucide-react'
 import { useEffect } from 'react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
@@ -38,6 +40,7 @@ import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/weather', icon: CloudSun, label: 'Weather' },
+  { to: '/airspace', icon: Radar, label: 'Airspace' },
   { to: '/analytics', icon: BarChart3, label: 'Analytics' },
   { to: '/flight-plans', icon: ClipboardCheck, label: 'Flight Plans', badge: 'pendingPlansCount' },
   { to: '/checklists', icon: ClipboardList, label: 'Checklists' },
@@ -55,6 +58,7 @@ const navItems = [
   { to: '/alerts', icon: Bell, label: 'Alerts' },
   { to: '/incidents', icon: AlertTriangle, label: 'Activity Reports' },
   { to: '/settings', icon: Settings, label: 'Settings' },
+  { to: '/integrations', icon: Plug, label: 'Integrations', adminOnly: true },
   { to: '/audit-log', icon: ScrollText, label: 'Audit Log', adminOnly: true },
 ]
 

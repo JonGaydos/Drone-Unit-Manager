@@ -211,7 +211,7 @@ class SkydioProvider(DroneProvider):
                     "serial_number": v.get("serial_number", v.get("vehicle_serial", "")),
                     "manufacturer": "Skydio",
                     "model": v.get("model", v.get("vehicle_type", "Unknown")),
-                    "skydio_vehicle_serial": v.get("serial_number", v.get("vehicle_serial", "")),
+                    "provider_serial": v.get("serial_number", v.get("vehicle_serial", "")),
                     "api_provider": "skydio",
                     "nickname": v.get("name") or v.get("nickname"),
                 })

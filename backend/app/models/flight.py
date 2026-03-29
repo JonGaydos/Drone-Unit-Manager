@@ -28,6 +28,7 @@ class Flight(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     external_id: Mapped[Optional[str]] = mapped_column(String(200), nullable=True, index=True)
     api_provider: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    data_source: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     pilot_id: Mapped[Optional[int]] = mapped_column(ForeignKey("pilots.id"), nullable=True)
     vehicle_id: Mapped[Optional[int]] = mapped_column(ForeignKey("vehicles.id"), nullable=True)
     date: Mapped[Optional[date]] = mapped_column(Date, nullable=True, index=True)
@@ -57,6 +58,7 @@ class Flight(Base):
     review_status: Mapped[str] = mapped_column(String(20), default="reviewed")  # needs_review, reviewed
     pilot_confirmed: Mapped[bool] = mapped_column(Boolean, default=True)
     operating_cost: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    tags: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     modified_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)

@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 _scheduler: BackgroundScheduler | None = None
 SYNC_JOB_ID = "skydio_sync"
+DIGEST_JOB_ID = "email_digest"
 
 
 def check_maintenance_schedules(db):
@@ -83,6 +84,95 @@ def _run_scheduled_sync():
         db.close()
 
 
+def _run_digest_job():
+    """Check for users due for a digest email and send them."""
+    import json
+    from datetime import datetime, date as date_type
+    from app.models.notification_preference import NotificationPreference
+    from app.models.notification_log import NotificationLog
+    from app.services.email_digest import build_digest, render_digest_html, send_email
+
+    db = SessionLocal()
+    try:
+        # Check if SMTP is configured
+        smtp_enabled = db.query(Setting).filter(Setting.key == "smtp_enabled").first()
+        if not smtp_enabled or smtp_enabled.value != "true":
+            return
+
+        now = datetime.now()
+        current_hour = now.strftime("%H")
+
+        # Find users with enabled notifications whose send_time hour matches
+        prefs = db.query(NotificationPreference).filter(
+            NotificationPreference.enabled == True,
+            NotificationPreference.frequency != "off",
+        ).all()
+
+        for pref in prefs:
+            # Check if it's the right hour
+            pref_hour = pref.send_time.split(":")[0] if pref.send_time else "07"
+            if pref_hour != current_hour:
+                continue
+
+            # Check if already sent today
+            today_start = datetime.combine(date_type.today(), datetime.min.time())
+            already_sent = db.query(NotificationLog).filter(
+                NotificationLog.user_id == pref.user_id,
+                NotificationLog.sent_at >= today_start,
+                NotificationLog.status == "sent",
+            ).first()
+            if already_sent:
+                continue
+
+            # For weekly, check day of week
+            if pref.frequency == "weekly" and pref.send_day is not None:
+                if now.weekday() != pref.send_day:
+                    continue
+
+            # Get user
+            from app.models.user import User
+            user = db.query(User).filter(User.id == pref.user_id).first()
+            if not user:
+                continue
+
+            to_email = pref.email_override or user.email
+            if not to_email:
+                continue
+
+            # Build and send digest
+            digest = build_digest(db, user)
+            if not digest:
+                db.add(NotificationLog(
+                    user_id=user.id, subject="Daily Digest", status="skipped",
+                    error_message="No actionable items", item_count=0,
+                ))
+                db.commit()
+                continue
+
+            org_setting = db.query(Setting).filter(Setting.key == "org_name").first()
+            org_name = org_setting.value if org_setting else "Drone Unit Manager"
+            html = render_digest_html(digest, user, org_name)
+            subject = f"{org_name} — Daily Digest"
+
+            success = send_email(to_email, subject, html, db)
+            item_count = sum(len(v) if isinstance(v, list) else 0 for v in digest.values())
+
+            db.add(NotificationLog(
+                user_id=user.id, subject=subject,
+                status="sent" if success else "failed",
+                error_message=None if success else "SMTP send failed",
+                categories_included=json.dumps(list(digest.keys())),
+                item_count=item_count,
+            ))
+            db.commit()
+            logger.info("Digest %s for user %s (%s)", "sent" if success else "failed", user.display_name, to_email)
+
+    except Exception as exc:
+        logger.error("Digest job failed: %s", exc)
+    finally:
+        db.close()
+
+
 def _get_sync_interval_minutes() -> int | None:
     """Read the sync interval from the database settings."""
     db = SessionLocal()
@@ -132,6 +222,16 @@ def start_scheduler():
         logger.info("Sync scheduler started with %d minute interval", interval_minutes)
     else:
         logger.info("Sync scheduler started (no interval configured, waiting for manual trigger)")
+
+    # Always run digest check every 30 minutes
+    _scheduler.add_job(
+        _run_digest_job,
+        trigger=IntervalTrigger(minutes=30),
+        id=DIGEST_JOB_ID,
+        replace_existing=True,
+        max_instances=1,
+    )
+    logger.info("Email digest scheduler started (checks every 30 minutes)")
 
 
 def stop_scheduler():
