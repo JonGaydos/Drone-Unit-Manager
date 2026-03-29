@@ -26,6 +26,7 @@ export default function BatteryDetailPage() {
   const [editForm, setEditForm] = useState({})
   const [saving, setSaving] = useState(false)
   const [healthHistory, setHealthHistory] = useState([])
+  const [batteryPilots, setBatteryPilots] = useState([])
   const [showReadingForm, setShowReadingForm] = useState(false)
   const [readingForm, setReadingForm] = useState({ health_pct: '', cycle_count: '', voltage: '', notes: '' })
   const [savingReading, setSavingReading] = useState(false)
@@ -34,20 +35,19 @@ export default function BatteryDetailPage() {
     Promise.all([
       api.get(`/batteries/${id}`),
       api.get(`/batteries/${id}/stats`),
-      api.get('/flights?per_page=1000').catch(() => ({ flights: [] })),
+      api.get(`/batteries/${id}/flights`).catch(() => []),
       api.get(`/maintenance?entity_type=battery&entity_id=${id}`).catch(() => []),
       api.get('/vehicles').catch(() => []),
       api.get(`/batteries/${id}/health-history`).catch(() => []),
-    ]).then(([b, s, fResp, m, v, healthData]) => {
+      api.get(`/batteries/${id}/pilots`).catch(() => []),
+    ]).then(([b, s, batteryFlights, m, v, healthData, pilotsData]) => {
       setBattery(b)
       setStats(s)
-      // Handle paginated response
-      const allFlights = Array.isArray(fResp) ? fResp : (fResp.flights || [])
-      const batteryFlights = allFlights.filter(fl => fl.battery_serial === b.serial_number)
-      setFlights(batteryFlights)
+      setFlights(Array.isArray(batteryFlights) ? batteryFlights : [])
       setMaintenance(m)
       setVehicles(v)
       setHealthHistory(healthData)
+      setBatteryPilots(Array.isArray(pilotsData) ? pilotsData : [])
     }).catch(() => {}).finally(() => setLoading(false))
   }, [id])
 
@@ -241,6 +241,21 @@ export default function BatteryDetailPage() {
               </>
             )}
           </p>
+        </div>
+      )}
+
+      {/* Pilots */}
+      {batteryPilots.length > 0 && (
+        <div className="bg-card border border-border rounded-xl p-4">
+          <h3 className="text-sm font-semibold text-foreground mb-2">Pilots</h3>
+          <div className="flex flex-wrap gap-2">
+            {batteryPilots.map(p => (
+              <Link key={p.id} to={`/pilots/${p.id}`} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-secondary rounded-lg text-sm text-foreground hover:bg-accent/30 transition-colors">
+                {p.full_name}
+                {p.flight_count != null && <span className="text-xs text-muted-foreground">({p.flight_count} flights)</span>}
+              </Link>
+            ))}
+          </div>
         </div>
       )}
 

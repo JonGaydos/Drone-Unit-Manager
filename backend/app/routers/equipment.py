@@ -105,6 +105,102 @@ def get_battery_stats(bid: int, db: Session = Depends(get_db), user: User = Depe
     return {"total_flights": flight_count, "total_hours": round(total_seconds / 3600, 2)}
 
 
+@router.get("/batteries/{bid}/flights")
+def get_battery_flights(bid: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Get all flights that used a specific battery."""
+    from app.models.flight import Flight
+    from app.models.pilot import Pilot
+    battery = db.query(Battery).filter(Battery.id == bid).first()
+    if not battery:
+        raise HTTPException(404, "Battery not found")
+    flights = db.query(Flight).filter(Flight.battery_serial == battery.serial_number).order_by(Flight.date.desc()).all()
+    return [
+        {
+            "id": f.id,
+            "date": str(f.date) if f.date else None,
+            "pilot_name": f"{f.pilot.first_name} {f.pilot.last_name}" if f.pilot else None,
+            "pilot_id": f.pilot_id,
+            "vehicle_name": f.vehicle.nickname or f"{f.vehicle.manufacturer} {f.vehicle.model}" if f.vehicle else None,
+            "duration_seconds": f.duration_seconds,
+            "purpose": f.purpose,
+            "max_altitude_m": f.max_altitude_m,
+        }
+        for f in flights
+    ]
+
+
+@router.get("/batteries/{bid}/pilots")
+def get_battery_pilots(bid: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Get unique pilots who have used a specific battery."""
+    from app.models.flight import Flight
+    from app.models.pilot import Pilot
+    battery = db.query(Battery).filter(Battery.id == bid).first()
+    if not battery:
+        raise HTTPException(404, "Battery not found")
+    pilot_ids = db.query(Flight.pilot_id).filter(
+        Flight.battery_serial == battery.serial_number,
+        Flight.pilot_id.isnot(None),
+    ).distinct().all()
+    pilots = db.query(Pilot).filter(Pilot.id.in_([p[0] for p in pilot_ids])).all()
+    return [{"id": p.id, "name": f"{p.first_name} {p.last_name}", "badge_number": p.badge_number} for p in pilots]
+
+
+@router.post("/batteries/{bid}/merge")
+def merge_batteries(bid: int, merge_from_id: int, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """Merge a duplicate battery into this one. Updates all flight references and deletes the duplicate."""
+    from app.models.flight import Flight
+    target = db.query(Battery).filter(Battery.id == bid).first()
+    source = db.query(Battery).filter(Battery.id == merge_from_id).first()
+    if not target or not source:
+        raise HTTPException(404, "Battery not found")
+    if target.id == source.id:
+        raise HTTPException(400, "Cannot merge a battery with itself")
+    # Update all flights referencing the source serial to use the target serial
+    updated = db.query(Flight).filter(Flight.battery_serial == source.serial_number).update(
+        {Flight.battery_serial: target.serial_number}, synchronize_session=False
+    )
+    db.delete(source)
+    db.commit()
+    return {"ok": True, "flights_updated": updated, "message": f"Merged '{source.serial_number}' into '{target.serial_number}'"}
+
+
+@router.post("/attachments/{aid}/merge")
+def merge_attachments(aid: int, merge_from_id: int, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """Merge a duplicate attachment into this one."""
+    target = db.query(Attachment).filter(Attachment.id == aid).first()
+    source = db.query(Attachment).filter(Attachment.id == merge_from_id).first()
+    if not target or not source:
+        raise HTTPException(404, "Attachment not found")
+    if target.id == source.id:
+        raise HTTPException(400, "Cannot merge an attachment with itself")
+    from app.models.flight import Flight
+    # Update all attachment fields across all flights
+    for field in ["attachment_top", "attachment_bottom", "attachment_left", "attachment_right"]:
+        db.query(Flight).filter(getattr(Flight, field) == source.serial_number).update(
+            {getattr(Flight, field): target.serial_number}, synchronize_session=False
+        )
+    db.delete(source)
+    db.commit()
+    return {"ok": True, "message": f"Merged '{source.serial_number}' into '{target.serial_number}'"}
+
+
+@router.post("/sensors/{sid}/merge")
+def merge_sensors(sid: int, merge_from_id: int, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """Merge a duplicate sensor package into this one."""
+    from app.models.sensor import SensorPackage as SP
+    from app.models.flight import Flight
+    target = db.query(SP).filter(SP.id == sid).first()
+    source = db.query(SP).filter(SP.id == merge_from_id).first()
+    if not target or not source:
+        raise HTTPException(404, "Sensor not found")
+    updated = db.query(Flight).filter(Flight.sensor_package == source.serial_number).update(
+        {Flight.sensor_package: target.serial_number}, synchronize_session=False
+    )
+    db.delete(source)
+    db.commit()
+    return {"ok": True, "flights_updated": updated, "message": f"Merged '{source.serial_number}' into '{target.serial_number}'"}
+
+
 class BatteryReadingCreate(BaseModel):
     """Schema for manually recording a battery health reading."""
     health_pct: Optional[float] = Field(None, ge=0, le=100)

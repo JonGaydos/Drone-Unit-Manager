@@ -367,6 +367,12 @@ def create_flight(data: FlightCreate, db: Session = Depends(get_db), admin: User
     flight = Flight(**data.model_dump(), review_status="reviewed", pilot_confirmed=True, data_source="manual")
     db.add(flight)
     db.flush()
+    # Auto-create Fleet records for any new equipment serials
+    from app.services.sync_manager import _ensure_equipment_records
+    try:
+        _ensure_equipment_records(db, flight)
+    except Exception:
+        pass
     log_action(db, admin.id, admin.display_name, "create", "flight", flight.id, f"Flight {flight.external_id or flight.id}")
     db.commit()
     db.refresh(flight)
@@ -383,6 +389,12 @@ def update_flight(flight_id: int, data: FlightUpdate, db: Session = Depends(get_
     changes = compute_changes(flight, update_data, ["pilot_id", "vehicle_id", "purpose", "review_status", "date", "notes"])
     for key, value in update_data.items():
         setattr(flight, key, value)
+    # Auto-create Fleet records for any new equipment serials
+    from app.services.sync_manager import _ensure_equipment_records
+    try:
+        _ensure_equipment_records(db, flight)
+    except Exception:
+        pass
     if changes:
         log_action(db, admin.id, admin.display_name, "update", "flight", flight.id, f"Flight {flight.external_id or flight.id}", changes=changes)
     db.commit()

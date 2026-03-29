@@ -305,6 +305,7 @@ export default function FlightDetailPage() {
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">Battery Serial</label>
                 <input list="detail-battery-list" value={editForm.battery_serial} onChange={e => setEditForm({...editForm, battery_serial: e.target.value})}
+                  onFocus={e => { e.target.showPicker?.() }}
                   placeholder="Select or type..." className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
                 <datalist id="detail-battery-list">
                   {batteries.map(b => <option key={b.id} value={b.serial_number}>{b.nickname || b.serial_number}</option>)}
@@ -313,6 +314,7 @@ export default function FlightDetailPage() {
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">Sensor Package</label>
                 <input list="detail-sensor-list" value={editForm.sensor_package} onChange={e => setEditForm({...editForm, sensor_package: e.target.value})}
+                  onFocus={e => { e.target.showPicker?.() }}
                   placeholder="Select or type..." className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
                 <datalist id="detail-sensor-list">
                   {sensors.map(s => <option key={s.id} value={s.serial_number}>{s.name || s.serial_number}</option>)}
@@ -323,6 +325,7 @@ export default function FlightDetailPage() {
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">Attachment (TOP)</label>
                 <input list="detail-attach-list" value={editForm.attachment_top} onChange={e => setEditForm({...editForm, attachment_top: e.target.value})}
+                  onFocus={e => { e.target.showPicker?.() }}
                   placeholder="Select or type..." className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
                 <datalist id="detail-attach-list">
                   {attachments.map(a => <option key={a.id} value={a.serial_number}>{a.name || a.serial_number}</option>)}
@@ -331,6 +334,7 @@ export default function FlightDetailPage() {
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">Attachment (BOTTOM)</label>
                 <input list="detail-attach-list" value={editForm.attachment_bottom} onChange={e => setEditForm({...editForm, attachment_bottom: e.target.value})}
+                  onFocus={e => { e.target.showPicker?.() }}
                   placeholder="Select or type..." className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               </div>
             </div>
@@ -338,11 +342,13 @@ export default function FlightDetailPage() {
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">Attachment (LEFT)</label>
                 <input list="detail-attach-list" value={editForm.attachment_left} onChange={e => setEditForm({...editForm, attachment_left: e.target.value})}
+                  onFocus={e => { e.target.showPicker?.() }}
                   placeholder="Select or type..." className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">Attachment (RIGHT)</label>
                 <input list="detail-attach-list" value={editForm.attachment_right} onChange={e => setEditForm({...editForm, attachment_right: e.target.value})}
+                  onFocus={e => { e.target.showPicker?.() }}
                   placeholder="Select or type..." className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               </div>
             </div>
@@ -381,7 +387,10 @@ export default function FlightDetailPage() {
             <div><p className="text-xs text-muted-foreground">Max Altitude</p><p className="text-sm text-foreground">{flight.max_altitude_m ? `${metersToFeet(flight.max_altitude_m)} ft` : '—'}</p></div>
             <div><p className="text-xs text-muted-foreground">Max Speed</p><p className="text-sm text-foreground">{flight.max_speed_mps ? `${mpsToMph(flight.max_speed_mps)} mph` : '—'}</p></div>
             <div><p className="text-xs text-muted-foreground">Case #</p><p className="text-sm text-foreground">{flight.case_number || '—'}</p></div>
-            <div><p className="text-xs text-muted-foreground">Battery Serial</p><p className="text-sm text-foreground">{flight.battery_serial || '—'}</p></div>
+            <div><p className="text-xs text-muted-foreground">Battery Serial</p><p className="text-sm text-foreground">{flight.battery_serial ? (() => {
+              const bat = batteries.find(b => b.serial_number === flight.battery_serial)
+              return bat ? <Link to={`/fleet/batteries/${bat.id}`} className="text-primary hover:underline">{flight.battery_serial}</Link> : flight.battery_serial
+            })() : '—'}</p></div>
             <div><p className="text-xs text-muted-foreground">Sensor Package</p><p className="text-sm text-foreground">{flight.sensor_package || '—'}</p></div>
             <div><p className="text-xs text-muted-foreground">Carrier(s)</p><p className="text-sm text-foreground">{flight.carrier || '—'}</p></div>
             <div><p className="text-xs text-muted-foreground">&nbsp;</p></div>

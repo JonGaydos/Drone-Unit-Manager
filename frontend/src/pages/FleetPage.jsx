@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { useConfirm } from '@/hooks/useConfirm'
-import { Plus, Edit, Trash2, Search, Battery, Gamepad2, Warehouse, Cpu, Paperclip, ChevronUp, ChevronDown, Download, Loader2 } from 'lucide-react'
+import { Plus, Edit, Trash2, Search, Battery, Gamepad2, Warehouse, Cpu, Paperclip, ChevronUp, ChevronDown, Download, Loader2, Merge } from 'lucide-react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 
 // ─── Generic Equipment Modal ────────────────────────────────────────────────
@@ -93,7 +93,7 @@ function EquipmentModal({ title, record, fields, onSave, onClose, vehicleModels 
 
 // ─── Generic Equipment Table ────────────────────────────────────────────────
 
-function EquipmentTable({ items, columns, isAdmin, onEdit, onDelete, emptyMessage, sortKey, sortDir, onToggleSort }) {
+function EquipmentTable({ items, columns, isAdmin, onEdit, onDelete, onMerge, emptyMessage, sortKey, sortDir, onToggleSort }) {
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden">
       <div className="overflow-x-auto">
@@ -125,6 +125,11 @@ function EquipmentTable({ items, columns, isAdmin, onEdit, onDelete, emptyMessag
                     <button onClick={() => onEdit(item)} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent" aria-label="Edit">
                       <Edit className="w-4 h-4" />
                     </button>
+                    {onMerge && (
+                      <button onClick={() => onMerge(item)} className="p-1.5 text-muted-foreground hover:text-primary rounded-lg hover:bg-primary/10" aria-label="Merge" title="Merge duplicate into this item">
+                        <Merge className="w-4 h-4" />
+                      </button>
+                    )}
                     <button onClick={() => onDelete(item.id)} className="p-1.5 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10" aria-label="Delete">
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -422,6 +427,27 @@ export default function FleetPage() {
     }
   }
 
+  const [mergeTarget, setMergeTarget] = useState(null)
+  const [mergeFromId, setMergeFromId] = useState('')
+  const [merging, setMerging] = useState(false)
+
+  const handleMerge = async () => {
+    if (!mergeTarget || !mergeFromId) return
+    setMerging(true)
+    try {
+      const endpoint = config.endpoint.replace('/api/', '/api/')
+      const res = await api.post(`${config.endpoint}/${mergeTarget.id}/merge?merge_from_id=${mergeFromId}`)
+      toast.success(res.message || 'Merged successfully')
+      setMergeTarget(null)
+      setMergeFromId('')
+      load()
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setMerging(false)
+    }
+  }
+
   const handleDelete = (id) => {
     requestConfirm({
       title: `Delete ${singularize(config.label)}`,
@@ -529,6 +555,7 @@ export default function FleetPage() {
           isAdmin={isSupervisor}
           onEdit={(item) => setModal(item)}
           onDelete={handleDelete}
+          onMerge={['batteries', 'sensors', 'attachments'].includes(activeTab) && isSupervisor ? (item) => { setMergeTarget(item); setMergeFromId('') } : null}
           emptyMessage={`No ${config.label.toLowerCase()} found`}
           sortKey={sortKey}
           sortDir={sortDir}
@@ -546,6 +573,41 @@ export default function FleetPage() {
           onClose={() => setModal(null)}
           vehicleModels={vehicleModels}
         />
+      )}
+      {/* Merge Modal */}
+      {mergeTarget && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setMergeTarget(null)}>
+          <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold text-foreground mb-2">Merge {singularize(config.label)}</h2>
+            <p className="text-sm text-muted-foreground mb-4">
+              Select a duplicate to merge into <strong className="text-foreground">{mergeTarget.nickname || mergeTarget.name || mergeTarget.serial_number}</strong>. All flight references will be updated and the duplicate will be deleted.
+            </p>
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">Merge from (duplicate to remove)</label>
+              <select
+                value={mergeFromId}
+                onChange={e => setMergeFromId(e.target.value)}
+                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
+              >
+                <option value="">Select duplicate...</option>
+                {items.filter(i => i.id !== mergeTarget.id).map(i => (
+                  <option key={i.id} value={i.id}>{i.nickname || i.name || i.serial_number} ({i.serial_number})</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={handleMerge}
+                disabled={!mergeFromId || merging}
+                className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {merging ? <Loader2 className="w-4 h-4 animate-spin" /> : <Merge className="w-4 h-4" />}
+                Merge
+              </button>
+              <button onClick={() => setMergeTarget(null)} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm">Cancel</button>
+            </div>
+          </div>
+        </div>
       )}
       <ConfirmDialog {...confirmProps} />
     </div>

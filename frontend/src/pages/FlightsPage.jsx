@@ -88,6 +88,7 @@ function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachmen
             <div>
               <label className="block text-sm font-medium text-foreground mb-1">Battery</label>
               <input list="battery-list" value={form.battery_serial} onChange={e => setForm({...form, battery_serial: e.target.value})}
+                onFocus={e => { e.target.showPicker?.() }}
                 placeholder="Select or type..."
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               <datalist id="battery-list">
@@ -97,6 +98,7 @@ function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachmen
             <div>
               <label className="block text-sm font-medium text-foreground mb-1">Sensor Package</label>
               <input list="sensor-list" value={form.sensor_package} onChange={e => setForm({...form, sensor_package: e.target.value})}
+                onFocus={e => { e.target.showPicker?.() }}
                 placeholder="Select or type..."
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               <datalist id="sensor-list">
@@ -106,6 +108,7 @@ function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachmen
             <div>
               <label className="block text-sm font-medium text-foreground mb-1">Attachment (Top)</label>
               <input list="attach-list" value={form.attachment_top} onChange={e => setForm({...form, attachment_top: e.target.value})}
+                onFocus={e => { e.target.showPicker?.() }}
                 placeholder="Select or type..."
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               <datalist id="attach-list">
@@ -115,6 +118,7 @@ function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachmen
             <div>
               <label className="block text-sm font-medium text-foreground mb-1">Attachment (Bottom)</label>
               <input list="attach-list" value={form.attachment_bottom} onChange={e => setForm({...form, attachment_bottom: e.target.value})}
+                onFocus={e => { e.target.showPicker?.() }}
                 placeholder="Select or type..."
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
