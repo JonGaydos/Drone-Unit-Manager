@@ -59,6 +59,44 @@ def _build_creds(db: Session, provider_name: str) -> ProviderCredentials:
     return ProviderCredentials(api_token=api_token, token_id=token_id)
 
 
+def _ensure_equipment_records(db: Session, flight: Flight):
+    """Auto-create Fleet records (Battery, SensorPackage, Attachment) from flight equipment strings.
+
+    If a flight references equipment by serial number that doesn't exist in the Fleet,
+    create a minimal record so it appears in dropdown lists for future use.
+    """
+    if flight.battery_serial:
+        serial = flight.battery_serial.strip()
+        if serial and not db.query(Battery).filter(Battery.serial_number == serial).first():
+            db.add(Battery(serial_number=serial, status="active"))
+            logger.info("Auto-created battery record: %s", serial)
+
+    if flight.sensor_package:
+        serial = flight.sensor_package.strip()
+        if serial and not db.query(SensorPackage).filter(SensorPackage.serial_number == serial).first():
+            db.add(SensorPackage(serial_number=serial, status="active"))
+            logger.info("Auto-created sensor package record: %s", serial)
+
+    for field in ("attachment_top", "attachment_bottom", "attachment_left", "attachment_right"):
+        val = getattr(flight, field, None)
+        if val:
+            # Attachments may have format "TYPE (SERIAL)" — extract serial if present
+            serial = val.strip()
+            if not db.query(Attachment).filter(Attachment.serial_number == serial).first():
+                # Try to extract name and serial from "NAME (SERIAL)" format
+                name = None
+                if "(" in serial and serial.endswith(")"):
+                    parts = serial.rsplit("(", 1)
+                    name = parts[0].strip()
+                    serial_inner = parts[1].rstrip(")")
+                    if not db.query(Attachment).filter(Attachment.serial_number == serial_inner).first():
+                        db.add(Attachment(serial_number=serial_inner, name=name, status="active"))
+                        logger.info("Auto-created attachment record: %s (%s)", name, serial_inner)
+                else:
+                    db.add(Attachment(serial_number=serial, status="active"))
+                    logger.info("Auto-created attachment record: %s", serial)
+
+
 def _upsert_flights(flights_data: list[dict], skydio_users: list[dict], db: Session, result: SyncResult):
     """Shared flight upsert logic used by both sync_all and sync_all_deep."""
     for f_data in flights_data:
@@ -160,6 +198,12 @@ def _upsert_flights(flights_data: list[dict], skydio_users: list[dict], db: Sess
         )
         db.add(flight)
         result.flights_new += 1
+
+        # Auto-create Fleet records for equipment referenced by this flight
+        try:
+            _ensure_equipment_records(db, flight)
+        except Exception as e:
+            logger.warning("Equipment auto-create failed for flight %s: %s", ext_id, e)
 
     db.flush()
 

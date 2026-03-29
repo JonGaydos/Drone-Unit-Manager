@@ -213,6 +213,12 @@ def import_excel(db: Session, file_bytes: bytes) -> dict:
                     data_source="excel_import",
                 )
                 db.add(flight)
+                # Auto-create Fleet records for equipment mentioned in this flight
+                try:
+                    from app.services.sync_manager import _ensure_equipment_records
+                    _ensure_equipment_records(db, flight)
+                except Exception:
+                    pass
                 result["flights_imported"] += 1
             except Exception as e:
                 result["errors"].append(f"Skydio row {r}: {str(e)}")

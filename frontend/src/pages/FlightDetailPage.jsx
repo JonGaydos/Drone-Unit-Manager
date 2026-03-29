@@ -24,6 +24,9 @@ export default function FlightDetailPage() {
   const [pilots, setPilots] = useState([])
   const [vehicles, setVehicles] = useState([])
   const [purposes, setPurposes] = useState([])
+  const [batteries, setBatteries] = useState([])
+  const [sensors, setSensors] = useState([])
+  const [attachments, setAttachments] = useState([])
   const [editing, setEditing] = useState(false)
   const [editForm, setEditForm] = useState({})
   const [loading, setLoading] = useState(true)
@@ -61,12 +64,18 @@ export default function FlightDetailPage() {
       api.get('/pilots'),
       api.get('/vehicles'),
       api.get('/flights/purposes/list'),
-    ]).then(([f, t, p, v, pu]) => {
+      api.get('/batteries').catch(() => []),
+      api.get('/sensors').catch(() => []),
+      api.get('/attachments').catch(() => []),
+    ]).then(([f, t, p, v, pu, bats, sens, atts]) => {
       setFlight(f)
       setTelemetry(Array.isArray(t) ? t : [])
       setPilots(p)
       setVehicles(v)
       setPurposes(pu)
+      setBatteries(bats)
+      setSensors(sens)
+      setAttachments(atts)
       initEditForm(f)
     }).catch(() => {}).finally(() => setLoading(false))
   }, [id])
@@ -295,37 +304,46 @@ export default function FlightDetailPage() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">Battery Serial</label>
-                <input type="text" value={editForm.battery_serial} onChange={e => setEditForm({...editForm, battery_serial: e.target.value})}
-                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+                <input list="detail-battery-list" value={editForm.battery_serial} onChange={e => setEditForm({...editForm, battery_serial: e.target.value})}
+                  placeholder="Select or type..." className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+                <datalist id="detail-battery-list">
+                  {batteries.map(b => <option key={b.id} value={b.serial_number}>{b.nickname || b.serial_number}</option>)}
+                </datalist>
               </div>
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">Sensor Package</label>
-                <input type="text" value={editForm.sensor_package} onChange={e => setEditForm({...editForm, sensor_package: e.target.value})}
-                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+                <input list="detail-sensor-list" value={editForm.sensor_package} onChange={e => setEditForm({...editForm, sensor_package: e.target.value})}
+                  placeholder="Select or type..." className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+                <datalist id="detail-sensor-list">
+                  {sensors.map(s => <option key={s.id} value={s.serial_number}>{s.name || s.serial_number}</option>)}
+                </datalist>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">Attachment (TOP)</label>
-                <input type="text" value={editForm.attachment_top} onChange={e => setEditForm({...editForm, attachment_top: e.target.value})}
-                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+                <input list="detail-attach-list" value={editForm.attachment_top} onChange={e => setEditForm({...editForm, attachment_top: e.target.value})}
+                  placeholder="Select or type..." className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+                <datalist id="detail-attach-list">
+                  {attachments.map(a => <option key={a.id} value={a.serial_number}>{a.name || a.serial_number}</option>)}
+                </datalist>
               </div>
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">Attachment (BOTTOM)</label>
-                <input type="text" value={editForm.attachment_bottom} onChange={e => setEditForm({...editForm, attachment_bottom: e.target.value})}
-                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+                <input list="detail-attach-list" value={editForm.attachment_bottom} onChange={e => setEditForm({...editForm, attachment_bottom: e.target.value})}
+                  placeholder="Select or type..." className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">Attachment (LEFT)</label>
-                <input type="text" value={editForm.attachment_left} onChange={e => setEditForm({...editForm, attachment_left: e.target.value})}
-                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+                <input list="detail-attach-list" value={editForm.attachment_left} onChange={e => setEditForm({...editForm, attachment_left: e.target.value})}
+                  placeholder="Select or type..." className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">Attachment (RIGHT)</label>
-                <input type="text" value={editForm.attachment_right} onChange={e => setEditForm({...editForm, attachment_right: e.target.value})}
-                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+                <input list="detail-attach-list" value={editForm.attachment_right} onChange={e => setEditForm({...editForm, attachment_right: e.target.value})}
+                  placeholder="Select or type..." className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               </div>
             </div>
             <div>
