@@ -511,6 +511,15 @@ class SkydioProvider(DroneProvider):
             if not isinstance(raw, list):
                 return []
 
+            # Determine takeoff altitude (ground level) from the first point's gps_altitude
+            # so we can compute AGL from gps_altitude for points missing height_above_takeoff
+            takeoff_gps_alt = None
+            for p in raw:
+                if isinstance(p, dict) and p.get("gps_altitude") is not None:
+                    takeoff_gps_alt = p["gps_altitude"]
+                    break
+
+            import math
             points = []
             for p in raw:
                 if not isinstance(p, dict):
@@ -521,15 +530,20 @@ class SkydioProvider(DroneProvider):
                 if battery is not None and battery <= 1.0:
                     battery = round(battery * 100, 1)
 
-                # Altitude: Use height_above_takeoff exclusively (AGL — Above Ground Level)
-                # This is the altitude relative to the launch point, matching what the
-                # pilot sees on the drone's display (e.g., "200 ft AGL").
-                # gps_altitude is MSL (above sea level) and must NOT be mixed in,
-                # as it inflates the chart by the launch site's elevation.
-                alt = p.get("height_above_takeoff")
+                # Altitude (AGL — Above Ground Level):
+                # Prefer height_above_takeoff when available (sparse: ~17% of points).
+                # For all other points, compute AGL from gps_altitude by subtracting
+                # the takeoff point's gps_altitude (ground elevation MSL).
+                # This matches what the pilot sees on the drone display.
+                alt_hat = p.get("height_above_takeoff")
+                if alt_hat is not None:
+                    alt = alt_hat
+                elif p.get("gps_altitude") is not None and takeoff_gps_alt is not None:
+                    alt = p["gps_altitude"] - takeoff_gps_alt
+                else:
+                    alt = None
 
                 # Speed: calculate from gps_velocity [vx, vy, vz]
-                import math
                 velocity = p.get("gps_velocity")
                 speed = None
                 if isinstance(velocity, list) and len(velocity) >= 2:
@@ -546,7 +560,7 @@ class SkydioProvider(DroneProvider):
                     "heading_deg": p.get("heading_deg") or p.get("heading"),
                     "pitch_deg": p.get("pitch_deg") or p.get("pitch"),
                     "roll_deg": p.get("roll_deg") or p.get("roll"),
-                    "satellites": p.get("satellites") or p.get("gps_satellites"),
+                    "satellites": p.get("gps_num_satellites_used") or p.get("satellites"),
                 })
 
             logger.info("Fetched %d telemetry points for flight %s", len(points), flight_id)
