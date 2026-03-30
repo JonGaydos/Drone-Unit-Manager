@@ -328,55 +328,86 @@ function SmtpCard({ settings }) {
 }
 
 function FlightLogImport() {
-  const [file, setFile] = useState(null)
+  const [files, setFiles] = useState([])
   const [format, setFormat] = useState('auto')
   const [importing, setImporting] = useState(false)
   const [result, setResult] = useState(null)
+  const [progress, setProgress] = useState(null)
   const toast = useToast()
 
+  const importSingleFile = async (file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    if (format === 'skydio_csv') {
+      const res = await api.upload('/export/flights/import', formData)
+      return { ...res, flight_id: null, points_imported: res.imported || 0, format_detected: 'skydio_csv', error: res.errors?.length ? res.errors.join(', ') : null }
+    } else if (format === 'excel') {
+      const res = await api.upload('/export/excel/import', formData)
+      return { ...res, flight_id: null, points_imported: res.flights_imported || 0, format_detected: 'excel', error: res.errors?.length ? res.errors.join(', ') : null }
+    } else if (format === 'airdata_zip') {
+      return await api.upload('/export/flights/import/log', formData)
+    } else {
+      formData.append('format', format)
+      return await api.upload('/export/flights/import/log', formData)
+    }
+  }
+
   const handleImport = async () => {
-    if (!file) return
+    if (files.length === 0) return
     setImporting(true)
     setResult(null)
+    setProgress(null)
+
     try {
-      const formData = new FormData()
-      formData.append('file', file)
-
-      let res
-      if (format === 'skydio_csv') {
-        // Use the existing Skydio CSV import endpoint
-        res = await api.upload('/export/flights/import', formData)
-        // Normalize response shape
-        res = { ...res, flight_id: null, points_imported: res.imported || 0, format_detected: 'skydio_csv', error: res.errors?.length ? res.errors.join(', ') : null }
-      } else if (format === 'excel') {
-        // Use the existing Excel import endpoint
-        res = await api.upload('/export/excel/import', formData)
-        res = { ...res, flight_id: null, points_imported: res.flights_imported || 0, format_detected: 'excel', error: res.errors?.length ? res.errors.join(', ') : null }
-      } else if (format === 'airdata_zip') {
-        // ZIP bulk import → same endpoint handles it
-        res = await api.upload('/export/flights/import/log', formData)
+      if (files.length === 1) {
+        // Single file import
+        const res = await importSingleFile(files[0])
+        setResult(res)
+        if (res.error) {
+          toast.error(res.error)
+        } else if (res.total !== undefined) {
+          toast.success(`Bulk import: ${res.imported} imported, ${res.skipped} skipped out of ${res.total} files`)
+        } else if (res.skipped) {
+          toast.info(`Flight already exists (skipped)`)
+        } else if (res.flight_id) {
+          toast.success(`Imported flight #${res.flight_id} with ${res.points_imported} telemetry points`)
+        } else {
+          toast.success(`Imported ${res.points_imported || res.imported || 0} flights successfully`)
+        }
       } else {
-        // DJI/Litchi/Airdata/airdata_json/auto → flight log import
-        formData.append('format', format)
-        res = await api.upload('/export/flights/import/log', formData)
-      }
-
-      setResult(res)
-      if (res.error) {
-        toast.error(res.error)
-      } else if (res.total !== undefined) {
-        // Batch/ZIP result
-        toast.success(`Bulk import: ${res.imported} imported, ${res.skipped} skipped out of ${res.total} files`)
-        if (res.errors?.length) toast.error(`${res.errors.length} error(s) during import`)
-      } else if (res.flight_id) {
-        toast.success(`Imported flight #${res.flight_id} with ${res.points_imported} telemetry points`)
-      } else {
-        toast.success(`Imported ${res.points_imported || res.imported || 0} flights successfully`)
+        // Multi-file batch import (process sequentially)
+        const batch = { total: files.length, imported: 0, skipped: 0, errors: [] }
+        for (let i = 0; i < files.length; i++) {
+          setProgress(`Processing ${i + 1} of ${files.length}: ${files[i].name}`)
+          try {
+            const res = await importSingleFile(files[i])
+            if (res.total !== undefined) {
+              // ZIP result (nested batch)
+              batch.imported += res.imported || 0
+              batch.skipped += res.skipped || 0
+              if (res.errors?.length) batch.errors.push(...res.errors)
+            } else if (res.skipped) {
+              batch.skipped++
+            } else if (res.error) {
+              batch.errors.push(`${files[i].name}: ${res.error}`)
+            } else {
+              batch.imported++
+            }
+          } catch (err) {
+            batch.errors.push(`${files[i].name}: ${err.message}`)
+          }
+        }
+        setResult(batch)
+        setProgress(null)
+        toast.success(`Batch import: ${batch.imported} imported, ${batch.skipped} skipped out of ${batch.total}`)
+        if (batch.errors.length) toast.warning(`${batch.errors.length} error(s) during import`)
       }
     } catch (err) {
       toast.error(err.message)
     } finally {
       setImporting(false)
+      setProgress(null)
     }
   }
 
@@ -394,11 +425,12 @@ function FlightLogImport() {
 
       <div className="flex gap-3 items-end flex-wrap">
         <div className="flex-1 min-w-[200px]">
-          <label className="block text-xs font-medium text-muted-foreground mb-1">Flight Log File</label>
+          <label className="block text-xs font-medium text-muted-foreground mb-1">Flight Log File(s) — select multiple with Ctrl/Shift+click</label>
           <input
             type="file"
+            multiple
             accept=".txt,.csv,.xlsx,.xls,.json,.zip"
-            onChange={e => { setFile(e.target.files[0]); setResult(null) }}
+            onChange={e => { setFiles(Array.from(e.target.files)); setResult(null) }}
             className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm file:mr-3 file:bg-primary file:text-primary-foreground file:border-0 file:rounded file:px-2 file:py-1 file:text-xs file:font-medium"
           />
         </div>
@@ -421,13 +453,20 @@ function FlightLogImport() {
         </div>
         <button
           onClick={handleImport}
-          disabled={!file || importing}
+          disabled={files.length === 0 || importing}
           className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center gap-1.5"
         >
           {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-          Import
+          {files.length > 1 ? `Import ${files.length} files` : 'Import'}
         </button>
       </div>
+
+      {progress && (
+        <div className="bg-blue-500/10 border border-blue-500/30 text-blue-400 rounded-lg p-3 text-sm flex items-center gap-2">
+          <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+          {progress}
+        </div>
+      )}
 
       <p className="text-xs text-amber-400/80">After importing, add email addresses to pilot profiles for API sync matching.</p>
 
