@@ -23,6 +23,10 @@ const sections = [
         title: 'Navigating the App',
         body: 'Use the sidebar on the left to navigate between sections. The sidebar can be collapsed using the arrow at the bottom. On mobile devices, tap the menu icon in the top-left corner to open the sidebar.'
       },
+      {
+        title: 'Cross-Reference Links',
+        body: 'Throughout the app, pilot names, vehicle names, battery serials, sensor packages, attachments, purpose codes, and flight IDs are clickable orange links. Click any of these to navigate directly to that item\'s detail page. Purpose codes link to a filtered flights view showing all flights with that purpose.'
+      },
     ]
   },
   {
@@ -89,6 +93,18 @@ const sections = [
         title: 'Equipment Checkout',
         body: 'The equipment checkout system provides chain-of-custody tracking. Check equipment out to a pilot, and check it back in when returned.'
       },
+      {
+        title: 'Equipment Dropdowns',
+        body: 'When adding or editing a flight, equipment fields (battery, sensor package, attachments) show a dropdown of existing Fleet inventory. You can type to search or select from the list. Typing a new serial number automatically creates a Fleet record for it.'
+      },
+      {
+        title: 'Merging Duplicates',
+        body: 'If duplicate equipment records exist (e.g., two entries for the same battery), use the merge button (icon) in Fleet > Batteries/Sensors/Attachments. Select the duplicate to absorb — all flight references will be updated and the duplicate deleted.'
+      },
+      {
+        title: 'Battery Health Tracking',
+        body: 'Each battery has a health history chart showing health percentage and cycle count over time. Go to Fleet > click a battery > Health History section. Use "Record Reading" to manually add health data points. Health readings are also recorded automatically during Skydio API sync.'
+      },
     ]
   },
   {
@@ -148,6 +164,20 @@ const sections = [
     ]
   },
   {
+    id: 'airspace',
+    title: 'Airspace (ADS-B)',
+    content: [
+      {
+        title: 'Live Aircraft Map',
+        body: 'The Airspace page shows a live map of nearby manned aircraft using ADS-B data from airplanes.live. Click anywhere on the map to set your search center — a blue circle shows the search radius. Aircraft markers are color-coded by altitude: red (below 400ft, drone zone), orange (400-1000ft), yellow (1000-5000ft), blue (5000-15000ft), gray (above 15000ft).'
+      },
+      {
+        title: 'Using the Map',
+        body: 'Click a location on the map to start scanning. Adjust the radius (25-200 miles) and refresh interval (5-30 seconds or off) using the controls at the top. Click any aircraft marker to see its callsign, altitude, speed, heading, squawk code, and aircraft type. The aircraft count and last refresh time are shown in the top bar.'
+      },
+    ]
+  },
+  {
     id: 'flight-plans',
     title: 'Flight Plans & Checklists',
     content: [
@@ -200,6 +230,10 @@ const sections = [
         title: 'Analytics',
         body: 'The Analytics page provides interactive Power BI-style charts. Click any chart element (a pilot, year, purpose, or vehicle) to cross-filter all other charts. The map shows all flight locations.'
       },
+      {
+        title: 'GPX and KML Export',
+        body: 'Flight paths can be exported as GPX (for GPS devices) or KML (for Google Earth) from the flight detail page. These buttons appear when the flight has telemetry data. The exported files contain the full GPS track with altitude and speed data.'
+      },
     ]
   },
   {
@@ -224,8 +258,12 @@ const sections = [
   },
   {
     id: 'integrations',
-    title: 'API Integrations',
+    title: 'Integrations & Import',
     content: [
+      {
+        title: 'Drone Provider APIs',
+        body: 'The Integrations tab in Settings manages connections to drone manufacturer APIs. Currently Skydio is supported, with DJI, BRINC, Parrot, and Autel planned. Each provider has credential fields, Test Connection, Sync Now, Full Sync, and Sync Telemetry (10) buttons. Sync Now fetches new flights and automatically syncs telemetry. Sync Telemetry (10) fetches detailed flight path data for up to 10 flights at a time.'
+      },
       {
         title: 'Skydio Cloud API',
         body: `To connect to the Skydio Cloud API:
@@ -233,15 +271,33 @@ const sections = [
 1. Log into Skydio Cloud at cloud.skydio.com
 2. Go to Settings > Integrations > API Tokens
 3. Create a token with read access to: Flights, Flight Telemetry, Vehicles, Batteries, Controllers, Users, Attachments, Sensor Packages
-4. In Drone Unit Manager, go to Settings > Skydio Cloud API
+4. In Drone Unit Manager, go to Settings > Integrations tab
 5. Enter the API Token and Token ID
 6. Click "Test Connection", then "Sync All"
 
 For automatic pilot matching, ensure each pilot\'s profile has their Skydio account email address.`
       },
       {
-        title: 'Excel Import',
-        body: 'Import flight data from Excel spreadsheets with a sheet named "Skydio" containing columns for Flight ID, Vehicle, Pilot, timestamps, location, duration, and equipment. An optional "Pilot Info" sheet imports certification data.'
+        title: 'Flight Log Import',
+        body: `Import flight data from multiple sources via Settings > Integrations tab:
+
+• **Skydio CSV** — Flight records exported from Skydio Cloud
+• **Excel** — Spreadsheets with "Skydio" and "Pilot Info" sheets
+• **DJI .txt** — DJI Go 4 flight log text files
+• **Litchi CSV** — Litchi flight log exports
+• **Airdata CSV** — Rich 52-column exports with gimbal, RC inputs, battery temperature, flight mode
+• **Airdata JSON** — Single flight JSON exports from Airdata.com
+• **Airdata ZIP** — Bulk export of all flights from Airdata.com (ZIP of JSON files)
+
+Select multiple files at once using Ctrl+click or Shift+click. The app processes them sequentially with live progress tracking and automatic deduplication.`
+      },
+      {
+        title: 'SMTP Email',
+        body: 'Configure SMTP settings in the Integrations tab to enable email digest notifications. Enter your SMTP host, port, username, password, from address, and TLS settings. Use the "Send Test Email" button to verify the configuration.'
+      },
+      {
+        title: 'Email Digest Notifications',
+        body: 'Once SMTP is configured, each user can set up email digest preferences in Settings > General. Choose daily or weekly frequency, preferred send time, and which categories to include: pending flight plan approvals, flights needing review, expiring certifications, expiring registrations, overdue maintenance, assigned missions, overdue equipment checkouts, and recent incidents.'
       },
     ]
   },
@@ -249,6 +305,10 @@ For automatic pilot matching, ensure each pilot\'s profile has their Skydio acco
     id: 'settings',
     title: 'Settings & Admin',
     content: [
+      {
+        title: 'Settings Tabs',
+        body: 'The Settings page is organized into tabs: General (organization info, weather thresholds, sidebar config, mission purposes), Users (change password, user management), and Integrations (provider APIs, SMTP, flight log import).'
+      },
       {
         title: 'Organization Settings',
         body: 'Configure your organization name, logo, and timezone from the Settings page.'

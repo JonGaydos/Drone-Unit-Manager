@@ -4,7 +4,7 @@ A self-hosted drone fleet management platform for law enforcement, public safety
 
 ## Overview
 
-Drone Unit Manager replaces spreadsheets, AirData subscriptions, and scattered documentation with a unified platform that your organization owns and controls. Import flight data from Skydio's Cloud API or Excel spreadsheets, manage pilot certifications and currency, track equipment maintenance, generate compliance reports, and monitor fleet health — all from a modern web interface accessible on desktop and mobile.
+Drone Unit Manager replaces spreadsheets, AirData subscriptions, and scattered documentation with a unified platform that your organization owns and controls. Import flight data from Skydio's Cloud API, Airdata.com exports, DJI flight logs, Excel spreadsheets, and more. Manage pilot certifications and currency, track equipment maintenance, generate compliance reports, and monitor fleet health — all from a modern web interface accessible on desktop and mobile.
 
 The application runs as a single Docker container with no external dependencies. Your data stays on your infrastructure.
 
@@ -15,14 +15,22 @@ The application runs as a single Docker container with no external dependencies.
 - Equipment check-in/check-out with chain of custody
 - Component-level tracking (propellers, gimbals, cameras) with flight hours and warranty
 - FAA registration tracking with 2-year renewal calculation and history
+- Equipment merge for deduplicating batteries, sensors, and attachments
+- Battery health trending with historical readings chart
+- Smart equipment dropdowns — type to search or auto-create new Fleet records
 
 ### Flight Tracking and Telemetry
-- Import flights from Skydio Cloud API or Excel spreadsheets
+- Import flights from Skydio Cloud API, Airdata.com (CSV/JSON/ZIP), DJI .txt, Litchi CSV, or Excel
+- Multi-file import with progress tracking and automatic deduplication
 - GPS flight path visualization on interactive maps
 - Altitude, speed, and battery telemetry charts
+- GPX and KML export for Google Earth and GPS devices
+- AGL altitude calculation from GPS data with bucket-averaged smoothing
 - Per-flight detail with equipment linkage (battery, sensor, attachments, carrier)
 - Automatic pilot matching via email cross-reference
 - Reverse geocoding for takeoff addresses
+- Telemetry sync toggle for supervisors
+- Smart auto-tagging (Night Flight, High Speed, Low Battery, etc.)
 
 ### Pilot Management
 - Pilot profiles with contact info, badge numbers, photos
@@ -69,9 +77,30 @@ The application runs as a single Docker container with no external dependencies.
 - Flights by pilot, year, purpose, and vehicle
 - Flight locations map
 
+### Live Airspace (ADS-B)
+- Real-time nearby aircraft map using airplanes.live ADS-B data
+- Click-to-set location with configurable search radius (25-200 miles)
+- Aircraft color-coded by altitude band with auto-refresh
+- Clickable aircraft markers showing callsign, altitude, speed, heading, squawk
+
+### Email Notifications
+- Daily/weekly email digest with actionable items
+- Configurable SMTP server with test email
+- Per-user notification preferences (categories, frequency, send time)
+- Digest includes: pending approvals, expiring certs, overdue maintenance, recent incidents
+
+### Cross-Reference Navigation
+- Every pilot, vehicle, battery, sensor, attachment, purpose code, and flight ID is a clickable link
+- Navigate between related records with a single click
+- Purpose codes link to filtered flight views
+- Consistent orange link styling throughout the app
+
 ### API Integrations
 - Skydio Cloud API (flights, vehicles, batteries, controllers, telemetry, users)
-- Drone-agnostic architecture for future integrations (DJI, BRINC)
+- Multi-platform provider architecture (provider_serial, data_source, extra_data)
+- Airdata.com import (CSV with 52 fields, JSON, bulk ZIP)
+- DJI Go 4, Litchi, and generic CSV flight log import
+- Drone-agnostic architecture for future integrations (DJI, BRINC, Parrot, Autel)
 - Automatic and manual sync with intelligent deduplication
 - Bulk telemetry fetching
 
@@ -84,6 +113,10 @@ The application runs as a single Docker container with no external dependencies.
 - Path traversal prevention
 - JWT authentication with configurable secret key
 - Password policy enforcement (12+ characters, uppercase, number)
+- File type whitelist validation on all uploads
+- CORS restricted to specific methods and headers
+- Request ID tracking (X-Request-ID header)
+- Settings key whitelist to prevent configuration injection
 
 ## Quick Start
 
@@ -148,9 +181,10 @@ On first launch with an empty database, the application displays a setup wizard.
 1. Log into Skydio Cloud at cloud.skydio.com
 2. Go to Settings > Integrations > API Tokens
 3. Create a token with read access to: Flights, Flight Telemetry, Vehicles, Batteries, Controllers, Users, Attachments, Sensor Packages
-4. In Drone Unit Manager, go to Settings > Skydio Cloud API
+4. In Drone Unit Manager, go to Settings > Integrations tab > Skydio
 5. Enter the API Token and Token ID
 6. Click Test Connection, then Sync All
+7. Use the "Sync Telemetry (10)" button to fetch detailed telemetry for recent flights
 
 For automatic pilot matching, ensure each pilot's profile has their Skydio account email address.
 
@@ -167,11 +201,26 @@ Attachment (RIGHT), Carrier(s), Purpose
 
 An optional "Pilot Info" sheet imports certification data.
 
+### Airdata Import
+
+Import flights from Airdata.com in multiple formats:
+
+- **Airdata CSV**: Single-flight export with 52 data columns (altitude, gimbal, RC inputs, battery temperature, flight mode)
+- **Airdata JSON**: Single-flight JSON export with channel-based telemetry
+- **Airdata ZIP**: Bulk export of all flights (ZIP of JSON files)
+
+Upload via Settings > Integrations tab > Flight Log Import. Select multiple files at once using Ctrl+click. Existing flights are automatically deduplicated by flight ID.
+
+### DJI and Litchi Import
+
+Import flight logs from DJI Go 4 (.txt files) or Litchi (.csv files). The application auto-detects the format and extracts telemetry data including GPS path, altitude, speed, and battery.
+
 ## Architecture
 
 - **Backend:** Python 3.12, FastAPI, SQLAlchemy, SQLite
 - **Frontend:** React 19, Vite, Tailwind CSS v4, Recharts, Leaflet.js
-- **Database:** 34 tables, 212+ API endpoints
+- **Database:** 37+ tables, 250+ API endpoints
+- **Telemetry:** Separate SQLite database for high-volume flight telemetry
 - **Deployment:** Single Docker container, multi-stage build
 
 ## API Documentation
