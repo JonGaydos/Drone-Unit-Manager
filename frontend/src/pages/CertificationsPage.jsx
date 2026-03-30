@@ -438,7 +438,7 @@ export default function CertificationsPage() {
                 {filteredMatrix.map(row => (
                   <tr key={row.pilot_id} className="border-b border-border/50 hover:bg-accent/30">
                     <td className="px-4 py-2 text-foreground font-medium sticky left-0 bg-card z-10">
-                      <Link to={`/pilots/${row.pilot_id}`} className="text-foreground hover:text-primary">
+                      <Link to={`/pilots/${row.pilot_id}`} className="text-primary hover:underline">
                         {row.pilot_name}
                       </Link>
                     </td>

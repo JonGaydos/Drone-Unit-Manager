@@ -186,7 +186,7 @@ const TAB_CONFIGS = {
     columns: [
       { key: 'nickname', label: 'Vehicle', primary: true, render: v => {
         const name = v.nickname || v.serial_number || '—'
-        return <Link to={`/fleet/vehicles/${v.id}`} className="hover:text-primary">{name}</Link>
+        return <Link to={`/fleet/vehicles/${v.id}`} className="text-primary hover:underline">{name}</Link>
       }},
       { key: 'manufacturer', label: 'Manufacturer' },
       { key: 'model', label: 'Model' },
@@ -233,7 +233,7 @@ const TAB_CONFIGS = {
     columns: [
       { key: 'nickname', label: 'Battery', primary: true, render: b => {
         const name = b.nickname || b.serial_number || '—'
-        return <Link to={`/fleet/batteries/${b.id}`} className="hover:text-primary">{name}</Link>
+        return <Link to={`/fleet/batteries/${b.id}`} className="text-primary hover:underline">{name}</Link>
       }},
       { key: 'serial_number', label: 'Serial' },
       { key: 'manufacturer', label: 'Manufacturer' },
@@ -265,7 +265,7 @@ const TAB_CONFIGS = {
     columns: [
       { key: 'nickname', label: 'Controller', primary: true, render: c => {
         const name = c.nickname || c.serial_number || '—'
-        return <Link to={`/fleet/controllers/${c.id}`} className="hover:text-primary">{name}</Link>
+        return <Link to={`/fleet/controllers/${c.id}`} className="text-primary hover:underline">{name}</Link>
       }},
       { key: 'serial_number', label: 'Serial' },
       { key: 'manufacturer', label: 'Manufacturer' },

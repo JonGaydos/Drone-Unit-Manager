@@ -204,13 +204,13 @@ export default function DashboardPage() {
                       </td>
                       <td className="px-5 py-3 text-muted-foreground">
                         {flight.pilot_id
-                          ? <Link to={`/pilots/${flight.pilot_id}`} className="hover:text-primary">{flight.pilot_name || flight.pilot?.name || '—'}</Link>
+                          ? <Link to={`/pilots/${flight.pilot_id}`} className="text-primary hover:underline">{flight.pilot_name || flight.pilot?.name || '—'}</Link>
                           : (flight.pilot_name || flight.pilot?.name || '—')
                         }
                       </td>
                       <td className="px-5 py-3 text-muted-foreground hidden md:table-cell">
                         {flight.vehicle_id
-                          ? <Link to={`/fleet/vehicles/${flight.vehicle_id}`} className="hover:text-primary">{flight.vehicle_name || flight.vehicle?.name || flight.vehicle?.serial_number || '—'}</Link>
+                          ? <Link to={`/fleet/vehicles/${flight.vehicle_id}`} className="text-primary hover:underline">{flight.vehicle_name || flight.vehicle?.name || flight.vehicle?.serial_number || '—'}</Link>
                           : (flight.vehicle_name || flight.vehicle?.name || flight.vehicle?.serial_number || '—')
                         }
                       </td>
@@ -358,7 +358,7 @@ export default function DashboardPage() {
                     <div className="space-y-0.5">
                       {topVehicles.map((v) => (
                         <p key={v.id} className="text-xs">
-                          <Link to={`/fleet/vehicles/${v.id}`} className="text-foreground font-medium hover:text-primary">{v.name}</Link>
+                          <Link to={`/fleet/vehicles/${v.id}`} className="text-primary font-medium hover:underline">{v.name}</Link>
                           <span className="text-muted-foreground ml-1">{v.hours}h / {v.flights} flights</span>
                         </p>
                       ))}

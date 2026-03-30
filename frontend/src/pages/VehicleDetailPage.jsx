@@ -425,11 +425,11 @@ export default function VehicleDetailPage() {
             {flights.map(f => (
               <tr key={f.id} className="border-b border-border/50 hover:bg-accent/30">
                 <td className="px-4 py-2 text-foreground">
-                  <Link to={`/flights/${f.id}`} className="hover:text-primary">{f.date || '—'}</Link>
+                  <Link to={`/flights/${f.id}`} className="text-primary hover:underline">{f.date || '—'}</Link>
                 </td>
                 <td className="px-4 py-2 text-muted-foreground">
                   {f.pilot_id ? (
-                    <Link to={`/pilots/${f.pilot_id}`} className="hover:text-primary">{f.pilot_name || `Pilot #${f.pilot_id}`}</Link>
+                    <Link to={`/pilots/${f.pilot_id}`} className="text-primary hover:underline">{f.pilot_name || `Pilot #${f.pilot_id}`}</Link>
                   ) : '—'}
                 </td>
                 <td className="px-4 py-2 text-muted-foreground hidden md:table-cell">{f.purpose || '—'}</td>

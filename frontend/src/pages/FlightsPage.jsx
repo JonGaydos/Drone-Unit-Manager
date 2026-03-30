@@ -473,10 +473,10 @@ export default function FlightsPage() {
                 </td>
                 <td className="px-4 py-3 text-foreground">{f.date || '—'}</td>
                 <td className="px-4 py-3 text-foreground">
-                  {f.pilot_id ? <Link to={`/pilots/${f.pilot_id}`} className="hover:text-primary">{f.pilot_name}</Link> : (f.pilot_name || <span className="text-amber-400">Unassigned</span>)}
+                  {f.pilot_id ? <Link to={`/pilots/${f.pilot_id}`} className="text-primary hover:underline">{f.pilot_name}</Link> : (f.pilot_name || <span className="text-amber-400">Unassigned</span>)}
                 </td>
                 <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">
-                  {f.vehicle_id ? <Link to={`/fleet/vehicles/${f.vehicle_id}`} className="hover:text-primary">{f.vehicle_name}</Link> : (f.vehicle_name || '—')}
+                  {f.vehicle_id ? <Link to={`/fleet/vehicles/${f.vehicle_id}`} className="text-primary hover:underline">{f.vehicle_name}</Link> : (f.vehicle_name || '—')}
                 </td>
                 <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{f.purpose || <span className="text-amber-400">None</span>}</td>
                 <td className="px-4 py-3 text-right text-foreground">{formatDuration(f.duration_seconds)}</td>

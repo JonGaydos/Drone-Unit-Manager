@@ -239,7 +239,7 @@ export default function PilotsPage() {
             {filtered.map((p) => (
               <tr key={p.id} className="border-b border-border/50 hover:bg-accent/30 transition-colors">
                 <td className="px-4 py-3">
-                  <Link to={`/pilots/${p.id}`} className="flex items-center gap-2 text-foreground hover:text-primary">
+                  <Link to={`/pilots/${p.id}`} className="flex items-center gap-2 text-primary hover:underline">
                     <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center text-primary text-xs font-medium">
                       {p.first_name[0]}{p.last_name[0]}
                     </div>

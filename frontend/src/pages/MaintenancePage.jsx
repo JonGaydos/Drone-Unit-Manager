@@ -328,7 +328,7 @@ function resolveEntityName(entityType, entityId, entityLists) {
 function EntityRef({ entityType, entityId, entityLists }) {
   const name = resolveEntityName(entityType, entityId, entityLists)
   if (entityType === 'vehicle') {
-    return <Link to={`/fleet/vehicles/${entityId}`} className="text-foreground hover:text-primary capitalize">{name}</Link>
+    return <Link to={`/fleet/vehicles/${entityId}`} className="text-primary hover:underline capitalize">{name}</Link>
   }
   return <span className="text-foreground capitalize">{name}</span>
 }

@@ -133,7 +133,7 @@ export default function FleetHealthPage() {
               {sortedVehicles.map(v => (
                 <tr key={v.id} className="border-b border-border/50 hover:bg-accent/30">
                   <td className="px-4 py-2 text-foreground font-medium">
-                    <Link to={`/fleet/vehicles/${v.id}`} className="hover:text-primary">{v.name}</Link>
+                    <Link to={`/fleet/vehicles/${v.id}`} className="text-primary hover:underline">{v.name}</Link>
                     {v.serial && <span className="text-xs text-muted-foreground ml-2">{v.serial}</span>}
                   </td>
                   <td className="px-4 py-2 text-muted-foreground">{v.flights}</td>
