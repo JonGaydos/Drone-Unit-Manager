@@ -523,20 +523,20 @@ async def import_flight_log(
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
-    """Import a flight log file (DJI .txt, Litchi CSV, Airdata CSV).
+    """Import a flight log file (DJI .txt, Litchi CSV, Airdata CSV/JSON, or ZIP).
 
     Auto-detects format from file content, or use the format parameter
     to specify explicitly. Creates a Flight record and TelemetryPoints.
 
     Args:
-        file: The flight log file (.txt or .csv).
-        format: Format hint - "auto", "dji", "litchi", or "airdata".
+        file: The flight log file (.txt, .csv, .json, or .zip).
+        format: Format hint - "auto", "dji", "litchi", "airdata", or "airdata_json".
 
     Returns:
         Import result with flight_id, points_imported, and format_detected.
     """
-    if not file.filename.endswith(('.txt', '.csv')):
-        raise HTTPException(400, "Only .txt and .csv files are supported")
+    if not file.filename.endswith(('.txt', '.csv', '.json', '.zip')):
+        raise HTTPException(400, "Only .txt, .csv, .json, and .zip files are supported")
 
     content = await file.read()
     if len(content) > settings.MAX_UPLOAD_SIZE:
@@ -544,6 +544,34 @@ async def import_flight_log(
 
     from app.services.dji_import import import_flight_log as do_import
     from app.database import get_telemetry_db
+
+    # Handle ZIP files (bulk import)
+    if file.filename.endswith('.zip'):
+        import zipfile
+
+        with zipfile.ZipFile(io.BytesIO(content)) as zf:
+            json_files = [n for n in zf.namelist() if n.endswith('.json') and not n.startswith('__')]
+            results = {"total": len(json_files), "imported": 0, "skipped": 0, "errors": []}
+
+            for fname in json_files:
+                try:
+                    file_content = zf.read(fname)
+                    telemetry_db = next(get_telemetry_db())
+                    try:
+                        result = do_import(file_content, db, telemetry_db, format_hint="airdata_json", user_id=admin.id)
+                    finally:
+                        telemetry_db.close()
+
+                    if result.get("skipped"):
+                        results["skipped"] += 1
+                    elif result.get("error"):
+                        results["errors"].append(f"{fname}: {result['error']}")
+                    else:
+                        results["imported"] += 1
+                except Exception as e:
+                    results["errors"].append(f"{fname}: {str(e)}")
+
+            return results
 
     telemetry_db = next(get_telemetry_db())
     try:

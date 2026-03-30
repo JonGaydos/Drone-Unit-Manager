@@ -352,8 +352,11 @@ function FlightLogImport() {
         // Use the existing Excel import endpoint
         res = await api.upload('/export/excel/import', formData)
         res = { ...res, flight_id: null, points_imported: res.flights_imported || 0, format_detected: 'excel', error: res.errors?.length ? res.errors.join(', ') : null }
+      } else if (format === 'airdata_zip') {
+        // ZIP bulk import → same endpoint handles it
+        res = await api.upload('/export/flights/import/log', formData)
       } else {
-        // DJI/Litchi/Airdata/auto → flight log import
+        // DJI/Litchi/Airdata/airdata_json/auto → flight log import
         formData.append('format', format)
         res = await api.upload('/export/flights/import/log', formData)
       }
@@ -361,6 +364,10 @@ function FlightLogImport() {
       setResult(res)
       if (res.error) {
         toast.error(res.error)
+      } else if (res.total !== undefined) {
+        // Batch/ZIP result
+        toast.success(`Bulk import: ${res.imported} imported, ${res.skipped} skipped out of ${res.total} files`)
+        if (res.errors?.length) toast.error(`${res.errors.length} error(s) during import`)
       } else if (res.flight_id) {
         toast.success(`Imported flight #${res.flight_id} with ${res.points_imported} telemetry points`)
       } else {
@@ -381,7 +388,7 @@ function FlightLogImport() {
         </div>
         <div>
           <h3 className="text-sm font-semibold text-foreground">Flight Log Import</h3>
-          <p className="text-xs text-muted-foreground">Import flight logs from Skydio CSV, DJI .txt, Litchi CSV, Airdata CSV, or Excel files.</p>
+          <p className="text-xs text-muted-foreground">Import flight logs from Skydio CSV, DJI .txt, Litchi CSV, Airdata CSV/JSON/ZIP, or Excel files.</p>
         </div>
       </div>
 
@@ -390,7 +397,7 @@ function FlightLogImport() {
           <label className="block text-xs font-medium text-muted-foreground mb-1">Flight Log File</label>
           <input
             type="file"
-            accept=".txt,.csv,.xlsx,.xls"
+            accept=".txt,.csv,.xlsx,.xls,.json,.zip"
             onChange={e => { setFile(e.target.files[0]); setResult(null) }}
             className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm file:mr-3 file:bg-primary file:text-primary-foreground file:border-0 file:rounded file:px-2 file:py-1 file:text-xs file:font-medium"
           />
@@ -408,6 +415,8 @@ function FlightLogImport() {
             <option value="dji">DJI .txt</option>
             <option value="litchi">Litchi CSV</option>
             <option value="airdata">Airdata CSV</option>
+            <option value="airdata_json">Airdata JSON</option>
+            <option value="airdata_zip">Airdata ZIP (bulk)</option>
           </select>
         </div>
         <button
@@ -422,10 +431,23 @@ function FlightLogImport() {
 
       <p className="text-xs text-amber-400/80">After importing, add email addresses to pilot profiles for API sync matching.</p>
 
-      {result && !result.error && (
+      {result && !result.error && result.total !== undefined && (
+        <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-lg p-3 text-sm space-y-1">
+          <div>Bulk import complete: {result.imported} imported, {result.skipped} skipped, {result.total} total files</div>
+          {result.errors?.length > 0 && (
+            <div className="text-amber-400 text-xs mt-1">
+              {result.errors.map((e, i) => <div key={i}>{e}</div>)}
+            </div>
+          )}
+        </div>
+      )}
+      {result && !result.error && result.total === undefined && (
         <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-lg p-3 text-sm">
-          Flight #{result.flight_id} imported successfully — {result.points_imported} telemetry points, format: {result.format_detected}
-          {result.date && ` — ${result.date}`}
+          {result.skipped
+            ? `Flight #${result.flight_id} already exists (skipped)`
+            : <>Flight #{result.flight_id} imported successfully — {result.points_imported} telemetry points, format: {result.format_detected}
+              {result.date && ` — ${result.date}`}</>
+          }
         </div>
       )}
       {result?.error && (
