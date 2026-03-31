@@ -603,8 +603,8 @@ export default function MaintenancePage() {
                       {r.maintenance_type}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground">{r.performed_by || '\u2014'}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{r.performed_date || '\u2014'}</td>
+                  <td className="px-4 py-3 text-foreground">{r.performed_by || '\u2014'}</td>
+                  <td className="px-4 py-3 text-foreground">{r.performed_date || '\u2014'}</td>
                   <td className="px-4 py-3 text-right">
                     {isPilot && (
                       <div className="flex items-center justify-end gap-1">
@@ -675,7 +675,7 @@ export default function MaintenancePage() {
                 return (
                   <tr key={s.id} className="border-b border-border/50 hover:bg-accent/30 transition-colors">
                     <td className="px-4 py-3 text-foreground font-medium">{s.name}</td>
-                    <td className="px-4 py-3 text-muted-foreground capitalize">
+                    <td className="px-4 py-3 text-foreground capitalize">
                       {s.entity_type}{s.entity_id ? ` #${s.entity_id}` : ''}
                     </td>
                     <td className="px-4 py-3">
@@ -683,8 +683,8 @@ export default function MaintenancePage() {
                         {s.frequency}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{s.assigned_to_name || '\u2014'}</td>
-                    <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{s.last_completed || '\u2014'}</td>
+                    <td className="px-4 py-3 text-foreground hidden md:table-cell">{s.assigned_to_name || '\u2014'}</td>
+                    <td className="px-4 py-3 text-foreground hidden md:table-cell">{s.last_completed || '\u2014'}</td>
                     <td className="px-4 py-3">
                       <span className={urgencyColor}>{s.next_due || '\u2014'}</span>
                       {daysUntil !== null && (

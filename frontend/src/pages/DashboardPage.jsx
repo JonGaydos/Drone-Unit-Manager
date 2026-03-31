@@ -202,22 +202,22 @@ export default function DashboardPage() {
                           ? new Date(flight.date + 'T00:00:00').toLocaleDateString()
                           : '—'}
                       </td>
-                      <td className="px-5 py-3 text-muted-foreground">
+                      <td className="px-5 py-3 text-foreground">
                         {flight.pilot_id
                           ? <Link to={`/pilots/${flight.pilot_id}`} className="text-primary hover:underline">{flight.pilot_name || flight.pilot?.name || '—'}</Link>
                           : (flight.pilot_name || flight.pilot?.name || '—')
                         }
                       </td>
-                      <td className="px-5 py-3 text-muted-foreground hidden md:table-cell">
+                      <td className="px-5 py-3 text-foreground hidden md:table-cell">
                         {flight.vehicle_id
                           ? <Link to={`/fleet/vehicles/${flight.vehicle_id}`} className="text-primary hover:underline">{flight.vehicle_name || flight.vehicle?.name || flight.vehicle?.serial_number || '—'}</Link>
                           : (flight.vehicle_name || flight.vehicle?.name || flight.vehicle?.serial_number || '—')
                         }
                       </td>
-                      <td className="px-5 py-3 text-muted-foreground hidden md:table-cell">
+                      <td className="px-5 py-3 text-foreground hidden md:table-cell">
                         {(flight.purpose || flight.flight_purpose) ? <Link to={`/flights?purpose=${encodeURIComponent(flight.purpose || flight.flight_purpose)}`} className="text-primary hover:underline">{flight.purpose || flight.flight_purpose}</Link> : '—'}
                       </td>
-                      <td className="px-5 py-3 text-muted-foreground">
+                      <td className="px-5 py-3 text-foreground">
                         {flight.duration_seconds
                           ? formatDuration(flight.duration_seconds)
                           : flight.duration
@@ -306,10 +306,10 @@ export default function DashboardPage() {
                       <td className="px-5 py-3 text-foreground">
                         {item.description || item.name || '—'}
                       </td>
-                      <td className="px-5 py-3 text-muted-foreground">
+                      <td className="px-5 py-3 text-foreground">
                         {item.entity_type || item.vehicle_name || item.vehicle?.name || '—'}
                       </td>
-                      <td className="px-5 py-3 text-muted-foreground">
+                      <td className="px-5 py-3 text-foreground">
                         {dueDate ? new Date(dueDate).toLocaleDateString() : '—'}
                       </td>
                       <td className="px-5 py-3">

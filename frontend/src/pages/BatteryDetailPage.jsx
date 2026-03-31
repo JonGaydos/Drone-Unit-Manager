@@ -268,11 +268,11 @@ export default function BatteryDetailPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/30">
-                <th className="text-left px-4 py-2 text-muted-foreground font-medium">Date</th>
-                <th className="text-left px-4 py-2 text-muted-foreground font-medium">Pilot</th>
-                <th className="text-left px-4 py-2 text-muted-foreground font-medium hidden md:table-cell">Purpose</th>
-                <th className="text-left px-4 py-2 text-muted-foreground font-medium">Duration</th>
-                <th className="text-left px-4 py-2 text-muted-foreground font-medium hidden lg:table-cell">Location</th>
+                <th className="text-left px-4 py-2 text-foreground font-medium">Date</th>
+                <th className="text-left px-4 py-2 text-foreground font-medium">Pilot</th>
+                <th className="text-left px-4 py-2 text-foreground font-medium hidden md:table-cell">Purpose</th>
+                <th className="text-left px-4 py-2 text-foreground font-medium">Duration</th>
+                <th className="text-left px-4 py-2 text-foreground font-medium hidden lg:table-cell">Location</th>
               </tr>
             </thead>
             <tbody>
@@ -281,14 +281,14 @@ export default function BatteryDetailPage() {
                   <td className="px-4 py-2 text-foreground">
                     <Link to={`/flights/${f.id}`} className="text-primary hover:underline">{f.date || '--'}</Link>
                   </td>
-                  <td className="px-4 py-2 text-muted-foreground">
+                  <td className="px-4 py-2 text-foreground">
                     {f.pilot_id ? (
                       <Link to={`/pilots/${f.pilot_id}`} className="text-primary hover:underline">{f.pilot_name || `Pilot #${f.pilot_id}`}</Link>
                     ) : '--'}
                   </td>
-                  <td className="px-4 py-2 text-muted-foreground hidden md:table-cell">{f.purpose || '--'}</td>
-                  <td className="px-4 py-2 text-muted-foreground">{formatDuration(f.duration_seconds)}</td>
-                  <td className="px-4 py-2 text-muted-foreground truncate max-w-[200px] hidden lg:table-cell">{f.takeoff_address || '--'}</td>
+                  <td className="px-4 py-2 text-foreground hidden md:table-cell">{f.purpose || '--'}</td>
+                  <td className="px-4 py-2 text-foreground">{formatDuration(f.duration_seconds)}</td>
+                  <td className="px-4 py-2 text-foreground truncate max-w-[200px] hidden lg:table-cell">{f.takeoff_address || '--'}</td>
                 </tr>
               ))}
               {flights.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">No flights recorded for this battery</td></tr>}
@@ -307,21 +307,21 @@ export default function BatteryDetailPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/30">
-                <th className="text-left px-4 py-2 text-muted-foreground font-medium">Date</th>
-                <th className="text-left px-4 py-2 text-muted-foreground font-medium">Description</th>
-                <th className="text-left px-4 py-2 text-muted-foreground font-medium hidden md:table-cell">Type</th>
-                <th className="text-left px-4 py-2 text-muted-foreground font-medium hidden md:table-cell">Performed By</th>
-                <th className="text-right px-4 py-2 text-muted-foreground font-medium">Cost</th>
+                <th className="text-left px-4 py-2 text-foreground font-medium">Date</th>
+                <th className="text-left px-4 py-2 text-foreground font-medium">Description</th>
+                <th className="text-left px-4 py-2 text-foreground font-medium hidden md:table-cell">Type</th>
+                <th className="text-left px-4 py-2 text-foreground font-medium hidden md:table-cell">Performed By</th>
+                <th className="text-right px-4 py-2 text-foreground font-medium">Cost</th>
               </tr>
             </thead>
             <tbody>
               {maintenance.map(m => (
                 <tr key={m.id} className="border-b border-border/50 hover:bg-accent/30">
                   <td className="px-4 py-2 text-foreground">{m.date || m.performed_date || '--'}</td>
-                  <td className="px-4 py-2 text-muted-foreground">{m.description || '--'}</td>
-                  <td className="px-4 py-2 text-muted-foreground hidden md:table-cell">{m.maintenance_type || m.type || '--'}</td>
-                  <td className="px-4 py-2 text-muted-foreground hidden md:table-cell">{m.performed_by || '--'}</td>
-                  <td className="px-4 py-2 text-muted-foreground text-right">{m.cost != null ? `$${parseFloat(m.cost).toFixed(2)}` : '--'}</td>
+                  <td className="px-4 py-2 text-foreground">{m.description || '--'}</td>
+                  <td className="px-4 py-2 text-foreground hidden md:table-cell">{m.maintenance_type || m.type || '--'}</td>
+                  <td className="px-4 py-2 text-foreground hidden md:table-cell">{m.performed_by || '--'}</td>
+                  <td className="px-4 py-2 text-foreground text-right">{m.cost != null ? `$${parseFloat(m.cost).toFixed(2)}` : '--'}</td>
                 </tr>
               ))}
               {maintenance.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">No maintenance records</td></tr>}

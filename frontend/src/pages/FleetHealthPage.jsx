@@ -112,19 +112,19 @@ export default function FleetHealthPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/30">
-                <th className="text-left px-4 py-2 text-muted-foreground font-medium cursor-pointer select-none" onClick={() => handleSort('name')}>
+                <th className="text-left px-4 py-2 text-foreground font-medium cursor-pointer select-none" onClick={() => handleSort('name')}>
                   Vehicle <SortIcon col="name" />
                 </th>
-                <th className="text-left px-4 py-2 text-muted-foreground font-medium cursor-pointer select-none" onClick={() => handleSort('flights')}>
+                <th className="text-left px-4 py-2 text-foreground font-medium cursor-pointer select-none" onClick={() => handleSort('flights')}>
                   Flights <SortIcon col="flights" />
                 </th>
-                <th className="text-left px-4 py-2 text-muted-foreground font-medium cursor-pointer select-none" onClick={() => handleSort('hours')}>
+                <th className="text-left px-4 py-2 text-foreground font-medium cursor-pointer select-none" onClick={() => handleSort('hours')}>
                   Hours <SortIcon col="hours" />
                 </th>
-                <th className="text-left px-4 py-2 text-muted-foreground font-medium cursor-pointer select-none hidden md:table-cell" onClick={() => handleSort('last_flight')}>
+                <th className="text-left px-4 py-2 text-foreground font-medium cursor-pointer select-none hidden md:table-cell" onClick={() => handleSort('last_flight')}>
                   Last Flight <SortIcon col="last_flight" />
                 </th>
-                <th className="text-left px-4 py-2 text-muted-foreground font-medium cursor-pointer select-none" onClick={() => handleSort('overdue_maintenance')}>
+                <th className="text-left px-4 py-2 text-foreground font-medium cursor-pointer select-none" onClick={() => handleSort('overdue_maintenance')}>
                   Overdue <SortIcon col="overdue_maintenance" />
                 </th>
               </tr>
@@ -136,9 +136,9 @@ export default function FleetHealthPage() {
                     <Link to={`/fleet/vehicles/${v.id}`} className="text-primary hover:underline">{v.name}</Link>
                     {v.serial && <span className="text-xs text-muted-foreground ml-2">{v.serial}</span>}
                   </td>
-                  <td className="px-4 py-2 text-muted-foreground">{v.flights}</td>
-                  <td className="px-4 py-2 text-muted-foreground">{v.hours}h</td>
-                  <td className="px-4 py-2 text-muted-foreground hidden md:table-cell">{v.last_flight || 'Never'}</td>
+                  <td className="px-4 py-2 text-foreground">{v.flights}</td>
+                  <td className="px-4 py-2 text-foreground">{v.hours}h</td>
+                  <td className="px-4 py-2 text-foreground hidden md:table-cell">{v.last_flight || 'Never'}</td>
                   <td className="px-4 py-2">
                     {v.overdue_maintenance > 0 ? (
                       <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-red-500/15 text-red-400">

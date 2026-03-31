@@ -328,10 +328,10 @@ export default function MissionLogPage() {
                   </td>
                   <td className="px-4 py-3 text-foreground">{m.date}</td>
                   <td className="px-4 py-3 text-foreground font-medium">{m.title}</td>
-                  <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{m.reason || '—'}</td>
-                  <td className="px-4 py-3 text-muted-foreground truncate max-w-[150px] hidden lg:table-cell">{m.location || '—'}</td>
-                  <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{m.vehicle_id ? <Link to={`/fleet/vehicles/${m.vehicle_id}`} className="text-primary hover:underline">{m.vehicle_name || '—'}</Link> : (m.vehicle_name || '—')}</td>
-                  <td className="px-4 py-3 text-muted-foreground hidden lg:table-cell">
+                  <td className="px-4 py-3 text-foreground hidden md:table-cell">{m.reason || '—'}</td>
+                  <td className="px-4 py-3 text-foreground truncate max-w-[150px] hidden lg:table-cell">{m.location || '—'}</td>
+                  <td className="px-4 py-3 text-foreground hidden md:table-cell">{m.vehicle_id ? <Link to={`/fleet/vehicles/${m.vehicle_id}`} className="text-primary hover:underline">{m.vehicle_name || '—'}</Link> : (m.vehicle_name || '—')}</td>
+                  <td className="px-4 py-3 text-foreground hidden lg:table-cell">
                     {m.pilots?.length > 0 ? m.pilots.map((p, i) => (
                       <span key={p.pilot_id || i}>{i > 0 && ', '}{p.pilot_id ? <Link to={`/pilots/${p.pilot_id}`} className="text-primary hover:underline">{p.pilot_name}</Link> : p.pilot_name}</span>
                     )) : '—'}

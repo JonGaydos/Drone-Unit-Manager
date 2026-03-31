@@ -321,9 +321,9 @@ export default function TrainingLogPage() {
                   <td className="px-4 py-3 hidden md:table-cell">
                     <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-primary/15 text-primary">{t.training_type}</span>
                   </td>
-                  <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{t.instructor || '—'}</td>
-                  <td className="px-4 py-3 text-muted-foreground truncate max-w-[150px] hidden lg:table-cell">{t.location || '—'}</td>
-                  <td className="px-4 py-3 text-muted-foreground hidden lg:table-cell">
+                  <td className="px-4 py-3 text-foreground hidden md:table-cell">{t.instructor || '—'}</td>
+                  <td className="px-4 py-3 text-foreground truncate max-w-[150px] hidden lg:table-cell">{t.location || '—'}</td>
+                  <td className="px-4 py-3 text-foreground hidden lg:table-cell">
                     {t.pilots?.length > 0 ? t.pilots.map((p, i) => (
                       <span key={p.pilot_id || i}>{i > 0 && ', '}{p.pilot_id ? <Link to={`/pilots/${p.pilot_id}`} className="text-primary hover:underline">{p.pilot_name}</Link> : p.pilot_name}</span>
                     )) : '—'}

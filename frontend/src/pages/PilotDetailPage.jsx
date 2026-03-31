@@ -357,21 +357,21 @@ export default function PilotDetailPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/30">
-              <th className="text-left px-4 py-2 text-muted-foreground font-medium">Date</th>
-              <th className="text-left px-4 py-2 text-muted-foreground font-medium">Vehicle</th>
-              <th className="text-left px-4 py-2 text-muted-foreground font-medium hidden md:table-cell">Purpose</th>
-              <th className="text-left px-4 py-2 text-muted-foreground font-medium">Duration</th>
-              <th className="text-left px-4 py-2 text-muted-foreground font-medium hidden md:table-cell">Location</th>
+              <th className="text-left px-4 py-2 text-foreground font-medium">Date</th>
+              <th className="text-left px-4 py-2 text-foreground font-medium">Vehicle</th>
+              <th className="text-left px-4 py-2 text-foreground font-medium hidden md:table-cell">Purpose</th>
+              <th className="text-left px-4 py-2 text-foreground font-medium">Duration</th>
+              <th className="text-left px-4 py-2 text-foreground font-medium hidden md:table-cell">Location</th>
             </tr>
           </thead>
           <tbody>
             {flights.map(f => (
               <tr key={f.id} className="border-b border-border/50 hover:bg-accent/30">
                 <td className="px-4 py-2 text-foreground"><Link to={`/flights/${f.id}`} className="text-primary hover:underline">{f.date || '—'}</Link></td>
-                <td className="px-4 py-2 text-muted-foreground">{f.vehicle_id ? <Link to={`/fleet/vehicles/${f.vehicle_id}`} className="text-primary hover:underline">{f.vehicle_name || '—'}</Link> : (f.vehicle_name || '—')}</td>
-                <td className="px-4 py-2 text-muted-foreground hidden md:table-cell">{f.purpose ? <Link to={`/flights?purpose=${encodeURIComponent(f.purpose)}`} className="text-primary hover:underline">{f.purpose}</Link> : '—'}</td>
-                <td className="px-4 py-2 text-muted-foreground">{formatDuration(f.duration_seconds)}</td>
-                <td className="px-4 py-2 text-muted-foreground truncate max-w-[200px] hidden md:table-cell">{f.takeoff_address || '—'}</td>
+                <td className="px-4 py-2 text-foreground">{f.vehicle_id ? <Link to={`/fleet/vehicles/${f.vehicle_id}`} className="text-primary hover:underline">{f.vehicle_name || '—'}</Link> : (f.vehicle_name || '—')}</td>
+                <td className="px-4 py-2 text-foreground hidden md:table-cell">{f.purpose ? <Link to={`/flights?purpose=${encodeURIComponent(f.purpose)}`} className="text-primary hover:underline">{f.purpose}</Link> : '—'}</td>
+                <td className="px-4 py-2 text-foreground">{formatDuration(f.duration_seconds)}</td>
+                <td className="px-4 py-2 text-foreground truncate max-w-[200px] hidden md:table-cell">{f.takeoff_address || '—'}</td>
               </tr>
             ))}
             {flights.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">No flights yet</td></tr>}
@@ -390,11 +390,11 @@ export default function PilotDetailPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/30">
-              <th className="text-left px-4 py-2 text-muted-foreground font-medium">Certification</th>
-              <th className="text-left px-4 py-2 text-muted-foreground font-medium">Status</th>
-              <th className="text-left px-4 py-2 text-muted-foreground font-medium hidden md:table-cell">Issue Date</th>
-              <th className="text-left px-4 py-2 text-muted-foreground font-medium">Expiration</th>
-              <th className="text-left px-4 py-2 text-muted-foreground font-medium hidden md:table-cell">Certificate #</th>
+              <th className="text-left px-4 py-2 text-foreground font-medium">Certification</th>
+              <th className="text-left px-4 py-2 text-foreground font-medium">Status</th>
+              <th className="text-left px-4 py-2 text-foreground font-medium hidden md:table-cell">Issue Date</th>
+              <th className="text-left px-4 py-2 text-foreground font-medium">Expiration</th>
+              <th className="text-left px-4 py-2 text-foreground font-medium hidden md:table-cell">Certificate #</th>
             </tr>
           </thead>
           <tbody>
@@ -406,9 +406,9 @@ export default function PilotDetailPage() {
                     {(c.status || 'not_started').replace(/_/g, ' ')}
                   </span>
                 </td>
-                <td className="px-4 py-2 text-muted-foreground hidden md:table-cell">{c.issue_date || '—'}</td>
-                <td className="px-4 py-2 text-muted-foreground">{c.expiration_date || '—'}</td>
-                <td className="px-4 py-2 text-muted-foreground hidden md:table-cell">{c.certificate_number || '—'}</td>
+                <td className="px-4 py-2 text-foreground hidden md:table-cell">{c.issue_date || '—'}</td>
+                <td className="px-4 py-2 text-foreground">{c.expiration_date || '—'}</td>
+                <td className="px-4 py-2 text-foreground hidden md:table-cell">{c.certificate_number || '—'}</td>
               </tr>
             ))}
             {certifications.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">No certifications assigned</td></tr>}
@@ -441,27 +441,27 @@ export default function PilotDetailPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/30">
-                  <th className="text-left px-4 py-2 text-muted-foreground font-medium">Rule</th>
-                  <th className="text-left px-4 py-2 text-muted-foreground font-medium hidden md:table-cell">Model</th>
-                  <th className="text-left px-4 py-2 text-muted-foreground font-medium">Hours</th>
-                  <th className="text-left px-4 py-2 text-muted-foreground font-medium">Flights</th>
-                  <th className="text-left px-4 py-2 text-muted-foreground font-medium">Status</th>
-                  <th className="text-left px-4 py-2 text-muted-foreground font-medium hidden md:table-cell">Expires</th>
+                  <th className="text-left px-4 py-2 text-foreground font-medium">Rule</th>
+                  <th className="text-left px-4 py-2 text-foreground font-medium hidden md:table-cell">Model</th>
+                  <th className="text-left px-4 py-2 text-foreground font-medium">Hours</th>
+                  <th className="text-left px-4 py-2 text-foreground font-medium">Flights</th>
+                  <th className="text-left px-4 py-2 text-foreground font-medium">Status</th>
+                  <th className="text-left px-4 py-2 text-foreground font-medium hidden md:table-cell">Expires</th>
                 </tr>
               </thead>
               <tbody>
                 {currencyStatus.rules.map(r => (
                   <tr key={r.rule_id} className="border-b border-border/50 hover:bg-accent/30">
                     <td className="px-4 py-2 text-foreground font-medium">{r.rule_name}</td>
-                    <td className="px-4 py-2 text-muted-foreground hidden md:table-cell">{r.vehicle_model || 'All'}</td>
-                    <td className="px-4 py-2 text-muted-foreground">
+                    <td className="px-4 py-2 text-foreground hidden md:table-cell">{r.vehicle_model || 'All'}</td>
+                    <td className="px-4 py-2 text-foreground">
                       <span className={r.actual_hours >= r.required_hours ? 'text-emerald-400' : 'text-red-400'}>
                         {r.actual_hours}
                       </span>
                       <span className="text-muted-foreground"> / {r.required_hours}h</span>
                       <span className="text-xs text-muted-foreground ml-1">({r.period_days}d)</span>
                     </td>
-                    <td className="px-4 py-2 text-muted-foreground">
+                    <td className="px-4 py-2 text-foreground">
                       {r.required_flights != null ? (
                         <>
                           <span className={r.actual_flights >= r.required_flights ? 'text-emerald-400' : 'text-red-400'}>
@@ -479,7 +479,7 @@ export default function PilotDetailPage() {
                         {r.is_current ? 'Current' : 'Lapsed'}
                       </span>
                     </td>
-                    <td className="px-4 py-2 text-muted-foreground hidden md:table-cell">{r.expires_date || '—'}</td>
+                    <td className="px-4 py-2 text-foreground hidden md:table-cell">{r.expires_date || '—'}</td>
                   </tr>
                 ))}
               </tbody>

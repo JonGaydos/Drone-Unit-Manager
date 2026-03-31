@@ -246,8 +246,8 @@ export default function PilotsPage() {
                     {p.full_name}
                   </Link>
                 </td>
-                <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{p.email || '—'}</td>
-                <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{p.badge_number || '—'}</td>
+                <td className="px-4 py-3 text-foreground hidden md:table-cell">{p.email || '—'}</td>
+                <td className="px-4 py-3 text-foreground hidden md:table-cell">{p.badge_number || '—'}</td>
                 <td className="px-4 py-3">
                   <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
                     p.status === 'active' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'

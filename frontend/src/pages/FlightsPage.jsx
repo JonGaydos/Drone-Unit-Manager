@@ -421,7 +421,7 @@ export default function FlightsPage() {
           <tbody>
             {filtered.map(f => editingId === f.id ? (
               <tr key={f.id} className="border-b border-border/50 bg-accent/20">
-                <td className="px-4 py-2 text-muted-foreground text-xs font-mono" title={f.external_id || ''}>{f.external_id ? f.external_id.slice(0, 8) : '—'}</td>
+                <td className="px-4 py-2 text-foreground text-xs font-mono" title={f.external_id || ''}>{f.external_id ? f.external_id.slice(0, 8) : '—'}</td>
                 <td className="px-4 py-2">
                   <input type="date" value={editForm.date} onChange={e => setEditForm({...editForm, date: e.target.value})}
                     onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) setEditForm(prev => ({...prev, date: n})) }}
@@ -434,7 +434,7 @@ export default function FlightsPage() {
                     {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
                   </select>
                 </td>
-                <td className="px-4 py-2 hidden md:table-cell text-muted-foreground">{f.vehicle_name || '—'}</td>
+                <td className="px-4 py-2 hidden md:table-cell text-foreground">{f.vehicle_name || '—'}</td>
                 <td className="px-4 py-2 hidden md:table-cell">
                   <select value={editForm.purpose} onChange={e => setEditForm({...editForm, purpose: e.target.value})}
                     className="w-full px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm">
@@ -446,7 +446,7 @@ export default function FlightsPage() {
                   <input type="number" value={editForm.duration_seconds} onChange={e => setEditForm({...editForm, duration_seconds: e.target.value})}
                     className="w-20 px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm text-right" placeholder="sec" />
                 </td>
-                <td className="px-4 py-2 hidden lg:table-cell text-muted-foreground">{f.takeoff_address || '—'}</td>
+                <td className="px-4 py-2 hidden lg:table-cell text-foreground">{f.takeoff_address || '—'}</td>
                 <td className="px-4 py-2">
                   <button onClick={() => setEditForm({...editForm, review_status: editForm.review_status === 'reviewed' ? 'needs_review' : 'reviewed'})}
                     className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium cursor-pointer ${
@@ -475,12 +475,12 @@ export default function FlightsPage() {
                 <td className="px-4 py-3 text-foreground">
                   {f.pilot_id ? <Link to={`/pilots/${f.pilot_id}`} className="text-primary hover:underline">{f.pilot_name}</Link> : (f.pilot_name || <span className="text-amber-400">Unassigned</span>)}
                 </td>
-                <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">
+                <td className="px-4 py-3 text-foreground hidden md:table-cell">
                   {f.vehicle_id ? <Link to={`/fleet/vehicles/${f.vehicle_id}`} className="text-primary hover:underline">{f.vehicle_name}</Link> : (f.vehicle_name || '—')}
                 </td>
-                <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{f.purpose || <span className="text-amber-400">None</span>}</td>
+                <td className="px-4 py-3 text-foreground hidden md:table-cell">{f.purpose || <span className="text-amber-400">None</span>}</td>
                 <td className="px-4 py-3 text-right text-foreground">{formatDuration(f.duration_seconds)}</td>
-                <td className="px-4 py-3 text-muted-foreground truncate max-w-[200px] hidden lg:table-cell">{f.takeoff_address || '—'}</td>
+                <td className="px-4 py-3 text-foreground truncate max-w-[200px] hidden lg:table-cell">{f.takeoff_address || '—'}</td>
                 <td className="px-4 py-3">
                   <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
                     f.review_status === 'needs_review' ? 'bg-amber-500/15 text-amber-400' : 'bg-emerald-500/15 text-emerald-400'

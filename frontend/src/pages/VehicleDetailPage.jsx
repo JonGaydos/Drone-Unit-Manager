@@ -413,12 +413,12 @@ export default function VehicleDetailPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/30">
-              <th className="text-left px-4 py-2 text-muted-foreground font-medium">Date</th>
-              <th className="text-left px-4 py-2 text-muted-foreground font-medium">Pilot</th>
-              <th className="text-left px-4 py-2 text-muted-foreground font-medium hidden md:table-cell">Purpose</th>
-              <th className="text-left px-4 py-2 text-muted-foreground font-medium">Duration</th>
-              <th className="text-left px-4 py-2 text-muted-foreground font-medium hidden md:table-cell">Battery</th>
-              <th className="text-left px-4 py-2 text-muted-foreground font-medium hidden lg:table-cell">Location</th>
+              <th className="text-left px-4 py-2 text-foreground font-medium">Date</th>
+              <th className="text-left px-4 py-2 text-foreground font-medium">Pilot</th>
+              <th className="text-left px-4 py-2 text-foreground font-medium hidden md:table-cell">Purpose</th>
+              <th className="text-left px-4 py-2 text-foreground font-medium">Duration</th>
+              <th className="text-left px-4 py-2 text-foreground font-medium hidden md:table-cell">Battery</th>
+              <th className="text-left px-4 py-2 text-foreground font-medium hidden lg:table-cell">Location</th>
             </tr>
           </thead>
           <tbody>
@@ -427,18 +427,18 @@ export default function VehicleDetailPage() {
                 <td className="px-4 py-2 text-foreground">
                   <Link to={`/flights/${f.id}`} className="text-primary hover:underline">{f.date || '—'}</Link>
                 </td>
-                <td className="px-4 py-2 text-muted-foreground">
+                <td className="px-4 py-2 text-foreground">
                   {f.pilot_id ? (
                     <Link to={`/pilots/${f.pilot_id}`} className="text-primary hover:underline">{f.pilot_name || `Pilot #${f.pilot_id}`}</Link>
                   ) : '—'}
                 </td>
-                <td className="px-4 py-2 text-muted-foreground hidden md:table-cell">{f.purpose || '—'}</td>
-                <td className="px-4 py-2 text-muted-foreground">{formatDuration(f.duration_seconds)}</td>
-                <td className="px-4 py-2 text-muted-foreground hidden md:table-cell">{f.battery_serial ? (() => {
+                <td className="px-4 py-2 text-foreground hidden md:table-cell">{f.purpose || '—'}</td>
+                <td className="px-4 py-2 text-foreground">{formatDuration(f.duration_seconds)}</td>
+                <td className="px-4 py-2 text-foreground hidden md:table-cell">{f.battery_serial ? (() => {
                   const bat = batteries.find(b => b.serial_number === f.battery_serial)
                   return bat ? <Link to={`/fleet/batteries/${bat.id}`} className="text-primary hover:underline">{f.battery_serial}</Link> : f.battery_serial
                 })() : '—'}</td>
-                <td className="px-4 py-2 text-muted-foreground truncate max-w-[200px] hidden lg:table-cell">{f.takeoff_address || '—'}</td>
+                <td className="px-4 py-2 text-foreground truncate max-w-[200px] hidden lg:table-cell">{f.takeoff_address || '—'}</td>
               </tr>
             ))}
             {flights.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">No flights recorded</td></tr>}
@@ -457,21 +457,21 @@ export default function VehicleDetailPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/30">
-              <th className="text-left px-4 py-2 text-muted-foreground font-medium">Date</th>
-              <th className="text-left px-4 py-2 text-muted-foreground font-medium">Description</th>
-              <th className="text-left px-4 py-2 text-muted-foreground font-medium hidden md:table-cell">Type</th>
-              <th className="text-left px-4 py-2 text-muted-foreground font-medium hidden md:table-cell">Performed By</th>
-              <th className="text-right px-4 py-2 text-muted-foreground font-medium">Cost</th>
+              <th className="text-left px-4 py-2 text-foreground font-medium">Date</th>
+              <th className="text-left px-4 py-2 text-foreground font-medium">Description</th>
+              <th className="text-left px-4 py-2 text-foreground font-medium hidden md:table-cell">Type</th>
+              <th className="text-left px-4 py-2 text-foreground font-medium hidden md:table-cell">Performed By</th>
+              <th className="text-right px-4 py-2 text-foreground font-medium">Cost</th>
             </tr>
           </thead>
           <tbody>
             {maintenance.map(m => (
               <tr key={m.id} className="border-b border-border/50 hover:bg-accent/30">
                 <td className="px-4 py-2 text-foreground">{m.date || m.performed_date || '—'}</td>
-                <td className="px-4 py-2 text-muted-foreground">{m.description || '—'}</td>
-                <td className="px-4 py-2 text-muted-foreground hidden md:table-cell">{m.maintenance_type || m.type || '—'}</td>
-                <td className="px-4 py-2 text-muted-foreground hidden md:table-cell">{m.performed_by || '—'}</td>
-                <td className="px-4 py-2 text-muted-foreground text-right">{m.cost != null ? `$${parseFloat(m.cost).toFixed(2)}` : '—'}</td>
+                <td className="px-4 py-2 text-foreground">{m.description || '—'}</td>
+                <td className="px-4 py-2 text-foreground hidden md:table-cell">{m.maintenance_type || m.type || '—'}</td>
+                <td className="px-4 py-2 text-foreground hidden md:table-cell">{m.performed_by || '—'}</td>
+                <td className="px-4 py-2 text-foreground text-right">{m.cost != null ? `$${parseFloat(m.cost).toFixed(2)}` : '—'}</td>
               </tr>
             ))}
             {maintenance.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">No maintenance records</td></tr>}
@@ -609,12 +609,12 @@ export default function VehicleDetailPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/30">
-                  <th className="text-left px-4 py-2 text-muted-foreground font-medium">Reg #</th>
-                  <th className="text-left px-4 py-2 text-muted-foreground font-medium">Registered</th>
-                  <th className="text-left px-4 py-2 text-muted-foreground font-medium">Expires</th>
-                  <th className="text-left px-4 py-2 text-muted-foreground font-medium">Status</th>
-                  <th className="text-left px-4 py-2 text-muted-foreground font-medium hidden md:table-cell">Notes</th>
-                  {isAdmin && <th className="text-right px-4 py-2 text-muted-foreground font-medium">Actions</th>}
+                  <th className="text-left px-4 py-2 text-foreground font-medium">Reg #</th>
+                  <th className="text-left px-4 py-2 text-foreground font-medium">Registered</th>
+                  <th className="text-left px-4 py-2 text-foreground font-medium">Expires</th>
+                  <th className="text-left px-4 py-2 text-foreground font-medium">Status</th>
+                  <th className="text-left px-4 py-2 text-foreground font-medium hidden md:table-cell">Notes</th>
+                  {isAdmin && <th className="text-right px-4 py-2 text-foreground font-medium">Actions</th>}
                 </tr>
               </thead>
               <tbody>
@@ -627,14 +627,14 @@ export default function VehicleDetailPage() {
                   return (
                   <tr key={r.id} className="border-b border-border/50 hover:bg-accent/30">
                     <td className="px-4 py-2 text-foreground font-medium">{r.registration_number || '--'}</td>
-                    <td className="px-4 py-2 text-muted-foreground">{r.registration_date || '--'}</td>
-                    <td className="px-4 py-2 text-muted-foreground">{r.expiry_date || '--'}</td>
+                    <td className="px-4 py-2 text-foreground">{r.registration_date || '--'}</td>
+                    <td className="px-4 py-2 text-foreground">{r.expiry_date || '--'}</td>
                     <td className="px-4 py-2">
                       <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${statusColor}`}>
                         {statusLabel}
                       </span>
                     </td>
-                    <td className="px-4 py-2 text-muted-foreground hidden md:table-cell">{r.notes || '--'}</td>
+                    <td className="px-4 py-2 text-foreground hidden md:table-cell">{r.notes || '--'}</td>
                     {isAdmin && (
                       <td className="px-4 py-2 text-right">
                         <button onClick={() => {
@@ -847,25 +847,25 @@ export default function VehicleDetailPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/30">
-                  <th className="text-left px-4 py-2 text-muted-foreground font-medium">Checked Out By</th>
-                  <th className="text-left px-4 py-2 text-muted-foreground font-medium">Out</th>
-                  <th className="text-left px-4 py-2 text-muted-foreground font-medium">In</th>
-                  <th className="text-left px-4 py-2 text-muted-foreground font-medium hidden md:table-cell">Condition Out</th>
-                  <th className="text-left px-4 py-2 text-muted-foreground font-medium hidden md:table-cell">Condition In</th>
-                  <th className="text-left px-4 py-2 text-muted-foreground font-medium">Status</th>
+                  <th className="text-left px-4 py-2 text-foreground font-medium">Checked Out By</th>
+                  <th className="text-left px-4 py-2 text-foreground font-medium">Out</th>
+                  <th className="text-left px-4 py-2 text-foreground font-medium">In</th>
+                  <th className="text-left px-4 py-2 text-foreground font-medium hidden md:table-cell">Condition Out</th>
+                  <th className="text-left px-4 py-2 text-foreground font-medium hidden md:table-cell">Condition In</th>
+                  <th className="text-left px-4 py-2 text-foreground font-medium">Status</th>
                 </tr>
               </thead>
               <tbody>
                 {checkouts.map(c => (
                   <tr key={c.id} className="border-b border-border/50 hover:bg-accent/30">
                     <td className="px-4 py-2 text-foreground font-medium">{c.checked_out_by_name || '--'}</td>
-                    <td className="px-4 py-2 text-muted-foreground text-xs">{c.checked_out_at ? new Date(c.checked_out_at).toLocaleString() : '--'}</td>
-                    <td className="px-4 py-2 text-muted-foreground text-xs">
+                    <td className="px-4 py-2 text-foreground text-xs">{c.checked_out_at ? new Date(c.checked_out_at).toLocaleString() : '--'}</td>
+                    <td className="px-4 py-2 text-foreground text-xs">
                       {c.checked_in_at ? new Date(c.checked_in_at).toLocaleString() : '--'}
                       {c.checked_in_by_name && <span className="block text-xs">by {c.checked_in_by_name}</span>}
                     </td>
-                    <td className="px-4 py-2 text-muted-foreground hidden md:table-cell">{c.condition_out || '--'}</td>
-                    <td className="px-4 py-2 text-muted-foreground hidden md:table-cell">{c.condition_in || '--'}</td>
+                    <td className="px-4 py-2 text-foreground hidden md:table-cell">{c.condition_out || '--'}</td>
+                    <td className="px-4 py-2 text-foreground hidden md:table-cell">{c.condition_in || '--'}</td>
                     <td className="px-4 py-2">
                       <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
                         c.checked_in_at ? 'bg-emerald-500/15 text-emerald-400' : 'bg-amber-500/15 text-amber-400'
@@ -1037,14 +1037,14 @@ export default function VehicleDetailPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/30">
-                  <th className="text-left px-4 py-2 text-muted-foreground font-medium">Name</th>
-                  <th className="text-left px-4 py-2 text-muted-foreground font-medium">Type</th>
-                  <th className="text-left px-4 py-2 text-muted-foreground font-medium hidden md:table-cell">Serial</th>
-                  <th className="text-left px-4 py-2 text-muted-foreground font-medium">Status</th>
-                  <th className="text-left px-4 py-2 text-muted-foreground font-medium hidden md:table-cell">Flight Hours</th>
-                  <th className="text-left px-4 py-2 text-muted-foreground font-medium hidden lg:table-cell">Install Date</th>
-                  <th className="text-left px-4 py-2 text-muted-foreground font-medium hidden lg:table-cell">Warranty</th>
-                  {isAdmin && <th className="text-right px-4 py-2 text-muted-foreground font-medium">Actions</th>}
+                  <th className="text-left px-4 py-2 text-foreground font-medium">Name</th>
+                  <th className="text-left px-4 py-2 text-foreground font-medium">Type</th>
+                  <th className="text-left px-4 py-2 text-foreground font-medium hidden md:table-cell">Serial</th>
+                  <th className="text-left px-4 py-2 text-foreground font-medium">Status</th>
+                  <th className="text-left px-4 py-2 text-foreground font-medium hidden md:table-cell">Flight Hours</th>
+                  <th className="text-left px-4 py-2 text-foreground font-medium hidden lg:table-cell">Install Date</th>
+                  <th className="text-left px-4 py-2 text-foreground font-medium hidden lg:table-cell">Warranty</th>
+                  {isAdmin && <th className="text-right px-4 py-2 text-foreground font-medium">Actions</th>}
                 </tr>
               </thead>
               <tbody>
@@ -1062,8 +1062,8 @@ export default function VehicleDetailPage() {
                   return (
                     <tr key={c.id} className="border-b border-border/50 hover:bg-accent/30">
                       <td className="px-4 py-2 text-foreground font-medium">{c.name}</td>
-                      <td className="px-4 py-2 text-muted-foreground capitalize">{(c.component_type || '').replace(/_/g, ' ')}</td>
-                      <td className="px-4 py-2 text-muted-foreground hidden md:table-cell">{c.serial_number || '--'}</td>
+                      <td className="px-4 py-2 text-foreground capitalize">{(c.component_type || '').replace(/_/g, ' ')}</td>
+                      <td className="px-4 py-2 text-foreground hidden md:table-cell">{c.serial_number || '--'}</td>
                       <td className="px-4 py-2">
                         <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[c.status] || 'bg-zinc-500/15 text-zinc-400'}`}>
                           {(c.status || '').replace(/_/g, ' ')}
@@ -1072,8 +1072,8 @@ export default function VehicleDetailPage() {
                       <td className={`px-4 py-2 hidden md:table-cell ${hoursWarning ? 'text-amber-400 font-medium' : 'text-muted-foreground'}`}>
                         {hoursDisplay}
                       </td>
-                      <td className="px-4 py-2 text-muted-foreground hidden lg:table-cell">{c.install_date || '--'}</td>
-                      <td className="px-4 py-2 text-muted-foreground hidden lg:table-cell">{c.warranty_expiry || '--'}</td>
+                      <td className="px-4 py-2 text-foreground hidden lg:table-cell">{c.install_date || '--'}</td>
+                      <td className="px-4 py-2 text-foreground hidden lg:table-cell">{c.warranty_expiry || '--'}</td>
                       {isAdmin && (
                         <td className="px-4 py-2 text-right">
                           <button onClick={() => {
