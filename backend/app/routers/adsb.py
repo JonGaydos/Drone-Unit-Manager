@@ -58,21 +58,27 @@ def get_nearby_aircraft(
                 "cache_age_seconds": round(now - _cache["timestamp"], 1),
             }
 
-    # Fetch from airplanes.live API
+    # Fetch from airplanes.live API (longer timeout for large radius queries)
     url = f"https://api.airplanes.live/v2/point/{lat}/{lon}/{radius_nm}"
     try:
-        with httpx.Client(timeout=10.0) as client:
+        with httpx.Client(timeout=30.0) as client:
             resp = client.get(url)
             resp.raise_for_status()
             data = resp.json()
-    except httpx.TimeoutException:
-        raise HTTPException(504, "ADS-B data source timed out")
-    except httpx.HTTPStatusError as e:
-        logger.warning("ADS-B API error: %s", e)
-        raise HTTPException(502, "ADS-B data source returned an error")
-    except Exception as e:
-        logger.error("ADS-B fetch failed: %s", e)
-        raise HTTPException(502, "Failed to fetch ADS-B data")
+    except (httpx.TimeoutException, httpx.HTTPStatusError, Exception) as e:
+        logger.warning("ADS-B fetch failed: %s", e)
+        # Return stale cache if available instead of erroring
+        with _cache_lock:
+            if _cache["data"] is not None:
+                return {
+                    "aircraft": _cache["data"],
+                    "count": len(_cache["data"]),
+                    "cached": True,
+                    "cache_age_seconds": round(now - _cache["timestamp"], 1),
+                    "stale": True,
+                }
+        # No cache available — return empty result instead of error
+        return {"aircraft": [], "count": 0, "cached": False, "error": str(e)}
 
     # Parse and clean aircraft data
     raw_aircraft = data.get("ac", [])

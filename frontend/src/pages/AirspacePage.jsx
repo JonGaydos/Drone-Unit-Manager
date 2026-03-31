@@ -130,7 +130,7 @@ export default function AirspacePage() {
     }).catch(() => {})
   }, [])
 
-  const fetchAircraft = useCallback(async (point) => {
+  const fetchAircraft = useCallback(async (point, manual = false) => {
     const p = point || selectedPoint
     if (!p) return
     const radiusNm = Math.round(radius * MILES_TO_NM)
@@ -142,7 +142,9 @@ export default function AirspacePage() {
       setCached(data.cached || false)
       setLastFetch(new Date())
     } catch (err) {
-      toast.error('Failed to fetch aircraft: ' + err.message)
+      // Only show error toast on manual refresh — silent retry on auto-refresh
+      if (manual) toast.error('Failed to fetch aircraft: ' + err.message)
+      else console.warn('ADS-B auto-refresh failed:', err.message)
     } finally {
       setLoading(false)
     }
@@ -166,7 +168,7 @@ export default function AirspacePage() {
     const point = [lat, lng]
     setSelectedPoint(point)
     setMapCenter(point)
-    fetchAircraft(point)
+    fetchAircraft(point, true)
   }
 
   return (
@@ -216,7 +218,7 @@ export default function AirspacePage() {
 
           {/* Refresh Button */}
           <button
-            onClick={() => fetchAircraft()}
+            onClick={() => fetchAircraft(null, true)}
             disabled={loading || !selectedPoint}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50"
           >
