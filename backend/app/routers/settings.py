@@ -159,10 +159,16 @@ def set_settings_bulk(data: list[SettingValue], db: Session = Depends(get_db), a
 def test_smtp(db: Session = Depends(get_db), admin: User = Depends(require_admin)):
     """Send a test email to verify SMTP configuration."""
     from app.services.email_digest import send_email
+    from app.models.pilot import Pilot
 
+    # Resolve email: user.email → linked pilot.email
     admin_email = admin.email
+    if not admin_email and admin.pilot_id:
+        pilot = db.query(Pilot).filter(Pilot.id == admin.pilot_id).first()
+        if pilot and pilot.email:
+            admin_email = pilot.email
     if not admin_email:
-        raise HTTPException(400, "Set your email address in your user profile first")
+        raise HTTPException(400, "No email address found. Add an email to your linked pilot profile or user account in Settings > Users.")
 
     success = send_email(
         admin_email,

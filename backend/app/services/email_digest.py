@@ -263,7 +263,11 @@ def send_email(to_address: str, subject: str, html_body: str, db: Session) -> bo
     msg.attach(MIMEText(html_body, "html"))
 
     try:
-        if smtp_tls:
+        if smtp_port == 465:
+            # Port 465 = implicit SSL (Gmail, Yahoo, etc.)
+            server = smtplib.SMTP_SSL(smtp_host, smtp_port)
+        elif smtp_tls:
+            # Port 587 = STARTTLS
             server = smtplib.SMTP(smtp_host, smtp_port)
             server.starttls()
         else:

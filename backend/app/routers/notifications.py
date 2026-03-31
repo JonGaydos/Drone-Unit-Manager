@@ -129,11 +129,16 @@ def send_test_digest(
     from app.services.email_digest import build_digest, render_digest_html, send_email
     from app.models.setting import Setting
 
-    # Get user email
+    # Resolve email: preference override → user email → linked pilot email
     pref = _get_or_create_pref(db, user.id)
     to_email = pref.email_override or user.email
+    if not to_email and user.pilot_id:
+        from app.models.pilot import Pilot
+        pilot = db.query(Pilot).filter(Pilot.id == user.pilot_id).first()
+        if pilot and pilot.email:
+            to_email = pilot.email
     if not to_email:
-        raise HTTPException(400, "No email address configured. Set your email in user settings or notification preferences.")
+        raise HTTPException(400, "No email address found. Add an email to your linked pilot profile or user account.")
 
     digest = build_digest(db, user)
     if not digest:

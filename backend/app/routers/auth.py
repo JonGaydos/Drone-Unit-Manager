@@ -293,13 +293,21 @@ def create_user(data: UserCreate, admin: User = Depends(require_admin), db: Sess
     _validate_password(data.password)
     if db.query(User).filter(User.username == data.username).first():
         raise HTTPException(status_code=409, detail="Username already exists")
+    # Auto-populate email from linked pilot if not provided
+    email = data.email
+    if not email and data.pilot_id:
+        from app.models.pilot import Pilot
+        pilot = db.query(Pilot).filter(Pilot.id == data.pilot_id).first()
+        if pilot and pilot.email:
+            email = pilot.email
+
     user = User(
         username=data.username,
         password_hash=hash_password(data.password),
         display_name=data.display_name,
         role=data.role,
         pilot_id=data.pilot_id,
-        email=data.email,
+        email=email,
     )
     db.add(user)
     db.flush()
@@ -342,6 +350,12 @@ def update_user(user_id: int, data: UserUpdate, admin: User = Depends(require_ad
         target.is_active = data.is_active
     if data.pilot_id is not None:
         target.pilot_id = data.pilot_id if data.pilot_id != 0 else None
+        # Auto-sync email from linked pilot if user has no email
+        if target.pilot_id and not target.email:
+            from app.models.pilot import Pilot
+            pilot = db.query(Pilot).filter(Pilot.id == target.pilot_id).first()
+            if pilot and pilot.email:
+                target.email = pilot.email
     if data.email is not None:
         target.email = data.email
     db.commit()
