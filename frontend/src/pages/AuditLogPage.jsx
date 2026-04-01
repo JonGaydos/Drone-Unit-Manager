@@ -165,15 +165,17 @@ export default function AuditLogPage() {
 
       {/* Table */}
       <div className="bg-card border border-border rounded-xl overflow-hidden">
-        {loading ? (
+        {loading && (
           <div className="flex items-center justify-center h-32">
             <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
           </div>
-        ) : logs.length === 0 ? (
+        )}
+        {!loading && logs.length === 0 && (
           <div className="flex items-center justify-center h-32 text-muted-foreground text-sm">
             No audit log entries found.
           </div>
-        ) : (
+        )}
+        {!loading && logs.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>

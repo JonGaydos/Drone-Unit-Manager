@@ -31,8 +31,8 @@ function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachmen
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" role="presentation" onClick={onClose}>
-      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-lg shadow-xl" role="dialog" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-lg shadow-xl" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold text-foreground mb-4">Add Flight</h2>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
@@ -159,7 +159,7 @@ export default function FlightsPage() {
   const [filterPilotId, setFilterPilotId] = useState('')
   const [filterVehicleId, setFilterVehicleId] = useState('')
   const [filterPurpose, setFilterPurpose] = useState(() => {
-    try { return new URLSearchParams(window.location.search).get('purpose') || '' } catch { return '' }
+    try { return new URLSearchParams(globalThis.location.search).get('purpose') || '' } catch { return '' }
   })
 
   // Pagination state
@@ -189,7 +189,7 @@ export default function FlightsPage() {
     qp.set('page', page)
     qp.set('per_page', 100)
     const qs = qp.toString()
-    const path = `/flights${qs ? `?${qs}` : ''}`
+    const path = qs ? `/flights?${qs}` : '/flights'
 
     Promise.all([
       api.get(path),
@@ -396,23 +396,23 @@ export default function FlightsPage() {
           <thead>
             <tr className="border-b border-border bg-muted/30">
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Flight ID</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none" onClick={() => toggleSort('date')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('date'))() } }} tabIndex={0} role="columnheader">
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none" onClick={() => toggleSort('date')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('date'))() } }} tabIndex={0}>
                 Date{sortKey === 'date' && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />)}
               </th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none" onClick={() => toggleSort('pilot_name')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('pilot_name'))() } }} tabIndex={0} role="columnheader">
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none" onClick={() => toggleSort('pilot_name')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('pilot_name'))() } }} tabIndex={0}>
                 Pilot{sortKey === 'pilot_name' && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />)}
               </th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none hidden md:table-cell" onClick={() => toggleSort('vehicle_name')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('vehicle_name'))() } }} tabIndex={0} role="columnheader">
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none hidden md:table-cell" onClick={() => toggleSort('vehicle_name')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('vehicle_name'))() } }} tabIndex={0}>
                 Vehicle{sortKey === 'vehicle_name' && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />)}
               </th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none hidden md:table-cell" onClick={() => toggleSort('purpose')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('purpose'))() } }} tabIndex={0} role="columnheader">
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none hidden md:table-cell" onClick={() => toggleSort('purpose')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('purpose'))() } }} tabIndex={0}>
                 Purpose{sortKey === 'purpose' && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />)}
               </th>
-              <th className="text-right px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none" onClick={() => toggleSort('duration_seconds')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('duration_seconds'))() } }} tabIndex={0} role="columnheader">
+              <th className="text-right px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none" onClick={() => toggleSort('duration_seconds')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('duration_seconds'))() } }} tabIndex={0}>
                 Duration{sortKey === 'duration_seconds' && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />)}
               </th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden lg:table-cell">Location</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none" onClick={() => toggleSort('review_status')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('review_status'))() } }} tabIndex={0} role="columnheader">
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none" onClick={() => toggleSort('review_status')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('review_status'))() } }} tabIndex={0}>
                 Status{sortKey === 'review_status' && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />)}
               </th>
               <th className="text-right px-4 py-3 font-medium text-muted-foreground w-20">Actions</th>
@@ -485,20 +485,20 @@ export default function FlightsPage() {
                   <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
                     f.review_status === 'needs_review' ? 'bg-amber-500/15 text-amber-400' : 'bg-emerald-500/15 text-emerald-400'
                   }`}>{f.review_status === 'needs_review' ? 'Needs Review' : 'Reviewed'}</span>
-                  {' '}
-                  {f.telemetry_synced ? (
-                    isSupervisor ? (
-                      <button onClick={async (e) => { e.stopPropagation(); try { await api.patch(`/flights/${f.id}/telemetry-status`, { telemetry_synced: false }); load() } catch (err) { toast.error(err.message) } }} className="w-2 h-2 rounded-full bg-emerald-400 inline-block cursor-pointer" title="Telemetry synced (click to unset)" />
-                    ) : (
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" title="Telemetry synced" />
-                    )
-                  ) : f.external_id ? (
-                    isSupervisor ? (
-                      <button onClick={async (e) => { e.stopPropagation(); try { await api.patch(`/flights/${f.id}/telemetry-status`, { telemetry_synced: true }); load() } catch (err) { toast.error(err.message) } }} className="w-2 h-2 rounded-full bg-zinc-500 inline-block cursor-pointer" title="Telemetry pending (click to mark synced)" />
-                    ) : (
-                      <span className="w-2 h-2 rounded-full bg-zinc-500 inline-block" title="Telemetry pending" />
-                    )
-                  ) : null}
+                  <span> </span>
+                  {(() => {
+                    if (f.telemetry_synced) {
+                      return isSupervisor
+                        ? <button onClick={async (e) => { e.stopPropagation(); try { await api.patch(`/flights/${f.id}/telemetry-status`, { telemetry_synced: false }); load() } catch (err) { toast.error(err.message) } }} className="w-2 h-2 rounded-full bg-emerald-400 inline-block cursor-pointer" title="Telemetry synced (click to unset)" />
+                        : <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" title="Telemetry synced" />
+                    }
+                    if (f.external_id) {
+                      return isSupervisor
+                        ? <button onClick={async (e) => { e.stopPropagation(); try { await api.patch(`/flights/${f.id}/telemetry-status`, { telemetry_synced: true }); load() } catch (err) { toast.error(err.message) } }} className="w-2 h-2 rounded-full bg-zinc-500 inline-block cursor-pointer" title="Telemetry pending (click to mark synced)" />
+                        : <span className="w-2 h-2 rounded-full bg-zinc-500 inline-block" title="Telemetry pending" />
+                    }
+                    return null
+                  })()}
                 </td>
                 <td className="px-4 py-3 text-right">
                   {isPilot && (

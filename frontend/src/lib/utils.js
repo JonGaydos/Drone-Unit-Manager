@@ -67,7 +67,7 @@ export function mpsToMph(mps) {
 export function formatDate(iso) {
   if (!iso) return '—'
   const d = new Date(iso.includes('T') ? iso : iso + 'T00:00:00')
-  if (isNaN(d.getTime())) return '—'
+  if (Number.isNaN(d.getTime())) return '—'
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
@@ -79,7 +79,7 @@ export function formatDate(iso) {
 export function formatDateTime(iso) {
   if (!iso) return '—'
   const d = new Date(iso)
-  if (isNaN(d.getTime())) return '—'
+  if (Number.isNaN(d.getTime())) return '—'
   return d.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
 }
 
@@ -94,7 +94,7 @@ export function normalizeDateValue(value) {
   // Handle dates like "0026-12-12" → "2026-12-12"
   const match = value.match(/^00(\d{2})-/)
   if (match) {
-    const yr = parseInt(match[1])
+    const yr = Number.parseInt(match[1], 10)
     const century = yr >= 50 ? '19' : '20'
     return value.replace(/^00\d{2}/, century + match[1])
   }

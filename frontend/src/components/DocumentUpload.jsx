@@ -254,7 +254,7 @@ export default function DocumentUpload({ entityType, entityId, folderId }) {
             {editingDoc !== doc.id && (
               <div className="flex items-center gap-1 shrink-0">
                 <button
-                  onClick={() => window.open(doc.view_url, '_blank')}
+                  onClick={() => globalThis.open(doc.view_url, '_blank')}
                   className="p-1.5 text-muted-foreground hover:text-foreground rounded hover:bg-accent/30"
                   title="View"
                 >

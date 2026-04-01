@@ -22,9 +22,9 @@ L.Icon.Default.mergeOptions({
 function FitBounds({ bounds }) {
   const map = useMap()
   useEffect(() => {
-    if (bounds && bounds.length > 1) {
+    if (bounds?.length > 1) {
       map.fitBounds(bounds, { padding: [30, 30] })
-    } else if (bounds && bounds.length === 1) {
+    } else if (bounds?.length === 1) {
       map.setView(bounds[0], 15)
     }
   }, [map, bounds])

@@ -13,6 +13,7 @@ from email.mime.text import MIMEText
 
 from sqlalchemy.orm import Session
 
+from app.constants import APP_TITLE
 from app.models.user import User
 from app.models.setting import Setting
 from app.models.notification_preference import NotificationPreference
@@ -26,6 +27,114 @@ def _get_setting(db: Session, key: str, default: str = "") -> str:
     return s.value if s else default
 
 
+def _is_category_enabled(enabled_categories: list | None, category: str) -> bool:
+    """Check if a digest category is enabled (None means all enabled)."""
+    return not enabled_categories or category in enabled_categories
+
+
+def _build_pending_approvals(db: Session) -> list[dict] | None:
+    from app.models.flight_approval import FlightPlan
+    pending = db.query(FlightPlan).filter(FlightPlan.status == "pending").all()
+    if not pending:
+        return None
+    return [
+        {"id": p.id, "title": p.title or f"Flight Plan #{p.id}",
+         "submitted_by_id": p.submitted_by_id, "date": str(p.date_planned) if p.date_planned else "TBD"}
+        for p in pending
+    ]
+
+
+def _build_needs_review(db: Session) -> list[dict] | None:
+    from app.models.flight import Flight
+    needs_review = db.query(Flight).filter(Flight.review_status == "needs_review").count()
+    return [{"count": needs_review}] if needs_review > 0 else None
+
+
+def _build_expiring_certs(db: Session, today: date, thirty_days: date) -> list[dict] | None:
+    from app.models.certification import PilotCertification
+    expiring = db.query(PilotCertification).filter(
+        PilotCertification.expiration_date <= thirty_days,
+        PilotCertification.expiration_date >= today,
+    ).all()
+    if not expiring:
+        return None
+    return [
+        {"id": c.id,
+         "pilot_name": (f"{c.pilot.first_name} {c.pilot.last_name}".strip() if c.pilot else "Unknown"),
+         "cert_name": (c.certification_type.name if c.certification_type else "Certification"),
+         "expires": str(c.expiration_date)}
+        for c in expiring
+    ]
+
+
+def _build_expiring_registrations(db: Session, today: date, thirty_days: date) -> list[dict] | None:
+    from app.models.vehicle_registration import VehicleRegistration
+    try:
+        exp_regs = db.query(VehicleRegistration).filter(
+            VehicleRegistration.expiry_date <= thirty_days,
+            VehicleRegistration.expiry_date >= today,
+            VehicleRegistration.is_current == True,
+        ).all()
+        if not exp_regs:
+            return None
+        return [
+            {"id": r.id, "registration_number": r.registration_number or "N/A",
+             "expires": str(r.expiry_date)}
+            for r in exp_regs
+        ]
+    except Exception:
+        return None
+
+
+def _build_overdue_maintenance(db: Session, today: date) -> list[dict] | None:
+    from app.models.maintenance_schedule import MaintenanceSchedule
+    overdue = db.query(MaintenanceSchedule).filter(
+        MaintenanceSchedule.is_active == True,
+        MaintenanceSchedule.next_due <= today,
+    ).all()
+    if not overdue:
+        return None
+    return [
+        {"id": m.id, "name": m.name, "entity_type": m.entity_type,
+         "due": str(m.next_due)}
+        for m in overdue
+    ]
+
+
+def _build_overdue_checkouts(db: Session) -> list[dict] | None:
+    from app.models.equipment_checkout import EquipmentCheckout
+    try:
+        overdue_eq = db.query(EquipmentCheckout).filter(
+            EquipmentCheckout.checked_in_at.is_(None),
+            EquipmentCheckout.expected_return < datetime.now(),
+        ).all()
+        if not overdue_eq:
+            return None
+        return [
+            {"id": e.id, "equipment_type": e.entity_type or "Equipment",
+             "equipment_name": e.entity_name or "Unknown"}
+            for e in overdue_eq
+        ]
+    except Exception:
+        return None
+
+
+def _build_recent_incidents(db: Session, pref) -> list[dict] | None:
+    from app.models.incident import Incident
+    freq = pref.frequency if pref else "daily"
+    lookback = timedelta(days=1) if freq == "daily" else timedelta(days=7)
+    since = datetime.now() - lookback
+    recent = db.query(Incident).filter(Incident.created_at >= since).all()
+    if not recent:
+        return None
+    return [
+        {"id": i.id, "title": i.title or f"Incident #{i.id}",
+         "severity": i.severity or "unknown",
+         "date": i.created_at.isoformat() if i.created_at else ""}
+        for i in recent
+    ]
+
+
 def build_digest(db: Session, user: User) -> dict | None:
     """Build a digest of actionable items for a user based on their role.
 
@@ -36,15 +145,6 @@ def build_digest(db: Session, user: User) -> dict | None:
     Returns:
         Dict of category -> list of item dicts, or None if nothing to report.
     """
-    from app.models.flight_approval import FlightPlan
-    from app.models.flight import Flight
-    from app.models.certification import PilotCertification
-    from app.models.vehicle_registration import VehicleRegistration
-    from app.models.maintenance_schedule import MaintenanceSchedule
-    from app.models.equipment_checkout import EquipmentCheckout
-    from app.models.incident import Incident
-
-    # Get user's notification preferences
     pref = db.query(NotificationPreference).filter(
         NotificationPreference.user_id == user.id
     ).first()
@@ -59,98 +159,42 @@ def build_digest(db: Session, user: User) -> dict | None:
     thirty_days = today + timedelta(days=30)
     sections = {}
 
-    # Pending flight plan approvals (supervisors/admins only)
-    if user.role in ("admin", "supervisor"):
-        if not enabled_categories or "pending_approvals" in enabled_categories:
-            pending = db.query(FlightPlan).filter(FlightPlan.status == "pending").all()
-            if pending:
-                sections["pending_approvals"] = [
-                    {"id": p.id, "title": p.title or f"Flight Plan #{p.id}",
-                     "submitted_by_id": p.submitted_by_id, "date": str(p.date_planned) if p.date_planned else "TBD"}
-                    for p in pending
-                ]
+    is_supervisor = user.role in ("admin", "supervisor")
 
-    # Flights needing review (supervisors/admins only)
-    if user.role in ("admin", "supervisor"):
-        if not enabled_categories or "needs_review" in enabled_categories:
-            needs_review = db.query(Flight).filter(Flight.review_status == "needs_review").count()
-            if needs_review > 0:
-                sections["needs_review"] = [{"count": needs_review}]
+    if is_supervisor and _is_category_enabled(enabled_categories, "pending_approvals"):
+        items = _build_pending_approvals(db)
+        if items:
+            sections["pending_approvals"] = items
 
-    # Expiring certifications (within 30 days)
-    if not enabled_categories or "expiring_certs" in enabled_categories:
-        expiring = db.query(PilotCertification).filter(
-            PilotCertification.expiration_date <= thirty_days,
-            PilotCertification.expiration_date >= today,
-        ).all()
-        if expiring:
-            sections["expiring_certs"] = [
-                {"id": c.id,
-                 "pilot_name": (f"{c.pilot.first_name} {c.pilot.last_name}".strip() if c.pilot else "Unknown"),
-                 "cert_name": (c.certification_type.name if c.certification_type else "Certification"),
-                 "expires": str(c.expiration_date)}
-                for c in expiring
-            ]
+    if is_supervisor and _is_category_enabled(enabled_categories, "needs_review"):
+        items = _build_needs_review(db)
+        if items:
+            sections["needs_review"] = items
 
-    # Expiring FAA registrations
-    if not enabled_categories or "expiring_registrations" in enabled_categories:
-        try:
-            exp_regs = db.query(VehicleRegistration).filter(
-                VehicleRegistration.expiry_date <= thirty_days,
-                VehicleRegistration.expiry_date >= today,
-                VehicleRegistration.is_current == True,
-            ).all()
-            if exp_regs:
-                sections["expiring_registrations"] = [
-                    {"id": r.id, "registration_number": r.registration_number or "N/A",
-                     "expires": str(r.expiry_date)}
-                    for r in exp_regs
-                ]
-        except Exception:
-            pass  # Table may not have all expected columns
+    if _is_category_enabled(enabled_categories, "expiring_certs"):
+        items = _build_expiring_certs(db, today, thirty_days)
+        if items:
+            sections["expiring_certs"] = items
 
-    # Overdue maintenance
-    if not enabled_categories or "overdue_maintenance" in enabled_categories:
-        overdue = db.query(MaintenanceSchedule).filter(
-            MaintenanceSchedule.is_active == True,
-            MaintenanceSchedule.next_due <= today,
-        ).all()
-        if overdue:
-            sections["overdue_maintenance"] = [
-                {"id": m.id, "name": m.name, "entity_type": m.entity_type,
-                 "due": str(m.next_due)}
-                for m in overdue
-            ]
+    if _is_category_enabled(enabled_categories, "expiring_registrations"):
+        items = _build_expiring_registrations(db, today, thirty_days)
+        if items:
+            sections["expiring_registrations"] = items
 
-    # Overdue equipment checkouts
-    if not enabled_categories or "overdue_checkouts" in enabled_categories:
-        try:
-            overdue_eq = db.query(EquipmentCheckout).filter(
-                EquipmentCheckout.checked_in_at.is_(None),
-                EquipmentCheckout.expected_return < datetime.now(),
-            ).all()
-            if overdue_eq:
-                sections["overdue_checkouts"] = [
-                    {"id": e.id, "equipment_type": e.entity_type or "Equipment",
-                     "equipment_name": e.entity_name or "Unknown"}
-                    for e in overdue_eq
-                ]
-        except Exception:
-            pass
+    if _is_category_enabled(enabled_categories, "overdue_maintenance"):
+        items = _build_overdue_maintenance(db, today)
+        if items:
+            sections["overdue_maintenance"] = items
 
-    # Recent incidents (last 24h for daily, 7d for weekly)
-    if not enabled_categories or "recent_incidents" in enabled_categories:
-        freq = pref.frequency if pref else "daily"
-        lookback = timedelta(days=1) if freq == "daily" else timedelta(days=7)
-        since = datetime.now() - lookback
-        recent = db.query(Incident).filter(Incident.created_at >= since).all()
-        if recent:
-            sections["recent_incidents"] = [
-                {"id": i.id, "title": i.title or f"Incident #{i.id}",
-                 "severity": i.severity or "unknown",
-                 "date": i.created_at.isoformat() if i.created_at else ""}
-                for i in recent
-            ]
+    if _is_category_enabled(enabled_categories, "overdue_checkouts"):
+        items = _build_overdue_checkouts(db)
+        if items:
+            sections["overdue_checkouts"] = items
+
+    if _is_category_enabled(enabled_categories, "recent_incidents"):
+        items = _build_recent_incidents(db, pref)
+        if items:
+            sections["recent_incidents"] = items
 
     return sections if sections else None
 
@@ -245,7 +289,7 @@ def send_email(to_address: str, subject: str, html_body: str, db: Session) -> bo
     smtp_user = _get_setting(db, "smtp_username")
     smtp_pass = _get_setting(db, "smtp_password")
     smtp_from = _get_setting(db, "smtp_from_address")
-    smtp_from_name = _get_setting(db, "smtp_from_name", "Drone Unit Manager")
+    smtp_from_name = _get_setting(db, "smtp_from_name", APP_TITLE)
     smtp_tls = _get_setting(db, "smtp_tls", "true").lower() == "true"
 
     if not smtp_host or not smtp_from:

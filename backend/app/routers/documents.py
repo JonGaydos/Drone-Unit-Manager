@@ -6,6 +6,7 @@ file-type validation and path-traversal protection.
 
 import os
 from pathlib import Path
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse
@@ -39,13 +40,13 @@ def _doc_to_out(doc: Document) -> DocumentOut:
 async def upload_document(
     db: DBSession,
     admin: PilotUser,
-    file: UploadFile = File(...),
-    entity_type: str = Form(...),
-    entity_id: int = Form(...),
-    document_type: str = Form(...),
-    title: str = Form(...),
-    notes: str | None = Form(default=None),
-    folder_id: int | None = Form(default=None),
+    file: Annotated[UploadFile, File()],
+    entity_type: Annotated[str, Form()],
+    entity_id: Annotated[int, Form()],
+    document_type: Annotated[str, Form()],
+    title: Annotated[str, Form()],
+    notes: Annotated[str | None, Form()] = None,
+    folder_id: Annotated[int | None, Form()] = None,
 ):
     """Upload a document and attach it to a pilot, vehicle, or certification.
 

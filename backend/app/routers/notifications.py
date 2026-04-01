@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.constants import APP_TITLE
 from app.deps import CurrentUser, DBSession
 from app.models.notification_preference import NotificationPreference
 from app.models.notification_log import NotificationLog
@@ -144,7 +145,7 @@ def send_test_digest(
         return {"ok": False, "message": "No actionable items to include in the digest"}
 
     org_name_setting = db.query(Setting).filter(Setting.key == "org_name").first()
-    org_name = org_name_setting.value if org_name_setting else "Drone Unit Manager"
+    org_name = org_name_setting.value if org_name_setting else APP_TITLE
 
     html = render_digest_html(digest, user, org_name)
     subject = f"{org_name} — Daily Digest"

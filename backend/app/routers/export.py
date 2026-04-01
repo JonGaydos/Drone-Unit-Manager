@@ -2,6 +2,7 @@ import csv
 import io
 import xml.etree.ElementTree as ET
 from datetime import date, datetime, timezone
+from typing import Annotated
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from fastapi.responses import StreamingResponse
@@ -17,12 +18,18 @@ from app.models.training_log_pilot import TrainingLogPilot
 from app.models.mission_log import MissionLog
 from app.models.mission_log_pilot import MissionLogPilot
 from app.config import settings
+from app.constants import APP_TITLE
 from app.deps import DBSession, CurrentUser, AdminUser
 from app.responses import responses
 
 router = APIRouter(prefix="/api/export", tags=["export"])
 
 CSV_MEDIA_TYPE = "text/csv"
+
+# CSV column header constants (S1192 - duplicated strings)
+COL_CASE_NUMBER = COL_CASE_NUMBER
+COL_ENTITY_TYPE = COL_ENTITY_TYPE
+COL_ENTITY_ID = COL_ENTITY_ID
 
 
 @router.get("/flights/csv")
@@ -43,7 +50,7 @@ def export_flights_csv(
     writer.writerow([
         "Date", "Pilot", "Vehicle", "Purpose", "Duration (s)", "Takeoff Address",
         "Takeoff Lat", "Takeoff Lon", "Max Altitude (m)", "Max Speed (m/s)",
-        "Distance (m)", "Case Number", "Review Status", "Notes",
+        "Distance (m)", COL_CASE_NUMBER, "Review Status", "Notes",
     ])
     for f in flights:
         writer.writerow([
@@ -114,7 +121,7 @@ def export_maintenance_csv(
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow([
-        "Entity Type", "Entity ID", "Maintenance Type", "Description",
+        COL_ENTITY_TYPE, COL_ENTITY_ID, "Maintenance Type", "Description",
         "Performed By", "Performed Date", "Next Due Date", "Cost", "Notes",
     ])
     for r in records:
@@ -260,7 +267,7 @@ def export_mission_logs_csv(
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow([
-        "Date", "Title", "Reason", "Location", "Case Number",
+        "Date", "Title", "Reason", "Location", COL_CASE_NUMBER,
         "Man Hours", "Status", "Pilots", "Description", "Notes",
     ])
     for m in logs:
@@ -343,7 +350,7 @@ def export_flight_plans_csv(
     writer = csv.writer(output)
     writer.writerow([
         "Title", "Date Planned", "Pilot", "Vehicle", "Location", "Purpose",
-        "Case Number", "Status", "Max Altitude", "Est Duration (min)", "Notes",
+        COL_CASE_NUMBER, "Status", "Max Altitude", "Est Duration (min)", "Notes",
     ])
     for p in plans:
         pilot = db.query(Pilot).filter(Pilot.id == p.pilot_id).first() if p.pilot_id else None
@@ -382,7 +389,7 @@ def export_audit_csv(
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow([
-        "Timestamp", "User", "Action", "Entity Type", "Entity ID",
+        "Timestamp", "User", "Action", COL_ENTITY_TYPE, COL_ENTITY_ID,
         "Entity Name", "Details", "IP Address",
     ])
     for log in logs:
@@ -418,7 +425,7 @@ def export_equipment_checkouts_csv(
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow([
-        "Entity Type", "Entity Name", "Checked Out By", "Checked Out At",
+        COL_ENTITY_TYPE, "Entity Name", "Checked Out By", "Checked Out At",
         "Expected Return", "Checked In At", "Condition Out", "Condition In",
         "Notes Out", "Notes In",
     ])
@@ -445,7 +452,7 @@ def export_equipment_checkouts_csv(
 async def import_flights_csv(
     db: DBSession,
     admin: AdminUser,
-    file: UploadFile = File(...),
+    file: Annotated[UploadFile, File()],
 ):
     if not file.filename.endswith('.csv'):
         raise HTTPException(400, "Only CSV files are supported")
@@ -469,7 +476,7 @@ async def import_flights_csv(
                 takeoff_lon=float(row["Takeoff Lon"]) if row.get("Takeoff Lon") else None,
                 max_altitude_m=float(row["Max Altitude (m)"]) if row.get("Max Altitude (m)") else None,
                 max_speed_mps=float(row["Max Speed (m/s)"]) if row.get("Max Speed (m/s)") else None,
-                case_number=row.get("Case Number") or None,
+                case_number=row.get(COL_CASE_NUMBER) or None,
                 notes=row.get("Notes") or None,
                 review_status="reviewed",
                 pilot_confirmed=True,
@@ -497,7 +504,7 @@ async def import_flights_csv(
 async def import_excel_file(
     db: DBSession,
     admin: AdminUser,
-    file: UploadFile = File(...),
+    file: Annotated[UploadFile, File()],
 ):
     if not file.filename.endswith(('.xlsx', '.xls')):
         raise HTTPException(400, "Only Excel files (.xlsx) are supported")
@@ -513,7 +520,7 @@ async def import_excel_file(
 async def import_flight_log(
     db: DBSession,
     admin: AdminUser,
-    file: UploadFile = File(...),
+    file: Annotated[UploadFile, File()],
     format: str = "auto",
 ):
     """Import a flight log file (DJI .txt, Litchi CSV, Airdata CSV/JSON, or ZIP).
@@ -603,7 +610,7 @@ def export_flight_gpx(
     if not points:
         raise HTTPException(404, "No telemetry data for this flight")
 
-    gpx = ET.Element("gpx", version="1.1", creator="Drone Unit Manager",
+    gpx = ET.Element("gpx", version="1.1", creator=APP_TITLE,
                      xmlns="http://www.topografix.com/GPX/1/1")
 
     metadata = ET.SubElement(gpx, "metadata")

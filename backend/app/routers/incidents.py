@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from typing import Optional
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
@@ -162,9 +162,9 @@ def list_incidents(
 
     report_type: str | None = None,
 
-    page: int = Query(default=1, ge=1),
+    page: Annotated[int, Query(ge=1)] = 1,
 
-    per_page: int = Query(default=50, le=200),
+    per_page: Annotated[int, Query(le=200)] = 50,
 ):
     q = db.query(Incident)
     if status:

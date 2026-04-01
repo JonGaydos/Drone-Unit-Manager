@@ -13,11 +13,7 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('general')
   const [settings, setSettings] = useState({})
   const [saving, setSaving] = useState(false)
-  const [, setTesting] = useState(false)
-  const [, setSyncing] = useState(false)
-  const [, setTestResult] = useState(null)
-  const [, setImportResult] = useState(null)
-  const [, setImporting] = useState(false)
+  const [testResult, setTestResult] = useState(null)
   const { isAdmin, user: currentUser } = useAuth()
   const toast = useToast()
   const [confirmProps, requestConfirm] = useConfirm()
@@ -59,8 +55,8 @@ export default function SettingsPage() {
       e.preventDefault()
       e.returnValue = ''
     }
-    window.addEventListener('beforeunload', handler)
-    return () => window.removeEventListener('beforeunload', handler)
+    globalThis.addEventListener('beforeunload', handler)
+    return () => globalThis.removeEventListener('beforeunload', handler)
   }, [hasUnsavedChanges])
 
   // Change password state
@@ -155,15 +151,15 @@ export default function SettingsPage() {
       }
       // Load cert status labels
       if (map.cert_status_labels) {
-        try { setCertLabels(JSON.parse(map.cert_status_labels)) } catch {}
+        try { setCertLabels(JSON.parse(map.cert_status_labels)) } catch { /* invalid JSON */ }
       }
       // Load weather thresholds
       if (map.weather_thresholds) {
-        try { setWeatherThresholds(JSON.parse(map.weather_thresholds)) } catch {}
+        try { setWeatherThresholds(JSON.parse(map.weather_thresholds)) } catch { /* invalid JSON */ }
       }
       // Load mission purposes from settings, or fall back to API defaults
       if (map.mission_purposes) {
-        try { setMissionPurposes(JSON.parse(map.mission_purposes)) } catch {}
+        try { setMissionPurposes(JSON.parse(map.mission_purposes)) } catch { /* invalid JSON */ }
       } else {
         // Load default purposes from the database
         api.get('/flights/purposes/list').then(purposes => {
@@ -269,81 +265,6 @@ export default function SettingsPage() {
     }
   }
 
-  const handleTestConnection = async () => {
-    setTesting(true)
-    setTestResult(null)
-    try {
-      // Save credentials first
-      const current = gatherInputs()
-      setSettings(current)
-      const items = Object.entries(current).map(([key, value]) => ({ key, value }))
-      await api.put('/settings/bulk', items)
-      // Then test
-      const result = await api.post('/sync/test', {})
-      setTestResult({ ok: result.ok, message: result.message })
-    } catch (err) {
-      setTestResult({ ok: false, message: err.message })
-    } finally {
-      setTesting(false)
-    }
-  }
-
-  const handleSyncNow = async (full = false) => {
-    setSyncing(true)
-    setTestResult(null)
-    try {
-      const result = await api.post(`/sync/now?full=${full}`, {})
-      const parts = [
-        `${result.flights_new || 0} new flights`,
-        `${result.flights_skipped || 0} skipped`,
-        `${result.vehicles_synced || 0} vehicles`,
-        `${result.batteries_synced || 0} batteries`,
-        `${result.controllers_synced || 0} controllers`,
-        `${result.users_synced || 0} users`,
-      ]
-      let msg = `Synced: ${parts.join(', ')}`
-      if (result.errors?.length > 0) {
-        msg += `\n\nErrors:\n${result.errors.join('\n')}`
-      }
-      setTestResult({ ok: result.errors?.length === 0, message: msg })
-    } catch (err) {
-      setTestResult({ ok: false, message: err.message })
-    } finally {
-      setSyncing(false)
-    }
-  }
-
-  const handleSyncTelemetry = async () => {
-    setSyncing(true)
-    try {
-      const result = await api.post('/sync/telemetry', {})
-      const msg = `Synced telemetry for ${result.synced} flights. ${result.remaining > 0 ? `${result.remaining} remaining.` : 'All caught up!'}`
-      setTestResult({ ok: true, message: msg })
-    } catch (err) {
-      setTestResult({ ok: false, message: err.message })
-    } finally {
-      setSyncing(false)
-    }
-  }
-
-  const handleExcelImport = async (e) => {
-    const file = e.target.files[0]
-    if (!file) return
-    setImporting(true)
-    setImportResult(null)
-    try {
-      const formData = new FormData()
-      formData.append('file', file)
-      const result = await api.upload('/export/excel/import', formData)
-      setImportResult(result)
-    } catch (err) {
-      setImportResult({ error: err.message })
-    } finally {
-      setImporting(false)
-      e.target.value = '' // Reset file input
-    }
-  }
-
   // Use refs for settings inputs to avoid re-renders on keystroke/paste
   const inputRefs = React.useRef({})
 
@@ -362,7 +283,7 @@ export default function SettingsPage() {
 
   const field = (label, key, type = 'text', description = '') => {
     const isPassword = type === 'password'
-    const hasMaskedValue = isPassword && settings[key] && settings[key].includes('...')
+    const hasMaskedValue = isPassword && settings[key]?.includes('...')
     const fieldId = `setting-${key}`
     return (
       <div>
@@ -609,7 +530,7 @@ export default function SettingsPage() {
 
           {/* Logo Upload */}
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Organization Logo</label>
+            <p className="block text-sm font-medium text-foreground mb-1">Organization Logo</p>
             <p className="text-xs text-muted-foreground mb-2">Used on reports and exports</p>
             <div className="flex items-center gap-4">
               {logoUrl ? (
@@ -899,8 +820,8 @@ export default function SettingsPage() {
 
       {/* Edit User Modal */}
       {editUser && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" role="presentation" onClick={() => setEditUser(null)}>
-          <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl" role="dialog" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setEditUser(null)}>
+          <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
             <h2 className="text-lg font-semibold text-foreground mb-4">Edit User: {editUser.username}</h2>
             <div className="space-y-3">
               <div>

@@ -6,7 +6,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { useConfirm } from '@/hooks/useConfirm'
 import {
   Search, Upload, X, ChevronLeft, ChevronRight, Edit2, Trash2,
-  Camera, Calendar, User, Info, ZoomIn, Image as ImageIcon
+  Camera, User, Info, ZoomIn, Image as ImageIcon
 } from 'lucide-react'
 import { sortPilotsActiveFirst } from '@/lib/formatters'
 
@@ -63,8 +63,8 @@ export default function MediaPage() {
       if (e.key === 'ArrowLeft') setLightbox(i => i > 0 ? i - 1 : filtered.length - 1)
       if (e.key === 'ArrowRight') setLightbox(i => i < filtered.length - 1 ? i + 1 : 0)
     }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
+    globalThis.addEventListener('keydown', handler)
+    return () => globalThis.removeEventListener('keydown', handler)
   }, [lightbox, filtered.length])
 
   const handleDelete = (id) => {
@@ -158,7 +158,7 @@ export default function MediaPage() {
                       {/* Thumbnail */}
                       <div
                         className="aspect-[4/3] bg-muted/30 relative cursor-pointer overflow-hidden"
-                        role="button"
+                       
                         tabIndex={0}
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setLightbox(idx) } }}
                         onClick={() => setLightbox(idx)}
@@ -259,7 +259,7 @@ function LightboxModal({ photos, index, onClose, onPrev, onNext, formatDate, for
   const API = import.meta.env.VITE_API_URL || '/api'
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center" role="presentation" onClick={onClose}>
+    <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center" onClick={onClose}>
       <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
         <button
           onClick={(e) => { e.stopPropagation(); setShowInfo(s => !s) }}
@@ -295,7 +295,7 @@ function LightboxModal({ photos, index, onClose, onPrev, onNext, formatDate, for
       )}
 
       {/* Image */}
-      <div className="max-w-[90vw] max-h-[85vh] flex items-center justify-center" role="dialog" onClick={(e) => e.stopPropagation()}>
+      <div className="max-w-[90vw] max-h-[85vh] flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
         <img
           src={`${API}/photos/${photo.id}/view`}
           alt={photo.title || photo.filename}
@@ -307,6 +307,7 @@ function LightboxModal({ photos, index, onClose, onPrev, onNext, formatDate, for
       {showInfo && (
         <div
           className="absolute bottom-0 left-0 right-0 bg-black/80 backdrop-blur-sm p-6 text-white"
+         
           onClick={(e) => e.stopPropagation()}
         >
           <div className="max-w-2xl mx-auto space-y-2">
@@ -379,9 +380,10 @@ function UploadModal({ pilots, onClose, onSuccess }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" role="presentation" onClick={onClose}>
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={onClose}>
       <div
         className="bg-card border border-border rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+       
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-4 border-b border-border">
@@ -391,7 +393,7 @@ function UploadModal({ pilots, onClose, onSuccess }) {
         <div className="p-4 space-y-4">
           {/* File drop */}
           <div
-            role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileRef.current?.click() } }} onClick={() => fileRef.current?.click()}
+            tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileRef.current?.click() } }} onClick={() => fileRef.current?.click()}
             className="border-2 border-dashed border-border rounded-xl p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
           >
             {preview ? (
@@ -439,7 +441,7 @@ function UploadModal({ pilots, onClose, onSuccess }) {
 
           {/* Pilot multi-select */}
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Associated Pilots</label>
+            <p className="block text-sm font-medium text-foreground mb-1">Associated Pilots</p>
             <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-2 bg-secondary border border-border rounded-lg">
               {sortPilotsActiveFirst(pilots).map(p => {
                 const name = `${p.first_name} ${p.last_name}`.trim()
@@ -513,7 +515,7 @@ function EditModal({ photo, pilots, onClose, onSuccess }) {
       if (res.status === 401) {
         localStorage.removeItem('token')
         localStorage.removeItem('user')
-        window.location.href = '/login'
+        globalThis.location.href = '/login'
         throw new Error('Unauthorized')
       }
       if (!res.ok) {
@@ -529,9 +531,10 @@ function EditModal({ photo, pilots, onClose, onSuccess }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" role="presentation" onClick={onClose}>
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={onClose}>
       <div
         className="bg-card border border-border rounded-xl w-full max-w-lg"
+       
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-4 border-b border-border">
@@ -562,7 +565,7 @@ function EditModal({ photo, pilots, onClose, onSuccess }) {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Associated Pilots</label>
+            <p className="block text-sm font-medium text-foreground mb-1">Associated Pilots</p>
             <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-2 bg-secondary border border-border rounded-lg">
               {sortPilotsActiveFirst(pilots).map(p => {
                 const name = `${p.first_name} ${p.last_name}`.trim()

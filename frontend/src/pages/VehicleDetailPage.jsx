@@ -11,7 +11,7 @@ import {
   ArrowLeft, Clock, Calendar, Battery, Edit,
   Wrench, Gamepad2, Cpu, Paperclip, Camera,
   ShieldCheck, Plus, Trash2, AlertTriangle, LogIn, LogOut,
-  CheckCircle, User, Cog, X, Save
+  User, Cog, X, Save
 } from 'lucide-react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 import DocumentUpload from '@/components/DocumentUpload'
@@ -507,7 +507,6 @@ export default function VehicleDetailPage() {
             const isExpired = daysUntil !== null && daysUntil < 0
             const isUrgent = daysUntil !== null && daysUntil >= 0 && daysUntil < 30
             const isWarning = daysUntil !== null && daysUntil >= 30 && daysUntil <= 90
-            const isGood = daysUntil !== null && daysUntil > 90
             const rowBg = (() => {
               if (isExpired) return 'bg-red-900/10'
               if (isUrgent) return 'bg-red-500/5'

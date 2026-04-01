@@ -17,9 +17,11 @@ from sqlalchemy import text
 logger = logging.getLogger(__name__)
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.constants import APP_TITLE
 from app.config import settings
+from app.responses import responses
 from app.database import Base, engine, SessionLocal
-from app.models import *  # noqa: F401,F403 - Import all models to register them
+import app.models as _models  # noqa: F401 - Import all models to register them with SQLAlchemy
 from app.models.telemetry import TelemetryBase
 from app.database import telemetry_engine
 from app.routers import (
@@ -86,7 +88,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Drone Unit Manager",
+    title=APP_TITLE,
     version="3.0.0",
     lifespan=lifespan,
 )
@@ -152,12 +154,12 @@ def health_check():
     db = SessionLocal()
     try:
         db.execute(text("SELECT 1"))
-        return {"status": "ok", "app": "Drone Unit Manager", "version": "3.0.0", "database": "connected"}
+        return {"status": "ok", "app": APP_TITLE, "version": "3.0.0", "database": "connected"}
     except Exception as e:
         logger.error("Health check failed: %s", e)
         return JSONResponse(
             status_code=503,
-            content={"status": "unhealthy", "app": "Drone Unit Manager", "database": "disconnected"},
+            content={"status": "unhealthy", "app": APP_TITLE, "database": "disconnected"},
         )
     finally:
         db.close()
@@ -167,7 +169,7 @@ def health_check():
 
 _static_dir = str(Path(__file__).parent.parent / "static")
 
-@app.get("/{full_path:path}", include_in_schema=False)
+@app.get("/{full_path:path}", include_in_schema=False, responses=responses(403, 404))
 def serve_spa(full_path: str):
     """Serve the React SPA and its static assets in production (Docker).
 

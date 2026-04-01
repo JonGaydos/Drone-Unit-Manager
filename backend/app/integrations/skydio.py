@@ -6,6 +6,7 @@ from datetime import datetime
 
 import httpx
 
+from app.constants import UTC_OFFSET
 from app.integrations.base import DroneProvider, ProviderCredentials
 from app.integrations.registry import register_provider
 
@@ -31,6 +32,117 @@ def _to_str(val):
     if isinstance(val, list):
         return ", ".join(str(v) for v in val)
     return str(val)
+
+
+def _map_raw_flight(f: dict) -> dict:
+    """Map a raw Skydio API flight dict to our standard flight dict format."""
+    takeoff_time = None
+    landing_time = None
+    flight_date = None
+
+    takeoff_str = f.get("takeoff_time") or f.get("takeoff") or f.get("start_time")
+    landing_str = f.get("landing_time") or f.get("landing") or f.get("end_time")
+
+    if takeoff_str:
+        try:
+            takeoff_time = datetime.fromisoformat(takeoff_str.replace("Z", UTC_OFFSET))
+            flight_date = takeoff_time.date().isoformat()
+        except (ValueError, AttributeError):
+            pass
+
+    if landing_str:
+        try:
+            landing_time = datetime.fromisoformat(landing_str.replace("Z", UTC_OFFSET))
+        except (ValueError, AttributeError):
+            pass
+
+    duration = f.get("duration_seconds") or f.get("duration")
+    if duration is None and takeoff_time and landing_time:
+        duration = int((landing_time - takeoff_time).total_seconds())
+
+    return {
+        "external_id": f.get("flight_id") or f.get("uuid") or f.get("id"),
+        "api_provider": "skydio",
+        "date": flight_date or f.get("date"),
+        "takeoff_time": takeoff_time,
+        "landing_time": landing_time,
+        "duration_seconds": duration,
+        "takeoff_lat": f.get("takeoff_latitude") or f.get("takeoff_lat"),
+        "takeoff_lon": f.get("takeoff_longitude") or f.get("takeoff_lon"),
+        "landing_lat": f.get("landing_latitude") or f.get("landing_lat"),
+        "landing_lon": f.get("landing_longitude") or f.get("landing_lon"),
+        "takeoff_address": f.get("takeoff_address") or f.get("location"),
+        "pilot_name": f.get("pilot_name") or f.get("operator_name"),
+        "vehicle_serial": f.get("vehicle_serial") or f.get("serial_number"),
+        "max_altitude_m": f.get("max_altitude_m") or f.get("max_altitude"),
+        "max_speed_mps": f.get("max_speed_mps") or f.get("max_speed"),
+        "distance_m": f.get("distance_m") or f.get("total_distance"),
+        "battery_serial": _to_str(f.get("battery_serial") or f.get("battery")),
+        "sensor_package": _to_str(f.get("sensor_package")),
+        "attachment_top": _to_str(f.get("attachment_top")),
+        "attachment_bottom": _to_str(f.get("attachment_bottom")),
+        "attachment_left": _to_str(f.get("attachment_left")),
+        "attachment_right": _to_str(f.get("attachment_right")),
+        "carrier": _to_str(f.get("carrier") or f.get("carriers")),
+    }
+
+
+def _unwrap_telemetry_response(body) -> list:
+    """Unwrap nested Skydio telemetry response to get a flat list of point dicts."""
+    raw = body
+    if isinstance(raw, dict) and "data" in raw and isinstance(raw["data"], dict):
+        raw = raw["data"]
+    if isinstance(raw, dict):
+        for key in ("flight_telemetry", "telemetry", "points", "data"):
+            val = raw.get(key)
+            if isinstance(val, list):
+                return val
+            if isinstance(val, dict):
+                for _subkey, subval in val.items():
+                    if isinstance(subval, list):
+                        return subval
+    if isinstance(raw, list):
+        return raw
+    return []
+
+
+def _map_telemetry_point(p: dict, takeoff_gps_alt: float | None) -> dict | None:
+    """Map a raw Skydio telemetry point to our standard format."""
+    if not isinstance(p, dict):
+        return None
+
+    import math
+
+    battery = p.get("battery_percentage")
+    if battery is not None and battery <= 1.0:
+        battery = round(battery * 100, 1)
+
+    alt_hat = p.get("height_above_takeoff")
+    if alt_hat is not None:
+        alt = alt_hat
+    elif p.get("gps_altitude") is not None and takeoff_gps_alt is not None:
+        alt = p["gps_altitude"] - takeoff_gps_alt
+    else:
+        alt = None
+
+    velocity = p.get("gps_velocity")
+    speed = None
+    if isinstance(velocity, list) and len(velocity) >= 2:
+        speed = round(math.sqrt(sum(v**2 for v in velocity[:3])), 2)
+
+    return {
+        "timestamp_ms": p.get("timestamp_ms") or p.get("timestamp"),
+        "lat": p.get("gps_latitude") or p.get("lat"),
+        "lon": p.get("gps_longitude") or p.get("lon"),
+        "altitude_m": round(alt, 2) if alt is not None else None,
+        "speed_mps": speed,
+        "battery_pct": battery,
+        "battery_voltage": p.get("battery_voltage"),
+        "heading_deg": p.get("heading_deg") or p.get("heading"),
+        "pitch_deg": p.get("pitch_deg") or p.get("pitch"),
+        "roll_deg": p.get("roll_deg") or p.get("roll"),
+        "satellites": p.get("gps_num_satellites_used") or p.get("satellites"),
+    }
 
 
 class SkydioProvider(DroneProvider):
@@ -229,68 +341,11 @@ class SkydioProvider(DroneProvider):
                 params["date_from"] = since[:10] if len(since) > 10 else since
 
             raw = self._paginate(f"{BASE_URL}/flights", creds, params=params)
-            flights = []
             if raw:
                 logger.info("First flight raw keys: %s", list(raw[0].keys()))
                 logger.info("First flight raw data: %s", {k: raw[0][k] for k in list(raw[0].keys())[:20]})
-            for f in raw:
-                # Parse timestamps
-                takeoff_time = None
-                landing_time = None
-                flight_date = None
 
-                takeoff_str = f.get("takeoff_time") or f.get("takeoff") or f.get("start_time")
-                landing_str = f.get("landing_time") or f.get("landing") or f.get("end_time")
-
-                if takeoff_str:
-                    try:
-                        takeoff_time = datetime.fromisoformat(takeoff_str.replace("Z", "+00:00"))
-                        flight_date = takeoff_time.date().isoformat()
-                    except (ValueError, AttributeError):
-                        pass
-
-                if landing_str:
-                    try:
-                        landing_time = datetime.fromisoformat(landing_str.replace("Z", "+00:00"))
-                    except (ValueError, AttributeError):
-                        pass
-
-                duration = f.get("duration_seconds") or f.get("duration")
-                if duration is None and takeoff_time and landing_time:
-                    duration = int((landing_time - takeoff_time).total_seconds())
-
-                # Extract location data
-                takeoff_lat = f.get("takeoff_latitude") or f.get("takeoff_lat")
-                takeoff_lon = f.get("takeoff_longitude") or f.get("takeoff_lon")
-                landing_lat = f.get("landing_latitude") or f.get("landing_lat")
-                landing_lon = f.get("landing_longitude") or f.get("landing_lon")
-
-                flights.append({
-                    "external_id": f.get("flight_id") or f.get("uuid") or f.get("id"),
-                    "api_provider": "skydio",
-                    "date": flight_date or f.get("date"),
-                    "takeoff_time": takeoff_time,
-                    "landing_time": landing_time,
-                    "duration_seconds": duration,
-                    "takeoff_lat": takeoff_lat,
-                    "takeoff_lon": takeoff_lon,
-                    "landing_lat": landing_lat,
-                    "landing_lon": landing_lon,
-                    "takeoff_address": f.get("takeoff_address") or f.get("location"),
-                    "pilot_name": f.get("pilot_name") or f.get("operator_name"),
-                    "vehicle_serial": f.get("vehicle_serial") or f.get("serial_number"),
-                    "max_altitude_m": f.get("max_altitude_m") or f.get("max_altitude"),
-                    "max_speed_mps": f.get("max_speed_mps") or f.get("max_speed"),
-                    "distance_m": f.get("distance_m") or f.get("total_distance"),
-                    "battery_serial": _to_str(f.get("battery_serial")),
-                    "sensor_package": _to_str(f.get("sensor_package")),
-                    "attachment_top": _to_str(f.get("attachment_top")),
-                    "attachment_bottom": _to_str(f.get("attachment_bottom")),
-                    "attachment_left": _to_str(f.get("attachment_left")),
-                    "attachment_right": _to_str(f.get("attachment_right")),
-                    "carrier": _to_str(f.get("carrier") or f.get("carriers")),
-                })
-
+            flights = [_map_raw_flight(f) for f in raw]
             logger.info("Fetched %d flights from Skydio", len(flights))
             return flights
         except Exception as exc:
@@ -359,60 +414,7 @@ class SkydioProvider(DroneProvider):
 
         logger.info("Deep sync complete: %d total unique flights across %d batches", len(all_raw), batch)
 
-        # Map using the same logic as sync_flights
-        flights = []
-        for f in all_raw:
-            takeoff_time = None
-            landing_time = None
-            flight_date = None
-
-            takeoff_str = f.get("takeoff_time") or f.get("start_time")
-            landing_str = f.get("landing_time") or f.get("end_time")
-
-            if takeoff_str:
-                try:
-                    takeoff_time = datetime.fromisoformat(takeoff_str.replace("Z", "+00:00"))
-                    flight_date = takeoff_time.date().isoformat()
-                except (ValueError, AttributeError):
-                    pass
-
-            if landing_str:
-                try:
-                    landing_time = datetime.fromisoformat(landing_str.replace("Z", "+00:00"))
-                except (ValueError, AttributeError):
-                    pass
-
-            duration = f.get("duration_seconds") or f.get("duration")
-            if duration is None and takeoff_time and landing_time:
-                duration = int((landing_time - takeoff_time).total_seconds())
-
-            flights.append({
-                "external_id": f.get("flight_id") or f.get("uuid") or f.get("id"),
-                "api_provider": "skydio",
-                "date": flight_date or f.get("date"),
-                "takeoff_time": takeoff_time,
-                "landing_time": landing_time,
-                "duration_seconds": duration,
-                "takeoff_lat": f.get("takeoff_latitude") or f.get("takeoff_lat"),
-                "takeoff_lon": f.get("takeoff_longitude") or f.get("takeoff_lon"),
-                "landing_lat": f.get("landing_latitude") or f.get("landing_lat"),
-                "landing_lon": f.get("landing_longitude") or f.get("landing_lon"),
-                "takeoff_address": f.get("takeoff_address") or f.get("location"),
-                "pilot_name": f.get("pilot_name") or f.get("operator_name"),
-                "vehicle_serial": f.get("vehicle_serial") or f.get("serial_number"),
-                "max_altitude_m": f.get("max_altitude_m") or f.get("max_altitude"),
-                "max_speed_mps": f.get("max_speed_mps") or f.get("max_speed"),
-                "distance_m": f.get("distance_m") or f.get("total_distance"),
-                "battery_serial": _to_str(f.get("battery_serial") or f.get("battery")),
-                "sensor_package": _to_str(f.get("sensor_package")),
-                "attachment_top": _to_str(f.get("attachment_top")),
-                "attachment_bottom": _to_str(f.get("attachment_bottom")),
-                "attachment_left": _to_str(f.get("attachment_left")),
-                "attachment_right": _to_str(f.get("attachment_right")),
-                "carrier": _to_str(f.get("carrier") or f.get("carriers")),
-            })
-
-        return flights
+        return [_map_raw_flight(f) for f in all_raw]
 
     def sync_batteries(self, creds: ProviderCredentials) -> list[dict]:
         """Fetch batteries from Skydio Cloud."""
@@ -488,80 +490,22 @@ class SkydioProvider(DroneProvider):
             )
             body = resp.json()
 
-            # Unwrap telemetry response
-            # Skydio returns {"data": {"flight": {...}, "flight_telemetry": [...]}, "meta": ..., ...}
-            raw = body
-            # Step 1: unwrap "data" wrapper if present
-            if isinstance(raw, dict) and "data" in raw and isinstance(raw["data"], dict):
-                raw = raw["data"]
-            # Step 2: extract the telemetry list
-            if isinstance(raw, dict):
-                for key in ("flight_telemetry", "telemetry", "points", "data"):
-                    val = raw.get(key)
-                    if isinstance(val, list):
-                        raw = val
-                        break
-                    elif isinstance(val, dict):
-                        for subkey, subval in val.items():
-                            if isinstance(subval, list):
-                                raw = subval
-                                break
-                        if isinstance(raw, list):
-                            break
-            if not isinstance(raw, list):
+            raw = _unwrap_telemetry_response(body)
+            if not raw:
                 return []
 
             # Determine takeoff altitude (ground level) from the first point's gps_altitude
-            # so we can compute AGL from gps_altitude for points missing height_above_takeoff
             takeoff_gps_alt = None
             for p in raw:
                 if isinstance(p, dict) and p.get("gps_altitude") is not None:
                     takeoff_gps_alt = p["gps_altitude"]
                     break
 
-            import math
             points = []
             for p in raw:
-                if not isinstance(p, dict):
-                    continue
-
-                # Battery: Skydio returns 0-1 fraction
-                battery = p.get("battery_percentage")
-                if battery is not None and battery <= 1.0:
-                    battery = round(battery * 100, 1)
-
-                # Altitude (AGL — Above Ground Level):
-                # Prefer height_above_takeoff when available (sparse: ~17% of points).
-                # For all other points, compute AGL from gps_altitude by subtracting
-                # the takeoff point's gps_altitude (ground elevation MSL).
-                # This matches what the pilot sees on the drone display.
-                alt_hat = p.get("height_above_takeoff")
-                if alt_hat is not None:
-                    alt = alt_hat
-                elif p.get("gps_altitude") is not None and takeoff_gps_alt is not None:
-                    alt = p["gps_altitude"] - takeoff_gps_alt
-                else:
-                    alt = None
-
-                # Speed: calculate from gps_velocity [vx, vy, vz]
-                velocity = p.get("gps_velocity")
-                speed = None
-                if isinstance(velocity, list) and len(velocity) >= 2:
-                    speed = round(math.sqrt(sum(v**2 for v in velocity[:3])), 2)
-
-                points.append({
-                    "timestamp_ms": p.get("timestamp_ms") or p.get("timestamp"),
-                    "lat": p.get("gps_latitude") or p.get("lat"),
-                    "lon": p.get("gps_longitude") or p.get("lon"),
-                    "altitude_m": round(alt, 2) if alt is not None else None,
-                    "speed_mps": speed,
-                    "battery_pct": battery,
-                    "battery_voltage": p.get("battery_voltage"),
-                    "heading_deg": p.get("heading_deg") or p.get("heading"),
-                    "pitch_deg": p.get("pitch_deg") or p.get("pitch"),
-                    "roll_deg": p.get("roll_deg") or p.get("roll"),
-                    "satellites": p.get("gps_num_satellites_used") or p.get("satellites"),
-                })
+                mapped = _map_telemetry_point(p, takeoff_gps_alt)
+                if mapped:
+                    points.append(mapped)
 
             logger.info("Fetched %d telemetry points for flight %s", len(points), flight_id)
             return points
@@ -580,7 +524,7 @@ class SkydioProvider(DroneProvider):
                 captured_str = m.get("captured_time") or m.get("created_at") or m.get("timestamp")
                 if captured_str:
                     try:
-                        captured_time = datetime.fromisoformat(captured_str.replace("Z", "+00:00"))
+                        captured_time = datetime.fromisoformat(captured_str.replace("Z", UTC_OFFSET))
                     except (ValueError, AttributeError):
                         pass
 

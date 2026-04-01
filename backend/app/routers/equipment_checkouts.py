@@ -1,10 +1,11 @@
-from datetime import datetime
-from typing import Optional
+from datetime import datetime, timezone
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.constants import CHECKOUT_NOT_FOUND
 from app.deps import DBSession, CurrentUser, PilotUser, SupervisorUser
 from app.models.equipment_checkout import EquipmentCheckout
 from app.responses import responses
@@ -57,13 +58,13 @@ def list_checkouts(
 
     user: CurrentUser,
 
-    entity_type: Optional[str] = Query(None),
+    entity_type: Annotated[Optional[str], Query()] = None,
 
-    entity_id: Optional[int] = Query(None),
+    entity_id: Annotated[Optional[int], Query()] = None,
 
-    pilot_id: Optional[int] = Query(None),
+    pilot_id: Annotated[Optional[int], Query()] = None,
 
-    active_only: bool = Query(False),
+    active_only: Annotated[bool, Query()] = False,
 ):
     q = db.query(EquipmentCheckout)
     if entity_type:
@@ -127,11 +128,11 @@ def checkin_equipment(
 ):
     checkout = db.query(EquipmentCheckout).filter(EquipmentCheckout.id == checkout_id).first()
     if not checkout:
-        raise HTTPException(status_code=404, detail="Checkout record not found")
+        raise HTTPException(status_code=404, detail=CHECKOUT_NOT_FOUND)
     if checkout.checked_in_at is not None:
         raise HTTPException(status_code=400, detail="Already checked in")
 
-    checkout.checked_in_at = datetime.utcnow()
+    checkout.checked_in_at = datetime.now(timezone.utc)
     checkout.checked_in_by_id = data.checked_in_by_id
     checkout.condition_in = data.condition_in
     checkout.notes_in = data.notes_in
@@ -148,7 +149,7 @@ def delete_checkout(
 ):
     checkout = db.query(EquipmentCheckout).filter(EquipmentCheckout.id == checkout_id).first()
     if not checkout:
-        raise HTTPException(status_code=404, detail="Checkout record not found")
+        raise HTTPException(status_code=404, detail=CHECKOUT_NOT_FOUND)
     db.delete(checkout)
     db.commit()
     return {"ok": True}

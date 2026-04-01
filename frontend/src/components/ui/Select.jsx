@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils'
 
 const Select = forwardRef(
   ({ className, label, id, options = [], value, onChange, placeholder, ...props }, ref) => {
-    const selectId = id || (label ? label.toLowerCase().replace(/\s+/g, '-') : undefined)
+    const selectId = id || (label ? label.toLowerCase().replaceAll(/\s+/g, '-') : undefined)
 
     return (
       <div className="flex flex-col gap-1.5">

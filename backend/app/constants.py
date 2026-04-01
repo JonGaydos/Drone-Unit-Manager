@@ -52,3 +52,12 @@ REVIEW_REVIEWED = "reviewed"
 # ── API provider strings ──────────────────────────────────────────────────────
 PROVIDER_SKYDIO = "skydio"
 API_PROVIDER_SKYDIO = "skydio"
+
+# ── UTC / timezone ───────────────────────────────────────────────────────────
+UTC_OFFSET = "+00:00"
+
+# ── Application metadata ────────────────────────────────────────────────────
+APP_TITLE = "Drone Unit Manager"
+
+# ── Folder / geofence messages ───────────────────────────────────────────────
+FOLDER_NOT_FOUND = "Folder not found"

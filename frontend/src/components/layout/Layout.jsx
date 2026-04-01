@@ -1,11 +1,10 @@
 /**
  * Application shell layout with responsive sidebar, top bar, and page content area.
  */
-import { Outlet } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
 import { useState, useEffect } from 'react'
-import { useLocation } from 'react-router-dom'
 import { Menu } from 'lucide-react'
 import { PageErrorBoundary } from '@/components/ui/PageErrorBoundary'
 
@@ -42,8 +41,8 @@ export function Layout() {
 
   useEffect(() => {
     const handler = (e) => setSidebarCollapsed(e.detail.collapsed)
-    window.addEventListener('sidebar-toggle', handler)
-    return () => window.removeEventListener('sidebar-toggle', handler)
+    globalThis.addEventListener('sidebar-toggle', handler)
+    return () => globalThis.removeEventListener('sidebar-toggle', handler)
   }, [])
 
   // Close mobile sidebar on route change
@@ -63,7 +62,7 @@ export function Layout() {
 
       {/* Mobile overlay backdrop */}
       {mobileOpen && (
-        <div className="md:hidden fixed inset-0 bg-black/50 z-40" role="presentation" aria-label="Close menu" onClick={() => setMobileOpen(false)} />
+        <div className="md:hidden fixed inset-0 bg-black/50 z-40" onClick={() => setMobileOpen(false)} />
       )}
 
       <Sidebar mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} />

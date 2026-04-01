@@ -34,7 +34,7 @@ async function request(path, options = {}) {
   if (res.status === 401) {
     localStorage.removeItem('token')
     localStorage.removeItem('user')
-    window.location.href = '/login'
+    globalThis.location.href = '/login'
     throw new Error('Unauthorized')
   }
 
@@ -89,7 +89,7 @@ export const api = {
     const disposition = res.headers.get('Content-Disposition')
     let filename = 'report.pdf'
     if (disposition) {
-      const match = disposition.match(/filename="?(.+?)"?$/i)
+      const match = /filename="?(.+?)"?$/i.exec(disposition)
       if (match) filename = match[1]
     }
     const url = URL.createObjectURL(blob)
@@ -117,7 +117,7 @@ export const api = {
     const disposition = res.headers.get('Content-Disposition')
     let filename = 'export.csv'
     if (disposition) {
-      const match = disposition.match(/filename="?(.+?)"?$/)
+      const match = /filename="?(.+?)"?$/.exec(disposition)
       if (match) filename = match[1]
     }
     const url = URL.createObjectURL(blob)
@@ -146,7 +146,7 @@ export const api = {
     if (res.status === 401) {
       localStorage.removeItem('token')
       localStorage.removeItem('user')
-      window.location.href = '/login'
+      globalThis.location.href = '/login'
       throw new Error('Unauthorized')
     }
     if (!res.ok) {

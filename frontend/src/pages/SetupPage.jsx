@@ -38,7 +38,7 @@ export default function SetupPage() {
     try {
       const result = await api.post('/auth/setup', form)
       localStorage.setItem('token', result.token)
-      window.location.href = '/'
+      globalThis.location.href = '/'
     } catch (err) {
       setError(err.message || 'Setup failed')
     } finally {

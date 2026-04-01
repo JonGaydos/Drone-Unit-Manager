@@ -2,7 +2,7 @@ import { forwardRef } from 'react'
 import { cn } from '@/lib/utils'
 
 const Input = forwardRef(({ className, label, id, type = 'text', ...props }, ref) => {
-  const inputId = id || (label ? label.toLowerCase().replace(/\s+/g, '-') : undefined)
+  const inputId = id || (label ? label.toLowerCase().replaceAll(/\s+/g, '-') : undefined)
 
   return (
     <div className="flex flex-col gap-1.5">

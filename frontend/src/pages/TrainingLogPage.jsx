@@ -52,8 +52,8 @@ function TrainingModal({ pilots, vehicles, onSave, onClose, initial }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" role="presentation" onClick={onClose}>
-      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-2xl shadow-xl max-h-[90vh] overflow-y-auto" role="dialog" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-2xl shadow-xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold text-foreground mb-4">{initial ? 'Edit Training' : 'Add Training'}</h2>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="grid grid-cols-3 gap-3">
@@ -74,7 +74,7 @@ function TrainingModal({ pilots, vehicles, onSave, onClose, initial }) {
               <label htmlFor="outcome" className="block text-sm font-medium text-foreground mb-1">Outcome</label>
               <select id="outcome" value={form.outcome} onChange={e => setForm({...form, outcome: e.target.value})}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
-                {OUTCOME_OPTIONS.map(o => <option key={o} value={o}>{o.replace(/\b\w/g, l => l.toUpperCase())}</option>)}
+                {OUTCOME_OPTIONS.map(o => <option key={o} value={o}>{o.replaceAll(/\b\w/g, l => l.toUpperCase())}</option>)}
               </select>
             </div>
           </div>
@@ -139,7 +139,7 @@ function TrainingModal({ pilots, vehicles, onSave, onClose, initial }) {
           {/* Pilots Section */}
           <div className="border border-border rounded-lg p-3">
             <div className="flex items-center justify-between mb-2">
-              <label className="text-sm font-medium text-foreground">Pilots / Trainees</label>
+              <span className="text-sm font-medium text-foreground">Pilots / Trainees</span>
               <button type="button" onClick={addPilotEntry} className="text-xs text-primary hover:underline">+ Add Pilot</button>
             </div>
             {pilotEntries.length === 0 && <p className="text-xs text-muted-foreground">No pilots added yet.</p>}
@@ -332,7 +332,7 @@ export default function TrainingLogPage() {
                   <td className="px-4 py-3 text-right text-foreground hidden md:table-cell">{t.man_hours || 0}</td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${OUTCOME_COLORS[t.outcome] || 'bg-gray-500/15 text-gray-400'}`}>
-                      {t.outcome?.replace(/\b\w/g, l => l.toUpperCase())}
+                      {t.outcome?.replaceAll(/\b\w/g, l => l.toUpperCase())}
                     </span>
                   </td>
                   {isPilot && (

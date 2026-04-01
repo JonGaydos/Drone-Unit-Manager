@@ -5,6 +5,7 @@ import logging
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
+from app.constants import APP_TITLE
 from app.database import SessionLocal
 from app.models.setting import Setting
 from app.services.sync_manager import SyncManager
@@ -150,7 +151,7 @@ def _run_digest_job():
                 continue
 
             org_setting = db.query(Setting).filter(Setting.key == "org_name").first()
-            org_name = org_setting.value if org_setting else "Drone Unit Manager"
+            org_name = org_setting.value if org_setting else APP_TITLE
             html = render_digest_html(digest, user, org_name)
             subject = f"{org_name} — Daily Digest"
 

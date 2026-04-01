@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { formatDuration, normalizeDateValue, metersToFeet, mpsToMph } from '@/lib/utils'
 import { sortByName, sortVehicles, sortPilotsActiveFirst, vehicleDisplayName } from '@/lib/formatters'
-import { ArrowLeft, MapPin, Battery, Save, RefreshCw, Loader2, Download } from 'lucide-react'
+import { ArrowLeft, MapPin, Save, RefreshCw, Loader2, Download } from 'lucide-react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 import { FlightPathMap } from '@/components/FlightMap'
 import {
@@ -220,7 +220,7 @@ export default function FlightDetailPage() {
               )}
               {flight.data_source && (
                 <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/15 text-blue-400">
-                  {flight.data_source.replaceAll('_', ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                  {flight.data_source.replaceAll('_', ' ').replaceAll(/\b\w/g, c => c.toUpperCase())}
                 </span>
               )}
               {flight.api_provider && <span>Source: {flight.api_provider}</span>}
@@ -391,10 +391,9 @@ export default function FlightDetailPage() {
               const bat = batteries.find(b => b.serial_number === flight.battery_serial)
               return bat ? <Link to={`/fleet/batteries/${bat.id}`} className="text-primary hover:underline">{flight.battery_serial}</Link> : flight.battery_serial
             })() : '—'}</p></div>
-            <div><p className="text-xs text-muted-foreground">Sensor Package</p><p className="text-sm text-foreground">{flight.sensor_package ? (() => {
-              const sen = sensors.find(s => s.serial_number === flight.sensor_package)
-              return <Link to="/fleet?tab=sensors" className="text-primary hover:underline">{flight.sensor_package}</Link>
-            })() : '—'}</p></div>
+            <div><p className="text-xs text-muted-foreground">Sensor Package</p><p className="text-sm text-foreground">{flight.sensor_package ? (
+              <Link to="/fleet?tab=sensors" className="text-primary hover:underline">{flight.sensor_package}</Link>
+            ) : '—'}</p></div>
             <div><p className="text-xs text-muted-foreground">Carrier(s)</p><p className="text-sm text-foreground">{flight.carrier || '—'}</p></div>
             <div><p className="text-xs text-muted-foreground">&nbsp;</p></div>
             {(flight.attachment_top || flight.attachment_bottom || flight.attachment_left || flight.attachment_right) && (

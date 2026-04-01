@@ -2,11 +2,12 @@
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.constants import UTC_OFFSET
 from app.integrations.base import ProviderCredentials
 from app.integrations.registry import get_provider
 from app.models.vehicle import Vehicle
@@ -97,6 +98,53 @@ def _ensure_equipment_records(db: Session, flight: Flight):
                     logger.info("Auto-created attachment record: %s", serial)
 
 
+def _merge_existing_flight(existing: Flight, f_data: dict, db: Session):
+    """Merge API data into an existing flight — fill empty fields, don't overwrite."""
+    if not existing.vehicle_id and f_data.get("vehicle_serial"):
+        v = db.query(Vehicle).filter(
+            Vehicle.provider_serial == f_data["vehicle_serial"]
+        ).first()
+        if v:
+            existing.vehicle_id = v.id
+    for api_key, db_field in [
+        ("takeoff_lat", "takeoff_lat"), ("takeoff_lon", "takeoff_lon"),
+        ("landing_lat", "landing_lat"), ("landing_lon", "landing_lon"),
+        ("battery_serial", "battery_serial"), ("sensor_package", "sensor_package"),
+        ("carrier", "carrier"), ("attachment_top", "attachment_top"),
+        ("attachment_bottom", "attachment_bottom"), ("attachment_left", "attachment_left"),
+        ("attachment_right", "attachment_right"),
+    ]:
+        new_val = f_data.get(api_key)
+        if new_val and not getattr(existing, db_field, None):
+            setattr(existing, db_field, new_val)
+    if not existing.duration_seconds and f_data.get("duration_seconds"):
+        existing.duration_seconds = f_data["duration_seconds"]
+
+
+def _resolve_vehicle_id(db: Session, vehicle_serial: str | None) -> int | None:
+    """Try to match a vehicle serial to a local vehicle ID."""
+    if not vehicle_serial:
+        return None
+    vehicle = db.query(Vehicle).filter(
+        Vehicle.provider_serial == vehicle_serial
+    ).first()
+    return vehicle.id if vehicle else None
+
+
+def _parse_flight_date(date_val) -> date | None:
+    """Parse a date value from API data into a date object."""
+    if not date_val:
+        return None
+    if isinstance(date_val, str):
+        try:
+            return date.fromisoformat(date_val)
+        except ValueError:
+            return None
+    if isinstance(date_val, date):
+        return date_val
+    return None
+
+
 def _upsert_flights(flights_data: list[dict], skydio_users: list[dict], db: Session, result: SyncResult):
     """Shared flight upsert logic used by both sync_all and sync_all_deep."""
     for f_data in flights_data:
@@ -104,65 +152,23 @@ def _upsert_flights(flights_data: list[dict], skydio_users: list[dict], db: Sess
         if not ext_id:
             continue
 
-        # Check if flight already exists (case-insensitive, hyphen-insensitive UUID match)
         existing = db.query(Flight).filter(
             func.replace(func.upper(Flight.external_id), "-", "") == ext_id,
         ).first()
 
         if existing:
-            # Merge API data into existing flight — fill empty fields, don't overwrite
-            # Vehicle
-            if not existing.vehicle_id and f_data.get("vehicle_serial"):
-                v = db.query(Vehicle).filter(
-                    Vehicle.provider_serial == f_data["vehicle_serial"]
-                ).first()
-                if v:
-                    existing.vehicle_id = v.id
-            # Simple fields — only fill if currently empty
-            for api_key, db_field in [
-                ("takeoff_lat", "takeoff_lat"), ("takeoff_lon", "takeoff_lon"),
-                ("landing_lat", "landing_lat"), ("landing_lon", "landing_lon"),
-                ("battery_serial", "battery_serial"), ("sensor_package", "sensor_package"),
-                ("carrier", "carrier"), ("attachment_top", "attachment_top"),
-                ("attachment_bottom", "attachment_bottom"), ("attachment_left", "attachment_left"),
-                ("attachment_right", "attachment_right"),
-            ]:
-                new_val = f_data.get(api_key)
-                if new_val and not getattr(existing, db_field, None):
-                    setattr(existing, db_field, new_val)
-            # Duration — only if missing
-            if not existing.duration_seconds and f_data.get("duration_seconds"):
-                existing.duration_seconds = f_data["duration_seconds"]
+            _merge_existing_flight(existing, f_data, db)
             result.flights_skipped += 1
             continue
 
-        # Try to match vehicle
-        vehicle_id = None
-        vehicle_serial = f_data.get("vehicle_serial")
-        if vehicle_serial:
-            vehicle = db.query(Vehicle).filter(
-                Vehicle.provider_serial == vehicle_serial
-            ).first()
-            if vehicle:
-                vehicle_id = vehicle.id
+        vehicle_id = _resolve_vehicle_id(db, f_data.get("vehicle_serial"))
 
-        # Try to match pilot by Skydio user name
         pilot_id = None
         pilot_name = f_data.get("pilot_name")
         if pilot_name and skydio_users:
             pilot_id = _match_pilot(db, pilot_name)
 
-        # Parse date
-        flight_date = None
-        date_val = f_data.get("date")
-        if date_val:
-            if isinstance(date_val, str):
-                try:
-                    flight_date = date.fromisoformat(date_val)
-                except ValueError:
-                    pass
-            elif isinstance(date_val, date):
-                flight_date = date_val
+        flight_date = _parse_flight_date(f_data.get("date"))
 
         flight = Flight(
             external_id=ext_id,
@@ -195,11 +201,436 @@ def _upsert_flights(flights_data: list[dict], skydio_users: list[dict], db: Sess
         db.add(flight)
         result.flights_new += 1
 
-        # Auto-create Fleet records for equipment referenced by this flight
         try:
             _ensure_equipment_records(db, flight)
         except Exception as e:
             logger.warning("Equipment auto-create failed for flight %s: %s", ext_id, e)
+
+    db.flush()
+
+
+def _match_pilot_emails(skydio_users: list[dict], db: Session) -> int:
+    """Match Skydio users to local pilots and populate emails. Returns count matched."""
+    logger.info("Matching %d Skydio users to %d pilots",
+                len(skydio_users), db.query(Pilot).filter(Pilot.status == "active").count())
+    matched = 0
+    for su in skydio_users:
+        su_name = su.get("name", "").strip()
+        su_email = su.get("email", "")
+        if not su_email:
+            continue
+        logger.info("  Skydio user: name='%s' email='%s'", su_name, su_email)
+
+        pilot = _find_pilot_by_name(db, su_name)
+        if not pilot:
+            pilot = db.query(Pilot).filter(Pilot.email.ilike(su_email)).first()
+        if not pilot and su_email:
+            pilot = _find_pilot_by_email_pattern(db, su_email)
+
+        if pilot:
+            if not pilot.email:
+                pilot.email = su_email
+                matched += 1
+                logger.info("    -> Matched to pilot: %s %s", pilot.first_name, pilot.last_name)
+            else:
+                logger.info("    -> Pilot %s already has email: %s", pilot.first_name, pilot.email)
+        else:
+            logger.info("    -> No pilot match found")
+
+    db.flush()
+    logger.info("Populated emails for %d pilots", matched)
+    return matched
+
+
+def _find_pilot_by_name(db: Session, su_name: str) -> Pilot | None:
+    """Try exact first+last name match for a Skydio user."""
+    if not su_name:
+        return None
+    parts = su_name.split()
+    if len(parts) >= 2:
+        first, last = parts[0], parts[-1]
+        return db.query(Pilot).filter(
+            Pilot.first_name.ilike(first),
+            Pilot.last_name.ilike(last),
+            Pilot.status == "active",
+        ).first()
+    return None
+
+
+def _find_pilot_by_email_pattern(db: Session, su_email: str) -> Pilot | None:
+    """Match email username patterns to pilots (firstinitial+lastname, etc.)."""
+    username = su_email.split("@")[0].lower()
+    all_pilots = db.query(Pilot).filter(Pilot.status == "active").all()
+    for p in all_pilots:
+        last_lower = (p.last_name or "").lower()
+        first_lower = (p.first_name or "").lower()
+        if not last_lower or not first_lower:
+            continue
+        p1 = first_lower[0] + last_lower
+        p2 = last_lower[:3] + first_lower
+        if username in (p1, p2, last_lower + first_lower, first_lower + last_lower):
+            logger.info("    -> Pattern match: '%s' matched pilot %s %s", username, p.first_name, p.last_name)
+            return p
+        if len(last_lower) >= 4 and last_lower in username:
+            logger.info("    -> Substring match: '%s' contains '%s' -> %s %s", username, last_lower, p.first_name, p.last_name)
+            return p
+    return None
+
+
+def _sync_vehicles(provider, creds, db: Session, result: SyncResult):
+    """Sync vehicles from provider into the local database."""
+    vehicles_data = provider.sync_vehicles(creds)
+    for v_data in vehicles_data:
+        serial = v_data.get("provider_serial") or v_data.get("serial_number", "")
+        if not serial:
+            continue
+
+        existing = db.query(Vehicle).filter(
+            (Vehicle.provider_serial == serial) |
+            (Vehicle.serial_number == serial)
+        ).first()
+
+        if existing:
+            existing.manufacturer = v_data.get("manufacturer", existing.manufacturer)
+            existing.model = v_data.get("model", existing.model)
+            existing.api_provider = v_data.get("api_provider", "skydio")
+            if v_data.get("nickname") and not existing.nickname:
+                existing.nickname = v_data["nickname"]
+        else:
+            vehicle = Vehicle(
+                serial_number=v_data.get("serial_number", serial),
+                manufacturer=v_data.get("manufacturer", "Skydio"),
+                model=v_data.get("model", "Unknown"),
+                provider_serial=serial,
+                api_provider=v_data.get("api_provider", "skydio"),
+                nickname=v_data.get("nickname"),
+            )
+            db.add(vehicle)
+
+        result.vehicles_synced += 1
+
+    db.flush()
+
+
+def _enrich_flight_timestamps(flight: Flight, detail: dict):
+    """Fill in takeoff/landing times and duration from flight detail."""
+    takeoff_str = detail.get("takeoff") or detail.get("takeoff_time")
+    if takeoff_str and not flight.takeoff_time:
+        try:
+            takeoff = datetime.fromisoformat(str(takeoff_str).replace("Z", UTC_OFFSET))
+            flight.takeoff_time = takeoff
+            if not flight.date:
+                flight.date = takeoff.date()
+        except (ValueError, AttributeError):
+            pass
+
+    landing_str = detail.get("landing") or detail.get("landing_time")
+    if landing_str and not flight.landing_time:
+        try:
+            flight.landing_time = datetime.fromisoformat(str(landing_str).replace("Z", UTC_OFFSET))
+        except (ValueError, AttributeError):
+            pass
+
+    if flight.takeoff_time and flight.landing_time and not flight.duration_seconds:
+        flight.duration_seconds = int((flight.landing_time - flight.takeoff_time).total_seconds())
+
+
+def _enrich_flight_equipment(flight: Flight, detail: dict):
+    """Fill in attachments, sensor, battery from flight detail."""
+    from app.integrations.skydio import _to_str
+
+    attachments = detail.get("attachments")
+    if isinstance(attachments, list):
+        mount_map = {"TOP": "attachment_top", "BOTTOM": "attachment_bottom",
+                     "LEFT": "attachment_left", "RIGHT": "attachment_right"}
+        for att in attachments:
+            if isinstance(att, dict):
+                mount = att.get("mount_point", "").upper()
+                fld = mount_map.get(mount)
+                if fld:
+                    setattr(flight, fld, f"{att.get('attachment_type', '')} ({att.get('attachment_serial', '')})")
+
+    sensor = detail.get("sensor_package")
+    if isinstance(sensor, dict):
+        flight.sensor_package = sensor.get("sensor_package_serial") or _to_str(sensor)
+    battery = detail.get("battery_serial")
+    if battery:
+        flight.battery_serial = _to_str(battery)
+
+
+def _enrich_flight_metrics(flight: Flight, detail: dict):
+    """Fill in numeric metrics (lat, lon, altitude, speed, distance) from flight detail."""
+    for api_key, fld in [("takeoff_latitude", "takeoff_lat"), ("takeoff_longitude", "takeoff_lon"),
+                         ("max_altitude_m", "max_altitude_m"), ("max_altitude", "max_altitude_m"),
+                         ("max_speed_mps", "max_speed_mps"), ("max_speed", "max_speed_mps"),
+                         ("distance_m", "distance_m"), ("total_distance", "distance_m")]:
+        val = detail.get(api_key)
+        if val is not None and not getattr(flight, fld, None):
+            try:
+                setattr(flight, fld, float(val))
+            except (ValueError, TypeError):
+                pass
+
+    addr = detail.get("takeoff_address") or detail.get("location")
+    if addr and not flight.takeoff_address:
+        flight.takeoff_address = str(addr)
+
+
+def _enrich_flight_address_geocode(flight: Flight):
+    """Reverse geocode takeoff coordinates if address is missing."""
+    if not flight.takeoff_address and flight.takeoff_lat and flight.takeoff_lon:
+        try:
+            import httpx
+            geo_resp = httpx.get(
+                "https://nominatim.openstreetmap.org/reverse",
+                params={"lat": flight.takeoff_lat, "lon": flight.takeoff_lon, "format": "json", "zoom": 16},
+                headers={"User-Agent": "DroneUnitManager/1.0"},
+                timeout=5,
+            )
+            if geo_resp.status_code == 200:
+                flight.takeoff_address = geo_resp.json().get("display_name", "")
+        except Exception:
+            pass
+
+
+def _enrich_flight_associations(flight: Flight, detail: dict, db: Session):
+    """Match vehicle and pilot from flight detail."""
+    vs = detail.get("vehicle_serial")
+    if vs and not flight.vehicle_id:
+        vehicle = db.query(Vehicle).filter(
+            (Vehicle.provider_serial == str(vs)) | (Vehicle.serial_number == str(vs))
+        ).first()
+        if vehicle:
+            flight.vehicle_id = vehicle.id
+
+    ue = detail.get("user_email")
+    if ue and not flight.pilot_id:
+        pilot = db.query(Pilot).filter(
+            Pilot.email.ilike(str(ue)),
+            Pilot.status == "active",
+        ).first()
+        if pilot:
+            flight.pilot_id = pilot.id
+
+
+def _enrich_single_flight(flight: Flight, provider, creds, db: Session) -> bool:
+    """Enrich a single flight with full details from the API. Returns True if enriched."""
+    detail = provider.get_flight_detail(creds, flight.external_id)
+    if not detail:
+        return False
+
+    _enrich_flight_timestamps(flight, detail)
+    _enrich_flight_equipment(flight, detail)
+    _enrich_flight_metrics(flight, detail)
+    _enrich_flight_address_geocode(flight)
+    _enrich_flight_associations(flight, detail, db)
+    return True
+
+
+def _enrich_flights(provider, creds, db: Session, result: SyncResult):
+    """Enrich flights with full details and clean up ghost flights."""
+    from app.integrations.skydio import _to_str
+    # Pass 1: All API flights missing pilot/vehicle/altitude
+    urgent = db.query(Flight).filter(
+        Flight.external_id.isnot(None),
+        Flight.api_provider == "skydio",
+        (Flight.pilot_id.is_(None)) | (Flight.vehicle_id.is_(None)) | (Flight.max_altitude_m.is_(None)),
+    ).all()
+    # Pass 2: Excel imports needing telemetry (cap at 100)
+    urgent_ids = {f.id for f in urgent}
+    remaining_slots = 100
+    extra = []
+    if remaining_slots > 0:
+        extra = db.query(Flight).filter(
+            Flight.max_altitude_m.is_(None),
+            Flight.external_id.isnot(None),
+            Flight.id.notin_(urgent_ids) if urgent_ids else True,
+        ).limit(remaining_slots).all()
+    unenriched = urgent + extra
+    logger.info("Enrichment: %d urgent API flights + %d extra = %d total", len(urgent), len(extra), len(unenriched))
+
+    enriched_count = 0
+    for flight in unenriched:
+        try:
+            if _enrich_single_flight(flight, provider, creds, db):
+                enriched_count += 1
+        except Exception as exc:
+            logger.warning("Failed to enrich flight %s: %s", flight.external_id, exc)
+
+    db.flush()
+    logger.info("Enriched %d flights with full details", enriched_count)
+
+    # Clean up ghost flights
+    ghosts = db.query(Flight).filter(
+        Flight.api_provider == "skydio",
+        Flight.date.is_(None),
+        Flight.max_altitude_m.is_(None),
+        Flight.external_id.isnot(None),
+    ).all()
+    ghost_count = len(ghosts)
+    for ghost in ghosts:
+        db.delete(ghost)
+    db.flush()
+    if ghost_count:
+        logger.info("Deleted %d ghost flights with no data", ghost_count)
+        result.errors.append(f"Auto-cleaned {ghost_count} flights with no data")
+
+
+def _sync_entity_list(provider_method, creds, db: Session, model_class, serial_field: str,
+                      update_fn, create_fn, result_attr: str, result: SyncResult):
+    """Generic sync for simple entity types (batteries, controllers, docks, sensors, attachments)."""
+    items_data = provider_method(creds)
+    for item_data in items_data:
+        serial = item_data.get("serial_number", "")
+        if not serial:
+            continue
+
+        existing = db.query(model_class).filter(
+            getattr(model_class, serial_field) == serial
+        ).first()
+
+        if existing:
+            update_fn(existing, item_data)
+        else:
+            db.add(create_fn(item_data, serial))
+
+        setattr(result, result_attr, getattr(result, result_attr) + 1)
+
+    db.flush()
+
+
+def _update_battery(existing: Battery, b_data: dict):
+    existing.cycle_count = b_data.get("cycle_count", existing.cycle_count)
+    existing.health_pct = b_data.get("health_pct", existing.health_pct)
+    existing.api_provider = "skydio"
+
+
+def _create_battery(b_data: dict, serial: str) -> Battery:
+    return Battery(
+        serial_number=serial,
+        manufacturer=b_data.get("manufacturer", "Skydio"),
+        model=b_data.get("model"),
+        vehicle_model=b_data.get("vehicle_model"),
+        cycle_count=b_data.get("cycle_count", 0),
+        health_pct=b_data.get("health_pct"),
+        skydio_battery_serial=b_data.get("skydio_battery_serial", serial),
+        api_provider="skydio",
+    )
+
+
+def _update_controller(existing: Controller, c_data: dict):
+    existing.api_provider = "skydio"
+    if c_data.get("model"):
+        existing.model = c_data["model"]
+
+
+def _create_controller(c_data: dict, serial: str) -> Controller:
+    return Controller(
+        serial_number=serial,
+        manufacturer=c_data.get("manufacturer", "Skydio"),
+        model=c_data.get("model"),
+        skydio_controller_serial=c_data.get("skydio_controller_serial", serial),
+        api_provider="skydio",
+    )
+
+
+def _update_dock(existing: Dock, d_data: dict):
+    existing.api_provider = "skydio"
+    if d_data.get("name"):
+        existing.name = d_data["name"]
+    if d_data.get("lat"):
+        existing.lat = d_data["lat"]
+    if d_data.get("lon"):
+        existing.lon = d_data["lon"]
+    if d_data.get("location_name"):
+        existing.location_name = d_data["location_name"]
+
+
+def _create_dock(d_data: dict, serial: str) -> Dock:
+    return Dock(
+        serial_number=serial,
+        name=d_data.get("name"),
+        location_name=d_data.get("location_name"),
+        lat=d_data.get("lat"),
+        lon=d_data.get("lon"),
+        skydio_dock_serial=d_data.get("skydio_dock_serial", serial),
+        api_provider="skydio",
+    )
+
+
+def _update_sensor(existing: SensorPackage, s_data: dict):
+    existing.api_provider = "skydio"
+    if s_data.get("name"):
+        existing.name = s_data["name"]
+    if s_data.get("type"):
+        existing.type = s_data["type"]
+
+
+def _create_sensor(s_data: dict, serial: str) -> SensorPackage:
+    return SensorPackage(
+        serial_number=serial,
+        name=s_data.get("name"),
+        type=s_data.get("type"),
+        manufacturer=s_data.get("manufacturer", "Skydio"),
+        model=s_data.get("model"),
+        skydio_serial=s_data.get("skydio_serial", serial),
+        api_provider="skydio",
+    )
+
+
+def _update_attachment(existing: Attachment, a_data: dict):
+    existing.api_provider = "skydio"
+    if a_data.get("name"):
+        existing.name = a_data["name"]
+    if a_data.get("type"):
+        existing.type = a_data["type"]
+
+
+def _create_attachment(a_data: dict, serial: str) -> Attachment:
+    return Attachment(
+        serial_number=serial,
+        name=a_data.get("name"),
+        type=a_data.get("type"),
+        manufacturer=a_data.get("manufacturer", "Skydio"),
+        model=a_data.get("model"),
+        skydio_serial=a_data.get("skydio_serial", serial),
+        api_provider="skydio",
+    )
+
+
+def _sync_media(provider, creds, since: str | None, db: Session, result: SyncResult):
+    """Sync media files from provider."""
+    media_data = provider.sync_media(creds, since=since)
+    for m_data in media_data:
+        ext_uuid = m_data.get("external_uuid", "")
+        if not ext_uuid:
+            continue
+
+        existing = db.query(MediaFile).filter(
+            MediaFile.external_uuid == ext_uuid
+        ).first()
+
+        if not existing:
+            media_file = MediaFile(
+                external_uuid=ext_uuid,
+                filename=m_data.get("filename", ""),
+                kind=m_data.get("kind", "photo"),
+                captured_time=m_data.get("captured_time"),
+                size_bytes=m_data.get("size_bytes"),
+                download_url=m_data.get("download_url"),
+                api_provider="skydio",
+            )
+            flight_ext_id = m_data.get("flight_external_id")
+            if flight_ext_id:
+                flight = db.query(Flight).filter(
+                    func.replace(func.upper(Flight.external_id), "-", "") == str(flight_ext_id).upper().replace("-", ""),
+                    Flight.api_provider == "skydio",
+                ).first()
+                if flight:
+                    media_file.flight_id = flight.id
+
+            db.add(media_file)
+            result.media_synced += 1
 
     db.flush()
 
@@ -266,108 +697,13 @@ class SyncManager:
 
         # --- Match Skydio users to pilots and populate emails ---
         try:
-            logger.info("Matching %d Skydio users to %d pilots",
-                        len(skydio_users), db.query(Pilot).filter(Pilot.status == "active").count())
-            matched = 0
-            for su in skydio_users:
-                su_name = su.get("name", "").strip()
-                su_email = su.get("email", "")
-                if not su_email:
-                    continue
-                logger.info("  Skydio user: name='%s' email='%s'", su_name, su_email)
-
-                pilot = None
-                # Try exact first+last name match
-                if su_name:
-                    parts = su_name.split()
-                    if len(parts) >= 2:
-                        first, last = parts[0], parts[-1]
-                        pilot = db.query(Pilot).filter(
-                            Pilot.first_name.ilike(first),
-                            Pilot.last_name.ilike(last),
-                            Pilot.status == "active",
-                        ).first()
-
-                # Fallback: try matching email directly to any pilot with same email
-                if not pilot:
-                    pilot = db.query(Pilot).filter(
-                        Pilot.email.ilike(su_email),
-                    ).first()
-
-                # Fallback: match email username patterns
-                # Pattern 1: firstinitial+lastname (e.g. jgaydos)
-                # Pattern 2: first3oflast+firstname (e.g. gayjonathan)
-                if not pilot and su_email:
-                    username = su_email.split("@")[0].lower()
-                    all_pilots = db.query(Pilot).filter(Pilot.status == "active").all()
-                    for p in all_pilots:
-                        last_lower = (p.last_name or "").lower()
-                        first_lower = (p.first_name or "").lower()
-                        if not last_lower or not first_lower:
-                            continue
-                        # Pattern 1: jgaydos = j + gaydos
-                        p1 = first_lower[0] + last_lower
-                        # Pattern 2: gayjonathan = gay + jonathan
-                        p2 = last_lower[:3] + first_lower
-                        # Pattern 3: lastname only in username
-                        if username == p1 or username == p2 or username == last_lower + first_lower or username == first_lower + last_lower:
-                            pilot = p
-                            logger.info("    -> Pattern match: '%s' matched pilot %s %s", username, p.first_name, p.last_name)
-                            break
-                        # Looser: last name appears in username
-                        if len(last_lower) >= 4 and last_lower in username:
-                            pilot = p
-                            logger.info("    -> Substring match: '%s' contains '%s' -> %s %s", username, last_lower, p.first_name, p.last_name)
-                            break
-
-                if pilot:
-                    if not pilot.email:
-                        pilot.email = su_email
-                        matched += 1
-                        logger.info("    -> Matched to pilot: %s %s", pilot.first_name, pilot.last_name)
-                    else:
-                        logger.info("    -> Pilot %s already has email: %s", pilot.first_name, pilot.email)
-                else:
-                    logger.info("    -> No pilot match found")
-
-            db.flush()
-            logger.info("Populated emails for %d pilots", matched)
+            _match_pilot_emails(skydio_users, db)
         except Exception as exc:
             logger.warning("Pilot email matching error: %s", exc)
 
         # --- Sync vehicles ---
         try:
-            vehicles_data = provider.sync_vehicles(creds)
-            for v_data in vehicles_data:
-                serial = v_data.get("provider_serial") or v_data.get("serial_number", "")
-                if not serial:
-                    continue
-
-                existing = db.query(Vehicle).filter(
-                    (Vehicle.provider_serial == serial) |
-                    (Vehicle.serial_number == serial)
-                ).first()
-
-                if existing:
-                    existing.manufacturer = v_data.get("manufacturer", existing.manufacturer)
-                    existing.model = v_data.get("model", existing.model)
-                    existing.api_provider = v_data.get("api_provider", "skydio")
-                    if v_data.get("nickname") and not existing.nickname:
-                        existing.nickname = v_data["nickname"]
-                else:
-                    vehicle = Vehicle(
-                        serial_number=v_data.get("serial_number", serial),
-                        manufacturer=v_data.get("manufacturer", "Skydio"),
-                        model=v_data.get("model", "Unknown"),
-                        provider_serial=serial,
-                        api_provider=v_data.get("api_provider", "skydio"),
-                        nickname=v_data.get("nickname"),
-                    )
-                    db.add(vehicle)
-
-                result.vehicles_synced += 1
-
-            db.flush()
+            _sync_vehicles(provider, creds, db, result)
         except Exception as exc:
             result.errors.append(f"Vehicles sync error: {exc}")
             logger.error("Vehicles sync error: %s", exc)
@@ -383,176 +719,16 @@ class SyncManager:
             db.rollback()
 
         # --- Enrich flights with full details ---
-        # Prioritize new API flights (no pilot/vehicle), then older unenriched flights
         try:
-            from app.integrations.skydio import _to_str
-            # Pass 1: All API flights missing pilot/vehicle/altitude (no limit — enrich all)
-            urgent = db.query(Flight).filter(
-                Flight.external_id.isnot(None),
-                Flight.api_provider == "skydio",
-                (Flight.pilot_id.is_(None)) | (Flight.vehicle_id.is_(None)) | (Flight.max_altitude_m.is_(None)),
-            ).all()
-            # Pass 2: Excel imports needing telemetry (cap at 100 per sync to spread load)
-            urgent_ids = {f.id for f in urgent}
-            remaining_slots = 100
-            extra = []
-            if remaining_slots > 0:
-                extra = db.query(Flight).filter(
-                    Flight.max_altitude_m.is_(None),
-                    Flight.external_id.isnot(None),
-                    Flight.id.notin_(urgent_ids) if urgent_ids else True,
-                ).limit(remaining_slots).all()
-            unenriched = urgent + extra
-            logger.info("Enrichment: %d urgent API flights + %d extra = %d total", len(urgent), len(extra), len(unenriched))
-
-            enriched_count = 0
-            for flight in unenriched:
-                try:
-                    detail = provider.get_flight_detail(creds, flight.external_id)
-                    if not detail:
-                        continue
-
-                    takeoff_str = detail.get("takeoff") or detail.get("takeoff_time")
-                    if takeoff_str and not flight.takeoff_time:
-                        try:
-                            takeoff = datetime.fromisoformat(str(takeoff_str).replace("Z", "+00:00"))
-                            flight.takeoff_time = takeoff
-                            if not flight.date:
-                                flight.date = takeoff.date()
-                        except (ValueError, AttributeError):
-                            pass
-
-                    landing_str = detail.get("landing") or detail.get("landing_time")
-                    if landing_str and not flight.landing_time:
-                        try:
-                            flight.landing_time = datetime.fromisoformat(str(landing_str).replace("Z", "+00:00"))
-                        except (ValueError, AttributeError):
-                            pass
-
-                    if flight.takeoff_time and flight.landing_time and not flight.duration_seconds:
-                        flight.duration_seconds = int((flight.landing_time - flight.takeoff_time).total_seconds())
-
-                    attachments = detail.get("attachments")
-                    if isinstance(attachments, list):
-                        mount_map = {"TOP": "attachment_top", "BOTTOM": "attachment_bottom",
-                                     "LEFT": "attachment_left", "RIGHT": "attachment_right"}
-                        for att in attachments:
-                            if isinstance(att, dict):
-                                mount = att.get("mount_point", "").upper()
-                                field = mount_map.get(mount)
-                                if field:
-                                    setattr(flight, field, f"{att.get('attachment_type', '')} ({att.get('attachment_serial', '')})")
-
-                    sensor = detail.get("sensor_package")
-                    if isinstance(sensor, dict):
-                        flight.sensor_package = sensor.get("sensor_package_serial") or _to_str(sensor)
-                    battery = detail.get("battery_serial")
-                    if battery:
-                        flight.battery_serial = _to_str(battery)
-
-                    for api_key, field in [("takeoff_latitude", "takeoff_lat"), ("takeoff_longitude", "takeoff_lon"),
-                                            ("max_altitude_m", "max_altitude_m"), ("max_altitude", "max_altitude_m"),
-                                            ("max_speed_mps", "max_speed_mps"), ("max_speed", "max_speed_mps"),
-                                            ("distance_m", "distance_m"), ("total_distance", "distance_m")]:
-                        val = detail.get(api_key)
-                        if val is not None and not getattr(flight, field, None):
-                            try:
-                                setattr(flight, field, float(val))
-                            except (ValueError, TypeError):
-                                pass
-
-                    addr = detail.get("takeoff_address") or detail.get("location")
-                    if addr and not flight.takeoff_address:
-                        flight.takeoff_address = str(addr)
-
-                    # Reverse geocode if we have coordinates but no address
-                    if not flight.takeoff_address and flight.takeoff_lat and flight.takeoff_lon:
-                        try:
-                            import httpx
-                            geo_resp = httpx.get(
-                                "https://nominatim.openstreetmap.org/reverse",
-                                params={"lat": flight.takeoff_lat, "lon": flight.takeoff_lon, "format": "json", "zoom": 16},
-                                headers={"User-Agent": "DroneUnitManager/1.0"},
-                                timeout=5,
-                            )
-                            if geo_resp.status_code == 200:
-                                flight.takeoff_address = geo_resp.json().get("display_name", "")
-                        except Exception:
-                            pass
-
-                    vs = detail.get("vehicle_serial")
-                    if vs and not flight.vehicle_id:
-                        vehicle = db.query(Vehicle).filter(
-                            (Vehicle.provider_serial == str(vs)) | (Vehicle.serial_number == str(vs))
-                        ).first()
-                        if vehicle:
-                            flight.vehicle_id = vehicle.id
-
-                    ue = detail.get("user_email")
-                    if ue and not flight.pilot_id:
-                        pilot = db.query(Pilot).filter(
-                            Pilot.email.ilike(str(ue)),
-                            Pilot.status == "active",
-                        ).first()
-                        if pilot:
-                            flight.pilot_id = pilot.id
-
-                    enriched_count += 1
-                except Exception as exc:
-                    logger.warning("Failed to enrich flight %s: %s", flight.external_id, exc)
-
-            db.flush()
-            logger.info("Enriched %d flights with full details", enriched_count)
-
-            ghosts = db.query(Flight).filter(
-                Flight.api_provider == "skydio",
-                Flight.date.is_(None),
-                Flight.max_altitude_m.is_(None),
-                Flight.external_id.isnot(None),
-            ).all()
-            ghost_count = len(ghosts)
-            for ghost in ghosts:
-                db.delete(ghost)
-            db.flush()
-            if ghost_count:
-                logger.info("Deleted %d ghost flights with no data", ghost_count)
-                result.errors.append(f"Auto-cleaned {ghost_count} flights with no data")
+            _enrich_flights(provider, creds, db, result)
         except Exception as exc:
             result.errors.append(f"Flight enrichment error: {exc}")
             logger.error("Flight enrichment error: %s", exc)
 
         # --- Sync batteries ---
         try:
-            batteries_data = provider.sync_batteries(creds)
-            for b_data in batteries_data:
-                serial = b_data.get("serial_number", "")
-                if not serial:
-                    continue
-
-                existing = db.query(Battery).filter(
-                    Battery.serial_number == serial
-                ).first()
-
-                if existing:
-                    existing.cycle_count = b_data.get("cycle_count", existing.cycle_count)
-                    existing.health_pct = b_data.get("health_pct", existing.health_pct)
-                    existing.api_provider = "skydio"
-                else:
-                    battery = Battery(
-                        serial_number=serial,
-                        manufacturer=b_data.get("manufacturer", "Skydio"),
-                        model=b_data.get("model"),
-                        vehicle_model=b_data.get("vehicle_model"),
-                        cycle_count=b_data.get("cycle_count", 0),
-                        health_pct=b_data.get("health_pct"),
-                        skydio_battery_serial=b_data.get("skydio_battery_serial", serial),
-                        api_provider="skydio",
-                    )
-                    db.add(battery)
-
-                result.batteries_synced += 1
-
-            db.flush()
+            _sync_entity_list(provider.sync_batteries, creds, db, Battery, "serial_number",
+                              _update_battery, _create_battery, "batteries_synced", result)
         except Exception as exc:
             result.errors.append(f"Batteries sync error: {exc}")
             logger.error("Batteries sync error: %s", exc)
@@ -560,33 +736,8 @@ class SyncManager:
 
         # --- Sync controllers ---
         try:
-            controllers_data = provider.sync_controllers(creds)
-            for c_data in controllers_data:
-                serial = c_data.get("serial_number", "")
-                if not serial:
-                    continue
-
-                existing = db.query(Controller).filter(
-                    Controller.serial_number == serial
-                ).first()
-
-                if existing:
-                    existing.api_provider = "skydio"
-                    if c_data.get("model"):
-                        existing.model = c_data["model"]
-                else:
-                    controller = Controller(
-                        serial_number=serial,
-                        manufacturer=c_data.get("manufacturer", "Skydio"),
-                        model=c_data.get("model"),
-                        skydio_controller_serial=c_data.get("skydio_controller_serial", serial),
-                        api_provider="skydio",
-                    )
-                    db.add(controller)
-
-                result.controllers_synced += 1
-
-            db.flush()
+            _sync_entity_list(provider.sync_controllers, creds, db, Controller, "serial_number",
+                              _update_controller, _create_controller, "controllers_synced", result)
         except Exception as exc:
             result.errors.append(f"Controllers sync error: {exc}")
             logger.error("Controllers sync error: %s", exc)
@@ -594,41 +745,8 @@ class SyncManager:
 
         # --- Sync docks ---
         try:
-            docks_data = provider.sync_docks(creds)
-            for d_data in docks_data:
-                serial = d_data.get("serial_number", "")
-                if not serial:
-                    continue
-
-                existing = db.query(Dock).filter(
-                    Dock.serial_number == serial
-                ).first()
-
-                if existing:
-                    existing.api_provider = "skydio"
-                    if d_data.get("name"):
-                        existing.name = d_data["name"]
-                    if d_data.get("lat"):
-                        existing.lat = d_data["lat"]
-                    if d_data.get("lon"):
-                        existing.lon = d_data["lon"]
-                    if d_data.get("location_name"):
-                        existing.location_name = d_data["location_name"]
-                else:
-                    dock = Dock(
-                        serial_number=serial,
-                        name=d_data.get("name"),
-                        location_name=d_data.get("location_name"),
-                        lat=d_data.get("lat"),
-                        lon=d_data.get("lon"),
-                        skydio_dock_serial=d_data.get("skydio_dock_serial", serial),
-                        api_provider="skydio",
-                    )
-                    db.add(dock)
-
-                result.docks_synced += 1
-
-            db.flush()
+            _sync_entity_list(provider.sync_docks, creds, db, Dock, "serial_number",
+                              _update_dock, _create_dock, "docks_synced", result)
         except Exception as exc:
             result.errors.append(f"Docks sync error: {exc}")
             logger.error("Docks sync error: %s", exc)
@@ -636,37 +754,8 @@ class SyncManager:
 
         # --- Sync sensor packages ---
         try:
-            sensors_data = provider.sync_sensor_packages(creds)
-            for s_data in sensors_data:
-                serial = s_data.get("serial_number", "")
-                if not serial:
-                    continue
-
-                existing = db.query(SensorPackage).filter(
-                    SensorPackage.serial_number == serial
-                ).first()
-
-                if existing:
-                    existing.api_provider = "skydio"
-                    if s_data.get("name"):
-                        existing.name = s_data["name"]
-                    if s_data.get("type"):
-                        existing.type = s_data["type"]
-                else:
-                    sensor = SensorPackage(
-                        serial_number=serial,
-                        name=s_data.get("name"),
-                        type=s_data.get("type"),
-                        manufacturer=s_data.get("manufacturer", "Skydio"),
-                        model=s_data.get("model"),
-                        skydio_serial=s_data.get("skydio_serial", serial),
-                        api_provider="skydio",
-                    )
-                    db.add(sensor)
-
-                result.sensors_synced += 1
-
-            db.flush()
+            _sync_entity_list(provider.sync_sensor_packages, creds, db, SensorPackage, "serial_number",
+                              _update_sensor, _create_sensor, "sensors_synced", result)
         except Exception as exc:
             result.errors.append(f"Sensors sync error: {exc}")
             logger.error("Sensors sync error: %s", exc)
@@ -674,37 +763,8 @@ class SyncManager:
 
         # --- Sync attachments ---
         try:
-            attachments_data = provider.sync_attachments(creds)
-            for a_data in attachments_data:
-                serial = a_data.get("serial_number", "")
-                if not serial:
-                    continue
-
-                existing = db.query(Attachment).filter(
-                    Attachment.serial_number == serial
-                ).first()
-
-                if existing:
-                    existing.api_provider = "skydio"
-                    if a_data.get("name"):
-                        existing.name = a_data["name"]
-                    if a_data.get("type"):
-                        existing.type = a_data["type"]
-                else:
-                    attachment = Attachment(
-                        serial_number=serial,
-                        name=a_data.get("name"),
-                        type=a_data.get("type"),
-                        manufacturer=a_data.get("manufacturer", "Skydio"),
-                        model=a_data.get("model"),
-                        skydio_serial=a_data.get("skydio_serial", serial),
-                        api_provider="skydio",
-                    )
-                    db.add(attachment)
-
-                result.attachments_synced += 1
-
-            db.flush()
+            _sync_entity_list(provider.sync_attachments, creds, db, Attachment, "serial_number",
+                              _update_attachment, _create_attachment, "attachments_synced", result)
         except Exception as exc:
             result.errors.append(f"Attachments sync error: {exc}")
             logger.error("Attachments sync error: %s", exc)
@@ -712,40 +772,7 @@ class SyncManager:
 
         # --- Sync media ---
         try:
-            media_data = provider.sync_media(creds, since=since)
-            for m_data in media_data:
-                ext_uuid = m_data.get("external_uuid", "")
-                if not ext_uuid:
-                    continue
-
-                existing = db.query(MediaFile).filter(
-                    MediaFile.external_uuid == ext_uuid
-                ).first()
-
-                if not existing:
-                    media_file = MediaFile(
-                        external_uuid=ext_uuid,
-                        filename=m_data.get("filename", ""),
-                        kind=m_data.get("kind", "photo"),
-                        captured_time=m_data.get("captured_time"),
-                        size_bytes=m_data.get("size_bytes"),
-                        download_url=m_data.get("download_url"),
-                        api_provider="skydio",
-                    )
-                    # Try to link to flight if we have a flight external_id
-                    flight_ext_id = m_data.get("flight_external_id")
-                    if flight_ext_id:
-                        flight = db.query(Flight).filter(
-                            func.replace(func.upper(Flight.external_id), "-", "") == str(flight_ext_id).upper().replace("-", ""),
-                            Flight.api_provider == "skydio",
-                        ).first()
-                        if flight:
-                            media_file.flight_id = flight.id
-
-                    db.add(media_file)
-                    result.media_synced += 1
-
-            db.flush()
+            _sync_media(provider, creds, since, db, result)
         except Exception as exc:
             result.errors.append(f"Media sync error: {exc}")
             logger.error("Media sync error: %s", exc)
@@ -753,7 +780,7 @@ class SyncManager:
 
         # --- Commit and update last sync timestamp ---
         try:
-            _set_setting(db, "last_sync_timestamp", datetime.utcnow().isoformat())
+            _set_setting(db, "last_sync_timestamp", datetime.now(timezone.utc).isoformat())
             _set_setting(db, "last_sync_provider", provider_name)
             db.commit()
         except Exception as exc:
@@ -796,37 +823,7 @@ class SyncManager:
 
         # --- Sync vehicles (needed for flight vehicle matching) ---
         try:
-            vehicles_data = provider.sync_vehicles(creds)
-            for v_data in vehicles_data:
-                serial = v_data.get("provider_serial") or v_data.get("serial_number", "")
-                if not serial:
-                    continue
-
-                existing = db.query(Vehicle).filter(
-                    (Vehicle.provider_serial == serial) |
-                    (Vehicle.serial_number == serial)
-                ).first()
-
-                if existing:
-                    existing.manufacturer = v_data.get("manufacturer", existing.manufacturer)
-                    existing.model = v_data.get("model", existing.model)
-                    existing.api_provider = v_data.get("api_provider", "skydio")
-                    if v_data.get("nickname") and not existing.nickname:
-                        existing.nickname = v_data["nickname"]
-                else:
-                    vehicle = Vehicle(
-                        serial_number=v_data.get("serial_number", serial),
-                        manufacturer=v_data.get("manufacturer", "Skydio"),
-                        model=v_data.get("model", "Unknown"),
-                        provider_serial=serial,
-                        api_provider=v_data.get("api_provider", "skydio"),
-                        nickname=v_data.get("nickname"),
-                    )
-                    db.add(vehicle)
-
-                result.vehicles_synced += 1
-
-            db.flush()
+            _sync_vehicles(provider, creds, db, result)
         except Exception as exc:
             result.errors.append(f"Vehicles sync error: {exc}")
             logger.error("Deep sync vehicles error: %s", exc)
@@ -844,7 +841,7 @@ class SyncManager:
 
         # --- Commit and update last sync timestamp ---
         try:
-            _set_setting(db, "last_sync_timestamp", datetime.utcnow().isoformat())
+            _set_setting(db, "last_sync_timestamp", datetime.now(timezone.utc).isoformat())
             _set_setting(db, "last_sync_provider", provider_name)
             db.commit()
         except Exception as exc:

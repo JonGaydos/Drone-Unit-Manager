@@ -25,8 +25,8 @@ function CertTypeModal({ certType, onSave, onClose }) {
     try { await onSave(data) } finally { setSaving(false) }
   }
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" role="presentation" onClick={onClose}>
-      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl" role="dialog" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold text-foreground mb-4">{certType ? 'Edit Certification Type' : 'Add Certification Type'}</h2>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
@@ -105,8 +105,8 @@ function AssignCertModal({ pilots, certTypes, existingCert, onSave, onClose, cer
     try { await onSave(data, isEditing ? existingCert.id : null) } finally { setSaving(false) }
   }
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" role="presentation" onClick={onClose}>
-      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl" role="dialog" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold text-foreground mb-4">{isEditing ? 'Edit Certification' : 'Assign Certification'}</h2>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
@@ -207,7 +207,7 @@ export default function CertificationsPage() {
     ]).then(([ct, mx, p, labels]) => {
       setCertTypes(ct); setMatrix(mx.matrix || []); setPilots(p)
       if (labels.value) {
-        try { setCertStatusLabels(JSON.parse(labels.value)) } catch {}
+        try { setCertStatusLabels(JSON.parse(labels.value)) } catch { /* invalid JSON */ }
       }
     }).catch(err => setError(err.message)).finally(() => setLoading(false))
   }
@@ -448,7 +448,7 @@ export default function CertificationsPage() {
                       const status = cert?.status || 'not_started'
                       return (
                         <td key={ct.id} className="px-3 py-2 text-center cursor-pointer hover:bg-accent/40 transition-colors"
-                          role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.click() } }}
+                          tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.click() } }}
                           onClick={() => {
                             if (cert) {
                               setEditCert({

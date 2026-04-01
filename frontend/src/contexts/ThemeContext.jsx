@@ -2,7 +2,7 @@
  * Theme context for managing application color themes.
  * Persists the selected theme in localStorage and syncs with the user's backend profile.
  */
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react'
 import { api } from '@/api/client'
 
 const ThemeContext = createContext(null)
@@ -25,30 +25,32 @@ export const THEMES = [
  * @returns {JSX.Element}
  */
 export function ThemeProvider({ children }) {
-  const [theme, setThemeState] = useState(() => {
+  const [currentTheme, setCurrentTheme] = useState(() => {
     return localStorage.getItem('theme') || 'dark'
   })
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme)
-    localStorage.setItem('theme', theme)
-  }, [theme])
+    document.documentElement.dataset.theme = currentTheme
+    localStorage.setItem('theme', currentTheme)
+  }, [currentTheme])
 
   /**
    * Update the active theme locally and persist to the backend.
    * @param {string} newTheme - Theme ID to activate.
    */
-  const setTheme = async (newTheme) => {
-    setThemeState(newTheme)
+  const setTheme = useCallback(async (newTheme) => {
+    setCurrentTheme(newTheme)
     try {
       await api.patch('/auth/me', { theme: newTheme })
     } catch {
       // User might not be logged in yet
     }
-  }
+  }, [])
+
+  const contextValue = useMemo(() => ({ theme: currentTheme, setTheme }), [currentTheme, setTheme])
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme }}>
+    <ThemeContext.Provider value={contextValue}>
       {children}
     </ThemeContext.Provider>
   )

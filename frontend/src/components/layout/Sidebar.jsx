@@ -1,7 +1,7 @@
 /**
  * Collapsible sidebar navigation with role-based filtering and configurable item order.
  */
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
@@ -32,7 +32,6 @@ import {
   BookOpen,
   Radar,
 } from 'lucide-react'
-import { useEffect } from 'react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 
 /** @type {Array<{to: string, icon: Function, label: string, badge?: string, adminOnly?: boolean}>} Navigation menu items. */
@@ -79,7 +78,7 @@ export function Sidebar({ mobileOpen, onMobileClose }) {
     setCollapsed(prev => {
       const next = !prev
       localStorage.setItem('sidebar-collapsed', String(next))
-      window.dispatchEvent(new CustomEvent('sidebar-toggle', { detail: { collapsed: next } }))
+      globalThis.dispatchEvent(new CustomEvent('sidebar-toggle', { detail: { collapsed: next } }))
       return next
     })
   }
@@ -96,8 +95,8 @@ export function Sidebar({ mobileOpen, onMobileClose }) {
     api.get('/settings')
       .then(data => {
         const cfg = data.find(s => s.key === 'sidebar_config')
-        if (cfg && cfg.value) {
-          try { setSidebarConfig(JSON.parse(cfg.value)) } catch {}
+        if (cfg?.value) {
+          try { setSidebarConfig(JSON.parse(cfg.value)) } catch { /* invalid JSON, keep defaults */ }
         }
       })
       .catch(err => console.warn('Failed to fetch sidebar config:', err.message))

@@ -28,8 +28,8 @@ function EquipmentModal({ title, record, fields, onSave, onClose, vehicleModels 
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" role="presentation" onClick={onClose}>
-      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto" role="dialog" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold text-foreground mb-4">{record?.id ? `Edit ${title}` : `Add ${title}`}</h2>
         <form onSubmit={handleSubmit} className="space-y-3">
           {fields.map(f => {
@@ -107,10 +107,9 @@ function EquipmentTable({ items, columns, isAdmin, onEdit, onDelete, onMerge, em
             {columns.map(c => (
               <th key={c.key}
                 className={`${c.align === 'right' ? 'text-right' : 'text-left'} px-4 py-3 font-medium text-muted-foreground${c.sortable !== false ? ' cursor-pointer hover:text-foreground select-none' : ''}`}
-                onClick={() => c.sortable !== false && onToggleSort && onToggleSort(c.key)}
-                onKeyDown={c.sortable !== false ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggleSort && onToggleSort(c.key) } } : undefined}
-                tabIndex={c.sortable !== false ? 0 : undefined}
-                role={c.sortable !== false ? 'columnheader' : undefined}>
+                onClick={() => c.sortable !== false && onToggleSort?.(c.key)}
+                onKeyDown={c.sortable !== false ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggleSort?.(c.key) } } : undefined}
+                tabIndex={c.sortable !== false ? 0 : undefined}>
                 {c.label}
                 {sortKey === c.key && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />)}
               </th>
@@ -207,13 +206,14 @@ const TAB_CONFIGS = {
         const isExpired = days < 0
         const isUrgent = days >= 0 && days < 30
         const isWarning = days >= 30 && days <= 90
+        const badgeClass = (() => {
+          if (isExpired) return 'bg-red-900/20 text-red-300'
+          if (isUrgent) return 'bg-red-500/15 text-red-400'
+          if (isWarning) return 'bg-amber-500/15 text-amber-400'
+          return 'bg-emerald-500/15 text-emerald-400'
+        })()
         return (
-          <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
-            isExpired ? 'bg-red-900/20 text-red-300' :
-            isUrgent ? 'bg-red-500/15 text-red-400' :
-            isWarning ? 'bg-amber-500/15 text-amber-400' :
-            'bg-emerald-500/15 text-emerald-400'
-          }`}>
+          <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${badgeClass}`}>
             {isExpired ? `Overdue` : `${days}d`}
           </span>
         )
@@ -365,7 +365,7 @@ const TAB_CONFIGS = {
 export default function FleetPage() {
   // Read tab from URL query param (e.g., /fleet?tab=attachments)
   const initialTab = (() => {
-    try { return new URLSearchParams(window.location.search).get('tab') || 'vehicles' } catch { return 'vehicles' }
+    try { return new URLSearchParams(globalThis.location.search).get('tab') || 'vehicles' } catch { return 'vehicles' }
   })()
   const [activeTab, setActiveTab] = useState(initialTab)
   const [items, setItems] = useState([])
@@ -376,7 +376,7 @@ export default function FleetPage() {
   const [sortKey, setSortKey] = useState('name')
   const [sortDir, setSortDir] = useState('asc')
   const [vehicleModels, setVehicleModels] = useState([])
-  const { isAdmin, isSupervisor } = useAuth()
+  const { isSupervisor } = useAuth()
   const toast = useToast()
   const [confirmProps, requestConfirm] = useConfirm()
 
@@ -384,7 +384,7 @@ export default function FleetPage() {
   useEffect(() => {
     api.get('/vehicles').then(vehicles => {
       const models = [...new Set(vehicles.map(v => v.model).filter(Boolean))]
-      setVehicleModels(models.sort((a, b) => a.localeCompare(b)))
+      setVehicleModels([...models].sort((a, b) => a.localeCompare(b)))
     }).catch(() => {})
   }, [])
 
@@ -446,7 +446,6 @@ export default function FleetPage() {
     if (!mergeTarget || !mergeFromId) return
     setMerging(true)
     try {
-      const endpoint = config.endpoint.replace('/api/', '/api/')
       const res = await api.post(`${config.endpoint}/${mergeTarget.id}/merge?merge_from_id=${mergeFromId}`)
       toast.success(res.message || 'Merged successfully')
       setMergeTarget(null)
@@ -587,8 +586,8 @@ export default function FleetPage() {
       )}
       {/* Merge Modal */}
       {mergeTarget && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" role="presentation" onClick={() => setMergeTarget(null)}>
-          <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl" role="dialog" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setMergeTarget(null)}>
+          <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
             <h2 className="text-lg font-semibold text-foreground mb-2">Merge {singularize(config.label)}</h2>
             <p className="text-sm text-muted-foreground mb-4">
               Select a duplicate to merge into <strong className="text-foreground">{mergeTarget.nickname || mergeTarget.name || mergeTarget.serial_number}</strong>. All flight references will be updated and the duplicate will be deleted.

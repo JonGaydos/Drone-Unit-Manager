@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.constants import UTC_OFFSET
 from app.deps import DBSession, AdminUser
 from app.models.setting import Setting
 from app.services.sync_manager import SyncManager, SyncResult
@@ -55,7 +56,7 @@ def _parse_timestamp_ms(ts) -> int:
     if isinstance(ts, str):
         try:
             from datetime import datetime as dt
-            parsed = dt.fromisoformat(ts.replace("Z", "+00:00"))
+            parsed = dt.fromisoformat(ts.replace("Z", UTC_OFFSET))
             return int(parsed.timestamp() * 1000)
         except (ValueError, AttributeError):
             return 0
@@ -250,7 +251,7 @@ def enrich_flights(
         if takeoff_str:
             try:
                 from datetime import datetime
-                takeoff = datetime.fromisoformat(takeoff_str.replace("Z", "+00:00"))
+                takeoff = datetime.fromisoformat(takeoff_str.replace("Z", UTC_OFFSET))
                 flight.takeoff_time = takeoff
                 flight.date = takeoff.date()
             except (ValueError, AttributeError):
@@ -259,7 +260,7 @@ def enrich_flights(
         if landing_str:
             try:
                 from datetime import datetime
-                flight.landing_time = datetime.fromisoformat(landing_str.replace("Z", "+00:00"))
+                flight.landing_time = datetime.fromisoformat(landing_str.replace("Z", UTC_OFFSET))
             except (ValueError, AttributeError):
                 pass
 

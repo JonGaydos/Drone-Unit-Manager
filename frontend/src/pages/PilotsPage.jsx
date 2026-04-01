@@ -32,8 +32,8 @@ function PilotModal({ pilot, onSave, onClose }) {
   )
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" role="presentation" onClick={onClose}>
-      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl" role="dialog" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold text-foreground mb-4">{pilot ? 'Edit Pilot' : 'Add Pilot'}</h2>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
@@ -47,7 +47,7 @@ function PilotModal({ pilot, onSave, onClose }) {
               type="tel"
               value={form.phone || ''}
               onChange={(e) => {
-                const digits = e.target.value.replace(/\D/g, '').slice(0, 10)
+                const digits = e.target.value.replaceAll(/\D/g, '').slice(0, 10)
                 let formatted = digits
                 if (digits.length > 3) formatted = digits.slice(0,3) + '-' + digits.slice(3)
                 if (digits.length > 6) formatted = digits.slice(0,3) + '-' + digits.slice(3,6) + '-' + digits.slice(6)
@@ -63,7 +63,7 @@ function PilotModal({ pilot, onSave, onClose }) {
               type="tel"
               value={form.phone_work || ''}
               onChange={(e) => {
-                const digits = e.target.value.replace(/\D/g, '').slice(0, 10)
+                const digits = e.target.value.replaceAll(/\D/g, '').slice(0, 10)
                 let formatted = digits
                 if (digits.length > 3) formatted = digits.slice(0,3) + '-' + digits.slice(3)
                 if (digits.length > 6) formatted = digits.slice(0,3) + '-' + digits.slice(3,6) + '-' + digits.slice(6)
@@ -222,16 +222,16 @@ export default function PilotsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/30">
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none" onClick={() => toggleSort('last_name')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('last_name'))() } }} tabIndex={0} role="columnheader">
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none" onClick={() => toggleSort('last_name')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('last_name'))() } }} tabIndex={0}>
                 Name{sortKey === 'last_name' && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />)}
               </th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none hidden md:table-cell" onClick={() => toggleSort('email')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('email'))() } }} tabIndex={0} role="columnheader">
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none hidden md:table-cell" onClick={() => toggleSort('email')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('email'))() } }} tabIndex={0}>
                 Email{sortKey === 'email' && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />)}
               </th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none hidden md:table-cell" onClick={() => toggleSort('badge_number')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('badge_number'))() } }} tabIndex={0} role="columnheader">
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none hidden md:table-cell" onClick={() => toggleSort('badge_number')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('badge_number'))() } }} tabIndex={0}>
                 Badge #{sortKey === 'badge_number' && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />)}
               </th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none" onClick={() => toggleSort('status')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('status'))() } }} tabIndex={0} role="columnheader">
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none" onClick={() => toggleSort('status')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('status'))() } }} tabIndex={0}>
                 Status{sortKey === 'status' && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />)}
               </th>
               <th className="text-right px-4 py-3 font-medium text-muted-foreground">Actions</th>

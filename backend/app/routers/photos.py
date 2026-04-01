@@ -10,14 +10,14 @@ import shutil
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from PIL import Image as PILImage
 
 from app.config import settings
-from app.constants import MIME_JPEG, PHOTO_NOT_FOUND
+from app.constants import MIME_JPEG, PHOTO_NOT_FOUND, UTC_OFFSET
 from app.deps import DBSession, CurrentUser, PilotUser
 from app.models.photo import Photo, PhotoPilot
 from app.models.pilot import Pilot
@@ -54,15 +54,15 @@ def upload_photo(
 
     user: PilotUser,
 
-    file: UploadFile = File(...),
+    file: Annotated[UploadFile, File()],
 
-    title: Optional[str] = Form(None),
+    title: Annotated[Optional[str], Form()] = None,
 
-    description: Optional[str] = Form(None),
+    description: Annotated[Optional[str], Form()] = None,
 
-    date_taken: Optional[str] = Form(None),
+    date_taken: Annotated[Optional[str], Form()] = None,
 
-    pilot_ids: Optional[str] = Form(None),
+    pilot_ids: Annotated[Optional[str], Form()] = None,
 ):
     """Upload a photo with optional metadata and pilot associations.
 
@@ -90,7 +90,7 @@ def upload_photo(
     parsed_date = None
     if date_taken:
         try:
-            parsed_date = datetime.fromisoformat(date_taken.replace("Z", "+00:00").replace("+00:00", ""))
+            parsed_date = datetime.fromisoformat(date_taken.replace("Z", UTC_OFFSET).replace(UTC_OFFSET, ""))
         except (ValueError, AttributeError):
             pass
 
@@ -208,7 +208,7 @@ def view_photo(photo_id: int, db: DBSession, _user: CurrentUser):
     """Serve the full-resolution photo file."""
     photo = db.query(Photo).filter(Photo.id == photo_id).first()
     if not photo:
-        raise HTTPException(404, "Photo not found")
+        raise HTTPException(404, PHOTO_NOT_FOUND)
     file_path = os.path.join(UPLOAD_DIR, str(photo.id), photo.filename)
     resolved = _validate_path(file_path)
     if not resolved.exists():
@@ -221,7 +221,7 @@ def view_thumbnail(photo_id: int, db: DBSession, _user: CurrentUser):
     """Serve the photo thumbnail, falling back to the full image if unavailable."""
     photo = db.query(Photo).filter(Photo.id == photo_id).first()
     if not photo:
-        raise HTTPException(404, "Photo not found")
+        raise HTTPException(404, PHOTO_NOT_FOUND)
     if photo.thumbnail_path:
         thumb_resolved = _validate_path(photo.thumbnail_path)
         if thumb_resolved.exists():
@@ -243,13 +243,13 @@ def update_photo(
 
     user: PilotUser,
 
-    title: Optional[str] = Form(None),
+    title: Annotated[Optional[str], Form()] = None,
 
-    description: Optional[str] = Form(None),
+    description: Annotated[Optional[str], Form()] = None,
 
-    date_taken: Optional[str] = Form(None),
+    date_taken: Annotated[Optional[str], Form()] = None,
 
-    pilot_ids: Optional[str] = Form(None),
+    pilot_ids: Annotated[Optional[str], Form()] = None,
 ):
     """Update photo metadata and/or replace pilot associations.
 
@@ -265,7 +265,7 @@ def update_photo(
     """
     photo = db.query(Photo).filter(Photo.id == photo_id).first()
     if not photo:
-        raise HTTPException(404, "Photo not found")
+        raise HTTPException(404, PHOTO_NOT_FOUND)
 
     if title is not None:
         photo.title = title
@@ -273,7 +273,7 @@ def update_photo(
         photo.description = description
     if date_taken is not None:
         try:
-            photo.date_taken = datetime.fromisoformat(date_taken.replace("Z", "+00:00").replace("+00:00", ""))
+            photo.date_taken = datetime.fromisoformat(date_taken.replace("Z", UTC_OFFSET).replace(UTC_OFFSET, ""))
         except (ValueError, AttributeError):
             pass
 
@@ -295,7 +295,7 @@ def delete_photo(photo_id: int, db: DBSession, user: PilotUser):
     from app.services.audit import log_action
     photo = db.query(Photo).filter(Photo.id == photo_id).first()
     if not photo:
-        raise HTTPException(404, "Photo not found")
+        raise HTTPException(404, PHOTO_NOT_FOUND)
 
     # Delete pilot associations
     db.query(PhotoPilot).filter(PhotoPilot.photo_id == photo_id).delete()

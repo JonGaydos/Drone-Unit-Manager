@@ -154,7 +154,7 @@ export default function PilotDetailPage() {
                       type="tel"
                       value={editForm.phone || ''}
                       onChange={(e) => {
-                        const digits = e.target.value.replace(/\D/g, '').slice(0, 10)
+                        const digits = e.target.value.replaceAll(/\D/g, '').slice(0, 10)
                         let formatted = digits
                         if (digits.length > 3) formatted = digits.slice(0,3) + '-' + digits.slice(3)
                         if (digits.length > 6) formatted = digits.slice(0,3) + '-' + digits.slice(3,6) + '-' + digits.slice(6)
@@ -171,7 +171,7 @@ export default function PilotDetailPage() {
                     type="tel"
                     value={editForm.phone_work || ''}
                     onChange={(e) => {
-                      const digits = e.target.value.replace(/\D/g, '').slice(0, 10)
+                      const digits = e.target.value.replaceAll(/\D/g, '').slice(0, 10)
                       let formatted = digits
                       if (digits.length > 3) formatted = digits.slice(0,3) + '-' + digits.slice(3)
                       if (digits.length > 6) formatted = digits.slice(0,3) + '-' + digits.slice(3,6) + '-' + digits.slice(6)
@@ -418,7 +418,7 @@ export default function PilotDetailPage() {
       </div>
 
       {/* Currency Status */}
-      {currencyStatus && currencyStatus.rules && currencyStatus.rules.length > 0 && (
+      {currencyStatus?.rules?.length > 0 && (
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
             <div className="flex items-center gap-2">

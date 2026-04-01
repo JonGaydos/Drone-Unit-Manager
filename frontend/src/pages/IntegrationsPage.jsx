@@ -8,7 +8,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import {
   Plug, RefreshCw, CheckCircle, XCircle, Upload, Loader2,
-  Mail, Radar, ChevronDown, ChevronRight, ExternalLink,
+  Mail, ChevronDown, ChevronRight,
 } from 'lucide-react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 
@@ -253,7 +253,7 @@ function SmtpCard({ settings }) {
       {expanded && (
         <div className="px-4 pb-4 space-y-3 border-t border-border pt-3">
           <div className="flex items-center gap-3 mb-2">
-            <label className="text-sm text-foreground">Enable Email Notifications</label>
+            <span className="text-sm text-foreground">Enable Email Notifications</span>
             <button
               onClick={() => setForm({ ...form, smtp_enabled: form.smtp_enabled === 'true' ? 'false' : 'true' })}
               className={`w-10 h-5 rounded-full transition-colors ${form.smtp_enabled === 'true' ? 'bg-primary' : 'bg-muted'}`}

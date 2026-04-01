@@ -7,7 +7,7 @@ import { useConfirm } from '@/hooks/useConfirm'
 import { sortVehicles, sortPilotsActiveFirst, vehicleDisplayName } from '@/lib/formatters'
 import { Link } from 'react-router-dom'
 import {
-  AlertTriangle, Plus, Filter, Search, ChevronDown, ChevronUp,
+  AlertTriangle, Plus, Filter, ChevronDown, ChevronUp,
   X, Loader2, CheckCircle, Shield, Download,
 } from 'lucide-react'
 
@@ -54,7 +54,7 @@ const SEVERITIES = ['minor', 'moderate', 'major', 'critical']
 const STATUSES = ['open', 'investigating', 'resolved', 'closed']
 
 function formatCategory(cat) {
-  return cat ? cat.replaceAll('_', ' ').replace(/\b\w/g, l => l.toUpperCase()) : ''
+  return cat ? cat.replaceAll('_', ' ').replaceAll(/\b\w/g, l => l.toUpperCase()) : ''
 }
 
 function IncidentModal({ pilots, vehicles, flights, onSave, onClose }) {
@@ -83,8 +83,8 @@ function IncidentModal({ pilots, vehicles, flights, onSave, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" role="presentation" onClick={onClose}>
-      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-2xl shadow-xl max-h-[90vh] overflow-y-auto" role="dialog" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-2xl shadow-xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold text-foreground mb-4">
           {form.report_type === 'success' ? 'Report Success' : 'Report Incident'}
         </h2>
@@ -237,8 +237,8 @@ function ResolveModal({ incident, onSave, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" role="presentation" onClick={onClose}>
-      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-lg shadow-xl" role="dialog" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-lg shadow-xl" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold text-foreground mb-4">Resolve Incident</h2>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
@@ -471,7 +471,7 @@ export default function IncidentPage() {
                   <tr className="border-b border-border hover:bg-secondary/30 cursor-pointer"
                     onClick={() => setExpandedId(expandedId === inc.id ? null : inc.id)}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpandedId(expandedId === inc.id ? null : inc.id) } }}
-                    tabIndex={0} role="row">
+                    tabIndex={0}>
                     <td className="px-4 py-3 text-foreground whitespace-nowrap">{inc.date}</td>
                     <td className="px-4 py-3 text-foreground font-medium">{inc.title}</td>
                     <td className="px-4 py-3">

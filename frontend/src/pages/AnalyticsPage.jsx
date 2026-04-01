@@ -4,7 +4,7 @@ import { X, Filter } from 'lucide-react'
 import { FlightLocationsMap } from '@/components/FlightMap'
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
 
 const COLORS = [
@@ -40,6 +40,54 @@ function withOpacity(hex, opacity) {
   const g = Number.parseInt(hex.slice(3, 5), 16)
   const b = Number.parseInt(hex.slice(5, 7), 16)
   return `rgba(${r}, ${g}, ${b}, ${opacity})`
+}
+
+function createTotalBarRenderer(color, isFiltered) {
+  return (props) => {
+    const { x, y, width, height } = props
+    if (!height || height <= 0) return null
+    return (
+      <rect
+        x={x} y={y} width={width} height={height}
+        fill={isFiltered ? withOpacity(color, DIM_OPACITY) : color}
+        rx={4} ry={4}
+      />
+    )
+  }
+}
+
+function createFilteredBarRenderer(color) {
+  return (props) => {
+    const { x, y, width, height } = props
+    if (!height || height <= 0) return null
+    return (
+      <rect x={x} y={y} width={width} height={height} fill={color} rx={4} ry={4} />
+    )
+  }
+}
+
+function createTotalBarHRenderer(color, isFiltered) {
+  return (props) => {
+    const { x, y, width, height } = props
+    if (!width || width <= 0) return null
+    return (
+      <rect
+        x={x} y={y} width={width} height={height}
+        fill={isFiltered ? withOpacity(color, DIM_OPACITY) : color}
+        rx={4} ry={4}
+      />
+    )
+  }
+}
+
+function createFilteredBarHRenderer(color) {
+  return (props) => {
+    const { x, y, width, height } = props
+    if (!width || width <= 0) return null
+    return (
+      <rect x={x} y={y} width={width} height={height} fill={color} rx={4} ry={4} />
+    )
+  }
 }
 
 export default function AnalyticsPage() {
@@ -244,46 +292,10 @@ export default function AnalyticsPage() {
   }
 
   // Custom bar shape for overlapping bars (filtered on top of dimmed total)
-  const renderTotalBar = (color) => (props) => {
-    const { x, y, width, height } = props
-    if (!height || height <= 0) return null
-    return (
-      <rect
-        x={x} y={y} width={width} height={height}
-        fill={hasActiveFilter ? withOpacity(color, DIM_OPACITY) : color}
-        rx={4} ry={4}
-      />
-    )
-  }
-
-  const renderFilteredBar = (color) => (props) => {
-    const { x, y, width, height } = props
-    if (!height || height <= 0) return null
-    return (
-      <rect x={x} y={y} width={width} height={height} fill={color} rx={4} ry={4} />
-    )
-  }
-
-  // Horizontal bar shape variants
-  const renderTotalBarH = (color) => (props) => {
-    const { x, y, width, height } = props
-    if (!width || width <= 0) return null
-    return (
-      <rect
-        x={x} y={y} width={width} height={height}
-        fill={hasActiveFilter ? withOpacity(color, DIM_OPACITY) : color}
-        rx={4} ry={4}
-      />
-    )
-  }
-
-  const renderFilteredBarH = (color) => (props) => {
-    const { x, y, width, height } = props
-    if (!width || width <= 0) return null
-    return (
-      <rect x={x} y={y} width={width} height={height} fill={color} rx={4} ry={4} />
-    )
-  }
+  const renderTotalBar = (color) => createTotalBarRenderer(color, hasActiveFilter)
+  const renderFilteredBar = (color) => createFilteredBarRenderer(color)
+  const renderTotalBarH = (color) => createTotalBarHRenderer(color, hasActiveFilter)
+  const renderFilteredBarH = (color) => createFilteredBarHRenderer(color)
 
   return (
     <div className="space-y-6">
@@ -536,7 +548,7 @@ export default function AnalyticsPage() {
               <tbody>
                 {pilotHours.map((p) => {
                   const isSelected = filters.pilot === p.pilot_name
-                  const hasFilteredData = filteredPilotHours && filteredPilotHours[p.pilot_name]
+                  const hasFilteredData = filteredPilotHours?.[p.pilot_name]
                   const isDimmed = hasActiveFilter && !isSelected && !hasFilteredData
                   return (
                     <tr

@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import func
 
+from app.constants import FOLDER_NOT_FOUND
 from app.models.folder import Folder
 from app.models.document import Document
 from app.deps import DBSession, CurrentUser, PilotUser
@@ -45,7 +46,7 @@ def list_folders(db: DBSession, _user: CurrentUser):
 def get_folder_documents(folder_id: int, db: DBSession, _user: CurrentUser):
     folder = db.query(Folder).filter(Folder.id == folder_id).first()
     if not folder:
-        raise HTTPException(404, "Folder not found")
+        raise HTTPException(404, FOLDER_NOT_FOUND)
     docs = db.query(Document).filter(Document.folder_id == folder_id).order_by(Document.uploaded_at.desc()).all()
     return [{
         "id": d.id,
@@ -78,7 +79,7 @@ def create_folder(data: FolderCreate, db: DBSession, _user: PilotUser):
 def update_folder(folder_id: int, data: FolderUpdate, db: DBSession, _user: PilotUser):
     folder = db.query(Folder).filter(Folder.id == folder_id).first()
     if not folder:
-        raise HTTPException(404, "Folder not found")
+        raise HTTPException(404, FOLDER_NOT_FOUND)
     if folder.is_system:
         raise HTTPException(400, "Cannot rename system folders")
     if data.name is not None:
@@ -93,7 +94,7 @@ def update_folder(folder_id: int, data: FolderUpdate, db: DBSession, _user: Pilo
 def delete_folder(folder_id: int, db: DBSession, _user: PilotUser):
     folder = db.query(Folder).filter(Folder.id == folder_id).first()
     if not folder:
-        raise HTTPException(404, "Folder not found")
+        raise HTTPException(404, FOLDER_NOT_FOUND)
     if folder.is_system:
         raise HTTPException(400, "Cannot delete system folders")
 

@@ -218,11 +218,7 @@ export default function DashboardPage() {
                         {(flight.purpose || flight.flight_purpose) ? <Link to={`/flights?purpose=${encodeURIComponent(flight.purpose || flight.flight_purpose)}`} className="text-primary hover:underline">{flight.purpose || flight.flight_purpose}</Link> : '—'}
                       </td>
                       <td className="px-5 py-3 text-foreground">
-                        {flight.duration_seconds
-                          ? formatDuration(flight.duration_seconds)
-                          : flight.duration
-                            ? formatDuration(flight.duration)
-                            : '—'}
+                        {formatDuration(flight.duration_seconds || flight.duration)}
                       </td>
                       <td className="px-5 py-3">
                         <FlightStatusBadge status={flight.review_status || flight.status} />
@@ -329,7 +325,7 @@ export default function DashboardPage() {
       )}
 
       {/* Fleet Overview */}
-      {fleetHealth && fleetHealth.summary && (
+      {fleetHealth?.summary && (
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="flex items-center justify-between p-5 border-b border-border">
             <h3 className="font-semibold text-foreground">Fleet Overview</h3>
@@ -406,7 +402,7 @@ function FlightStatusBadge({ status }) {
     completed: 'bg-blue-500/15 text-blue-400',
   }
 
-  const label = status ? status.replaceAll('_', ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'Unknown'
+  const label = status ? status.replaceAll('_', ' ').replaceAll(/\b\w/g, c => c.toUpperCase()) : 'Unknown'
   const style = styles[status] || 'bg-muted text-muted-foreground'
 
   return (

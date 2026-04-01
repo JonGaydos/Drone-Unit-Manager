@@ -1,4 +1,5 @@
 from datetime import date
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -71,7 +72,7 @@ def list_training_logs(
 
     outcome: str | None = None,
 
-    limit: int = Query(default=200, le=1000),
+    limit: Annotated[int, Query(le=1000)] = 200,
 
     offset: int = 0,
 ):

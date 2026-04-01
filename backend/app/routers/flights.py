@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 
-from app.constants import FLIGHT_NOT_FOUND
+from app.constants import FLIGHT_NOT_FOUND, UTC_OFFSET
 from app.models.flight import Flight, FlightPurpose
 from app.deps import DBSession, CurrentUser, AdminUser, PilotUser, SupervisorUser
 from app.responses import responses
@@ -109,14 +109,230 @@ def get_flight(flight_id: int, db: DBSession, user: CurrentUser):
     return _flight_to_out(flight)
 
 
+def _refresh_timestamps(flight: Flight, detail: dict, updated_fields: list):
+    """Apply timestamp fields from API detail to flight."""
+    from datetime import datetime
+
+    takeoff_str = detail.get("takeoff_time") or detail.get("start_time")
+    if takeoff_str:
+        try:
+            takeoff = datetime.fromisoformat(str(takeoff_str).replace("Z", UTC_OFFSET))
+            flight.takeoff_time = takeoff
+            flight.date = takeoff.date()
+            updated_fields.append("date")
+        except (ValueError, AttributeError):
+            pass
+
+    landing_str = detail.get("landing_time") or detail.get("end_time")
+    if landing_str:
+        try:
+            flight.landing_time = datetime.fromisoformat(str(landing_str).replace("Z", UTC_OFFSET))
+            updated_fields.append("landing_time")
+        except (ValueError, AttributeError):
+            pass
+
+    duration = detail.get("duration_seconds") or detail.get("duration")
+    if duration is not None:
+        flight.duration_seconds = int(float(duration))
+        updated_fields.append("duration")
+    elif flight.takeoff_time and flight.landing_time:
+        flight.duration_seconds = int((flight.landing_time - flight.takeoff_time).total_seconds())
+        updated_fields.append("duration")
+
+
+def _refresh_location_and_metrics(flight: Flight, detail: dict, updated_fields: list):
+    """Apply location, speed, altitude, distance from API detail to flight."""
+    for api_key, fld in [
+        ("takeoff_latitude", "takeoff_lat"), ("takeoff_longitude", "takeoff_lon"),
+        ("landing_latitude", "landing_lat"), ("landing_longitude", "landing_lon"),
+    ]:
+        val = detail.get(api_key) or detail.get(fld)
+        if val is not None:
+            setattr(flight, fld, val)
+            updated_fields.append(fld)
+
+    addr = detail.get("takeoff_address") or detail.get("location") or detail.get("address")
+    if addr:
+        flight.takeoff_address = str(addr)
+        updated_fields.append("address")
+
+    for api_key, fld in [
+        ("max_altitude_m", "max_altitude_m"), ("max_speed_mps", "max_speed_mps"),
+        ("distance_m", "distance_m"),
+    ]:
+        val = detail.get(api_key) or detail.get(fld.replace("_m", "").replace("_mps", ""))
+        if val is not None:
+            setattr(flight, fld, val)
+            updated_fields.append(fld)
+
+
+def _refresh_pilot(flight: Flight, detail: dict, db, updated_fields: list):
+    """Match pilot by email or name from API detail."""
+    from app.models.pilot import Pilot
+    from app.services.sync_manager import _match_pilot
+
+    if flight.pilot_id:
+        return
+    user_email = detail.get("user_email")
+    if user_email:
+        pilot = db.query(Pilot).filter(
+            Pilot.email.ilike(str(user_email)),
+            Pilot.status == "active",
+        ).first()
+        if pilot:
+            flight.pilot_id = pilot.id
+            updated_fields.append("pilot")
+    if not flight.pilot_id:
+        pilot_name = detail.get("pilot_name") or detail.get("operator_name") or detail.get("user_name")
+        if pilot_name:
+            flight.pilot_id = _match_pilot(db, pilot_name)
+            if flight.pilot_id:
+                updated_fields.append("pilot")
+
+
+def _refresh_equipment(flight: Flight, detail: dict, updated_fields: list):
+    """Apply equipment fields (battery, sensor, attachments, carrier) from API detail."""
+    from app.integrations.skydio import _to_str
+
+    for api_key, fld in [
+        ("battery_serial", "battery_serial"), ("sensor_package", "sensor_package"),
+        ("carrier", "carrier"),
+    ]:
+        val = detail.get(api_key)
+        if val is not None:
+            setattr(flight, fld, _to_str(val))
+            updated_fields.append(fld)
+
+    attachments = detail.get("attachments")
+    if isinstance(attachments, list):
+        mount_map = {"TOP": "attachment_top", "BOTTOM": "attachment_bottom",
+                     "LEFT": "attachment_left", "RIGHT": "attachment_right"}
+        for att in attachments:
+            if not isinstance(att, dict):
+                continue
+            mount = att.get("mount_point", "").upper()
+            fld = mount_map.get(mount)
+            if fld:
+                label = f"{att.get('attachment_type', '')} ({att.get('attachment_serial', '')})"
+                setattr(flight, fld, label.strip())
+                updated_fields.append(fld)
+
+    battery = detail.get("battery")
+    if isinstance(battery, dict) and not flight.battery_serial:
+        flight.battery_serial = battery.get("battery_serial") or battery.get("serial_number") or _to_str(battery)
+        updated_fields.append("battery_serial")
+    elif isinstance(battery, str) and not flight.battery_serial:
+        flight.battery_serial = battery
+        updated_fields.append("battery_serial")
+
+    sensor = detail.get("sensor_package")
+    if isinstance(sensor, dict) and not flight.sensor_package:
+        flight.sensor_package = sensor.get("sensor_package_serial") or sensor.get("serial_number") or _to_str(sensor)
+        updated_fields.append("sensor_package")
+
+
+def _refresh_vehicle(flight: Flight, detail: dict, db, updated_fields: list):
+    """Match vehicle from API detail."""
+    from app.models.vehicle import Vehicle
+
+    vehicle_data = detail.get("vehicle")
+    vs = detail.get("vehicle_serial") or (vehicle_data.get("serial_number") if isinstance(vehicle_data, dict) else None)
+    if vs and not flight.vehicle_id:
+        vehicle = db.query(Vehicle).filter(
+            (Vehicle.provider_serial == str(vs)) |
+            (Vehicle.serial_number == str(vs))
+        ).first()
+        if vehicle:
+            flight.vehicle_id = vehicle.id
+            updated_fields.append("vehicle")
+
+
+def _parse_telemetry_timestamp(ts) -> int:
+    """Parse a telemetry timestamp value to milliseconds."""
+    from datetime import datetime
+    if isinstance(ts, str):
+        try:
+            parsed = datetime.fromisoformat(ts.replace("Z", UTC_OFFSET))
+            return int(parsed.timestamp() * 1000)
+        except (ValueError, AttributeError):
+            return 0
+    if isinstance(ts, (int, float)):
+        return int(ts)
+    return 0
+
+
+def _refresh_telemetry(flight: Flight, provider, creds, updated_fields: list, logger) -> int:
+    """Fetch and save telemetry data. Returns number of points saved."""
+    telemetry_data = None
+    try:
+        telemetry_data = provider.get_flight_telemetry(creds, flight.external_id)
+    except Exception as exc:
+        logger.warning("Telemetry fetch failed for %s: %s", flight.external_id, exc)
+
+    if not telemetry_data or not isinstance(telemetry_data, list) or len(telemetry_data) == 0:
+        return 0
+
+    from app.models.telemetry import TelemetryPoint
+    from app.database import TelemetrySessionLocal
+
+    tdb = TelemetrySessionLocal()
+    try:
+        tdb.query(TelemetryPoint).filter(TelemetryPoint.flight_id == flight.id).delete()
+
+        max_alt = 0
+        max_speed = 0
+
+        for point in telemetry_data:
+            if not isinstance(point, dict):
+                continue
+
+            timestamp_ms = _parse_telemetry_timestamp(point.get("timestamp_ms"))
+            alt = point.get("altitude_m") or 0
+            speed = point.get("speed_mps") or 0
+
+            if alt > max_alt:
+                max_alt = alt
+            if speed > max_speed:
+                max_speed = speed
+
+            tp = TelemetryPoint(
+                flight_id=flight.id,
+                timestamp_ms=timestamp_ms,
+                lat=point.get("lat"),
+                lon=point.get("lon"),
+                altitude_m=alt,
+                speed_mps=speed,
+                heading_deg=point.get("heading_deg"),
+                battery_pct=point.get("battery_pct"),
+            )
+            tdb.add(tp)
+
+        tdb.commit()
+        telemetry_points = len(telemetry_data)
+        updated_fields.append(f"telemetry({telemetry_points}pts)")
+
+        if max_alt > 0:
+            flight.max_altitude_m = round(max_alt, 2)
+            updated_fields.append("max_altitude")
+        if max_speed > 0:
+            flight.max_speed_mps = round(max_speed, 2)
+            updated_fields.append("max_speed")
+
+        return telemetry_points
+    except Exception as exc:
+        logger.error("Telemetry save failed: %s", exc)
+        tdb.rollback()
+        return 0
+    finally:
+        tdb.close()
+
+
 @router.post("/{flight_id}/refresh", responses=responses(400, 401, 404, 502))
 def refresh_flight_from_api(flight_id: int, db: DBSession, admin: AdminUser):
     """Fetch fresh data from Skydio API for a single flight."""
     import logging
-    from datetime import datetime
-    from app.integrations.skydio import SkydioProvider, _to_str
-    from app.services.sync_manager import _build_creds, _match_pilot
-    from app.models.vehicle import Vehicle
+    from app.integrations.skydio import SkydioProvider
+    from app.services.sync_manager import _build_creds
 
     logger = logging.getLogger(__name__)
 
@@ -131,8 +347,6 @@ def refresh_flight_from_api(flight_id: int, db: DBSession, admin: AdminUser):
         raise HTTPException(status_code=400, detail="Skydio API not configured")
 
     provider = SkydioProvider()
-
-    # Fetch raw response for debugging
     detail = provider.get_flight_detail(creds, flight.external_id)
 
     if not detail:
@@ -140,211 +354,14 @@ def refresh_flight_from_api(flight_id: int, db: DBSession, admin: AdminUser):
 
     updated_fields = []
 
-    # Date/time
-    takeoff_str = detail.get("takeoff_time") or detail.get("start_time")
-    if takeoff_str:
-        try:
-            takeoff = datetime.fromisoformat(str(takeoff_str).replace("Z", "+00:00"))
-            flight.takeoff_time = takeoff
-            flight.date = takeoff.date()
-            updated_fields.append("date")
-        except (ValueError, AttributeError):
-            pass
+    _refresh_timestamps(flight, detail, updated_fields)
+    _refresh_location_and_metrics(flight, detail, updated_fields)
+    _refresh_pilot(flight, detail, db, updated_fields)
+    _refresh_equipment(flight, detail, updated_fields)
+    _refresh_vehicle(flight, detail, db, updated_fields)
 
-    landing_str = detail.get("landing_time") or detail.get("end_time")
-    if landing_str:
-        try:
-            flight.landing_time = datetime.fromisoformat(str(landing_str).replace("Z", "+00:00"))
-            updated_fields.append("landing_time")
-        except (ValueError, AttributeError):
-            pass
+    telemetry_points = _refresh_telemetry(flight, provider, creds, updated_fields, logger)
 
-    # Duration
-    duration = detail.get("duration_seconds") or detail.get("duration")
-    if duration is not None:
-        flight.duration_seconds = int(float(duration))
-        updated_fields.append("duration")
-    elif flight.takeoff_time and flight.landing_time:
-        flight.duration_seconds = int((flight.landing_time - flight.takeoff_time).total_seconds())
-        updated_fields.append("duration")
-
-    # Location
-    for api_key, field in [
-        ("takeoff_latitude", "takeoff_lat"), ("takeoff_longitude", "takeoff_lon"),
-        ("landing_latitude", "landing_lat"), ("landing_longitude", "landing_lon"),
-    ]:
-        val = detail.get(api_key) or detail.get(field)
-        if val is not None:
-            setattr(flight, field, val)
-            updated_fields.append(field)
-
-    addr = detail.get("takeoff_address") or detail.get("location") or detail.get("address")
-    if addr:
-        flight.takeoff_address = str(addr)
-        updated_fields.append("address")
-
-    # Speed / altitude / distance
-    for api_key, field in [
-        ("max_altitude_m", "max_altitude_m"), ("max_speed_mps", "max_speed_mps"),
-        ("distance_m", "distance_m"),
-    ]:
-        val = detail.get(api_key) or detail.get(field.replace("_m", "").replace("_mps", ""))
-        if val is not None:
-            setattr(flight, field, val)
-            updated_fields.append(field)
-
-    # Pilot — match by email first, then by name
-    if not flight.pilot_id:
-        user_email = detail.get("user_email")
-        if user_email:
-            from app.models.pilot import Pilot
-            pilot = db.query(Pilot).filter(
-                Pilot.email.ilike(str(user_email)),
-                Pilot.status == "active",
-            ).first()
-            if pilot:
-                flight.pilot_id = pilot.id
-                updated_fields.append("pilot")
-        if not flight.pilot_id:
-            pilot_name = detail.get("pilot_name") or detail.get("operator_name") or detail.get("user_name")
-            if pilot_name:
-                flight.pilot_id = _match_pilot(db, pilot_name)
-                if flight.pilot_id:
-                    updated_fields.append("pilot")
-
-    # Equipment — simple fields
-    for api_key, field in [
-        ("battery_serial", "battery_serial"), ("sensor_package", "sensor_package"),
-        ("carrier", "carrier"),
-    ]:
-        val = detail.get(api_key)
-        if val is not None:
-            setattr(flight, field, _to_str(val))
-            updated_fields.append(field)
-
-    # Attachments — Skydio returns a list of {attachment_serial, attachment_type, mount_point}
-    attachments = detail.get("attachments")
-    if isinstance(attachments, list):
-        mount_map = {"TOP": "attachment_top", "BOTTOM": "attachment_bottom",
-                     "LEFT": "attachment_left", "RIGHT": "attachment_right"}
-        for att in attachments:
-            if not isinstance(att, dict):
-                continue
-            mount = att.get("mount_point", "").upper()
-            field = mount_map.get(mount)
-            if field:
-                label = f"{att.get('attachment_type', '')} ({att.get('attachment_serial', '')})"
-                setattr(flight, field, label.strip())
-                updated_fields.append(field)
-
-    # Battery — Skydio may return as nested object
-    battery = detail.get("battery")
-    if isinstance(battery, dict) and not flight.battery_serial:
-        flight.battery_serial = battery.get("battery_serial") or battery.get("serial_number") or _to_str(battery)
-        updated_fields.append("battery_serial")
-    elif isinstance(battery, str) and not flight.battery_serial:
-        flight.battery_serial = battery
-        updated_fields.append("battery_serial")
-
-    # Sensor package — may be nested
-    sensor = detail.get("sensor_package")
-    if isinstance(sensor, dict) and not flight.sensor_package:
-        flight.sensor_package = sensor.get("sensor_package_serial") or sensor.get("serial_number") or _to_str(sensor)
-        updated_fields.append("sensor_package")
-
-    # Vehicle serial from detail
-    vehicle_data = detail.get("vehicle")
-    if isinstance(vehicle_data, dict):
-        vs = detail.get("vehicle_serial") or vehicle_data.get("serial_number")
-    else:
-        vs = detail.get("vehicle_serial")
-    if vs and not flight.vehicle_id:
-        vehicle = db.query(Vehicle).filter(
-            (Vehicle.provider_serial == str(vs)) |
-            (Vehicle.serial_number == str(vs))
-        ).first()
-        if vehicle:
-            flight.vehicle_id = vehicle.id
-            updated_fields.append("vehicle")
-
-    # Also try fetching telemetry
-    telemetry_data = None
-    try:
-        telemetry_data = provider.get_flight_telemetry(creds, flight.external_id)
-    except Exception as exc:
-        logger.warning("Telemetry fetch failed for %s: %s", flight.external_id, exc)
-
-    telemetry_points = 0
-    if telemetry_data and isinstance(telemetry_data, list) and len(telemetry_data) > 0:
-        from app.models.telemetry import TelemetryPoint
-        from app.database import TelemetrySessionLocal
-
-        tdb = TelemetrySessionLocal()
-        try:
-            tdb.query(TelemetryPoint).filter(TelemetryPoint.flight_id == flight.id).delete()
-
-            max_alt = 0
-            max_speed = 0
-
-            for point in telemetry_data:
-                if not isinstance(point, dict):
-                    continue
-
-                # Data is already mapped by get_flight_telemetry()
-                # Fields: timestamp_ms, lat, lon, altitude_m, speed_mps, battery_pct, heading_deg
-
-                # Parse timestamp if it's still an ISO string
-                ts = point.get("timestamp_ms")
-                timestamp_ms = 0
-                if isinstance(ts, str):
-                    try:
-                        from datetime import datetime as dt
-                        parsed = dt.fromisoformat(ts.replace("Z", "+00:00"))
-                        timestamp_ms = int(parsed.timestamp() * 1000)
-                    except (ValueError, AttributeError):
-                        pass
-                elif isinstance(ts, (int, float)):
-                    timestamp_ms = int(ts)
-
-                alt = point.get("altitude_m") or 0
-                speed = point.get("speed_mps") or 0
-
-                if alt > max_alt:
-                    max_alt = alt
-                if speed > max_speed:
-                    max_speed = speed
-
-                tp = TelemetryPoint(
-                    flight_id=flight.id,
-                    timestamp_ms=timestamp_ms,
-                    lat=point.get("lat"),
-                    lon=point.get("lon"),
-                    altitude_m=alt,
-                    speed_mps=speed,
-                    heading_deg=point.get("heading_deg"),
-                    battery_pct=point.get("battery_pct"),
-                )
-                tdb.add(tp)
-
-            tdb.commit()
-            telemetry_points = len(telemetry_data)
-            updated_fields.append(f"telemetry({telemetry_points}pts)")
-
-            # Update flight with max altitude/speed from telemetry
-            if max_alt > 0:
-                flight.max_altitude_m = round(max_alt, 2)
-                updated_fields.append("max_altitude")
-            if max_speed > 0:
-                flight.max_speed_mps = round(max_speed, 2)
-                updated_fields.append("max_speed")
-
-        except Exception as exc:
-            logger.error("Telemetry save failed: %s", exc)
-            tdb.rollback()
-        finally:
-            tdb.close()
-
-    # Mark telemetry as synced if we got telemetry data
     if telemetry_points > 0:
         flight.telemetry_synced = True
 
@@ -437,7 +454,7 @@ def update_telemetry_status(
     from app.services.audit import log_action
     flight = db.query(Flight).filter(Flight.id == flight_id).first()
     if not flight:
-        raise HTTPException(404, "Flight not found")
+        raise HTTPException(404, FLIGHT_NOT_FOUND)
     flight.telemetry_synced = data.telemetry_synced
     log_action(db, user.id, user.display_name, "update", "flight", flight_id,
                details=f"Telemetry synced set to {data.telemetry_synced}")

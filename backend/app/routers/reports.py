@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.constants import APP_TITLE
 from app.config import settings
 from app.deps import DBSession, PilotUser
 from app.models.flight import Flight
@@ -40,80 +41,134 @@ class ReportRow(BaseModel):
     values: dict
 
 
+def _dispatch_report(config: ReportConfig, db: Session) -> dict:
+    """Dispatch to the appropriate report generator by type."""
+    generators = {
+        "flight_summary": _flight_summary,
+        "pilot_hours": _pilot_hours,
+        "equipment_utilization": _equipment_utilization,
+        "pilot_certifications": _pilot_certifications,
+        "battery_status": _battery_status,
+        "maintenance_history": _maintenance_history,
+        "pilot_activity_summary": _pilot_activity_summary,
+        "annual_unit_report": _annual_unit_report,
+    }
+    generator = generators.get(config.report_type)
+    if generator:
+        return generator(config, db)
+    return {"error": "Unknown report type"}
+
+
 @router.post("/generate", responses=responses(401))
 def generate_report(config: ReportConfig, db: DBSession, user: PilotUser):
-    if config.report_type == "flight_summary":
-        return _flight_summary(config, db)
-    elif config.report_type == "pilot_hours":
-        return _pilot_hours(config, db)
-    elif config.report_type == "equipment_utilization":
-        return _equipment_utilization(config, db)
-    elif config.report_type == "pilot_certifications":
-        return _pilot_certifications(config, db)
-    elif config.report_type == "battery_status":
-        return _battery_status(config, db)
-    elif config.report_type == "maintenance_history":
-        return _maintenance_history(config, db)
-    elif config.report_type == "pilot_activity_summary":
-        return _pilot_activity_summary(config, db)
-    elif config.report_type == "annual_unit_report":
-        return _annual_unit_report(config, db)
-    return {"error": "Unknown report type"}
+    return _dispatch_report(config, db)
+
+
+def _find_org_logo() -> str | None:
+    """Find the organization logo file path, if any."""
+    for ext in ["png", "jpg", "jpeg", "gif", "webp"]:
+        candidate = os.path.join(str(settings.UPLOAD_DIR), "org", f"logo.{ext}")
+        if os.path.exists(candidate):
+            return candidate
+    logo_dir = os.path.join(str(settings.UPLOAD_DIR), "org")
+    if os.path.isdir(logo_dir):
+        for f in os.listdir(logo_dir):
+            if f.lower().startswith("logo"):
+                return os.path.join(logo_dir, f)
+    return None
+
+
+def _build_pdf_summary_table(summary: dict, styles, primary_light, avail_width) -> list:
+    """Build PDF summary table elements from summary dict."""
+    from reportlab.lib.colors import HexColor
+    from reportlab.platypus import Table, TableStyle, Spacer
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.platypus import Paragraph
+
+    elements = []
+    summary_headers = []
+    summary_data = []
+    for key, value in summary.items():
+        label = key.replace("_", " ").title()
+        summary_headers.append(Paragraph(f"<b>{label}</b>", ParagraphStyle("SH", parent=styles["Normal"], fontSize=8, textColor=HexColor("#64748b"))))
+        summary_data.append(Paragraph(f"<b>{value}</b>", ParagraphStyle("SV", parent=styles["Normal"], fontSize=12, textColor=HexColor("#1e293b"))))
+
+    if summary_headers:
+        col_w = avail_width / max(len(summary_headers), 1)
+        summary_table = Table([summary_headers, summary_data], colWidths=[col_w] * len(summary_headers))
+        summary_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), primary_light),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("BOX", (0, 0), (-1, -1), 0.5, HexColor("#bfdbfe")),
+            ("INNERGRID", (0, 0), (-1, -1), 0.25, HexColor("#bfdbfe")),
+            ("TOPPADDING", (0, 0), (-1, -1), 6),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ("LEFTPADDING", (0, 0), (-1, -1), 8),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ]))
+        elements.append(summary_table)
+        elements.append(Spacer(1, 16))
+
+    return elements
+
+
+def _build_pdf_data_table(rows: list, columns: list, header_bg, alt_row, white, cell_style, header_cell_style, avail_width) -> list:
+    """Build PDF data table elements."""
+    from reportlab.lib.colors import HexColor
+    from reportlab.platypus import Table, TableStyle, Paragraph
+
+    table_header = [Paragraph(f"<b>{c}</b>", header_cell_style) for c in columns]
+    table_data = [table_header]
+
+    for row in rows[:200]:
+        vals = list(row.values())
+        table_row = [Paragraph(str(v) if v is not None else "-", cell_style) for v in vals]
+        table_data.append(table_row)
+
+    col_w = avail_width / max(len(columns), 1)
+    t = Table(table_data, colWidths=[col_w] * len(columns), repeatRows=1)
+    style_commands = [
+        ("BACKGROUND", (0, 0), (-1, 0), header_bg),
+        ("TEXTCOLOR", (0, 0), (-1, 0), white),
+        ("ALIGN", (0, 0), (-1, 0), "CENTER"),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("GRID", (0, 0), (-1, -1), 0.25, HexColor("#e2e8f0")),
+    ]
+    for i in range(1, len(table_data)):
+        if i % 2 == 0:
+            style_commands.append(("BACKGROUND", (0, i), (-1, i), alt_row))
+    t.setStyle(TableStyle(style_commands))
+    return [t]
 
 
 @router.post("/generate/pdf", responses=responses(401))
 def generate_report_pdf(config: ReportConfig, db: DBSession, user: PilotUser):
     import matplotlib
     matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
     from reportlab.lib.pagesizes import letter
     from reportlab.lib.colors import HexColor
     from reportlab.lib.units import inch
     from reportlab.lib import colors
     from reportlab.platypus import (
-        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage, PageBreak
+        SimpleDocTemplate, Paragraph, Spacer, Image as RLImage,
     )
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
-    if config.report_type == "flight_summary":
-        data = _flight_summary(config, db)
-    elif config.report_type == "pilot_hours":
-        data = _pilot_hours(config, db)
-    elif config.report_type == "equipment_utilization":
-        data = _equipment_utilization(config, db)
-    elif config.report_type == "pilot_certifications":
-        data = _pilot_certifications(config, db)
-    elif config.report_type == "battery_status":
-        data = _battery_status(config, db)
-    elif config.report_type == "maintenance_history":
-        data = _maintenance_history(config, db)
-    elif config.report_type == "pilot_activity_summary":
-        data = _pilot_activity_summary(config, db)
-    elif config.report_type == "annual_unit_report":
-        data = _annual_unit_report(config, db)
-    else:
+    data = _dispatch_report(config, db)
+    if "error" in data:
         data = {"title": "Unknown Report", "summary": {}, "rows": [], "columns": []}
 
     org_name_setting = db.query(Setting).filter(Setting.key == "org_name").first()
     logo_setting = db.query(Setting).filter(Setting.key == "org_logo").first()
-    org_name = org_name_setting.value if org_name_setting else "Drone Unit Manager"
+    org_name = org_name_setting.value if org_name_setting else APP_TITLE
 
-    logo_path = None
-    if logo_setting and logo_setting.value:
-        # First try exact extension matches
-        for ext in ["png", "jpg", "jpeg", "gif", "webp"]:
-            candidate = os.path.join(str(settings.UPLOAD_DIR), "org", f"logo.{ext}")
-            if os.path.exists(candidate):
-                logo_path = candidate
-                break
-        # If not found, scan the org directory for any file starting with "logo"
-        if not logo_path:
-            logo_dir = os.path.join(str(settings.UPLOAD_DIR), "org")
-            if os.path.isdir(logo_dir):
-                for f in os.listdir(logo_dir):
-                    if f.lower().startswith("logo"):
-                        logo_path = os.path.join(logo_dir, f)
-                        break
+    logo_path = _find_org_logo() if (logo_setting and logo_setting.value) else None
 
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -129,6 +184,7 @@ def generate_report_pdf(config: ReportConfig, db: DBSession, user: PilotUser):
     header_bg = HexColor("#1e293b")
     alt_row = HexColor("#f8fafc")
     white = colors.white
+    avail_width = letter[0] - 1.2 * inch
 
     title_style = ParagraphStyle("ReportTitle", parent=styles["Title"], fontSize=20, textColor=primary, spaceAfter=4)
     subtitle_style = ParagraphStyle("ReportSubtitle", parent=styles["Normal"], fontSize=10, textColor=HexColor("#64748b"), spaceAfter=12)
@@ -136,52 +192,24 @@ def generate_report_pdf(config: ReportConfig, db: DBSession, user: PilotUser):
     cell_style = ParagraphStyle("CellStyle", parent=styles["Normal"], fontSize=8, leading=10)
     header_cell_style = ParagraphStyle("HeaderCell", parent=styles["Normal"], fontSize=8, leading=10, textColor=white)
 
-    header_items = []
     if logo_path:
         try:
             logo_img = RLImage(logo_path, width=0.6 * inch, height=0.6 * inch)
             logo_img.hAlign = "LEFT"
-            header_items.append(logo_img)
+            elements.append(logo_img)
         except Exception:
             pass
 
     elements.append(Paragraph(org_name, title_style))
     elements.append(Paragraph(data.get("title", "Report"), ParagraphStyle("RPTitle", parent=styles["Heading1"], fontSize=16, textColor=HexColor("#334155"), spaceAfter=4)))
 
-    date_range = ""
-    if data.get("summary", {}).get("date_range"):
-        date_range = data["summary"]["date_range"]
-    else:
-        date_range = f"{config.date_from or 'All'} to {config.date_to or 'Present'}"
+    date_range = data.get("summary", {}).get("date_range") or f"{config.date_from or 'All'} to {config.date_to or 'Present'}"
     elements.append(Paragraph(f"Date Range: {date_range}  |  Generated: {date.today()}", subtitle_style))
     elements.append(Spacer(1, 8))
 
     summary = data.get("summary", {})
     if summary:
-        summary_data = []
-        summary_headers = []
-        for key, value in summary.items():
-            label = key.replace("_", " ").title()
-            summary_headers.append(Paragraph(f"<b>{label}</b>", ParagraphStyle("SH", parent=styles["Normal"], fontSize=8, textColor=HexColor("#64748b"))))
-            summary_data.append(Paragraph(f"<b>{value}</b>", ParagraphStyle("SV", parent=styles["Normal"], fontSize=12, textColor=HexColor("#1e293b"))))
-
-        if summary_headers:
-            avail_width = letter[0] - 1.2 * inch
-            col_w = avail_width / max(len(summary_headers), 1)
-            summary_table = Table([summary_headers, summary_data], colWidths=[col_w] * len(summary_headers))
-            summary_table.setStyle(TableStyle([
-                ("BACKGROUND", (0, 0), (-1, -1), primary_light),
-                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("BOX", (0, 0), (-1, -1), 0.5, HexColor("#bfdbfe")),
-                ("INNERGRID", (0, 0), (-1, -1), 0.25, HexColor("#bfdbfe")),
-                ("TOPPADDING", (0, 0), (-1, -1), 6),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-                ("LEFTPADDING", (0, 0), (-1, -1), 8),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-            ]))
-            elements.append(summary_table)
-            elements.append(Spacer(1, 16))
+        elements.extend(_build_pdf_summary_table(summary, styles, primary_light, avail_width))
 
     chart_buf = _generate_chart(config.report_type, data)
     if chart_buf:
@@ -194,40 +222,7 @@ def generate_report_pdf(config: ReportConfig, db: DBSession, user: PilotUser):
     columns = data.get("columns", [])
     if rows and columns:
         elements.append(Paragraph("Data", heading_style))
-
-        if rows:
-            row_keys = list(rows[0].keys())
-        else:
-            row_keys = []
-
-        table_header = [Paragraph(f"<b>{c}</b>", header_cell_style) for c in columns]
-        table_data = [table_header]
-
-        for row in rows[:200]:  # Limit to 200 rows
-            vals = list(row.values())
-            table_row = [Paragraph(str(v) if v is not None else "-", cell_style) for v in vals]
-            table_data.append(table_row)
-
-        avail_width = letter[0] - 1.2 * inch
-        col_w = avail_width / max(len(columns), 1)
-        t = Table(table_data, colWidths=[col_w] * len(columns), repeatRows=1)
-        style_commands = [
-            ("BACKGROUND", (0, 0), (-1, 0), header_bg),
-            ("TEXTCOLOR", (0, 0), (-1, 0), white),
-            ("ALIGN", (0, 0), (-1, 0), "CENTER"),
-            ("FONTSIZE", (0, 0), (-1, -1), 8),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("TOPPADDING", (0, 0), (-1, -1), 4),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-            ("LEFTPADDING", (0, 0), (-1, -1), 4),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-            ("GRID", (0, 0), (-1, -1), 0.25, HexColor("#e2e8f0")),
-        ]
-        for i in range(1, len(table_data)):
-            if i % 2 == 0:
-                style_commands.append(("BACKGROUND", (0, i), (-1, i), alt_row))
-        t.setStyle(TableStyle(style_commands))
-        elements.append(t)
+        elements.extend(_build_pdf_data_table(rows, columns, header_bg, alt_row, white, cell_style, header_cell_style, avail_width))
 
     doc.build(elements)
     buffer.seek(0)

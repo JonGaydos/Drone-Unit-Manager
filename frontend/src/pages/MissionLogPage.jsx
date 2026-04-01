@@ -49,8 +49,8 @@ function MissionModal({ pilots, vehicles, purposes, onSave, onClose, initial }) 
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" role="presentation" onClick={onClose}>
-      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-2xl shadow-xl max-h-[90vh] overflow-y-auto" role="dialog" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-2xl shadow-xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold text-foreground mb-4">{initial ? 'Edit Mission' : 'Add Mission'}</h2>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
@@ -155,7 +155,7 @@ function MissionModal({ pilots, vehicles, purposes, onSave, onClose, initial }) 
           {/* Pilots Section */}
           <div className="border border-border rounded-lg p-3">
             <div className="flex items-center justify-between mb-2">
-              <label className="text-sm font-medium text-foreground">Pilots Involved</label>
+              <span className="text-sm font-medium text-foreground">Pilots Involved</span>
               <button type="button" onClick={addPilotEntry} className="text-xs text-primary hover:underline">+ Add Pilot</button>
             </div>
             {pilotEntries.length === 0 && <p className="text-xs text-muted-foreground">No pilots added yet.</p>}
@@ -226,7 +226,7 @@ export default function MissionLogPage() {
     ]).then(([m, p, v, mp]) => {
       setMissions(m); setPilots(p); setVehicles(v)
       if (mp.value) {
-        try { setMissionPurposes(JSON.parse(mp.value)) } catch {}
+        try { setMissionPurposes(JSON.parse(mp.value)) } catch { /* invalid JSON */ }
       }
     }).catch(err => setError(err.message)).finally(() => setLoading(false))
   }

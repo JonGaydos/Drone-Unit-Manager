@@ -2,7 +2,7 @@
  * Toast notification system with auto-dismiss and type-based styling.
  * Renders floating notifications in the bottom-right corner of the viewport.
  */
-import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react'
+import React, { createContext, useContext, useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { X, CheckCircle, AlertTriangle, Info, XCircle } from 'lucide-react'
 
 const ToastContext = createContext()
@@ -56,12 +56,12 @@ export function ToastProvider({ children }) {
     setToasts(prev => prev.filter(t => t.id !== id))
   }, [])
 
-  const toast = {
+  const toast = useMemo(() => ({
     success: (msg) => addToast(msg, 'success'),
     error: (msg) => addToast(msg, 'error'),
     warning: (msg) => addToast(msg, 'warning'),
     info: (msg) => addToast(msg, 'info'),
-  }
+  }), [addToast])
 
   const icons = { success: CheckCircle, error: XCircle, warning: AlertTriangle, info: Info }
   const colors = {

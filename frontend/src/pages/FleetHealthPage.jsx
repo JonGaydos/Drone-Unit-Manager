@@ -43,7 +43,7 @@ export default function FleetHealthPage() {
     }
   }
 
-  const SortIcon = ({ col }) => {
+  const renderSortIcon = (col) => {
     if (sortKey !== col) return null
     return sortDir === 'asc' ? <ChevronUp className="w-3.5 h-3.5 inline ml-0.5" /> : <ChevronDown className="w-3.5 h-3.5 inline ml-0.5" />
   }
@@ -112,20 +112,20 @@ export default function FleetHealthPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/30">
-                <th className="text-left px-4 py-2 text-foreground font-medium cursor-pointer select-none" onClick={() => handleSort('name')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => handleSort('name'))() } }} tabIndex={0} role="columnheader">
-                  Vehicle <SortIcon col="name" />
+                <th className="text-left px-4 py-2 text-foreground font-medium cursor-pointer select-none" onClick={() => handleSort('name')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => handleSort('name'))() } }} tabIndex={0}>
+                  Vehicle {renderSortIcon('name')}
                 </th>
-                <th className="text-left px-4 py-2 text-foreground font-medium cursor-pointer select-none" onClick={() => handleSort('flights')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => handleSort('flights'))() } }} tabIndex={0} role="columnheader">
-                  Flights <SortIcon col="flights" />
+                <th className="text-left px-4 py-2 text-foreground font-medium cursor-pointer select-none" onClick={() => handleSort('flights')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => handleSort('flights'))() } }} tabIndex={0}>
+                  Flights {renderSortIcon('flights')}
                 </th>
-                <th className="text-left px-4 py-2 text-foreground font-medium cursor-pointer select-none" onClick={() => handleSort('hours')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => handleSort('hours'))() } }} tabIndex={0} role="columnheader">
-                  Hours <SortIcon col="hours" />
+                <th className="text-left px-4 py-2 text-foreground font-medium cursor-pointer select-none" onClick={() => handleSort('hours')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => handleSort('hours'))() } }} tabIndex={0}>
+                  Hours {renderSortIcon('hours')}
                 </th>
-                <th className="text-left px-4 py-2 text-foreground font-medium cursor-pointer select-none hidden md:table-cell" onClick={() => handleSort('last_flight')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => handleSort('last_flight'))() } }} tabIndex={0} role="columnheader">
-                  Last Flight <SortIcon col="last_flight" />
+                <th className="text-left px-4 py-2 text-foreground font-medium cursor-pointer select-none hidden md:table-cell" onClick={() => handleSort('last_flight')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => handleSort('last_flight'))() } }} tabIndex={0}>
+                  Last Flight {renderSortIcon('last_flight')}
                 </th>
-                <th className="text-left px-4 py-2 text-foreground font-medium cursor-pointer select-none" onClick={() => handleSort('overdue_maintenance')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => handleSort('overdue_maintenance'))() } }} tabIndex={0} role="columnheader">
-                  Overdue <SortIcon col="overdue_maintenance" />
+                <th className="text-left px-4 py-2 text-foreground font-medium cursor-pointer select-none" onClick={() => handleSort('overdue_maintenance')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => handleSort('overdue_maintenance'))() } }} tabIndex={0}>
+                  Overdue {renderSortIcon('overdue_maintenance')}
                 </th>
               </tr>
             </thead>

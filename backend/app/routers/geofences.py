@@ -1,9 +1,10 @@
 import math
-from typing import Optional
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
+from app.constants import GEOFENCE_NOT_FOUND
 from app.deps import CurrentUser, DBSession, SupervisorUser
 from app.models.geofence import Geofence
 from app.services.audit import log_action
@@ -93,9 +94,9 @@ def check_geofences(
 
     user: CurrentUser,
 
-    lat: float = Query(...),
+    lat: Annotated[float, Query()],
 
-    lon: float = Query(...),
+    lon: Annotated[float, Query()],
 ):
     """Check if a lat/lon point is inside any active geofence."""
     fences = db.query(Geofence).filter(Geofence.is_active.is_(True)).all()
@@ -135,7 +136,7 @@ def list_geofences(
 def get_geofence(geofence_id: int, db: DBSession, user: CurrentUser):
     g = db.query(Geofence).filter(Geofence.id == geofence_id).first()
     if not g:
-        raise HTTPException(404, "Geofence not found")
+        raise HTTPException(404, GEOFENCE_NOT_FOUND)
     return _serialize(g)
 
 
@@ -166,7 +167,7 @@ def create_geofence(data: GeofenceCreate, db: DBSession, user: SupervisorUser):
 def update_geofence(geofence_id: int, data: GeofenceUpdate, db: DBSession, user: SupervisorUser):
     g = db.query(Geofence).filter(Geofence.id == geofence_id).first()
     if not g:
-        raise HTTPException(404, "Geofence not found")
+        raise HTTPException(404, GEOFENCE_NOT_FOUND)
     update_data = data.model_dump(exclude_unset=True)
     for key, val in update_data.items():
         setattr(g, key, val)
@@ -180,7 +181,7 @@ def update_geofence(geofence_id: int, data: GeofenceUpdate, db: DBSession, user:
 def delete_geofence(geofence_id: int, db: DBSession, user: SupervisorUser):
     g = db.query(Geofence).filter(Geofence.id == geofence_id).first()
     if not g:
-        raise HTTPException(404, "Geofence not found")
+        raise HTTPException(404, GEOFENCE_NOT_FOUND)
     log_action(db, user.id, user.display_name, "delete", "geofence", g.id, g.name)
     db.delete(g)
     db.commit()

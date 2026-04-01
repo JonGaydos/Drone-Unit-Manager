@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import {
   FolderOpen, FolderPlus, FileText, ChevronRight, ChevronDown,
-  Upload, Trash2, Edit2, X, File, Search, Home,
+  Trash2, Edit2, X, File, Search, Home,
   FileImage, FileSpreadsheet, Save, FolderInput
 } from 'lucide-react'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
@@ -238,9 +238,14 @@ export default function DocumentStoragePage() {
             isSelected ? 'bg-primary/15 text-primary' : 'text-foreground hover:bg-muted/50'
           }`}
           style={{ paddingLeft: `${depth * 16 + 8}px` }}
+         
+          tabIndex={0}
           onClick={() => {
             setSelectedFolder(folder.id)
             if (hasChildren) toggleExpand(folder.id)
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedFolder(folder.id); if (hasChildren) { toggleExpand(folder.id) } }
           }}
         >
           {hasChildren ? (
@@ -306,7 +311,10 @@ export default function DocumentStoragePage() {
             className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer mt-2 border-t border-border pt-3 transition-colors ${
               selectedFolder === 'unfiled' ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:bg-muted/50'
             }`}
+           
+            tabIndex={0}
             onClick={() => setSelectedFolder('unfiled')}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedFolder('unfiled') } }}
           >
             <span className="w-4.5 shrink-0" />
             <FileText className="w-4 h-4 shrink-0" />
@@ -322,7 +330,7 @@ export default function DocumentStoragePage() {
               autoFocus
               value={newFolderName}
               onChange={(e) => setNewFolderName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleCreateFolder(); if (e.key === 'Escape') setShowCreateFolder(false) }}
+              onKeyDown={(e) => { if (e.key === 'Enter') { handleCreateFolder() } if (e.key === 'Escape') { setShowCreateFolder(false) } }}
               placeholder="Folder name"
               className="w-full px-2 py-1.5 bg-secondary border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             />
@@ -351,7 +359,7 @@ export default function DocumentStoragePage() {
               autoFocus
               value={editName}
               onChange={(e) => setEditName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleRenameFolder(); if (e.key === 'Escape') setEditingFolder(null) }}
+              onKeyDown={(e) => { if (e.key === 'Enter') { handleRenameFolder() } if (e.key === 'Escape') { setEditingFolder(null) } }}
               className="w-full px-2 py-1.5 bg-secondary border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             />
             <div className="flex gap-1">
@@ -413,7 +421,7 @@ export default function DocumentStoragePage() {
 
         {/* Document list */}
         <div className="flex-1 overflow-y-auto">
-          {!selectedFolder ? (
+          {!selectedFolder && (
             <div className="flex flex-col items-center justify-center h-full text-center p-8">
               <FolderOpen className="w-16 h-16 text-muted-foreground/30 mb-4" />
               <h3 className="text-lg font-semibold text-foreground mb-2">Document Storage</h3>
@@ -422,11 +430,13 @@ export default function DocumentStoragePage() {
                 certifications, insurance documents, maintenance records, and more.
               </p>
             </div>
-          ) : docsLoading ? (
+          )}
+          {selectedFolder && docsLoading && (
             <div className="flex items-center justify-center h-32">
               <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
             </div>
-          ) : filteredDocs.length === 0 ? (
+          )}
+          {selectedFolder && !docsLoading && filteredDocs.length === 0 && (
             <div className="flex flex-col items-center justify-center h-full text-center p-8">
               <FileText className="w-12 h-12 text-muted-foreground/30 mb-3" />
               <p className="text-sm text-muted-foreground">
@@ -436,7 +446,8 @@ export default function DocumentStoragePage() {
                 Upload documents from the Documents page and assign them to folders.
               </p>
             </div>
-          ) : (
+          )}
+          {selectedFolder && !docsLoading && filteredDocs.length > 0 && (
             <table className="w-full">
               <thead className="sticky top-0 bg-card border-b border-border">
                 <tr className="text-xs text-muted-foreground">
@@ -460,7 +471,7 @@ export default function DocumentStoragePage() {
                               type="text"
                               value={editDocTitle}
                               onChange={(e) => setEditDocTitle(e.target.value)}
-                              onKeyDown={(e) => { if (e.key === 'Enter') handleRenameDocument(doc.id); if (e.key === 'Escape') setEditingDoc(null) }}
+                              onKeyDown={(e) => { if (e.key === 'Enter') { handleRenameDocument(doc.id) } if (e.key === 'Escape') { setEditingDoc(null) } }}
                               className="flex-1 px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                             />
                             <button onClick={() => handleRenameDocument(doc.id)} className="p-1 text-primary hover:opacity-80"><Save className="w-3.5 h-3.5" /></button>

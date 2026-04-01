@@ -61,8 +61,8 @@ function PlanModal({ pilots, vehicles, currentUser, onSave, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" role="presentation" onClick={onClose}>
-      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-2xl shadow-xl max-h-[90vh] overflow-y-auto" role="dialog" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-2xl shadow-xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold text-foreground mb-4">Submit Flight Plan</h2>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
@@ -167,8 +167,8 @@ function DenyModal({ plan, onDeny, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" role="presentation" onClick={onClose}>
-      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl" role="dialog" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold text-foreground mb-4">Deny Flight Plan</h2>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
@@ -461,7 +461,7 @@ export default function FlightPlansPage() {
                               <p className="text-muted-foreground mt-1"><span className="text-foreground font-medium">Est. Duration:</span> {plan.estimated_duration_min} min</p>
                             )}
                             <p className="text-muted-foreground mt-1">
-                              <span className="text-foreground font-medium">Checklist:</span>{' '}
+                              <span className="text-foreground font-medium">Checklist:</span><span> </span>
                               {plan.checklist_completed ? <span className="text-emerald-400">Completed</span> : <span className="text-amber-400">Not completed</span>}
                             </p>
                             {plan.location && (

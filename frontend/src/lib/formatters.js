@@ -85,5 +85,5 @@ export function equipmentDisplayName(item) {
  */
 export function formatStatusText(status) {
   if (!status) return ''
-  return status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+  return status.replaceAll('_', ' ').replaceAll(/\b\w/g, l => l.toUpperCase())
 }

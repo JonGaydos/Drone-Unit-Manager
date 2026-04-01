@@ -381,8 +381,8 @@ export default function BatteryDetailPage() {
       </div>
 
       {showReadingForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" role="presentation" onClick={() => setShowReadingForm(false)}>
-          <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl" role="dialog" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowReadingForm(false)}>
+          <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
             <h2 className="text-lg font-semibold text-foreground mb-4">Record Battery Health Reading</h2>
             <div className="space-y-3">
               <div>

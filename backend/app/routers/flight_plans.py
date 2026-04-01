@@ -1,5 +1,5 @@
-from datetime import date, datetime
-from typing import Optional
+from datetime import date, datetime, timezone
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
@@ -150,9 +150,9 @@ def list_flight_plans(
 
     submitted_by_id: int | None = None,
 
-    page: int = Query(default=1, ge=1),
+    page: Annotated[int, Query(ge=1)] = 1,
 
-    per_page: int = Query(default=50, le=200),
+    per_page: Annotated[int, Query(le=200)] = 50,
 ):
     q = db.query(FlightPlan)
     if status:
@@ -242,7 +242,7 @@ def approve_flight_plan(plan_id: int, data: ApproveRequest, db: DBSession, user:
         raise HTTPException(status_code=400, detail="Only pending plans can be approved")
     plan.status = "approved"
     plan.reviewed_by_id = user.id
-    plan.review_date = datetime.utcnow()
+    plan.review_date = datetime.now(timezone.utc)
     plan.review_notes = data.review_notes
     log_action(db, user.id, user.display_name, "approve", "flight_plan", plan.id, plan.title,
                details=f"Approved flight plan: {plan.title}")
@@ -260,7 +260,7 @@ def deny_flight_plan(plan_id: int, data: DenyRequest, db: DBSession, user: Super
         raise HTTPException(status_code=400, detail="Only pending plans can be denied")
     plan.status = "denied"
     plan.reviewed_by_id = user.id
-    plan.review_date = datetime.utcnow()
+    plan.review_date = datetime.now(timezone.utc)
     plan.denial_reason = data.denial_reason
     plan.review_notes = data.review_notes
     log_action(db, user.id, user.display_name, "deny", "flight_plan", plan.id, plan.title,

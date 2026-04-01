@@ -190,7 +190,7 @@ export default function ReportsPage() {
 
               {/* Pilot Select */}
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Pilots</label>
+                <p className="block text-sm font-medium text-foreground mb-1">Pilots</p>
                 <div className="bg-secondary border border-border rounded-lg p-2 max-h-36 overflow-y-auto space-y-1">
                   {pilots.length === 0 && <p className="text-xs text-muted-foreground px-1">No pilots available</p>}
                   {sortPilotsActiveFirst(pilots).map(p => (
@@ -212,7 +212,7 @@ export default function ReportsPage() {
 
               {/* Vehicle Select */}
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Vehicles</label>
+                <p className="block text-sm font-medium text-foreground mb-1">Vehicles</p>
                 <div className="bg-secondary border border-border rounded-lg p-2 max-h-36 overflow-y-auto space-y-1">
                   {vehicles.length === 0 && <p className="text-xs text-muted-foreground px-1">No vehicles available</p>}
                   {sortVehicles(vehicles).map(v => (
@@ -234,7 +234,7 @@ export default function ReportsPage() {
 
               {/* Logo Upload */}
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Logo</label>
+                <p className="block text-sm font-medium text-foreground mb-1">Logo</p>
                 {orgLogoUrl && !logoFile && (
                   <div className="flex items-center gap-2 mb-2">
                     <img src={orgLogoUrl} alt="Org logo" className="w-8 h-8 object-contain rounded border border-border" />
@@ -372,8 +372,8 @@ export default function ReportsPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {reportResult.rows.map((row, rowIdx) => (
-                          <tr key={`row-${rowIdx}`} className="border-b border-border/50 hover:bg-accent/30">
+                        {reportResult.rows.map((row) => (
+                          <tr key={Object.values(row).join('|')} className="border-b border-border/50 hover:bg-accent/30">
                             {Object.entries(row).map(([colKey, val]) => (
                               <td key={colKey} className="px-4 py-2 text-foreground text-xs">{val != null ? String(val) : '—'}</td>
                             ))}

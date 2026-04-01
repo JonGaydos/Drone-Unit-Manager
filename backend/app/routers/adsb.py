@@ -7,7 +7,7 @@ to respect rate limits and avoid CORS issues.
 import logging
 import time
 import threading
-from typing import Optional
+from typing import Annotated, Optional
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query
@@ -28,11 +28,11 @@ def get_nearby_aircraft(
 
     _user: CurrentUser,
 
-    lat: float = Query(..., ge=-90, le=90, description="Latitude"),
+    lat: Annotated[float, Query(ge=-90, le=90, description="Latitude")],
 
-    lon: float = Query(..., ge=-180, le=180, description="Longitude"),
+    lon: Annotated[float, Query(ge=-180, le=180, description="Longitude")],
 
-    radius_nm: int = Query(30, ge=5, le=250, description="Search radius in nautical miles"),
+    radius_nm: Annotated[int, Query(ge=5, le=250, description="Search radius in nautical miles")] = 30,
 ):
     """Fetch nearby aircraft positions from the airplanes.live ADS-B API.
 

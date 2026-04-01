@@ -39,7 +39,7 @@ function TemplateModal({ template, vehicles, onSave, onClose }) {
   const moveItem = (idx, dir) => {
     const items = [...form.items]
     const newIdx = idx + dir
-    if (newIdx < 0 || newIdx >= items.length) return
+    if (newIdx < 0 || newIdx >= items.length) { return }
     ;[items[idx], items[newIdx]] = [items[newIdx], items[idx]]
     setForm({ ...form, items })
   }
@@ -66,8 +66,8 @@ function TemplateModal({ template, vehicles, onSave, onClose }) {
   const models = [...new Set((vehicles || []).map(v => `${v.manufacturer} ${v.model}`).filter(Boolean))]
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" role="presentation" onClick={onClose}>
-      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-2xl shadow-xl max-h-[90vh] overflow-y-auto" role="dialog" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-2xl shadow-xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-foreground">
             {template ? 'Edit Template' : 'Create Checklist Template'}
@@ -112,9 +112,9 @@ function TemplateModal({ template, vehicles, onSave, onClose }) {
 
           {/* Checklist Items Builder */}
           <div>
-            <label className="block text-sm font-medium text-foreground mb-2">
+            <p className="block text-sm font-medium text-foreground mb-2">
               Checklist Items *
-            </label>
+            </p>
             <div className="space-y-2">
               {form.items.map((item, idx) => (
                 <div key={`checklist-item-${idx}-${item}`} className="flex items-center gap-2 bg-secondary/50 border border-border rounded-lg p-2">
@@ -237,8 +237,8 @@ function CompleteModal({ templates, pilots, vehicles, onSave, onClose }) {
   const allRequiredChecked = responses.filter(r => r.required).every(r => r.checked)
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" role="presentation" onClick={onClose}>
-      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-2xl shadow-xl max-h-[90vh] overflow-y-auto" role="dialog" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-2xl shadow-xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-foreground">Complete Pre-Flight Checklist</h2>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
@@ -373,8 +373,8 @@ function ViewCompletionModal({ completion, onClose }) {
   if (!completion) return null
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" role="presentation" onClick={onClose}>
-      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto" role="dialog" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-foreground">Checklist Details</h2>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
@@ -578,11 +578,12 @@ export default function ChecklistPage() {
         </button>
       </div>
 
-      {loading ? (
+      {loading && (
         <div className="flex items-center justify-center h-40">
           <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
-      ) : tab === 'templates' ? (
+      )}
+      {!loading && tab === 'templates' && (
         /* ── Templates Tab ──────────────────────────── */
         <div className="space-y-4">
           {isSupervisor && (
@@ -646,7 +647,8 @@ export default function ChecklistPage() {
             </div>
           )}
         </div>
-      ) : (
+      )}
+      {!loading && tab !== 'templates' && (
         /* ── Completions Tab ────────────────────────── */
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           {completions.length === 0 ? (

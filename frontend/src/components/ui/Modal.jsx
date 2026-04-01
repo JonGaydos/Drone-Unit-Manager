@@ -39,16 +39,12 @@ function Modal({ open, onClose, title, children, className }) {
       if (focusable.length === 0) return
       const first = focusable[0]
       const last = focusable[focusable.length - 1]
-      if (e.shiftKey) {
-        if (document.activeElement === first) {
-          e.preventDefault()
-          last.focus()
-        }
-      } else {
-        if (document.activeElement === last) {
-          e.preventDefault()
-          first.focus()
-        }
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault()
+        first.focus()
       }
     }
 
@@ -84,9 +80,6 @@ function Modal({ open, onClose, title, children, className }) {
       ref={overlayRef}
       onClick={handleOverlayClick}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md animate-[fadeIn_150ms_ease]"
-      role="dialog"
-      aria-modal="true"
-      aria-label={title || 'Dialog'}
     >
       <div
         ref={modalRef}
