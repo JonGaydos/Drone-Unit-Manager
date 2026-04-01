@@ -234,11 +234,11 @@ export default function DocumentStoragePage() {
     return (
       <div key={folder.id}>
         <div
+          role="button"
           className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer group transition-colors ${
             isSelected ? 'bg-primary/15 text-primary' : 'text-foreground hover:bg-muted/50'
           }`}
           style={{ paddingLeft: `${depth * 16 + 8}px` }}
-         
           tabIndex={0}
           onClick={() => {
             setSelectedFolder(folder.id)
@@ -308,10 +308,10 @@ export default function DocumentStoragePage() {
 
           {/* Unfiled section */}
           <div
+            role="button"
             className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer mt-2 border-t border-border pt-3 transition-colors ${
               selectedFolder === 'unfiled' ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:bg-muted/50'
             }`}
-           
             tabIndex={0}
             onClick={() => setSelectedFolder('unfiled')}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedFolder('unfiled') } }}
@@ -554,7 +554,7 @@ export default function DocumentStoragePage() {
         {/* Footer */}
         {selectedFolder && selectedFolderObj && (
           <div className="flex items-center justify-between px-4 py-2 border-t border-border text-xs text-muted-foreground">
-            <span>{filteredDocs.length} document{filteredDocs.length !== 1 ? 's' : ''}</span>
+            <span>{filteredDocs.length} document{filteredDocs.length === 1 ? '' : 's'}</span>
             {selectedFolderObj.description && <span>{selectedFolderObj.description}</span>}
           </div>
         )}

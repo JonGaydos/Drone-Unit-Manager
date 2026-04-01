@@ -16,6 +16,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.constants import USER_NOT_FOUND
 from app.database import get_db
 from app.models.user import User
 from app.schemas.user import LoginRequest, LoginResponse, UserOut, UserCreate, UserUpdate, ChangePasswordRequest, AdminResetPasswordRequest, SetupRequest
@@ -92,7 +93,7 @@ def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     user = db.query(User).filter(User.id == user_id, User.is_active.is_(True)).first()
     if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=USER_NOT_FOUND)
     return user
 
 
@@ -345,7 +346,7 @@ def update_user(user_id: int, data: UserUpdate, admin: Annotated[User, Depends(r
     """Update a user's profile, role, or active status. Admin only."""
     target = db.query(User).filter(User.id == user_id).first()
     if not target:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail=USER_NOT_FOUND)
     if data.display_name is not None:
         target.display_name = data.display_name
     if data.role is not None:
@@ -372,7 +373,7 @@ def admin_reset_password(user_id: int, req: AdminResetPasswordRequest, admin: An
     """Reset another user's password without requiring the old one. Admin only."""
     target = db.query(User).filter(User.id == user_id).first()
     if not target:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail=USER_NOT_FOUND)
     _validate_password(req.new_password)
     target.password_hash = hash_password(req.new_password)
     db.commit()
@@ -385,7 +386,7 @@ def delete_user(user_id: int, admin: Annotated[User, Depends(require_admin)], db
     from app.services.audit import log_action
     target = db.query(User).filter(User.id == user_id).first()
     if not target:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail=USER_NOT_FOUND)
     if target.id == admin.id:
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
     target_name = target.display_name

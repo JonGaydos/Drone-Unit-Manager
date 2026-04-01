@@ -820,8 +820,9 @@ export default function SettingsPage() {
 
       {/* Edit User Modal */}
       {editUser && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setEditUser(null)}>
-          <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <button className="absolute inset-0 bg-transparent cursor-default" onClick={() => setEditUser(null)} aria-label="Close dialog" />
+          <div className="relative bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl">
             <h2 className="text-lg font-semibold text-foreground mb-4">Edit User: {editUser.username}</h2>
             <div className="space-y-3">
               <div>

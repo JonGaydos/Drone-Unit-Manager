@@ -71,16 +71,12 @@ function Modal({ open, onClose, title, children, className }) {
 
   if (!open) return null
 
-  const handleOverlayClick = (e) => {
-    if (e.target === overlayRef.current) stableOnClose()
-  }
-
   return (
     <div
       ref={overlayRef}
-      onClick={handleOverlayClick}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md animate-[fadeIn_150ms_ease]"
     >
+      <button className="absolute inset-0 bg-transparent cursor-default" onClick={stableOnClose} aria-label="Close dialog" />
       <div
         ref={modalRef}
         className={cn(

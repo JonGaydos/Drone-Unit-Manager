@@ -161,42 +161,37 @@ def build_digest(db: Session, user: User) -> dict | None:
 
     is_supervisor = user.role in ("admin", "supervisor")
 
-    if is_supervisor and _is_category_enabled(enabled_categories, "pending_approvals"):
-        items = _build_pending_approvals(db)
-        if items:
-            sections["pending_approvals"] = items
+    # Define all possible digest sections with their builders and access requirements
+    section_defs = [
+        ("pending_approvals", is_supervisor, lambda: _build_pending_approvals(db)),
+        ("needs_review", is_supervisor, lambda: _build_needs_review(db)),
+        ("expiring_certs", True, lambda: _build_expiring_certs(db, today, thirty_days)),
+        ("expiring_registrations", True, lambda: _build_expiring_registrations(db, today, thirty_days)),
+        ("overdue_maintenance", True, lambda: _build_overdue_maintenance(db, today)),
+        ("overdue_checkouts", True, lambda: _build_overdue_checkouts(db)),
+        ("recent_incidents", True, lambda: _build_recent_incidents(db, pref)),
+    ]
 
-    if is_supervisor and _is_category_enabled(enabled_categories, "needs_review"):
-        items = _build_needs_review(db)
-        if items:
-            sections["needs_review"] = items
-
-    if _is_category_enabled(enabled_categories, "expiring_certs"):
-        items = _build_expiring_certs(db, today, thirty_days)
-        if items:
-            sections["expiring_certs"] = items
-
-    if _is_category_enabled(enabled_categories, "expiring_registrations"):
-        items = _build_expiring_registrations(db, today, thirty_days)
-        if items:
-            sections["expiring_registrations"] = items
-
-    if _is_category_enabled(enabled_categories, "overdue_maintenance"):
-        items = _build_overdue_maintenance(db, today)
-        if items:
-            sections["overdue_maintenance"] = items
-
-    if _is_category_enabled(enabled_categories, "overdue_checkouts"):
-        items = _build_overdue_checkouts(db)
-        if items:
-            sections["overdue_checkouts"] = items
-
-    if _is_category_enabled(enabled_categories, "recent_incidents"):
-        items = _build_recent_incidents(db, pref)
-        if items:
-            sections["recent_incidents"] = items
+    for key, has_access, builder in section_defs:
+        if has_access and _is_category_enabled(enabled_categories, key):
+            items = builder()
+            if items:
+                sections[key] = items
 
     return sections if sections else None
+
+
+def _render_section_items(cat_key: str, items: list, count: int) -> str:
+    """Render a single digest section's items as HTML."""
+    if cat_key == "needs_review":
+        return f'<p style="margin:4px 0;color:#666;">{count} flight(s) awaiting review</p>'
+    html = ""
+    for item in items:
+        detail_parts = [
+            f"{k.replace('_', ' ').title()}: {v}" for k, v in item.items() if k != "id"
+        ]
+        html += f'<p style="margin:4px 0;padding:4px 8px;background:#f5f5f5;border-radius:4px;font-size:13px;">{" | ".join(detail_parts)}</p>'
+    return html
 
 
 def render_digest_html(sections: dict, user: User, org_name: str) -> str:
@@ -225,23 +220,12 @@ def render_digest_html(sections: dict, user: User, org_name: str) -> str:
     for cat_key, items in sections.items():
         label = category_labels.get(cat_key, cat_key.replace("_", " ").title())
         count = items[0].get("count", len(items)) if items else 0
-
-        items_html = ""
-        if cat_key == "needs_review":
-            items_html = f'<p style="margin:4px 0;color:#666;">{count} flight(s) awaiting review</p>'
-        else:
-            for item in items:
-                detail_parts = []
-                for k, v in item.items():
-                    if k == "id":
-                        continue
-                    detail_parts.append(f"{k.replace('_', ' ').title()}: {v}")
-                items_html += f'<p style="margin:4px 0;padding:4px 8px;background:#f5f5f5;border-radius:4px;font-size:13px;">{" | ".join(detail_parts)}</p>'
-
+        items_html = _render_section_items(cat_key, items, count)
+        display_count = count if cat_key == "needs_review" else len(items)
         sections_html += f"""
         <div style="margin-bottom:20px;">
             <h3 style="margin:0 0 8px;font-size:15px;color:#333;border-bottom:1px solid #eee;padding-bottom:4px;">
-                {label} ({count if cat_key == 'needs_review' else len(items)})
+                {label} ({display_count})
             </h3>
             {items_html}
         </div>

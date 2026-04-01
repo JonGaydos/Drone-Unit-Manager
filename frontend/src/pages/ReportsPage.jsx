@@ -375,7 +375,7 @@ export default function ReportsPage() {
                         {reportResult.rows.map((row) => (
                           <tr key={Object.values(row).join('|')} className="border-b border-border/50 hover:bg-accent/30">
                             {Object.entries(row).map(([colKey, val]) => (
-                              <td key={colKey} className="px-4 py-2 text-foreground text-xs">{val != null ? String(val) : '—'}</td>
+                              <td key={colKey} className="px-4 py-2 text-foreground text-xs">{val == null ? '—' : String(val)}</td>
                             ))}
                           </tr>
                         ))}

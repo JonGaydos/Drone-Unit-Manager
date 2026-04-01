@@ -27,9 +27,14 @@ router = APIRouter(prefix="/api/export", tags=["export"])
 CSV_MEDIA_TYPE = "text/csv"
 
 # CSV column header constants (S1192 - duplicated strings)
-COL_CASE_NUMBER = COL_CASE_NUMBER
-COL_ENTITY_TYPE = COL_ENTITY_TYPE
-COL_ENTITY_ID = COL_ENTITY_ID
+COL_CASE_NUMBER = "Case Number"
+COL_ENTITY_TYPE = "Entity Type"
+COL_ENTITY_ID = "Entity ID"
+COL_DURATION_S = "Duration (s)"
+COL_TAKEOFF_LAT = "Takeoff Lat"
+COL_TAKEOFF_LON = "Takeoff Lon"
+COL_MAX_ALTITUDE_M = "Max Altitude (m)"
+COL_MAX_SPEED_MPS = "Max Speed (m/s)"
 
 
 @router.get("/flights/csv")
@@ -48,8 +53,8 @@ def export_flights_csv(
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow([
-        "Date", "Pilot", "Vehicle", "Purpose", "Duration (s)", "Takeoff Address",
-        "Takeoff Lat", "Takeoff Lon", "Max Altitude (m)", "Max Speed (m/s)",
+        "Date", "Pilot", "Vehicle", "Purpose", COL_DURATION_S, "Takeoff Address",
+        COL_TAKEOFF_LAT, COL_TAKEOFF_LON, COL_MAX_ALTITUDE_M, COL_MAX_SPEED_MPS,
         "Distance (m)", COL_CASE_NUMBER, "Review Status", "Notes",
     ])
     for f in flights:
@@ -470,12 +475,12 @@ async def import_flights_csv(
             flight = Flight(
                 date=row.get("Date") or None,
                 purpose=row.get("Purpose") or None,
-                duration_seconds=int(row["Duration (s)"]) if row.get("Duration (s)") else None,
+                duration_seconds=int(row[COL_DURATION_S]) if row.get(COL_DURATION_S) else None,
                 takeoff_address=row.get("Takeoff Address") or None,
-                takeoff_lat=float(row["Takeoff Lat"]) if row.get("Takeoff Lat") else None,
-                takeoff_lon=float(row["Takeoff Lon"]) if row.get("Takeoff Lon") else None,
-                max_altitude_m=float(row["Max Altitude (m)"]) if row.get("Max Altitude (m)") else None,
-                max_speed_mps=float(row["Max Speed (m/s)"]) if row.get("Max Speed (m/s)") else None,
+                takeoff_lat=float(row[COL_TAKEOFF_LAT]) if row.get(COL_TAKEOFF_LAT) else None,
+                takeoff_lon=float(row[COL_TAKEOFF_LON]) if row.get(COL_TAKEOFF_LON) else None,
+                max_altitude_m=float(row[COL_MAX_ALTITUDE_M]) if row.get(COL_MAX_ALTITUDE_M) else None,
+                max_speed_mps=float(row[COL_MAX_SPEED_MPS]) if row.get(COL_MAX_SPEED_MPS) else None,
                 case_number=row.get(COL_CASE_NUMBER) or None,
                 notes=row.get("Notes") or None,
                 review_status="reviewed",
@@ -516,6 +521,31 @@ async def import_excel_file(
     return result
 
 
+def _import_zip_flight_logs(content: bytes, db, do_import, get_telemetry_db, user_id: int) -> dict:
+    """Bulk import flight logs from a ZIP file containing JSON files."""
+    import zipfile
+    with zipfile.ZipFile(io.BytesIO(content)) as zf:
+        json_files = [n for n in zf.namelist() if n.endswith('.json') and not n.startswith('__')]
+        results = {"total": len(json_files), "imported": 0, "skipped": 0, "errors": []}
+        for fname in json_files:
+            try:
+                file_content = zf.read(fname)
+                telemetry_db = next(get_telemetry_db())
+                try:
+                    result = do_import(file_content, db, telemetry_db, format_hint="airdata_json", user_id=user_id)
+                finally:
+                    telemetry_db.close()
+                if result.get("skipped"):
+                    results["skipped"] += 1
+                elif result.get("error"):
+                    results["errors"].append(f"{fname}: {result['error']}")
+                else:
+                    results["imported"] += 1
+            except Exception as e:
+                results["errors"].append(f"{fname}: {str(e)}")
+        return results
+
+
 @router.post("/flights/import/log", responses=responses(400, 413))
 async def import_flight_log(
     db: DBSession,
@@ -547,31 +577,7 @@ async def import_flight_log(
 
     # Handle ZIP files (bulk import)
     if file.filename.endswith('.zip'):
-        import zipfile
-
-        with zipfile.ZipFile(io.BytesIO(content)) as zf:
-            json_files = [n for n in zf.namelist() if n.endswith('.json') and not n.startswith('__')]
-            results = {"total": len(json_files), "imported": 0, "skipped": 0, "errors": []}
-
-            for fname in json_files:
-                try:
-                    file_content = zf.read(fname)
-                    telemetry_db = next(get_telemetry_db())
-                    try:
-                        result = do_import(file_content, db, telemetry_db, format_hint="airdata_json", user_id=admin.id)
-                    finally:
-                        telemetry_db.close()
-
-                    if result.get("skipped"):
-                        results["skipped"] += 1
-                    elif result.get("error"):
-                        results["errors"].append(f"{fname}: {result['error']}")
-                    else:
-                        results["imported"] += 1
-                except Exception as e:
-                    results["errors"].append(f"{fname}: {str(e)}")
-
-            return results
+        return _import_zip_flight_logs(content, db, do_import, get_telemetry_db, admin.id)
 
     telemetry_db = next(get_telemetry_db())
     try:

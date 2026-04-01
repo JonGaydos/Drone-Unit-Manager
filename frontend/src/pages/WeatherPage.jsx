@@ -271,7 +271,7 @@ export default function WeatherPage() {
                     </div>
                     <div>
                       <p className="text-lg font-bold text-foreground">
-                        {briefing.local_weather?.wind_speed_mph?.toFixed(0) ?? briefing.metar?.wind_speed_kt ?? '--'} {briefing.local_weather?.wind_speed_mph != null ? 'mph' : 'kt'}
+                        {briefing.local_weather?.wind_speed_mph?.toFixed(0) ?? briefing.metar?.wind_speed_kt ?? '--'} {briefing.local_weather?.wind_speed_mph == null ? 'kt' : 'mph'}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         Wind {windDirection(briefing.local_weather?.wind_direction_deg ?? briefing.metar?.wind_dir_deg)}
@@ -286,7 +286,7 @@ export default function WeatherPage() {
                     </div>
                     <div>
                       <p className="text-lg font-bold text-foreground">
-                        {briefing.local_weather?.wind_gusts_mph?.toFixed(0) ?? briefing.metar?.wind_gust_kt ?? '--'} {briefing.local_weather?.wind_gusts_mph != null ? 'mph' : 'kt'}
+                        {briefing.local_weather?.wind_gusts_mph?.toFixed(0) ?? briefing.metar?.wind_gust_kt ?? '--'} {briefing.local_weather?.wind_gusts_mph == null ? 'kt' : 'mph'}
                       </p>
                       <p className="text-xs text-muted-foreground">Gusts</p>
                     </div>

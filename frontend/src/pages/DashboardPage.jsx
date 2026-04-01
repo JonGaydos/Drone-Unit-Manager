@@ -309,11 +309,11 @@ export default function DashboardPage() {
                         {dueDate ? new Date(dueDate).toLocaleDateString() : '—'}
                       </td>
                       <td className="px-5 py-3">
-                        {days !== null ? (
+                        {days === null ? '—' : (
                           <span className={`text-sm font-medium ${getDaysColor(days)}`}>
                             {days <= 0 ? 'Overdue' : `${days} days`}
                           </span>
-                        ) : '—'}
+                        )}
                       </td>
                     </tr>
                   )

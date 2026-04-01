@@ -246,7 +246,7 @@ export default function DocumentUpload({ entityType, entityId, folderId }) {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-foreground truncate">{doc.title || doc.filename}</p>
                 <p className="text-xs text-muted-foreground">
-                  {doc.document_type !== 'general' ? doc.document_type.replaceAll('_', ' ') + ' | ' : ''}
+                  {doc.document_type === 'general' ? '' : doc.document_type.replaceAll('_', ' ') + ' | '}
                   {doc.mime_type}
                 </p>
               </div>

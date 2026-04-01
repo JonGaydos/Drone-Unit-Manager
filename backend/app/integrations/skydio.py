@@ -145,6 +145,19 @@ def _map_telemetry_point(p: dict, takeoff_gps_alt: float | None) -> dict | None:
     }
 
 
+def _extract_oldest_date(raw: list[dict]) -> str | None:
+    """Extract the oldest date string from a batch of raw flight dicts."""
+    dates = []
+    for f in raw:
+        dt = f.get("takeoff_time") or f.get("start_time") or f.get("created_at")
+        if dt:
+            dates.append(dt)
+    if not dates:
+        return None
+    oldest = min(dates)
+    return oldest[:10] if len(oldest) > 10 else oldest
+
+
 class SkydioProvider(DroneProvider):
     PROVIDER_NAME = "skydio"
 
@@ -196,6 +209,45 @@ class SkydioProvider(DroneProvider):
         # Should not reach here, but just in case
         raise RuntimeError("Max retries exceeded for Skydio API request")
 
+    @staticmethod
+    def _extract_items_from_body(body: dict) -> list | None:
+        """Extract item list from a Skydio API response dict. Returns None if no list found."""
+        items = body.get("data") or body.get("results") or []
+
+        if isinstance(items, dict):
+            for key, val in items.items():
+                if isinstance(val, list):
+                    logger.info("  Found list under 'data.%s' with %d items", key, len(val))
+                    return val
+            logger.warning("Nested dict in 'data' but no list found. Keys: %s", list(items.keys()))
+            return None
+
+        if not isinstance(items, list):
+            logger.warning("Expected list but got %s", type(items).__name__)
+            return None
+
+        return items
+
+    @staticmethod
+    def _advance_pagination(body: dict, params: dict, all_data: list) -> tuple[str | None, dict]:
+        """Determine next page params. Returns (new_url_or_None, updated_params)."""
+        next_cursor = body.get("next") or body.get("next_cursor")
+        if next_cursor:
+            if isinstance(next_cursor, str) and next_cursor.startswith("http"):
+                return next_cursor, {}
+            params["cursor"] = next_cursor
+            return None, params
+
+        if body.get("has_more"):
+            params["offset"] = len(all_data)
+            return None, params
+
+        if body.get("page") is not None and body.get("total", 0) > len(all_data):
+            params["page"] = body["page"] + 1
+            return None, params
+
+        return "STOP", params
+
     def _paginate(
         self,
         url: str,
@@ -223,67 +275,30 @@ class SkydioProvider(DroneProvider):
                 url.split("/")[-1], page, resp.status_code,
                 type(body).__name__,
                 list(body.keys()) if isinstance(body, dict) else f"list[{len(body)}]")
-            # Log pagination-related fields
             if isinstance(body, dict):
                 for pkey in ("next", "next_cursor", "cursor", "has_more", "total", "count", "page", "per_page", "offset", "limit"):
                     if pkey in body:
                         logger.info("  Pagination field '%s': %s", pkey, body[pkey])
 
-            # Skydio API may return data in "data", "results", or as top-level list
             if isinstance(body, list):
                 all_data.extend(body)
                 break
-            elif isinstance(body, dict):
-                items = body.get("data") or body.get("results") or []
 
-                # Handle nested dict: {"data": {"vehicles": [...]}} or {"data": {"key": [...]}}
-                if isinstance(items, dict):
-                    # Try to find the list inside the nested dict
-                    for key, val in items.items():
-                        if isinstance(val, list):
-                            logger.info("  Found list under 'data.%s' with %d items", key, len(val))
-                            items = val
-                            break
-                    else:
-                        logger.warning("Nested dict in 'data' but no list found. Keys: %s", list(items.keys()))
-                        break
-
-                if not isinstance(items, list):
-                    logger.warning("Expected list but got %s", type(items).__name__)
-                    break
-
-                # Empty page means no more data
-                if len(items) == 0:
-                    break
-
-                all_data.extend(items)
-                logger.info("  Got %d items this page, %d total", len(items), len(all_data))
-
-                # Check for next page cursor/URL
-                next_cursor = body.get("next") or body.get("next_cursor")
-                if next_cursor:
-                    # If next is a full URL, use it directly
-                    if isinstance(next_cursor, str) and next_cursor.startswith("http"):
-                        url = next_cursor
-                        params = {}
-                    else:
-                        params["cursor"] = next_cursor
-                    continue
-
-                # Fallback: check has_more with offset-based pagination
-                if body.get("has_more"):
-                    params["offset"] = len(all_data)
-                    continue
-
-                # Fallback: page-number-based pagination
-                if body.get("page") is not None and body.get("total", 0) > len(all_data):
-                    params["page"] = body["page"] + 1
-                    continue
-
-                # No more pages
+            if not isinstance(body, dict):
                 break
-            else:
+
+            items = self._extract_items_from_body(body)
+            if items is None or len(items) == 0:
                 break
+
+            all_data.extend(items)
+            logger.info("  Got %d items this page, %d total", len(items), len(all_data))
+
+            new_url, params = self._advance_pagination(body, params, all_data)
+            if new_url == "STOP":
+                break
+            if new_url is not None:
+                url = new_url
 
         logger.info("Paginate complete: %d total items", len(all_data))
         return all_data
@@ -393,18 +408,10 @@ class SkydioProvider(DroneProvider):
                 break
 
             # Find oldest takeoff time in this batch to set next window
-            dates = []
-            for f in raw:
-                dt = f.get("takeoff_time") or f.get("start_time") or f.get("created_at")
-                if dt:
-                    dates.append(dt)
-
-            if not dates:
+            next_date_to = _extract_oldest_date(raw)
+            if next_date_to is None:
                 logger.info("Deep sync: no dates found in batch, stopping")
                 break
-
-            oldest = min(dates)
-            next_date_to = oldest[:10] if len(oldest) > 10 else oldest
 
             if next_date_to == date_to:
                 logger.info("Deep sync: date_to unchanged (%s), stopping", date_to)

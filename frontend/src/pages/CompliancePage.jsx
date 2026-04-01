@@ -286,7 +286,7 @@ export default function CompliancePage() {
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="px-5 py-4 border-b border-border flex items-center justify-between">
           <h2 className="text-lg font-semibold text-foreground">Items Requiring Attention</h2>
-          <span className="text-sm text-muted-foreground">{attentionItems.length} item{attentionItems.length !== 1 ? 's' : ''}</span>
+          <span className="text-sm text-muted-foreground">{attentionItems.length} item{attentionItems.length === 1 ? '' : 's'}</span>
         </div>
         {attentionItems.length === 0 ? (
           <div className="p-8 text-center text-muted-foreground">

@@ -28,8 +28,9 @@ function EquipmentModal({ title, record, fields, onSave, onClose, vehicleModels 
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <button className="absolute inset-0 bg-transparent cursor-default" onClick={onClose} aria-label="Close dialog" />
+      <div className="relative bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto">
         <h2 className="text-lg font-semibold text-foreground mb-4">{record?.id ? `Edit ${title}` : `Add ${title}`}</h2>
         <form onSubmit={handleSubmit} className="space-y-3">
           {fields.map(f => {
@@ -106,10 +107,10 @@ function EquipmentTable({ items, columns, isAdmin, onEdit, onDelete, onMerge, em
           <tr className="border-b border-border bg-muted/30">
             {columns.map(c => (
               <th key={c.key}
-                className={`${c.align === 'right' ? 'text-right' : 'text-left'} px-4 py-3 font-medium text-muted-foreground${c.sortable !== false ? ' cursor-pointer hover:text-foreground select-none' : ''}`}
+                className={`${c.align === 'right' ? 'text-right' : 'text-left'} px-4 py-3 font-medium text-muted-foreground${c.sortable === false ? '' : ' cursor-pointer hover:text-foreground select-none'}`}
                 onClick={() => c.sortable !== false && onToggleSort?.(c.key)}
-                onKeyDown={c.sortable !== false ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggleSort?.(c.key) } } : undefined}
-                tabIndex={c.sortable !== false ? 0 : undefined}>
+                onKeyDown={c.sortable === false ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggleSort?.(c.key) } }}
+                tabIndex={c.sortable === false ? undefined : 0}>
                 {c.label}
                 {sortKey === c.key && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />)}
               </th>
@@ -247,7 +248,7 @@ const TAB_CONFIGS = {
       { key: 'model', label: 'Model' },
       { key: 'vehicle_model', label: 'Vehicle Model' },
       { key: 'cycle_count', label: 'Cycles', align: 'right' },
-      { key: 'health_pct', label: 'Health', align: 'right', render: b => b.health_pct != null ? `${b.health_pct}%` : '—' },
+      { key: 'health_pct', label: 'Health', align: 'right', render: b => b.health_pct == null ? '—' : `${b.health_pct}%` },
       { key: 'status', label: 'Status', render: b => <StatusBadge status={b.status} /> },
     ],
     fields: [
@@ -297,8 +298,8 @@ const TAB_CONFIGS = {
       { key: 'name', label: 'Name', primary: true },
       { key: 'serial_number', label: 'Serial' },
       { key: 'location_name', label: 'Location' },
-      { key: 'lat', label: 'Lat', render: d => d.lat != null ? Number.parseFloat(d.lat).toFixed(6) : '—' },
-      { key: 'lon', label: 'Lon', render: d => d.lon != null ? Number.parseFloat(d.lon).toFixed(6) : '—' },
+      { key: 'lat', label: 'Lat', render: d => d.lat == null ? '—' : Number.parseFloat(d.lat).toFixed(6) },
+      { key: 'lon', label: 'Lon', render: d => d.lon == null ? '—' : Number.parseFloat(d.lon).toFixed(6) },
       { key: 'status', label: 'Status', render: d => <StatusBadge status={d.status} /> },
     ],
     fields: [
@@ -586,8 +587,9 @@ export default function FleetPage() {
       )}
       {/* Merge Modal */}
       {mergeTarget && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setMergeTarget(null)}>
-          <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <button className="absolute inset-0 bg-transparent cursor-default" onClick={() => setMergeTarget(null)} aria-label="Close dialog" />
+          <div className="relative bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl">
             <h2 className="text-lg font-semibold text-foreground mb-2">Merge {singularize(config.label)}</h2>
             <p className="text-sm text-muted-foreground mb-4">
               Select a duplicate to merge into <strong className="text-foreground">{mergeTarget.nickname || mergeTarget.name || mergeTarget.serial_number}</strong>. All flight references will be updated and the duplicate will be deleted.

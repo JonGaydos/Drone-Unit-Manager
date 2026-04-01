@@ -332,7 +332,7 @@ export default function VehicleDetailPage() {
                     <span className="text-sm text-foreground font-medium">{serial}</span>
                     {record && (
                       <span className="text-xs text-muted-foreground">
-                        {record.manufacturer} {record.model} | {record.cycle_count ?? '?'} cycles | {record.health_pct != null ? `${record.health_pct}%` : '?'} health
+                        {record.manufacturer} {record.model} | {record.cycle_count ?? '?'} cycles | {record.health_pct == null ? '?' : `${record.health_pct}%`} health
                       </span>
                     )}
                   </div>
@@ -471,7 +471,7 @@ export default function VehicleDetailPage() {
                 <td className="px-4 py-2 text-foreground">{m.description || '—'}</td>
                 <td className="px-4 py-2 text-foreground hidden md:table-cell">{m.maintenance_type || m.type || '—'}</td>
                 <td className="px-4 py-2 text-foreground hidden md:table-cell">{m.performed_by || '—'}</td>
-                <td className="px-4 py-2 text-foreground text-right">{m.cost != null ? `$${Number.parseFloat(m.cost).toFixed(2)}` : '—'}</td>
+                <td className="px-4 py-2 text-foreground text-right">{m.cost == null ? '—' : `$${Number.parseFloat(m.cost).toFixed(2)}`}</td>
               </tr>
             ))}
             {maintenance.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">No maintenance records</td></tr>}

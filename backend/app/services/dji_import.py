@@ -24,6 +24,21 @@ STANDARD_FIELDS = {"lat", "lon", "altitude_m", "speed_mps", "battery_pct", "head
                    "pitch_deg", "roll_deg", "satellites", "battery_voltage"}
 
 
+def _detect_airdata_json(content: str) -> bool:
+    """Check if content is Airdata JSON format (starts with { and has flight_telemetry)."""
+    if not content.strip().startswith('{'):
+        return False
+    try:
+        import json as _json
+        peek = _json.loads(content[:5000] if len(content) > 5000 else content)
+        if isinstance(peek, dict) and "data" in peek:
+            inner = peek["data"]
+            return isinstance(inner, dict) and "flight_telemetry" in inner
+    except (ValueError, KeyError):
+        pass
+    return False
+
+
 def detect_format(content: str) -> str:
     """Auto-detect the flight log format from file content.
 
@@ -33,17 +48,8 @@ def detect_format(content: str) -> str:
     Returns:
         Format identifier: "dji", "litchi", "airdata", "airdata_json", or "unknown".
     """
-    # Check for Airdata JSON format (starts with { and has flight_telemetry)
-    if content.strip().startswith('{'):
-        try:
-            import json as _json
-            peek = _json.loads(content[:5000] if len(content) > 5000 else content)
-            if isinstance(peek, dict) and "data" in peek:
-                inner = peek["data"]
-                if isinstance(inner, dict) and "flight_telemetry" in inner:
-                    return "airdata_json"
-        except (ValueError, KeyError):
-            pass
+    if _detect_airdata_json(content):
+        return "airdata_json"
 
     first_lines = content[:2000].lower()
 
@@ -102,6 +108,20 @@ def _parse_timestamp(val) -> Optional[datetime]:
         except ValueError:
             continue
     return None
+
+
+def _extract_dji_extra(cols, gimbal_pitch_col, gimbal_roll_col, gimbal_yaw_col, flight_mode_col) -> dict:
+    """Extract DJI provider-specific extra data from a row."""
+    extra = {}
+    if gimbal_pitch_col is not None:
+        extra["gimbal_pitch"] = _parse_float(cols[gimbal_pitch_col])
+    if gimbal_roll_col is not None:
+        extra["gimbal_roll"] = _parse_float(cols[gimbal_roll_col])
+    if gimbal_yaw_col is not None:
+        extra["gimbal_yaw"] = _parse_float(cols[gimbal_yaw_col])
+    if flight_mode_col is not None:
+        extra["flight_mode"] = cols[flight_mode_col] if flight_mode_col < len(cols) else None
+    return {k: v for k, v in extra.items() if v is not None}
 
 
 def parse_dji_txt(content: str) -> dict:
@@ -164,10 +184,6 @@ def parse_dji_txt(content: str) -> dict:
 
     telemetry = []
     first_ts = None
-    max_alt = 0
-    max_speed = 0
-    first_lat = None
-    first_lon = None
 
     for line in lines[1:]:
         cols = line.strip().split("\t")
@@ -191,26 +207,9 @@ def parse_dji_txt(content: str) -> dict:
 
         if first_ts is None and ts:
             first_ts = ts
-        if first_lat is None:
-            first_lat = lat
-            first_lon = lon
-        if alt and alt > max_alt:
-            max_alt = alt
-        if speed and speed > max_speed:
-            max_speed = speed
 
         # Provider-specific extra data
-        extra = {}
-        if gimbal_pitch_col is not None:
-            extra["gimbal_pitch"] = _parse_float(cols[gimbal_pitch_col])
-        if gimbal_roll_col is not None:
-            extra["gimbal_roll"] = _parse_float(cols[gimbal_roll_col])
-        if gimbal_yaw_col is not None:
-            extra["gimbal_yaw"] = _parse_float(cols[gimbal_yaw_col])
-        if flight_mode_col is not None:
-            extra["flight_mode"] = cols[flight_mode_col] if flight_mode_col < len(cols) else None
-        # Remove None values
-        extra = {k: v for k, v in extra.items() if v is not None}
+        extra = _extract_dji_extra(cols, gimbal_pitch_col, gimbal_roll_col, gimbal_yaw_col, flight_mode_col)
 
         point = {
             "lat": lat,
@@ -225,12 +224,91 @@ def parse_dji_txt(content: str) -> dict:
         }
         telemetry.append(point)
 
-    # Compute duration
+    metadata = _build_telemetry_metadata(telemetry, first_ts)
+    return {"metadata": metadata, "telemetry": telemetry, "error": None}
+
+
+def _convert_alt_units(alt: Optional[float], alt_col: Optional[str]) -> Optional[float]:
+    """Convert altitude from feet to meters if the column name indicates feet."""
+    if alt is not None and alt_col and 'feet' in alt_col.lower():
+        return alt / 3.28084
+    return alt
+
+
+def _convert_speed_units(speed: Optional[float], speed_col: Optional[str]) -> Optional[float]:
+    """Convert speed from mph to m/s if the column name indicates mph."""
+    if speed is not None and speed_col and 'mph' in speed_col.lower():
+        return speed * 0.44704
+    return speed
+
+
+def _collect_extra_columns(row: dict, standard_cols: set, fieldnames) -> dict:
+    """Collect non-standard columns as extra_data from a CSV row."""
+    extra = {}
+    for key, value in row.items():
+        k_lower = key.lower().strip()
+        if k_lower in {"latitude", "longitude", "lat", "lon", "lng"}:
+            continue
+        if key in standard_cols:
+            continue
+        parsed = _parse_float(value)
+        if parsed is not None:
+            extra[key] = parsed
+        elif value and value.strip():
+            extra[key] = value.strip()
+
+    # Airdata-specific extra fields
+    airdata_extra_fields = {
+        'gimbal_heading(degrees)': 'gimbal_heading',
+        'gimbal_pitch(degrees)': 'gimbal_pitch',
+        'gimbal_roll(degrees)': 'gimbal_roll',
+        'rc_elevator(percent)': 'rc_elevator_pct',
+        'rc_aileron(percent)': 'rc_aileron_pct',
+        'rc_throttle(percent)': 'rc_throttle_pct',
+        'rc_rudder(percent)': 'rc_rudder_pct',
+        'battery_temperature(f)': 'battery_temperature_f',
+        'current(a)': 'current_a',
+        'flycstate': 'flight_mode',
+        'isphotograph': 'is_photo',
+        'isvideo': 'is_video',
+    }
+    for csv_key, extra_key in airdata_extra_fields.items():
+        for header in (fieldnames or []):
+            if header.lower().strip() == csv_key:
+                val = row.get(header)
+                if val and val.strip():
+                    parsed_val = _parse_float(val)
+                    extra[extra_key] = parsed_val if parsed_val is not None else val.strip()
+                break
+
+    # Limit extra_data size
+    if len(extra) > 30:
+        extra = dict(list(extra.items())[:30])
+    return extra
+
+
+def _build_telemetry_metadata(telemetry: list, first_ts) -> dict:
+    """Compute metadata from a list of telemetry points."""
     duration = None
     if telemetry and telemetry[0].get("timestamp") and telemetry[-1].get("timestamp"):
         duration = int((telemetry[-1]["timestamp"] - telemetry[0]["timestamp"]).total_seconds())
 
-    metadata = {
+    first_lat = None
+    first_lon = None
+    max_alt = 0
+    max_speed = 0
+    for pt in telemetry:
+        if first_lat is None:
+            first_lat = pt.get("lat")
+            first_lon = pt.get("lon")
+        alt = pt.get("altitude_m")
+        speed = pt.get("speed_mps")
+        if alt and alt > max_alt:
+            max_alt = alt
+        if speed and speed > max_speed:
+            max_speed = speed
+
+    return {
         "takeoff_time": first_ts,
         "date": first_ts.date() if first_ts else None,
         "duration_seconds": duration,
@@ -240,15 +318,13 @@ def parse_dji_txt(content: str) -> dict:
         "takeoff_lon": first_lon,
     }
 
-    return {"metadata": metadata, "telemetry": telemetry, "error": None}
 
-
-def parse_csv_log(content: str, format_type: str) -> dict:
+def parse_csv_log(content: str, _format_type: str) -> dict:
     """Parse a CSV flight log (Litchi or Airdata format).
 
     Args:
         content: Raw CSV text content.
-        format_type: "litchi" or "airdata".
+        _format_type: "litchi" or "airdata" (reserved for future format-specific logic).
 
     Returns:
         Dict with 'metadata' and 'telemetry' keys.
@@ -278,12 +354,9 @@ def parse_csv_log(content: str, format_type: str) -> dict:
     if lat_col is None or lon_col is None:
         return {"metadata": {}, "telemetry": [], "error": "Could not find latitude/longitude columns"}
 
+    standard_cols = {lat_col, lon_col, alt_col, speed_col, bat_col, heading_col, ts_col}
     telemetry = []
     first_ts = None
-    max_alt = 0
-    max_speed = 0
-    first_lat = None
-    first_lon = None
 
     for row in reader:
         lat = _parse_float(row.get(lat_col))
@@ -291,72 +364,16 @@ def parse_csv_log(content: str, format_type: str) -> dict:
         if lat is None or lon is None or (lat == 0 and lon == 0):
             continue
 
-        alt = _parse_float(row.get(alt_col)) if alt_col else None
-        # Convert feet to meters if Airdata CSV (column names include units)
-        if alt is not None and alt_col and 'feet' in alt_col.lower():
-            alt = alt / 3.28084
-
-        speed = _parse_float(row.get(speed_col)) if speed_col else None
-
-        # Convert mph to m/s if speed column indicates mph
-        if speed is not None and speed_col and 'mph' in speed_col.lower():
-            speed = speed * 0.44704
-
+        alt = _convert_alt_units(_parse_float(row.get(alt_col)) if alt_col else None, alt_col)
+        speed = _convert_speed_units(_parse_float(row.get(speed_col)) if speed_col else None, speed_col)
         battery = _parse_float(row.get(bat_col)) if bat_col else None
         heading = _parse_float(row.get(heading_col)) if heading_col else None
 
         ts = _parse_timestamp(row.get(ts_col)) if ts_col else None
         if first_ts is None and ts:
             first_ts = ts
-        if first_lat is None:
-            first_lat = lat
-            first_lon = lon
-        if alt and alt > max_alt:
-            max_alt = alt
-        if speed and speed > max_speed:
-            max_speed = speed
 
-        # Collect all non-standard columns as extra_data
-        extra = {}
-        for key, value in row.items():
-            k_lower = key.lower().strip()
-            if k_lower in {"latitude", "longitude", "lat", "lon", "lng"}:
-                continue
-            if key in {lat_col, lon_col, alt_col, speed_col, bat_col, heading_col, ts_col}:
-                continue
-            parsed = _parse_float(value)
-            if parsed is not None:
-                extra[key] = parsed
-            elif value and value.strip():
-                extra[key] = value.strip()
-
-        # Airdata-specific extra fields
-        airdata_extra_fields = {
-            'gimbal_heading(degrees)': 'gimbal_heading',
-            'gimbal_pitch(degrees)': 'gimbal_pitch',
-            'gimbal_roll(degrees)': 'gimbal_roll',
-            'rc_elevator(percent)': 'rc_elevator_pct',
-            'rc_aileron(percent)': 'rc_aileron_pct',
-            'rc_throttle(percent)': 'rc_throttle_pct',
-            'rc_rudder(percent)': 'rc_rudder_pct',
-            'battery_temperature(f)': 'battery_temperature_f',
-            'current(a)': 'current_a',
-            'flycstate': 'flight_mode',
-            'isphotograph': 'is_photo',
-            'isvideo': 'is_video',
-        }
-        for csv_key, extra_key in airdata_extra_fields.items():
-            for header in (reader.fieldnames or []):
-                if header.lower().strip() == csv_key:
-                    val = row.get(header)
-                    if val and val.strip():
-                        parsed_val = _parse_float(val)
-                        extra[extra_key] = parsed_val if parsed_val is not None else val.strip()
-                    break
-
-        # Limit extra_data size
-        if len(extra) > 30:
-            extra = dict(list(extra.items())[:30])
+        extra = _collect_extra_columns(row, standard_cols, reader.fieldnames)
 
         point = {
             "lat": lat,
@@ -370,21 +387,40 @@ def parse_csv_log(content: str, format_type: str) -> dict:
         }
         telemetry.append(point)
 
-    duration = None
-    if telemetry and telemetry[0].get("timestamp") and telemetry[-1].get("timestamp"):
-        duration = int((telemetry[-1]["timestamp"] - telemetry[0]["timestamp"]).total_seconds())
-
-    metadata = {
-        "takeoff_time": first_ts,
-        "date": first_ts.date() if first_ts else None,
-        "duration_seconds": duration,
-        "max_altitude_m": max_alt if max_alt > 0 else None,
-        "max_speed_mps": max_speed if max_speed > 0 else None,
-        "takeoff_lat": first_lat,
-        "takeoff_lon": first_lon,
-    }
-
+    metadata = _build_telemetry_metadata(telemetry, first_ts)
     return {"metadata": metadata, "telemetry": telemetry, "error": None}
+
+
+def _parse_airdata_telemetry_channels(gps_data, gps_ts, hat_data, bat_data, vel_data, sat_data) -> list:
+    """Convert Airdata channel-based telemetry into point-based format."""
+    import math
+    telemetry = []
+    for i in range(len(gps_data)):
+        lat, lon = gps_data[i] if i < len(gps_data) else (None, None)
+        if lat is None or lon is None:
+            continue
+
+        ts = _parse_timestamp(gps_ts[i]) if i < len(gps_ts) else None
+        alt = hat_data[i] if i < len(hat_data) else None
+
+        battery = bat_data[i] if i < len(bat_data) else None
+        if battery is not None and battery <= 1.0:
+            battery = round(battery * 100, 1)
+
+        speed = None
+        if i < len(vel_data) and isinstance(vel_data[i], list) and len(vel_data[i]) >= 2:
+            speed = round(math.sqrt(sum(v**2 for v in vel_data[i][:3])), 2)
+
+        sats = sat_data[i] if i < len(sat_data) else None
+
+        telemetry.append({
+            "lat": lat, "lon": lon,
+            "altitude_m": round(alt, 2) if alt is not None else None,
+            "speed_mps": speed, "battery_pct": battery,
+            "heading_deg": None, "satellites": sats,
+            "timestamp": ts, "extra_data": None,
+        })
+    return telemetry
 
 
 def parse_airdata_json(content: str) -> dict:
@@ -444,57 +480,61 @@ def parse_airdata_json(content: str) -> dict:
     if not gps_data or not gps_ts:
         return {"metadata": metadata, "telemetry": [], "error": "No GPS data in telemetry"}
 
-    import math
+    telemetry = _parse_airdata_telemetry_channels(gps_data, gps_ts, hat_data, bat_data, vel_data, sat_data)
 
-    # Build timestamp lookup maps for non-GPS channels (index by position since counts may differ)
-    num_points = len(gps_data)
-    telemetry = []
+    # Compute max values
     max_alt = 0
     max_speed = 0
-
-    for i in range(num_points):
-        lat, lon = gps_data[i] if i < len(gps_data) else (None, None)
-        if lat is None or lon is None:
-            continue
-
-        ts = _parse_timestamp(gps_ts[i]) if i < len(gps_ts) else None
-
-        # Altitude: height_above_takeoff is in METERS in JSON format
-        alt = hat_data[i] if i < len(hat_data) else None
-
-        # Battery: Airdata stores as 0-1 fraction
-        battery = bat_data[i] if i < len(bat_data) else None
-        if battery is not None and battery <= 1.0:
-            battery = round(battery * 100, 1)
-
-        # Speed: magnitude of velocity vector [vx, vy, vz]
-        speed = None
-        if i < len(vel_data) and isinstance(vel_data[i], list) and len(vel_data[i]) >= 2:
-            speed = round(math.sqrt(sum(v**2 for v in vel_data[i][:3])), 2)
-
-        sats = sat_data[i] if i < len(sat_data) else None
-
-        if alt is not None and alt > max_alt:
-            max_alt = alt
-        if speed is not None and speed > max_speed:
-            max_speed = speed
-
-        telemetry.append({
-            "lat": lat,
-            "lon": lon,
-            "altitude_m": round(alt, 2) if alt is not None else None,
-            "speed_mps": speed,
-            "battery_pct": battery,
-            "heading_deg": None,
-            "satellites": sats,
-            "timestamp": ts,
-            "extra_data": None,
-        })
+    for pt in telemetry:
+        if pt["altitude_m"] is not None and pt["altitude_m"] > max_alt:
+            max_alt = pt["altitude_m"]
+        if pt["speed_mps"] is not None and pt["speed_mps"] > max_speed:
+            max_speed = pt["speed_mps"]
 
     metadata["max_altitude_m"] = max_alt if max_alt > 0 else None
     metadata["max_speed_mps"] = max_speed if max_speed > 0 else None
 
     return {"metadata": metadata, "telemetry": telemetry, "error": None}
+
+
+def _check_duplicate_by_external_id(meta: dict, db: Session):
+    """Check if a flight with the same external_id already exists. Returns existing Flight or None."""
+    if not meta.get("external_id"):
+        return None
+    from sqlalchemy import func
+    ext_id = str(meta["external_id"]).upper().replace("-", "")
+    return db.query(Flight).filter(
+        func.replace(func.upper(Flight.external_id), "-", "") == ext_id
+    ).first()
+
+
+def _create_telemetry_points(telemetry: list, flight_id: int, meta: dict, fmt: str, telemetry_db: Session) -> int:
+    """Create TelemetryPoint records from parsed telemetry data. Returns count created."""
+    base_ts = meta.get("takeoff_time")
+    points_created = 0
+    for i, pt in enumerate(telemetry):
+        ts_ms = int(pt["timestamp"].timestamp() * 1000) if pt.get("timestamp") else (
+            int(base_ts.timestamp() * 1000) + (i * 1000) if base_ts else i * 1000
+        )
+        extra_json = json.dumps(pt["extra_data"]) if pt.get("extra_data") else None
+        tp = TelemetryPoint(
+            flight_id=flight_id,
+            timestamp_ms=ts_ms,
+            lat=pt.get("lat"),
+            lon=pt.get("lon"),
+            altitude_m=pt.get("altitude_m"),
+            speed_mps=pt.get("speed_mps"),
+            battery_pct=pt.get("battery_pct"),
+            heading_deg=pt.get("heading_deg"),
+            satellites=pt.get("satellites"),
+            source=fmt,
+        )
+        if hasattr(tp, "extra_data"):
+            tp.extra_data = extra_json
+        telemetry_db.add(tp)
+        points_created += 1
+    telemetry_db.commit()
+    return points_created
 
 
 def import_flight_log(
@@ -552,24 +592,19 @@ def import_flight_log(
         return {"error": "No telemetry points found in file", "flight_id": None, "points_imported": 0}
 
     # Deduplication: check if flight already exists by external_id
-    if meta.get("external_id"):
-        from sqlalchemy import func
-        ext_id = str(meta["external_id"]).upper().replace("-", "")
-        existing = db.query(Flight).filter(
-            func.replace(func.upper(Flight.external_id), "-", "") == ext_id
-        ).first()
-        if existing:
-            return {
-                "flight_id": existing.id,
-                "points_imported": 0,
-                "data_source": data_source,
-                "format_detected": fmt,
-                "date": str(meta.get("date")) if meta.get("date") else None,
-                "duration_seconds": meta.get("duration_seconds"),
-                "error": None,
-                "skipped": True,
-                "message": "Flight already exists (duplicate external_id)",
-            }
+    existing = _check_duplicate_by_external_id(meta, db)
+    if existing:
+        return {
+            "flight_id": existing.id,
+            "points_imported": 0,
+            "data_source": data_source,
+            "format_detected": fmt,
+            "date": str(meta.get("date")) if meta.get("date") else None,
+            "duration_seconds": meta.get("duration_seconds"),
+            "error": None,
+            "skipped": True,
+            "message": "Flight already exists (duplicate external_id)",
+        }
 
     # Create flight record
     flight = Flight(
@@ -614,35 +649,7 @@ def import_flight_log(
     db.refresh(flight)
 
     # Create telemetry points
-    base_ts = meta.get("takeoff_time")
-    points_created = 0
-    for i, pt in enumerate(telemetry):
-        ts_ms = int(pt["timestamp"].timestamp() * 1000) if pt.get("timestamp") else (
-            int(base_ts.timestamp() * 1000) + (i * 1000) if base_ts else i * 1000
-        )
-
-        extra_json = json.dumps(pt["extra_data"]) if pt.get("extra_data") else None
-
-        tp = TelemetryPoint(
-            flight_id=flight.id,
-            timestamp_ms=ts_ms,
-            lat=pt.get("lat"),
-            lon=pt.get("lon"),
-            altitude_m=pt.get("altitude_m"),
-            speed_mps=pt.get("speed_mps"),
-            battery_pct=pt.get("battery_pct"),
-            heading_deg=pt.get("heading_deg"),
-            satellites=pt.get("satellites"),
-            source=fmt,
-        )
-        # Set extra_data if the model supports it
-        if hasattr(tp, "extra_data"):
-            tp.extra_data = extra_json
-
-        telemetry_db.add(tp)
-        points_created += 1
-
-    telemetry_db.commit()
+    points_created = _create_telemetry_points(telemetry, flight.id, meta, fmt, telemetry_db)
 
     logger.info("Imported flight %d with %d telemetry points from %s", flight.id, points_created, data_source)
 

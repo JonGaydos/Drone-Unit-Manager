@@ -1,5 +1,6 @@
 import logging
 from dataclasses import asdict
+from datetime import datetime
 
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -65,6 +66,38 @@ def _parse_timestamp_ms(ts) -> int:
     return 0
 
 
+def _store_telemetry_points(flight, telemetry_data: list, session_factory, point_model):
+    """Store telemetry points in the telemetry DB and update flight max metrics."""
+    tdb = session_factory()
+    try:
+        tdb.query(point_model).filter(point_model.flight_id == flight.id).delete()
+        max_alt = 0
+        max_speed = 0
+        for point in telemetry_data:
+            alt = point.get("altitude_m")
+            speed = point.get("speed_mps")
+            tp = point_model(
+                flight_id=flight.id,
+                timestamp_ms=_parse_timestamp_ms(point.get("timestamp_ms")),
+                lat=point.get("lat"),
+                lon=point.get("lon"),
+                altitude_m=float(alt) if alt is not None else None,
+                speed_mps=float(speed) if speed is not None else None,
+                battery_pct=point.get("battery_pct"),
+                heading_deg=point.get("heading_deg"),
+            )
+            tdb.add(tp)
+            if alt is not None and float(alt) > max_alt:
+                max_alt = float(alt)
+            if speed is not None and float(speed) > max_speed:
+                max_speed = float(speed)
+        tdb.commit()
+        flight.max_altitude_m = max_alt
+        flight.max_speed_mps = max_speed
+    finally:
+        tdb.close()
+
+
 def _batch_sync_telemetry(db: Session, limit: int = 10) -> int:
     """Fetch telemetry for up to `limit` flights without it. Returns count synced."""
     from app.integrations.skydio import SkydioProvider
@@ -88,36 +121,7 @@ def _batch_sync_telemetry(db: Session, limit: int = 10) -> int:
         try:
             telemetry_data = provider.get_flight_telemetry(creds, flight.external_id)
             if telemetry_data and len(telemetry_data) > 0:
-                tdb = TelemetrySessionLocal()
-                try:
-                    tdb.query(TelemetryPoint).filter(TelemetryPoint.flight_id == flight.id).delete()
-                    max_alt = 0
-                    max_speed = 0
-                    for point in telemetry_data:
-                        alt = point.get("altitude_m")
-                        speed = point.get("speed_mps")
-                        # Parse timestamp — Skydio returns ISO strings, not epoch ms
-                        timestamp_ms = _parse_timestamp_ms(point.get("timestamp_ms"))
-                        tp = TelemetryPoint(
-                            flight_id=flight.id,
-                            timestamp_ms=timestamp_ms,
-                            lat=point.get("lat"),
-                            lon=point.get("lon"),
-                            altitude_m=float(alt) if alt is not None else None,
-                            speed_mps=float(speed) if speed is not None else None,
-                            battery_pct=point.get("battery_pct"),
-                            heading_deg=point.get("heading_deg"),
-                        )
-                        tdb.add(tp)
-                        if alt is not None and float(alt) > max_alt:
-                            max_alt = float(alt)
-                        if speed is not None and float(speed) > max_speed:
-                            max_speed = float(speed)
-                    tdb.commit()
-                    flight.max_altitude_m = max_alt
-                    flight.max_speed_mps = max_speed
-                finally:
-                    tdb.close()
+                _store_telemetry_points(flight, telemetry_data, TelemetrySessionLocal, TelemetryPoint)
             flight.telemetry_synced = True
             flight.has_telemetry = True
             synced += 1
@@ -199,6 +203,70 @@ def sync_deep(
     return SyncResultResponse(**asdict(result))
 
 
+def _apply_enrichment_detail(flight, detail: dict, db):
+    """Apply all enrichment data from an API detail response to a flight."""
+    from app.services.sync_manager import _match_pilot
+
+    # Date / time
+    takeoff_str = detail.get("takeoff_time") or detail.get("start_time") or detail.get("created_at")
+    landing_str = detail.get("landing_time") or detail.get("end_time")
+    if takeoff_str:
+        try:
+            takeoff = datetime.fromisoformat(takeoff_str.replace("Z", UTC_OFFSET))
+            flight.takeoff_time = takeoff
+            flight.date = takeoff.date()
+        except (ValueError, AttributeError):
+            pass
+    if landing_str:
+        try:
+            flight.landing_time = datetime.fromisoformat(landing_str.replace("Z", UTC_OFFSET))
+        except (ValueError, AttributeError):
+            pass
+
+    # Duration
+    duration = detail.get("duration_seconds") or detail.get("duration") or detail.get("flight_duration")
+    if duration is not None:
+        flight.duration_seconds = int(float(duration))
+    elif flight.takeoff_time and flight.landing_time:
+        flight.duration_seconds = int((flight.landing_time - flight.takeoff_time).total_seconds())
+
+    # Location
+    flight.takeoff_lat = flight.takeoff_lat or detail.get("takeoff_latitude") or detail.get("takeoff_lat") or detail.get("latitude")
+    flight.takeoff_lon = flight.takeoff_lon or detail.get("takeoff_longitude") or detail.get("takeoff_lon") or detail.get("longitude")
+    flight.landing_lat = flight.landing_lat or detail.get("landing_latitude") or detail.get("landing_lat")
+    flight.landing_lon = flight.landing_lon or detail.get("landing_longitude") or detail.get("landing_lon")
+    flight.takeoff_address = flight.takeoff_address or detail.get("takeoff_address") or detail.get("location") or detail.get("address")
+
+    # Metrics
+    flight.max_altitude_m = flight.max_altitude_m or detail.get("max_altitude_m") or detail.get("max_altitude") or detail.get("max_height")
+    flight.max_speed_mps = flight.max_speed_mps or detail.get("max_speed_mps") or detail.get("max_speed") or detail.get("max_ground_speed")
+    flight.distance_m = flight.distance_m or detail.get("distance_m") or detail.get("total_distance") or detail.get("distance")
+
+    # Pilot
+    pilot_name = detail.get("pilot_name") or detail.get("operator_name") or detail.get("user_name")
+    if pilot_name and not flight.pilot_id:
+        flight.pilot_id = _match_pilot(db, pilot_name)
+
+    # Vehicle
+    from app.models.vehicle import Vehicle
+    vehicle_serial = detail.get("vehicle_serial") or detail.get("serial_number") or detail.get("vehicle_id")
+    if vehicle_serial and not flight.vehicle_id:
+        vehicle = db.query(Vehicle).filter(
+            (Vehicle.provider_serial == vehicle_serial) | (Vehicle.serial_number == vehicle_serial)
+        ).first()
+        if vehicle:
+            flight.vehicle_id = vehicle.id
+
+    # Equipment
+    flight.battery_serial = flight.battery_serial or detail.get("battery_serial") or detail.get("battery")
+    flight.sensor_package = flight.sensor_package or detail.get("sensor_package")
+    flight.attachment_top = flight.attachment_top or detail.get("attachment_top")
+    flight.attachment_bottom = flight.attachment_bottom or detail.get("attachment_bottom")
+    flight.attachment_left = flight.attachment_left or detail.get("attachment_left")
+    flight.attachment_right = flight.attachment_right or detail.get("attachment_right")
+    flight.carrier = flight.carrier or detail.get("carrier") or detail.get("carriers")
+
+
 @router.post("/enrich", response_model=SyncResultResponse)
 def enrich_flights(
     db: DBSession,
@@ -207,8 +275,7 @@ def enrich_flights(
     """Fetch full details for flights that have no date/pilot/duration."""
     from app.integrations.skydio import SkydioProvider
     from app.models.flight import Flight
-    from app.models.vehicle import Vehicle
-    from app.services.sync_manager import _build_creds, _match_pilot
+    from app.services.sync_manager import _build_creds
 
     result = SyncResult()
 
@@ -235,82 +302,16 @@ def enrich_flights(
         detail = provider.get_flight_detail(creds, flight.external_id)
 
         if not detail:
-            # Could not fetch details — delete the empty flight
             db.delete(flight)
             deleted += 1
             continue
 
-        # Try to extract useful data from the detail response
-        # Log ALL keys so we know what Skydio returns
         logger.info("Enriching flight %s with keys: %s", flight.external_id, list(detail.keys()))
+        _apply_enrichment_detail(flight, detail, db)
 
-        # Date / time
-        takeoff_str = detail.get("takeoff_time") or detail.get("start_time") or detail.get("created_at")
-        landing_str = detail.get("landing_time") or detail.get("end_time")
-
-        if takeoff_str:
-            try:
-                from datetime import datetime
-                takeoff = datetime.fromisoformat(takeoff_str.replace("Z", UTC_OFFSET))
-                flight.takeoff_time = takeoff
-                flight.date = takeoff.date()
-            except (ValueError, AttributeError):
-                pass
-
-        if landing_str:
-            try:
-                from datetime import datetime
-                flight.landing_time = datetime.fromisoformat(landing_str.replace("Z", UTC_OFFSET))
-            except (ValueError, AttributeError):
-                pass
-
-        # Duration
-        duration = detail.get("duration_seconds") or detail.get("duration") or detail.get("flight_duration")
-        if duration is not None:
-            flight.duration_seconds = int(float(duration))
-        elif flight.takeoff_time and flight.landing_time:
-            flight.duration_seconds = int((flight.landing_time - flight.takeoff_time).total_seconds())
-
-        # Location
-        flight.takeoff_lat = flight.takeoff_lat or detail.get("takeoff_latitude") or detail.get("takeoff_lat") or detail.get("latitude")
-        flight.takeoff_lon = flight.takeoff_lon or detail.get("takeoff_longitude") or detail.get("takeoff_lon") or detail.get("longitude")
-        flight.landing_lat = flight.landing_lat or detail.get("landing_latitude") or detail.get("landing_lat")
-        flight.landing_lon = flight.landing_lon or detail.get("landing_longitude") or detail.get("landing_lon")
-        flight.takeoff_address = flight.takeoff_address or detail.get("takeoff_address") or detail.get("location") or detail.get("address")
-
-        # Speed / altitude / distance
-        flight.max_altitude_m = flight.max_altitude_m or detail.get("max_altitude_m") or detail.get("max_altitude") or detail.get("max_height")
-        flight.max_speed_mps = flight.max_speed_mps or detail.get("max_speed_mps") or detail.get("max_speed") or detail.get("max_ground_speed")
-        flight.distance_m = flight.distance_m or detail.get("distance_m") or detail.get("total_distance") or detail.get("distance")
-
-        # Pilot
-        pilot_name = detail.get("pilot_name") or detail.get("operator_name") or detail.get("user_name")
-        if pilot_name and not flight.pilot_id:
-            flight.pilot_id = _match_pilot(db, pilot_name)
-
-        # Vehicle
-        vehicle_serial = detail.get("vehicle_serial") or detail.get("serial_number") or detail.get("vehicle_id")
-        if vehicle_serial and not flight.vehicle_id:
-            vehicle = db.query(Vehicle).filter(
-                (Vehicle.provider_serial == vehicle_serial) | (Vehicle.serial_number == vehicle_serial)
-            ).first()
-            if vehicle:
-                flight.vehicle_id = vehicle.id
-
-        # Equipment
-        flight.battery_serial = flight.battery_serial or detail.get("battery_serial") or detail.get("battery")
-        flight.sensor_package = flight.sensor_package or detail.get("sensor_package")
-        flight.attachment_top = flight.attachment_top or detail.get("attachment_top")
-        flight.attachment_bottom = flight.attachment_bottom or detail.get("attachment_bottom")
-        flight.attachment_left = flight.attachment_left or detail.get("attachment_left")
-        flight.attachment_right = flight.attachment_right or detail.get("attachment_right")
-        flight.carrier = flight.carrier or detail.get("carrier") or detail.get("carriers")
-
-        # Check if we actually got useful data
         if flight.date or flight.duration_seconds or flight.pilot_id:
             enriched += 1
         else:
-            # Still empty after enrichment — delete
             db.delete(flight)
             deleted += 1
 

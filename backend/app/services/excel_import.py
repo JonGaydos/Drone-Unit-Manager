@@ -147,6 +147,46 @@ def _is_duplicate_flight(db: Session, flight_id: str, pilot, vehicle, flight_dat
     return False
 
 
+def _build_flight_from_row(row: dict, flight_id: str, pilot, vehicle, db: Session) -> Optional[Flight]:
+    """Build a Flight object from an Excel row dict. Returns None if duplicate."""
+    takeoff_time_raw = row.get("Takeoff") or row.get("Local Takeoff Time")
+    flight_date = takeoff_time_raw.date() if isinstance(takeoff_time_raw, datetime) else None
+    duration = row.get("Duration (seconds)")
+    duration = int(duration) if duration else None
+
+    if _is_duplicate_flight(db, flight_id, pilot, vehicle, flight_date, duration):
+        return None
+
+    purpose = row.get("Purpose", "")
+    if purpose:
+        _ensure_purpose(db, purpose)
+
+    return Flight(
+        external_id=str(flight_id),
+        api_provider="excel_import",
+        pilot_id=pilot.id if pilot else None,
+        vehicle_id=vehicle.id if vehicle else None,
+        date=flight_date,
+        takeoff_time=takeoff_time_raw if isinstance(takeoff_time_raw, datetime) else None,
+        landing_time=row.get("Land") if isinstance(row.get("Land"), datetime) else None,
+        duration_seconds=int(duration) if duration else None,
+        takeoff_lat=_parse_safe_float(row.get("Takeoff Latitude")),
+        takeoff_lon=_parse_safe_float(row.get("Takeoff Longitude")),
+        takeoff_address=row.get("Takeoff Address", ""),
+        purpose=purpose if purpose else None,
+        battery_serial=row.get("Battery", ""),
+        sensor_package=row.get("Sensor Package", "") or None,
+        attachment_top=row.get("Attachment (TOP)", "") or None,
+        attachment_bottom=row.get("Attachment (BOTTOM)", "") or None,
+        attachment_left=row.get("Attachment (LEFT)", "") or None,
+        attachment_right=row.get("Attachment (RIGHT)", "") or None,
+        carrier=row.get("Carrier(s)", "") or None,
+        review_status="reviewed",
+        pilot_confirmed=True,
+        data_source="excel_import",
+    )
+
+
 def _import_skydio_sheet(ws, db: Session, result: dict) -> tuple[int, int]:
     """Import flights from the Skydio sheet. Returns (pilots_created, vehicles_created)."""
     headers = [ws.cell(1, c).value for c in range(1, ws.max_column + 1)]
@@ -168,46 +208,11 @@ def _import_skydio_sheet(ws, db: Session, result: dict) -> tuple[int, int]:
             if vehicle_new:
                 vehicles_created += 1
 
-            takeoff_time_raw = row.get("Takeoff") or row.get("Local Takeoff Time")
-            flight_date = takeoff_time_raw.date() if isinstance(takeoff_time_raw, datetime) else None
-            duration = row.get("Duration (seconds)")
-            duration = int(duration) if duration else None
-
-            if _is_duplicate_flight(db, flight_id, pilot, vehicle, flight_date, duration):
+            flight = _build_flight_from_row(row, flight_id, pilot, vehicle, db)
+            if flight is None:
                 result["flights_skipped"] += 1
                 continue
 
-            purpose = row.get("Purpose", "")
-            if purpose:
-                _ensure_purpose(db, purpose)
-
-            lat = _parse_safe_float(row.get("Takeoff Latitude"))
-            lon = _parse_safe_float(row.get("Takeoff Longitude"))
-
-            flight = Flight(
-                external_id=str(flight_id),
-                api_provider="excel_import",
-                pilot_id=pilot.id if pilot else None,
-                vehicle_id=vehicle.id if vehicle else None,
-                date=flight_date,
-                takeoff_time=takeoff_time_raw if isinstance(takeoff_time_raw, datetime) else None,
-                landing_time=row.get("Land") if isinstance(row.get("Land"), datetime) else None,
-                duration_seconds=int(duration) if duration else None,
-                takeoff_lat=lat,
-                takeoff_lon=lon,
-                takeoff_address=row.get("Takeoff Address", ""),
-                purpose=purpose if purpose else None,
-                battery_serial=row.get("Battery", ""),
-                sensor_package=row.get("Sensor Package", "") or None,
-                attachment_top=row.get("Attachment (TOP)", "") or None,
-                attachment_bottom=row.get("Attachment (BOTTOM)", "") or None,
-                attachment_left=row.get("Attachment (LEFT)", "") or None,
-                attachment_right=row.get("Attachment (RIGHT)", "") or None,
-                carrier=row.get("Carrier(s)", "") or None,
-                review_status="reviewed",
-                pilot_confirmed=True,
-                data_source="excel_import",
-            )
             db.add(flight)
             try:
                 from app.services.sync_manager import _ensure_equipment_records

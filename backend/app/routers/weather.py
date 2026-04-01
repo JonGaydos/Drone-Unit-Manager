@@ -37,6 +37,19 @@ def _get_thresholds(db: Session):
     return DEFAULT_THRESHOLDS
 
 
+def _find_nearest_station(stations: list, lat: float, lon: float) -> tuple[dict | None, float]:
+    """Find the nearest METAR station by haversine distance."""
+    nearest = None
+    min_dist = float('inf')
+    for s in stations:
+        if isinstance(s, dict) and s.get("lat") and s.get("lon"):
+            d = _haversine(lat, lon, float(s["lat"]), float(s["lon"]))
+            if d < min_dist:
+                min_dist = d
+                nearest = s
+    return nearest, min_dist
+
+
 def _fetch_metar_taf(lat: float, lon: float) -> dict:
     """Fetch nearest METAR station, current METAR, and TAF forecast."""
     result = {"metar": None, "taf": None, "station": None}
@@ -48,14 +61,7 @@ def _fetch_metar_taf(lat: float, lon: float) -> dict:
         })
         stations = station_resp.json() if station_resp.status_code == 200 else []
 
-        nearest_station = None
-        min_dist = float('inf')
-        for s in stations:
-            if isinstance(s, dict) and s.get("lat") and s.get("lon"):
-                d = _haversine(lat, lon, float(s["lat"]), float(s["lon"]))
-                if d < min_dist:
-                    min_dist = d
-                    nearest_station = s
+        nearest_station, min_dist = _find_nearest_station(stations, lat, lon)
 
         if not nearest_station:
             return result
@@ -243,6 +249,22 @@ def _check_threshold_pair_below(value, go_limit, caution_limit, status, reasons,
     return status
 
 
+def _check_temperature(temp, t: dict, status: str, reasons: list) -> str:
+    """Check temperature against thresholds and update status/reasons."""
+    if temp is None:
+        return status
+    if temp < t["temp_low_caution"]:
+        reasons.append(f"Temperature {temp:.0f}\u00b0F — too cold for safe operations")
+        return "no_go"
+    if temp < t["temp_low_go"]:
+        reasons.append(f"Temperature {temp:.0f}\u00b0F — cold conditions")
+        return _escalate_status(status, "caution")
+    if temp > t["temp_high_go"]:
+        reasons.append(f"Temperature {temp:.0f}\u00b0F — hot conditions")
+        return _escalate_status(status, "caution")
+    return status
+
+
 def _compute_advisory(data, thresholds=None):
     reasons = []
     status = "go"
@@ -276,17 +298,7 @@ def _compute_advisory(data, thresholds=None):
         f"Ceiling {ceil} ft AGL — below minimum",
         f"Ceiling {ceil} ft AGL — low")
 
-    temp = lw.get("temperature_f")
-    if temp is not None:
-        if temp < t["temp_low_caution"]:
-            status = "no_go"
-            reasons.append(f"Temperature {temp:.0f}\u00b0F — too cold for safe operations")
-        elif temp < t["temp_low_go"]:
-            status = _escalate_status(status, "caution")
-            reasons.append(f"Temperature {temp:.0f}\u00b0F — cold conditions")
-        elif temp > t["temp_high_go"]:
-            status = _escalate_status(status, "caution")
-            reasons.append(f"Temperature {temp:.0f}\u00b0F — hot conditions")
+    status = _check_temperature(lw.get("temperature_f"), t, status, reasons)
 
     precip = lw.get("precipitation_in", 0) or 0
     if precip > t["precip_caution"]:

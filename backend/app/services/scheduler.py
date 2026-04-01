@@ -85,17 +85,80 @@ def _run_scheduled_sync():
         db.close()
 
 
+def _is_pref_due_now(pref, now, current_hour, db, NotificationLog) -> bool:
+    """Check if a notification preference is due to send right now."""
+    from datetime import datetime, date as date_type
+
+    pref_hour = pref.send_time.split(":")[0] if pref.send_time else "07"
+    if pref_hour != current_hour:
+        return False
+
+    today_start = datetime.combine(date_type.today(), datetime.min.time())
+    already_sent = db.query(NotificationLog).filter(
+        NotificationLog.user_id == pref.user_id,
+        NotificationLog.sent_at >= today_start,
+        NotificationLog.status == "sent",
+    ).first()
+    if already_sent:
+        return False
+
+    if pref.frequency == "weekly" and pref.send_day is not None:
+        if now.weekday() != pref.send_day:
+            return False
+
+    return True
+
+
+def _send_user_digest(pref, db, NotificationLog):
+    """Build and send a digest email for a single user preference."""
+    import json
+    from app.models.user import User
+    from app.services.email_digest import build_digest, render_digest_html, send_email
+
+    user = db.query(User).filter(User.id == pref.user_id).first()
+    if not user:
+        return
+
+    to_email = pref.email_override or user.email
+    if not to_email:
+        return
+
+    digest = build_digest(db, user)
+    if not digest:
+        db.add(NotificationLog(
+            user_id=user.id, subject="Daily Digest", status="skipped",
+            error_message="No actionable items", item_count=0,
+        ))
+        db.commit()
+        return
+
+    org_setting = db.query(Setting).filter(Setting.key == "org_name").first()
+    org_name = org_setting.value if org_setting else APP_TITLE
+    html = render_digest_html(digest, user, org_name)
+    subject = f"{org_name} — Daily Digest"
+
+    success = send_email(to_email, subject, html, db)
+    item_count = sum(len(v) if isinstance(v, list) else 0 for v in digest.values())
+
+    db.add(NotificationLog(
+        user_id=user.id, subject=subject,
+        status="sent" if success else "failed",
+        error_message=None if success else "SMTP send failed",
+        categories_included=json.dumps(list(digest.keys())),
+        item_count=item_count,
+    ))
+    db.commit()
+    logger.info("Digest %s for user %s (%s)", "sent" if success else "failed", user.display_name, to_email)
+
+
 def _run_digest_job():
     """Check for users due for a digest email and send them."""
-    import json
-    from datetime import datetime, date as date_type
+    from datetime import datetime
     from app.models.notification_preference import NotificationPreference
     from app.models.notification_log import NotificationLog
-    from app.services.email_digest import build_digest, render_digest_html, send_email
 
     db = SessionLocal()
     try:
-        # Check if SMTP is configured
         smtp_enabled = db.query(Setting).filter(Setting.key == "smtp_enabled").first()
         if not smtp_enabled or smtp_enabled.value != "true":
             return
@@ -103,70 +166,15 @@ def _run_digest_job():
         now = datetime.now()
         current_hour = now.strftime("%H")
 
-        # Find users with enabled notifications whose send_time hour matches
         prefs = db.query(NotificationPreference).filter(
             NotificationPreference.enabled == True,
             NotificationPreference.frequency != "off",
         ).all()
 
         for pref in prefs:
-            # Check if it's the right hour
-            pref_hour = pref.send_time.split(":")[0] if pref.send_time else "07"
-            if pref_hour != current_hour:
+            if not _is_pref_due_now(pref, now, current_hour, db, NotificationLog):
                 continue
-
-            # Check if already sent today
-            today_start = datetime.combine(date_type.today(), datetime.min.time())
-            already_sent = db.query(NotificationLog).filter(
-                NotificationLog.user_id == pref.user_id,
-                NotificationLog.sent_at >= today_start,
-                NotificationLog.status == "sent",
-            ).first()
-            if already_sent:
-                continue
-
-            # For weekly, check day of week
-            if pref.frequency == "weekly" and pref.send_day is not None:
-                if now.weekday() != pref.send_day:
-                    continue
-
-            # Get user
-            from app.models.user import User
-            user = db.query(User).filter(User.id == pref.user_id).first()
-            if not user:
-                continue
-
-            to_email = pref.email_override or user.email
-            if not to_email:
-                continue
-
-            # Build and send digest
-            digest = build_digest(db, user)
-            if not digest:
-                db.add(NotificationLog(
-                    user_id=user.id, subject="Daily Digest", status="skipped",
-                    error_message="No actionable items", item_count=0,
-                ))
-                db.commit()
-                continue
-
-            org_setting = db.query(Setting).filter(Setting.key == "org_name").first()
-            org_name = org_setting.value if org_setting else APP_TITLE
-            html = render_digest_html(digest, user, org_name)
-            subject = f"{org_name} — Daily Digest"
-
-            success = send_email(to_email, subject, html, db)
-            item_count = sum(len(v) if isinstance(v, list) else 0 for v in digest.values())
-
-            db.add(NotificationLog(
-                user_id=user.id, subject=subject,
-                status="sent" if success else "failed",
-                error_message=None if success else "SMTP send failed",
-                categories_included=json.dumps(list(digest.keys())),
-                item_count=item_count,
-            ))
-            db.commit()
-            logger.info("Digest %s for user %s (%s)", "sent" if success else "failed", user.display_name, to_email)
+            _send_user_digest(pref, db, NotificationLog)
 
     except Exception as exc:
         logger.error("Digest job failed: %s", exc)

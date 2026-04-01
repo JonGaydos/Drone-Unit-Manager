@@ -176,7 +176,7 @@ export default function ControllerDetailPage() {
                   <td className="px-4 py-2 text-muted-foreground">{m.description || '--'}</td>
                   <td className="px-4 py-2 text-muted-foreground hidden md:table-cell">{m.maintenance_type || m.type || '--'}</td>
                   <td className="px-4 py-2 text-muted-foreground hidden md:table-cell">{m.performed_by || '--'}</td>
-                  <td className="px-4 py-2 text-muted-foreground text-right">{m.cost != null ? `$${Number.parseFloat(m.cost).toFixed(2)}` : '--'}</td>
+                  <td className="px-4 py-2 text-muted-foreground text-right">{m.cost == null ? '--' : `$${Number.parseFloat(m.cost).toFixed(2)}`}</td>
                 </tr>
               ))}
               {maintenance.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">No maintenance records</td></tr>}

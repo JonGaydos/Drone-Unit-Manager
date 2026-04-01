@@ -4,6 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from app.constants import SCHEDULE_NOT_FOUND
 from app.deps import CurrentUser, DBSession, PilotUser
 from app.models.maintenance_schedule import MaintenanceSchedule
 from app.models.maintenance import MaintenanceRecord
@@ -86,7 +87,7 @@ def get_schedule(
 ):
     s = db.query(MaintenanceSchedule).filter(MaintenanceSchedule.id == schedule_id).first()
     if not s:
-        raise HTTPException(404, "Schedule not found")
+        raise HTTPException(404, SCHEDULE_NOT_FOUND)
     pilot = None
     if s.assigned_to_id:
         pilot = db.query(Pilot).filter(Pilot.id == s.assigned_to_id).first()
@@ -137,7 +138,7 @@ def update_schedule(
 ):
     schedule = db.query(MaintenanceSchedule).filter(MaintenanceSchedule.id == schedule_id).first()
     if not schedule:
-        raise HTTPException(404, "Schedule not found")
+        raise HTTPException(404, SCHEDULE_NOT_FOUND)
     update_data = data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(schedule, key, value)
@@ -153,7 +154,7 @@ def delete_schedule(
 ):
     schedule = db.query(MaintenanceSchedule).filter(MaintenanceSchedule.id == schedule_id).first()
     if not schedule:
-        raise HTTPException(404, "Schedule not found")
+        raise HTTPException(404, SCHEDULE_NOT_FOUND)
     db.delete(schedule)
     db.commit()
     return {"ok": True}
@@ -167,7 +168,7 @@ def complete_schedule(
 ):
     schedule = db.query(MaintenanceSchedule).filter(MaintenanceSchedule.id == schedule_id).first()
     if not schedule:
-        raise HTTPException(404, "Schedule not found")
+        raise HTTPException(404, SCHEDULE_NOT_FOUND)
 
     today = date.today()
     schedule.last_completed = today

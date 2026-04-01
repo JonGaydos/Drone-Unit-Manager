@@ -29,6 +29,7 @@ SENSOR_NOT_FOUND = "Sensor not found"
 ATTACHMENT_NOT_FOUND = "Attachment not found"
 DOCK_NOT_FOUND = "Dock not found"
 CHECKOUT_NOT_FOUND = "Checkout record not found"
+SCHEDULE_NOT_FOUND = "Schedule not found"
 
 ACCESS_DENIED = "Access denied"
 
@@ -61,3 +62,9 @@ APP_TITLE = "Drone Unit Manager"
 
 # ── Folder / geofence messages ───────────────────────────────────────────────
 FOLDER_NOT_FOUND = "Folder not found"
+
+# ── API paths ────────────────────────────────────────────────────────────────
+LOGO_VIEW_PATH = "/api/settings/logo/view"
+
+# ── Sync messages ────────────────────────────────────────────────────────────
+API_TOKEN_NOT_CONFIGURED = "API token not configured"

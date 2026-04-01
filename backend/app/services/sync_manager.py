@@ -7,7 +7,7 @@ from datetime import datetime, date, timezone
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.constants import UTC_OFFSET
+from app.constants import API_TOKEN_NOT_CONFIGURED, UTC_OFFSET
 from app.integrations.base import ProviderCredentials
 from app.integrations.registry import get_provider
 from app.models.vehicle import Vehicle
@@ -60,42 +60,46 @@ def _build_creds(db: Session, provider_name: str) -> ProviderCredentials:
     return ProviderCredentials(api_token=api_token, token_id=token_id)
 
 
+def _ensure_simple_equipment(db: Session, serial_raw: str | None, model_class, label: str):
+    """Auto-create a simple equipment record (Battery or SensorPackage) if it doesn't exist."""
+    if not serial_raw:
+        return
+    serial = serial_raw.strip()
+    if serial and not db.query(model_class).filter(model_class.serial_number == serial).first():
+        db.add(model_class(serial_number=serial, status="active"))
+        logger.info("Auto-created %s record: %s", label, serial)
+
+
+def _ensure_attachment_record(db: Session, val: str):
+    """Auto-create an Attachment record from a flight equipment string."""
+    serial = val.strip()
+    if db.query(Attachment).filter(Attachment.serial_number == serial).first():
+        return
+    if "(" in serial and serial.endswith(")"):
+        parts = serial.rsplit("(", 1)
+        name = parts[0].strip()
+        serial_inner = parts[1].rstrip(")")
+        if not db.query(Attachment).filter(Attachment.serial_number == serial_inner).first():
+            db.add(Attachment(serial_number=serial_inner, name=name, status="active"))
+            logger.info("Auto-created attachment record: %s (%s)", name, serial_inner)
+    else:
+        db.add(Attachment(serial_number=serial, status="active"))
+        logger.info("Auto-created attachment record: %s", serial)
+
+
 def _ensure_equipment_records(db: Session, flight: Flight):
     """Auto-create Fleet records (Battery, SensorPackage, Attachment) from flight equipment strings.
 
     If a flight references equipment by serial number that doesn't exist in the Fleet,
     create a minimal record so it appears in dropdown lists for future use.
     """
-    if flight.battery_serial:
-        serial = flight.battery_serial.strip()
-        if serial and not db.query(Battery).filter(Battery.serial_number == serial).first():
-            db.add(Battery(serial_number=serial, status="active"))
-            logger.info("Auto-created battery record: %s", serial)
+    _ensure_simple_equipment(db, flight.battery_serial, Battery, "battery")
+    _ensure_simple_equipment(db, flight.sensor_package, SensorPackage, "sensor package")
 
-    if flight.sensor_package:
-        serial = flight.sensor_package.strip()
-        if serial and not db.query(SensorPackage).filter(SensorPackage.serial_number == serial).first():
-            db.add(SensorPackage(serial_number=serial, status="active"))
-            logger.info("Auto-created sensor package record: %s", serial)
-
-    for field in ("attachment_top", "attachment_bottom", "attachment_left", "attachment_right"):
-        val = getattr(flight, field, None)
+    for field_name in ("attachment_top", "attachment_bottom", "attachment_left", "attachment_right"):
+        val = getattr(flight, field_name, None)
         if val:
-            # Attachments may have format "TYPE (SERIAL)" — extract serial if present
-            serial = val.strip()
-            if not db.query(Attachment).filter(Attachment.serial_number == serial).first():
-                # Try to extract name and serial from "NAME (SERIAL)" format
-                name = None
-                if "(" in serial and serial.endswith(")"):
-                    parts = serial.rsplit("(", 1)
-                    name = parts[0].strip()
-                    serial_inner = parts[1].rstrip(")")
-                    if not db.query(Attachment).filter(Attachment.serial_number == serial_inner).first():
-                        db.add(Attachment(serial_number=serial_inner, name=name, status="active"))
-                        logger.info("Auto-created attachment record: %s (%s)", name, serial_inner)
-                else:
-                    db.add(Attachment(serial_number=serial, status="active"))
-                    logger.info("Auto-created attachment record: %s", serial)
+            _ensure_attachment_record(db, val)
 
 
 def _merge_existing_flight(existing: Flight, f_data: dict, db: Session):
@@ -643,7 +647,7 @@ class SyncManager:
         try:
             creds = _build_creds(db, provider_name)
             if not creds.api_token:
-                return False, "API token not configured", {}
+                return False, API_TOKEN_NOT_CONFIGURED, {}
 
             provider = get_provider(provider_name)
             valid = provider.validate_credentials(creds)
@@ -669,7 +673,7 @@ class SyncManager:
         try:
             creds = _build_creds(db, provider_name)
             if not creds.api_token:
-                result.errors.append("API token not configured")
+                result.errors.append(API_TOKEN_NOT_CONFIGURED)
                 return result
 
             provider = get_provider(provider_name)
@@ -804,7 +808,7 @@ class SyncManager:
         try:
             creds = _build_creds(db, provider_name)
             if not creds.api_token:
-                result.errors.append("API token not configured")
+                result.errors.append(API_TOKEN_NOT_CONFIGURED)
                 return result
             provider = get_provider(provider_name)
         except Exception as exc:

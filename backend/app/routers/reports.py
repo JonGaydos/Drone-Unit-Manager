@@ -235,6 +235,54 @@ def generate_report_pdf(config: ReportConfig, db: DBSession, user: PilotUser):
     )
 
 
+def _chart_bar_by_key(ax, rows, key, value_key, title, ylabel, colors, plt):
+    """Draw a vertical bar chart counting rows by a key field."""
+    counts = {}
+    for r in rows:
+        k = r.get(key, "Unknown")
+        counts[k] = counts.get(k, 0) + (1 if value_key is None else r.get(value_key, 0))
+    if not counts:
+        return False
+    labels = list(counts.keys())[:10]
+    values = [counts[l] for l in labels]
+    ax.bar(labels, values, color=colors[:len(labels)], edgecolor="white", linewidth=0.5)
+    ax.set_ylabel(ylabel, fontsize=9)
+    ax.set_title(title, fontsize=11, fontweight="bold", color="#334155")
+    plt.xticks(rotation=30, ha="right", fontsize=8)
+    return True
+
+
+def _chart_barh(ax, rows, label_key, value_key, title, xlabel, colors, plt, truncate=None):
+    """Draw a horizontal bar chart from rows."""
+    labels = [r.get(label_key, "?") for r in rows][:10]
+    if truncate:
+        labels = [l[:truncate] for l in labels]
+    values = [r.get(value_key, 0) for r in rows][:10]
+    ax.barh(labels, values, color=colors[:len(labels)], edgecolor="white", linewidth=0.5)
+    ax.set_xlabel(xlabel, fontsize=9)
+    ax.set_title(title, fontsize=11, fontweight="bold", color="#334155")
+    ax.invert_yaxis()
+    plt.yticks(fontsize=8)
+
+
+def _chart_grouped_bars(ax, rows, label_key, hr_keys, title, plt, limit=10):
+    """Draw a grouped bar chart with flight/mission/training hours."""
+    import numpy as np
+    labels = [str(r.get(label_key, "?")) for r in rows][:limit]
+    groups = [[r.get(k, 0) for r in rows][:limit] for k in hr_keys]
+    x = np.arange(len(labels))
+    width = 0.25
+    bar_colors = ["#3b82f6", "#10b981", "#f59e0b"]
+    bar_labels = ["Flight", "Mission", "Training"]
+    for i, (vals, color, lbl) in enumerate(zip(groups, bar_colors, bar_labels)):
+        ax.bar(x + (i - 1) * width, vals, width, label=lbl, color=color, edgecolor="white", linewidth=0.5)
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, rotation=30, ha="right", fontsize=8)
+    ax.set_ylabel("Hours", fontsize=9)
+    ax.set_title(title, fontsize=11, fontweight="bold", color="#334155")
+    ax.legend(fontsize=8)
+
+
 def _generate_chart(report_type: str, data: dict) -> io.BytesIO | None:
     import matplotlib
     matplotlib.use("Agg")
@@ -252,35 +300,15 @@ def _generate_chart(report_type: str, data: dict) -> io.BytesIO | None:
 
     try:
         if report_type == "flight_summary":
-            purposes = {}
-            for r in rows:
-                p = r.get("purpose", "Unknown")
-                purposes[p] = purposes.get(p, 0) + 1
-            if purposes:
-                labels = list(purposes.keys())[:10]
-                values = [purposes[l] for l in labels]
-                bars = ax.bar(labels, values, color=chart_colors[:len(labels)], edgecolor="white", linewidth=0.5)
-                ax.set_ylabel("Flights", fontsize=9)
-                ax.set_title("Flights by Purpose", fontsize=11, fontweight="bold", color="#334155")
-                plt.xticks(rotation=30, ha="right", fontsize=8)
+            if not _chart_bar_by_key(ax, rows, "purpose", None, "Flights by Purpose", "Flights", chart_colors, plt):
+                plt.close(fig)
+                return None
 
         elif report_type == "pilot_hours":
-            labels = [r.get("pilot", "?") for r in rows][:10]
-            values = [r.get("hours", 0) for r in rows][:10]
-            bars = ax.barh(labels, values, color=chart_colors[:len(labels)], edgecolor="white", linewidth=0.5)
-            ax.set_xlabel("Hours", fontsize=9)
-            ax.set_title("Hours by Pilot", fontsize=11, fontweight="bold", color="#334155")
-            ax.invert_yaxis()
-            plt.yticks(fontsize=8)
+            _chart_barh(ax, rows, "pilot", "hours", "Hours by Pilot", "Hours", chart_colors, plt)
 
         elif report_type == "equipment_utilization":
-            labels = [r.get("vehicle", "?")[:20] for r in rows][:10]
-            values = [r.get("hours", 0) for r in rows][:10]
-            bars = ax.barh(labels, values, color=chart_colors[:len(labels)], edgecolor="white", linewidth=0.5)
-            ax.set_xlabel("Hours", fontsize=9)
-            ax.set_title("Hours by Vehicle", fontsize=11, fontweight="bold", color="#334155")
-            ax.invert_yaxis()
-            plt.yticks(fontsize=8)
+            _chart_barh(ax, rows, "vehicle", "hours", "Hours by Vehicle", "Hours", chart_colors, plt, truncate=20)
 
         elif report_type == "battery_status":
             status_counts = {}
@@ -288,66 +316,29 @@ def _generate_chart(report_type: str, data: dict) -> io.BytesIO | None:
                 s = r.get("status", "unknown")
                 status_counts[s] = status_counts.get(s, 0) + 1
             if status_counts:
-                labels = list(status_counts.keys())
-                values = list(status_counts.values())
-                ax.pie(values, labels=labels, colors=chart_colors[:len(labels)],
+                ax.pie(list(status_counts.values()), labels=list(status_counts.keys()),
+                       colors=chart_colors[:len(status_counts)],
                        autopct="%1.0f%%", startangle=90, textprops={"fontsize": 9})
                 ax.set_title("Battery Status Distribution", fontsize=11, fontweight="bold", color="#334155")
 
         elif report_type == "maintenance_history":
-            type_counts = {}
-            for r in rows:
-                t = r.get("type", "other")
-                type_counts[t] = type_counts.get(t, 0) + 1
-            if type_counts:
-                labels = list(type_counts.keys())[:10]
-                values = [type_counts[l] for l in labels]
-                bars = ax.bar(labels, values, color=chart_colors[:len(labels)], edgecolor="white", linewidth=0.5)
-                ax.set_ylabel("Records", fontsize=9)
-                ax.set_title("Records by Type", fontsize=11, fontweight="bold", color="#334155")
-                plt.xticks(rotation=30, ha="right", fontsize=8)
+            _chart_bar_by_key(ax, rows, "type", None, "Records by Type", "Records", chart_colors, plt)
 
         elif report_type == "pilot_certifications":
             summary = data.get("summary", {})
             cats = ["Active", "Expired", "Pending"]
             vals = [summary.get("total_active", 0), summary.get("total_expired", 0), summary.get("total_pending", 0)]
-            bars = ax.bar(cats, vals, color=["#10b981", "#ef4444", "#f59e0b"], edgecolor="white", linewidth=0.5)
+            ax.bar(cats, vals, color=["#10b981", "#ef4444", "#f59e0b"], edgecolor="white", linewidth=0.5)
             ax.set_ylabel("Count", fontsize=9)
             ax.set_title("Certification Status", fontsize=11, fontweight="bold", color="#334155")
 
         elif report_type == "pilot_activity_summary":
-            labels = [r.get("pilot", "?") for r in rows][:10]
-            flight_hrs = [r.get("flight_hours", 0) for r in rows][:10]
-            mission_hrs = [r.get("mission_hours", 0) for r in rows][:10]
-            training_hrs = [r.get("training_hours", 0) for r in rows][:10]
-            import numpy as np
-            x = np.arange(len(labels))
-            width = 0.25
-            ax.bar(x - width, flight_hrs, width, label="Flight", color="#3b82f6", edgecolor="white", linewidth=0.5)
-            ax.bar(x, mission_hrs, width, label="Mission", color="#10b981", edgecolor="white", linewidth=0.5)
-            ax.bar(x + width, training_hrs, width, label="Training", color="#f59e0b", edgecolor="white", linewidth=0.5)
-            ax.set_xticks(x)
-            ax.set_xticklabels(labels, rotation=30, ha="right", fontsize=8)
-            ax.set_ylabel("Hours", fontsize=9)
-            ax.set_title("Hours by Pilot (Flight / Mission / Training)", fontsize=11, fontweight="bold", color="#334155")
-            ax.legend(fontsize=8)
+            _chart_grouped_bars(ax, rows, "pilot", ["flight_hours", "mission_hours", "training_hours"],
+                                "Hours by Pilot (Flight / Mission / Training)", plt)
 
         elif report_type == "annual_unit_report":
-            labels = [str(r.get("year", "?")) for r in rows][:15]
-            flight_hrs = [r.get("flight_hours", 0) for r in rows][:15]
-            mission_hrs = [r.get("mission_hours", 0) for r in rows][:15]
-            training_hrs = [r.get("training_hours", 0) for r in rows][:15]
-            import numpy as np
-            x = np.arange(len(labels))
-            width = 0.25
-            ax.bar(x - width, flight_hrs, width, label="Flight", color="#3b82f6", edgecolor="white", linewidth=0.5)
-            ax.bar(x, mission_hrs, width, label="Mission", color="#10b981", edgecolor="white", linewidth=0.5)
-            ax.bar(x + width, training_hrs, width, label="Training", color="#f59e0b", edgecolor="white", linewidth=0.5)
-            ax.set_xticks(x)
-            ax.set_xticklabels(labels, fontsize=8)
-            ax.set_ylabel("Hours", fontsize=9)
-            ax.set_title("Year-over-Year Activity Hours", fontsize=11, fontweight="bold", color="#334155")
-            ax.legend(fontsize=8)
+            _chart_grouped_bars(ax, rows, "year", ["flight_hours", "mission_hours", "training_hours"],
+                                "Year-over-Year Activity Hours", plt, limit=15)
 
         else:
             plt.close(fig)
@@ -631,6 +622,40 @@ def _maintenance_history(config: ReportConfig, db: Session):
     }
 
 
+def _pilot_flight_hours(db: Session, pilot_id: int, config: ReportConfig) -> float:
+    """Get total flight hours for a pilot within the config date range."""
+    fq = db.query(func.coalesce(func.sum(Flight.duration_seconds), 0)).filter(Flight.pilot_id == pilot_id)
+    if config.date_from:
+        fq = fq.filter(Flight.date >= config.date_from)
+    if config.date_to:
+        fq = fq.filter(Flight.date <= config.date_to)
+    return round((fq.scalar() or 0) / 3600, 1)
+
+
+def _pilot_mission_hours(db: Session, pilot_id: int, config: ReportConfig) -> float:
+    """Get total mission hours for a pilot within the config date range."""
+    mq = db.query(func.coalesce(func.sum(MissionLogPilot.hours), 0)).filter(MissionLogPilot.pilot_id == pilot_id)
+    if config.date_from or config.date_to:
+        mq = mq.join(MissionLog, MissionLogPilot.mission_log_id == MissionLog.id)
+        if config.date_from:
+            mq = mq.filter(MissionLog.date >= config.date_from)
+        if config.date_to:
+            mq = mq.filter(MissionLog.date <= config.date_to)
+    return round(mq.scalar() or 0, 1)
+
+
+def _pilot_training_hours(db: Session, pilot_id: int, config: ReportConfig) -> float:
+    """Get total training hours for a pilot within the config date range."""
+    tq = db.query(func.coalesce(func.sum(TrainingLogPilot.hours), 0)).filter(TrainingLogPilot.pilot_id == pilot_id)
+    if config.date_from or config.date_to:
+        tq = tq.join(TrainingLog, TrainingLogPilot.training_log_id == TrainingLog.id)
+        if config.date_from:
+            tq = tq.filter(TrainingLog.date >= config.date_from)
+        if config.date_to:
+            tq = tq.filter(TrainingLog.date <= config.date_to)
+    return round(tq.scalar() or 0, 1)
+
+
 def _pilot_activity_summary(config: ReportConfig, db: Session):
     pilots = db.query(Pilot).filter(Pilot.status == "active").order_by(Pilot.last_name).all()
 
@@ -640,34 +665,9 @@ def _pilot_activity_summary(config: ReportConfig, db: Session):
     total_training_hrs = 0
 
     for pilot in pilots:
-        # Flight hours
-        fq = db.query(func.coalesce(func.sum(Flight.duration_seconds), 0)).filter(Flight.pilot_id == pilot.id)
-        if config.date_from:
-            fq = fq.filter(Flight.date >= config.date_from)
-        if config.date_to:
-            fq = fq.filter(Flight.date <= config.date_to)
-        flight_secs = fq.scalar() or 0
-        flight_hrs = round(flight_secs / 3600, 1)
-
-        # Mission man-hours
-        mq = db.query(func.coalesce(func.sum(MissionLogPilot.hours), 0)).filter(MissionLogPilot.pilot_id == pilot.id)
-        if config.date_from or config.date_to:
-            mq = mq.join(MissionLog, MissionLogPilot.mission_log_id == MissionLog.id)
-            if config.date_from:
-                mq = mq.filter(MissionLog.date >= config.date_from)
-            if config.date_to:
-                mq = mq.filter(MissionLog.date <= config.date_to)
-        mission_hrs = round(mq.scalar() or 0, 1)
-
-        # Training hours
-        tq = db.query(func.coalesce(func.sum(TrainingLogPilot.hours), 0)).filter(TrainingLogPilot.pilot_id == pilot.id)
-        if config.date_from or config.date_to:
-            tq = tq.join(TrainingLog, TrainingLogPilot.training_log_id == TrainingLog.id)
-            if config.date_from:
-                tq = tq.filter(TrainingLog.date >= config.date_from)
-            if config.date_to:
-                tq = tq.filter(TrainingLog.date <= config.date_to)
-        training_hrs = round(tq.scalar() or 0, 1)
+        flight_hrs = _pilot_flight_hours(db, pilot.id, config)
+        mission_hrs = _pilot_mission_hours(db, pilot.id, config)
+        training_hrs = _pilot_training_hours(db, pilot.id, config)
 
         total_hrs = round(flight_hrs + mission_hrs + training_hrs, 1)
         total_flight_hrs += flight_hrs

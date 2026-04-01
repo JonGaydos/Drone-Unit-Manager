@@ -413,8 +413,8 @@ export default function FlightDetailPage() {
       {telemetry.length > 0 && (() => {
         const chartData = telemetry.map(t => ({
           ...t,
-          altitude_ft: t.altitude_m != null ? Math.round(t.altitude_m * 3.28084) : null,
-          speed_mph: t.speed_mps != null ? Math.round(t.speed_mps * 2.23694 * 10) / 10 : null,
+          altitude_ft: t.altitude_m == null ? null : Math.round(t.altitude_m * 3.28084),
+          speed_mph: t.speed_mps == null ? null : Math.round(t.speed_mps * 2.23694 * 10) / 10,
         }))
         return (
         <div className="space-y-4">

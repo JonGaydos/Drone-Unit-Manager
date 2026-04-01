@@ -25,8 +25,9 @@ function CertTypeModal({ certType, onSave, onClose }) {
     try { await onSave(data) } finally { setSaving(false) }
   }
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <button className="absolute inset-0 bg-transparent cursor-default" onClick={onClose} aria-label="Close dialog" />
+      <div className="relative bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl">
         <h2 className="text-lg font-semibold text-foreground mb-4">{certType ? 'Edit Certification Type' : 'Add Certification Type'}</h2>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
@@ -86,7 +87,7 @@ function AssignCertModal({ pilots, certTypes, existingCert, onSave, onClose, cer
     issue_date: existingCert.issue_date || '',
     expiration_date: existingCert.expiration_date || '',
     certificate_number: existingCert.certificate_number || '',
-    nist_level: existingCert.nist_level != null ? String(existingCert.nist_level) : '',
+    nist_level: existingCert.nist_level == null ? '' : String(existingCert.nist_level),
     notes: existingCert.notes || '',
   } : {
     pilot_id: '', certification_type_id: '', status: 'not_started', issue_date: '', expiration_date: '', certificate_number: '', nist_level: '', notes: ''
@@ -105,8 +106,9 @@ function AssignCertModal({ pilots, certTypes, existingCert, onSave, onClose, cer
     try { await onSave(data, isEditing ? existingCert.id : null) } finally { setSaving(false) }
   }
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <button className="absolute inset-0 bg-transparent cursor-default" onClick={onClose} aria-label="Close dialog" />
+      <div className="relative bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl">
         <h2 className="text-lg font-semibold text-foreground mb-4">{isEditing ? 'Edit Certification' : 'Assign Certification'}</h2>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>

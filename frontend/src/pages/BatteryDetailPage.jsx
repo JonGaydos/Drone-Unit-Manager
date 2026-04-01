@@ -214,7 +214,7 @@ export default function BatteryDetailPage() {
         </div>
         <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center text-emerald-400"><Activity className="w-5 h-5" /></div>
-          <div><p className="text-2xl font-bold text-foreground">{battery.health_pct != null ? `${battery.health_pct}%` : '--'}</p><p className="text-xs text-muted-foreground">Health</p></div>
+          <div><p className="text-2xl font-bold text-foreground">{battery.health_pct == null ? '--' : `${battery.health_pct}%`}</p><p className="text-xs text-muted-foreground">Health</p></div>
         </div>
         <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-blue-500/15 flex items-center justify-center text-blue-400"><QuadcopterIcon className="w-5 h-5" /></div>
@@ -222,7 +222,7 @@ export default function BatteryDetailPage() {
         </div>
         <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-amber-500/15 flex items-center justify-center text-amber-400"><Clock className="w-5 h-5" /></div>
-          <div><p className="text-2xl font-bold text-foreground">{stats?.total_hours != null ? `${stats.total_hours}h` : '--'}</p><p className="text-xs text-muted-foreground">Total Hours</p></div>
+          <div><p className="text-2xl font-bold text-foreground">{stats?.total_hours == null ? '--' : `${stats.total_hours}h`}</p><p className="text-xs text-muted-foreground">Total Hours</p></div>
         </div>
       </div>
 
@@ -321,7 +321,7 @@ export default function BatteryDetailPage() {
                   <td className="px-4 py-2 text-foreground">{m.description || '--'}</td>
                   <td className="px-4 py-2 text-foreground hidden md:table-cell">{m.maintenance_type || m.type || '--'}</td>
                   <td className="px-4 py-2 text-foreground hidden md:table-cell">{m.performed_by || '--'}</td>
-                  <td className="px-4 py-2 text-foreground text-right">{m.cost != null ? `$${Number.parseFloat(m.cost).toFixed(2)}` : '--'}</td>
+                  <td className="px-4 py-2 text-foreground text-right">{m.cost == null ? '--' : `$${Number.parseFloat(m.cost).toFixed(2)}`}</td>
                 </tr>
               ))}
               {maintenance.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">No maintenance records</td></tr>}
@@ -381,8 +381,9 @@ export default function BatteryDetailPage() {
       </div>
 
       {showReadingForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowReadingForm(false)}>
-          <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <button className="absolute inset-0 bg-transparent cursor-default" onClick={() => setShowReadingForm(false)} aria-label="Close dialog" />
+          <div className="relative bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl">
             <h2 className="text-lg font-semibold text-foreground mb-4">Record Battery Health Reading</h2>
             <div className="space-y-3">
               <div>

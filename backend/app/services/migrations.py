@@ -6,6 +6,48 @@ from app.database import engine
 logger = logging.getLogger(__name__)
 
 
+def _apply_column_migrations(conn, inspector, migrations: list, log_prefix: str = "Migration"):
+    """Apply a list of (table, column, sql) migrations, skipping existing columns."""
+    table_names = inspector.get_table_names()
+    for table, column, sql in migrations:
+        if table not in table_names:
+            continue
+        existing = [c["name"] for c in inspector.get_columns(table)]
+        if column in existing:
+            continue
+        try:
+            conn.execute(text(sql))
+            conn.commit()
+            logger.info("%s: Added %s.%s", log_prefix, table, column)
+        except Exception as e:
+            logger.warning("%s %s.%s failed: %s", log_prefix, table, column, e)
+            conn.rollback()
+
+
+def _rename_vehicle_serial(conn, inspector):
+    """Rename skydio_vehicle_serial -> provider_serial with fallback."""
+    if "vehicles" not in inspector.get_table_names():
+        return
+    existing = [c["name"] for c in inspector.get_columns("vehicles")]
+    if "skydio_vehicle_serial" not in existing or "provider_serial" in existing:
+        return
+    try:
+        conn.execute(text("ALTER TABLE vehicles RENAME COLUMN skydio_vehicle_serial TO provider_serial"))
+        conn.commit()
+        logger.info("Migration: Renamed vehicles.skydio_vehicle_serial to provider_serial")
+    except Exception as e:
+        logger.warning("Rename column failed, trying fallback: %s", e)
+        conn.rollback()
+        try:
+            conn.execute(text("ALTER TABLE vehicles ADD COLUMN provider_serial VARCHAR(100)"))
+            conn.execute(text("UPDATE vehicles SET provider_serial = skydio_vehicle_serial"))
+            conn.commit()
+            logger.info("Migration: Added vehicles.provider_serial (fallback)")
+        except Exception as e2:
+            logger.warning("Fallback migration for provider_serial failed: %s", e2)
+            conn.rollback()
+
+
 def run_migrations():
     """Add new columns to existing tables if they don't exist."""
     inspector = inspect(engine)
@@ -64,37 +106,8 @@ def run_migrations():
     ]
 
     with engine.connect() as conn:
-        for table, column, sql in migrations:
-            if table in inspector.get_table_names():
-                existing = [c["name"] for c in inspector.get_columns(table)]
-                if column not in existing:
-                    try:
-                        conn.execute(text(sql))
-                        conn.commit()
-                        logger.info("Migration: Added %s.%s", table, column)
-                    except Exception as e:
-                        logger.warning("Migration %s.%s failed: %s", table, column, e)
-                        conn.rollback()
-
-        # Phase 0A: Rename skydio_vehicle_serial -> provider_serial
-        if "vehicles" in inspector.get_table_names():
-            existing = [c["name"] for c in inspector.get_columns("vehicles")]
-            if "skydio_vehicle_serial" in existing and "provider_serial" not in existing:
-                try:
-                    conn.execute(text("ALTER TABLE vehicles RENAME COLUMN skydio_vehicle_serial TO provider_serial"))
-                    conn.commit()
-                    logger.info("Migration: Renamed vehicles.skydio_vehicle_serial to provider_serial")
-                except Exception as e:
-                    logger.warning("Rename column failed, trying fallback: %s", e)
-                    conn.rollback()
-                    try:
-                        conn.execute(text("ALTER TABLE vehicles ADD COLUMN provider_serial VARCHAR(100)"))
-                        conn.execute(text("UPDATE vehicles SET provider_serial = skydio_vehicle_serial"))
-                        conn.commit()
-                        logger.info("Migration: Added vehicles.provider_serial (fallback)")
-                    except Exception as e2:
-                        logger.warning("Fallback migration for provider_serial failed: %s", e2)
-                        conn.rollback()
+        _apply_column_migrations(conn, inspector, migrations)
+        _rename_vehicle_serial(conn, inspector)
 
     # Telemetry DB migrations (separate database)
     from app.database import telemetry_engine
@@ -104,14 +117,4 @@ def run_migrations():
         ("telemetry_points", "source", "ALTER TABLE telemetry_points ADD COLUMN source VARCHAR(30)"),
     ]
     with telemetry_engine.connect() as conn:
-        for table, column, sql in telemetry_migrations:
-            if table in telemetry_inspector.get_table_names():
-                existing = [c["name"] for c in telemetry_inspector.get_columns(table)]
-                if column not in existing:
-                    try:
-                        conn.execute(text(sql))
-                        conn.commit()
-                        logger.info("Telemetry migration: Added %s.%s", table, column)
-                    except Exception as e:
-                        logger.warning("Telemetry migration %s.%s failed: %s", table, column, e)
-                        conn.rollback()
+        _apply_column_migrations(conn, telemetry_inspector, telemetry_migrations, "Telemetry migration")

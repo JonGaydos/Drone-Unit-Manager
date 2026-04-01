@@ -32,8 +32,9 @@ function PilotModal({ pilot, onSave, onClose }) {
   )
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <button className="absolute inset-0 bg-transparent cursor-default" onClick={onClose} aria-label="Close dialog" />
+      <div className="relative bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl">
         <h2 className="text-lg font-semibold text-foreground mb-4">{pilot ? 'Edit Pilot' : 'Add Pilot'}</h2>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="grid grid-cols-2 gap-3">

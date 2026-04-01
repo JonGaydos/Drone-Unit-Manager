@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app.config import settings as app_settings
+from app.constants import LOGO_VIEW_PATH
 from app.deps import DBSession, CurrentUser, AdminUser
 from app.models.setting import Setting
 from app.responses import responses
@@ -112,11 +113,11 @@ async def upload_logo(file: UploadFile, db: DBSession, user: AdminUser):
     await anyio.Path(filepath).write_bytes(content)
     setting = db.query(Setting).filter(Setting.key == "org_logo").first()
     if setting:
-        setting.value = "/api/settings/logo/view"
+        setting.value = LOGO_VIEW_PATH
     else:
-        db.add(Setting(key="org_logo", value="/api/settings/logo/view"))
+        db.add(Setting(key="org_logo", value=LOGO_VIEW_PATH))
     db.commit()
-    return {"ok": True, "logo_url": "/api/settings/logo/view"}
+    return {"ok": True, "logo_url": LOGO_VIEW_PATH}
 
 
 @router.get("/logo/view", responses=responses(404))

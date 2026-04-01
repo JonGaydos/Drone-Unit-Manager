@@ -462,14 +462,14 @@ export default function PilotDetailPage() {
                       <span className="text-xs text-muted-foreground ml-1">({r.period_days}d)</span>
                     </td>
                     <td className="px-4 py-2 text-foreground">
-                      {r.required_flights != null ? (
+                      {r.required_flights == null ? '—' : (
                         <>
                           <span className={r.actual_flights >= r.required_flights ? 'text-emerald-400' : 'text-red-400'}>
                             {r.actual_flights}
                           </span>
                           <span className="text-muted-foreground"> / {r.required_flights}</span>
                         </>
-                      ) : '—'}
+                      )}
                     </td>
                     <td className="px-4 py-2">
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${

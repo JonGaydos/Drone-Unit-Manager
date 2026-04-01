@@ -45,7 +45,7 @@ function getAltColor(altBaro) {
 }
 
 function aircraftIcon(track, color) {
-  const rotation = track != null ? track : 0
+  const rotation = track == null ? 0 : track
   return L.divIcon({
     className: '',
     iconSize: [24, 24],
@@ -301,9 +301,9 @@ export default function AirspacePage() {
                       <span className="text-gray-500">Type:</span><span>{ac.aircraft_type || '--'}</span>
                       <span className="text-gray-500">Reg:</span><span>{ac.registration || '--'}</span>
                       <span className="text-gray-500">Altitude:</span><span>{fmtAlt(ac.alt_baro)}</span>
-                      <span className="text-gray-500">Speed:</span><span>{ac.gs != null ? ac.gs + ' kts' : '--'}</span>
-                      <span className="text-gray-500">Heading:</span><span>{ac.track != null ? ac.track + '\u00B0' : '--'}</span>
-                      <span className="text-gray-500">Vert Rate:</span><span>{ac.baro_rate != null ? ac.baro_rate + ' ft/m' : '--'}</span>
+                      <span className="text-gray-500">Speed:</span><span>{ac.gs == null ? '--' : ac.gs + ' kts'}</span>
+                      <span className="text-gray-500">Heading:</span><span>{ac.track == null ? '--' : ac.track + '\u00B0'}</span>
+                      <span className="text-gray-500">Vert Rate:</span><span>{ac.baro_rate == null ? '--' : ac.baro_rate + ' ft/m'}</span>
                       <span className="text-gray-500">Squawk:</span><span>{ac.squawk || '--'}</span>
                     </div>
                     {ac.emergency && ac.emergency !== 'none' && (

@@ -156,11 +156,9 @@ export default function MediaPage() {
                       className="group bg-card border border-border rounded-xl overflow-hidden hover:border-primary/50 transition-all hover:shadow-lg hover:shadow-primary/5"
                     >
                       {/* Thumbnail */}
-                      <div
-                        className="aspect-[4/3] bg-muted/30 relative cursor-pointer overflow-hidden"
-                       
-                        tabIndex={0}
-                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setLightbox(idx) } }}
+                      <button
+                        type="button"
+                        className="aspect-[4/3] bg-muted/30 relative cursor-pointer overflow-hidden w-full block"
                         onClick={() => setLightbox(idx)}
                       >
                         <img
@@ -172,7 +170,7 @@ export default function MediaPage() {
                         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
                           <ZoomIn className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />
                         </div>
-                      </div>
+                      </button>
                       {/* Info */}
                       <div className="p-3 space-y-1.5">
                         <p className="text-sm font-medium text-foreground truncate" title={photo.title || photo.filename}>
@@ -259,16 +257,17 @@ function LightboxModal({ photos, index, onClose, onPrev, onNext, formatDate, for
   const API = import.meta.env.VITE_API_URL || '/api'
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center" onClick={onClose}>
+    <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center">
+      <button className="absolute inset-0 bg-transparent cursor-default" onClick={onClose} aria-label="Close dialog" />
       <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
         <button
-          onClick={(e) => { e.stopPropagation(); setShowInfo(s => !s) }}
+          onClick={() => setShowInfo(s => !s)}
           className="p-2 text-white/70 hover:text-white bg-black/40 rounded-lg transition-colors"
         >
           <Info className="w-5 h-5" />
         </button>
         <button
-          onClick={(e) => { e.stopPropagation(); onClose() }}
+          onClick={onClose}
           className="p-2 text-white/70 hover:text-white bg-black/40 rounded-lg transition-colors"
           aria-label="Close"
         >
@@ -280,13 +279,13 @@ function LightboxModal({ photos, index, onClose, onPrev, onNext, formatDate, for
       {photos.length > 1 && (
         <>
           <button
-            onClick={(e) => { e.stopPropagation(); onPrev() }}
+            onClick={onPrev}
             className="absolute left-4 top-1/2 -translate-y-1/2 p-3 text-white/70 hover:text-white bg-black/40 rounded-full transition-colors z-10"
           >
             <ChevronLeft className="w-6 h-6" />
           </button>
           <button
-            onClick={(e) => { e.stopPropagation(); onNext() }}
+            onClick={onNext}
             className="absolute right-4 top-1/2 -translate-y-1/2 p-3 text-white/70 hover:text-white bg-black/40 rounded-full transition-colors z-10"
           >
             <ChevronRight className="w-6 h-6" />
@@ -295,7 +294,7 @@ function LightboxModal({ photos, index, onClose, onPrev, onNext, formatDate, for
       )}
 
       {/* Image */}
-      <div className="max-w-[90vw] max-h-[85vh] flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+      <div className="relative max-w-[90vw] max-h-[85vh] flex items-center justify-center">
         <img
           src={`${API}/photos/${photo.id}/view`}
           alt={photo.title || photo.filename}
@@ -306,9 +305,7 @@ function LightboxModal({ photos, index, onClose, onPrev, onNext, formatDate, for
       {/* Info panel */}
       {showInfo && (
         <div
-          className="absolute bottom-0 left-0 right-0 bg-black/80 backdrop-blur-sm p-6 text-white"
-         
-          onClick={(e) => e.stopPropagation()}
+          className="absolute bottom-0 left-0 right-0 bg-black/80 backdrop-blur-sm p-6 text-white z-10"
         >
           <div className="max-w-2xl mx-auto space-y-2">
             <h3 className="text-lg font-semibold">{photo.title || photo.filename}</h3>
@@ -380,11 +377,10 @@ function UploadModal({ pilots, onClose, onSuccess }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+      <button className="absolute inset-0 bg-transparent cursor-default" onClick={onClose} aria-label="Close dialog" />
       <div
-        className="bg-card border border-border rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
-       
-        onClick={(e) => e.stopPropagation()}
+        className="relative bg-card border border-border rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
       >
         <div className="flex items-center justify-between p-4 border-b border-border">
           <h2 className="text-lg font-semibold text-foreground">Upload Photo</h2>
@@ -392,9 +388,9 @@ function UploadModal({ pilots, onClose, onSuccess }) {
         </div>
         <div className="p-4 space-y-4">
           {/* File drop */}
-          <div
-            tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileRef.current?.click() } }} onClick={() => fileRef.current?.click()}
-            className="border-2 border-dashed border-border rounded-xl p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
+          <button
+            type="button" onClick={() => fileRef.current?.click()}
+            className="border-2 border-dashed border-border rounded-xl p-6 text-center cursor-pointer hover:border-primary/50 transition-colors w-full"
           >
             {preview ? (
               <div>
@@ -410,7 +406,7 @@ function UploadModal({ pilots, onClose, onSuccess }) {
               </div>
             )}
             <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => handleFiles(e.target.files)} />
-          </div>
+          </button>
 
           <div>
             <label htmlFor="title" className="block text-sm font-medium text-foreground mb-1">Title</label>
@@ -531,11 +527,10 @@ function EditModal({ photo, pilots, onClose, onSuccess }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+      <button className="absolute inset-0 bg-transparent cursor-default" onClick={onClose} aria-label="Close dialog" />
       <div
-        className="bg-card border border-border rounded-xl w-full max-w-lg"
-       
-        onClick={(e) => e.stopPropagation()}
+        className="relative bg-card border border-border rounded-xl w-full max-w-lg"
       >
         <div className="flex items-center justify-between p-4 border-b border-border">
           <h2 className="text-lg font-semibold text-foreground">Edit Photo</h2>
