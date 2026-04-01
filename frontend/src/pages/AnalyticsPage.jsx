@@ -36,9 +36,9 @@ function ChartCard({ title, children }) {
 
 // Returns a color with the given opacity as an rgba string
 function withOpacity(hex, opacity) {
-  const r = parseInt(hex.slice(1, 3), 16)
-  const g = parseInt(hex.slice(3, 5), 16)
-  const b = parseInt(hex.slice(5, 7), 16)
+  const r = Number.parseInt(hex.slice(1, 3), 16)
+  const g = Number.parseInt(hex.slice(3, 5), 16)
+  const b = Number.parseInt(hex.slice(5, 7), 16)
   return `rgba(${r}, ${g}, ${b}, ${opacity})`
 }
 
@@ -414,7 +414,7 @@ export default function AnalyticsPage() {
                   }
                   return (
                     <Cell
-                      key={i}
+                      key={entry.pilot_name}
                       fill={fillColor}
                       stroke={isSelected ? baseColor : 'none'}
                       strokeWidth={isSelected ? 3 : 0}
@@ -534,13 +534,13 @@ export default function AnalyticsPage() {
                 </tr>
               </thead>
               <tbody>
-                {pilotHours.map((p, i) => {
+                {pilotHours.map((p) => {
                   const isSelected = filters.pilot === p.pilot_name
                   const hasFilteredData = filteredPilotHours && filteredPilotHours[p.pilot_name]
                   const isDimmed = hasActiveFilter && !isSelected && !hasFilteredData
                   return (
                     <tr
-                      key={i}
+                      key={p.pilot_name}
                       className={`border-b border-border/50 cursor-pointer transition-colors ${
                         isSelected
                           ? 'bg-indigo-500/15'

@@ -6,16 +6,15 @@ organization logo upload, and bulk updates.
 
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+import anyio
+from fastapi import APIRouter, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
 
 from app.config import settings as app_settings
-from app.database import get_db
+from app.deps import DBSession, CurrentUser, AdminUser
 from app.models.setting import Setting
-from app.models.user import User
-from app.routers.auth import get_current_user, require_admin
+from app.responses import responses
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -51,8 +50,8 @@ class SettingOut(BaseModel):
 MASKED_KEYS = {"skydio_api_token", "smtp_password"}
 
 
-@router.get("", response_model=list[SettingOut])
-def list_settings(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+@router.get("", response_model=list[SettingOut], responses=responses(401))
+def list_settings(db: DBSession, user: CurrentUser):
     """List all settings. Secret values are partially masked in the response."""
     settings = db.query(Setting).all()
     result = []
@@ -64,8 +63,8 @@ def list_settings(db: Session = Depends(get_db), user: User = Depends(get_curren
     return result
 
 
-@router.get("/{key}", response_model=SettingOut)
-def get_setting(key: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+@router.get("/{key}", response_model=SettingOut, responses=responses(401))
+def get_setting(key: str, db: DBSession, user: CurrentUser):
     """Retrieve a single setting by key. Returns empty value if not found."""
     setting = db.query(Setting).filter(Setting.key == key).first()
     if not setting:
@@ -76,8 +75,8 @@ def get_setting(key: str, db: Session = Depends(get_db), user: User = Depends(ge
     return SettingOut(key=key, value=value)
 
 
-@router.put("")
-def set_setting(data: SettingValue, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+@router.put("", responses=responses(400, 401))
+def set_setting(data: SettingValue, db: DBSession, admin: AdminUser):
     """Create or update a single setting. Admin only. Key must be in ALLOWED_SETTING_KEYS."""
     if data.key not in ALLOWED_SETTING_KEYS:
         raise HTTPException(400, f"Setting key '{data.key}' is not allowed")
@@ -96,8 +95,8 @@ def set_setting(data: SettingValue, db: Session = Depends(get_db), admin: User =
 ALLOWED_LOGO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".svg"}
 
 
-@router.post("/logo")
-async def upload_logo(file: UploadFile, db: Session = Depends(get_db), user: User = Depends(require_admin)):
+@router.post("/logo", responses=responses(400, 401, 413))
+async def upload_logo(file: UploadFile, db: DBSession, user: AdminUser):
     """Upload or replace the organization logo. Admin only."""
     upload_dir = Path(app_settings.UPLOAD_DIR) / "org"
     upload_dir.mkdir(parents=True, exist_ok=True)
@@ -109,9 +108,8 @@ async def upload_logo(file: UploadFile, db: Session = Depends(get_db), user: Use
     filepath = upload_dir / f"logo{ext}"
     content = await file.read()
     if len(content) > app_settings.MAX_UPLOAD_SIZE:
-        raise HTTPException(413, f"File too large. Maximum size is {app_settings.MAX_UPLOAD_SIZE // (1024*1024)}MB")
-    with open(filepath, "wb") as f:
-        f.write(content)
+        raise HTTPException(413, f"File too large. Maximum size is {app_settings.MAX_UPLOAD_SIZE // (1024 * 1024)}MB")
+    await anyio.Path(filepath).write_bytes(content)
     setting = db.query(Setting).filter(Setting.key == "org_logo").first()
     if setting:
         setting.value = "/api/settings/logo/view"
@@ -121,7 +119,7 @@ async def upload_logo(file: UploadFile, db: Session = Depends(get_db), user: Use
     return {"ok": True, "logo_url": "/api/settings/logo/view"}
 
 
-@router.get("/logo/view")
+@router.get("/logo/view", responses=responses(404))
 def view_logo():
     """Serve the organization logo image file."""
     logo_dir = Path(app_settings.UPLOAD_DIR) / "org"
@@ -132,8 +130,8 @@ def view_logo():
     raise HTTPException(404, "No logo found")
 
 
-@router.put("/bulk")
-def set_settings_bulk(data: list[SettingValue], db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+@router.put("/bulk", responses=responses(401))
+def set_settings_bulk(data: list[SettingValue], db: DBSession, admin: AdminUser):
     """Update multiple settings in a single request. Admin only.
 
     Skips keys not in ALLOWED_SETTING_KEYS and ignores masked placeholder
@@ -155,8 +153,8 @@ def set_settings_bulk(data: list[SettingValue], db: Session = Depends(get_db), a
     return {"ok": True}
 
 
-@router.post("/smtp/test")
-def test_smtp(db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+@router.post("/smtp/test", responses=responses(400, 401, 500))
+def test_smtp(db: DBSession, admin: AdminUser):
     """Send a test email to verify SMTP configuration."""
     from app.services.email_digest import send_email
     from app.models.pilot import Pilot

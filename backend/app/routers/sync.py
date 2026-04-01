@@ -1,15 +1,14 @@
 import logging
 from dataclasses import asdict
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.database import get_db
+from app.deps import DBSession, AdminUser
 from app.models.setting import Setting
-from app.models.user import User
-from app.routers.auth import require_admin
 from app.services.sync_manager import SyncManager, SyncResult
+from app.responses import responses
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +43,8 @@ class SyncStatusResponse(BaseModel):
 
 @router.post("/test", response_model=TestConnectionResponse)
 def test_connection(
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    db: DBSession,
+    admin: AdminUser,
 ):
     ok, message, user_info = SyncManager.test_connection("skydio", db)
     return TestConnectionResponse(ok=ok, message=message, user_info=user_info)
@@ -130,11 +129,10 @@ def _batch_sync_telemetry(db: Session, limit: int = 10) -> int:
 
 @router.post("/now", response_model=SyncResultResponse)
 def sync_now(
+    db: DBSession,
+    admin: AdminUser,
     full: bool = False,
-    sync_telemetry: bool = True,
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
-):
+    sync_telemetry: bool = True):
     """Run a sync, optionally followed by batch telemetry fetch.
 
     Args:
@@ -174,8 +172,8 @@ def sync_now(
     return SyncResultResponse(**asdict(result))
 
 
-@router.post("/telemetry")
-def sync_telemetry_batch(db: Session = Depends(get_db), user: User = Depends(require_admin)):
+@router.post("/telemetry", responses=responses(401))
+def sync_telemetry_batch(db: DBSession, user: AdminUser):
     """Fetch telemetry for up to 10 flights that don't have it yet."""
     from sqlalchemy import func
     from app.models.flight import Flight
@@ -192,8 +190,8 @@ def sync_telemetry_batch(db: Session = Depends(get_db), user: User = Depends(req
 
 @router.post("/deep", response_model=SyncResultResponse)
 def sync_deep(
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    db: DBSession,
+    admin: AdminUser,
 ):
     logger.info("Deep sync triggered by admin")
     result = SyncManager.sync_all_deep("skydio", db)
@@ -202,8 +200,8 @@ def sync_deep(
 
 @router.post("/enrich", response_model=SyncResultResponse)
 def enrich_flights(
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    db: DBSession,
+    admin: AdminUser,
 ):
     """Fetch full details for flights that have no date/pilot/duration."""
     from app.integrations.skydio import SkydioProvider
@@ -328,8 +326,8 @@ def enrich_flights(
 
 @router.post("/cleanup")
 def cleanup_empty_flights(
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    db: DBSession,
+    admin: AdminUser,
 ):
     """Delete all flights that have no date, no duration, and no location."""
     from app.models.flight import Flight
@@ -350,8 +348,8 @@ def cleanup_empty_flights(
 
 @router.get("/status", response_model=SyncStatusResponse)
 def sync_status(
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
+    db: DBSession,
+    admin: AdminUser,
 ):
     last_sync_setting = db.query(Setting).filter(Setting.key == "last_sync_timestamp").first()
     interval_setting = db.query(Setting).filter(Setting.key == "sync_interval").first()

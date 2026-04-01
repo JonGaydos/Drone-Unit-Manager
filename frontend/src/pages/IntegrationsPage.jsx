@@ -140,8 +140,8 @@ function ProviderCard({ provider, settings, onSave, onTest, onSync }) {
       {expanded && provider.available && (
         <div className="px-4 pb-4 space-y-3 border-t border-border pt-3">
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">API Token</label>
-            <input
+            <label htmlFor="api-token" className="block text-xs font-medium text-muted-foreground mb-1">API Token</label>
+            <input id="api-token"
               type="password"
               value={token}
               onChange={e => setToken(e.target.value)}
@@ -151,8 +151,8 @@ function ProviderCard({ provider, settings, onSave, onTest, onSync }) {
           </div>
           {provider.tokenIdKey && (
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Token ID</label>
-              <input
+              <label htmlFor="token-id" className="block text-xs font-medium text-muted-foreground mb-1">Token ID</label>
+              <input id="token-id"
                 type="text"
                 value={tokenId}
                 onChange={e => setTokenId(e.target.value)}
@@ -263,28 +263,28 @@ function SmtpCard({ settings }) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">SMTP Host</label>
-              <input value={form.smtp_host} onChange={e => setForm({ ...form, smtp_host: e.target.value })} placeholder="smtp.gmail.com" className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              <label htmlFor="smtp-host" className="block text-xs font-medium text-muted-foreground mb-1">SMTP Host</label>
+              <input id="smtp-host" value={form.smtp_host} onChange={e => setForm({ ...form, smtp_host: e.target.value })} placeholder="smtp.gmail.com" className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Port</label>
-              <input value={form.smtp_port} onChange={e => setForm({ ...form, smtp_port: e.target.value })} placeholder="587" className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              <label htmlFor="port" className="block text-xs font-medium text-muted-foreground mb-1">Port</label>
+              <input id="port" value={form.smtp_port} onChange={e => setForm({ ...form, smtp_port: e.target.value })} placeholder="587" className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Username</label>
-              <input value={form.smtp_username} onChange={e => setForm({ ...form, smtp_username: e.target.value })} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              <label htmlFor="username" className="block text-xs font-medium text-muted-foreground mb-1">Username</label>
+              <input id="username" value={form.smtp_username} onChange={e => setForm({ ...form, smtp_username: e.target.value })} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">Password</label>
-              <input type="password" value={form.smtp_password} onChange={e => setForm({ ...form, smtp_password: e.target.value })} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              <label htmlFor="password" className="block text-xs font-medium text-muted-foreground mb-1">Password</label>
+              <input id="password" type="password" value={form.smtp_password} onChange={e => setForm({ ...form, smtp_password: e.target.value })} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">From Address</label>
-              <input value={form.smtp_from_address} onChange={e => setForm({ ...form, smtp_from_address: e.target.value })} placeholder="drones@agency.gov" className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              <label htmlFor="from-address" className="block text-xs font-medium text-muted-foreground mb-1">From Address</label>
+              <input id="from-address" value={form.smtp_from_address} onChange={e => setForm({ ...form, smtp_from_address: e.target.value })} placeholder="drones@agency.gov" className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">From Name</label>
-              <input value={form.smtp_from_name} onChange={e => setForm({ ...form, smtp_from_name: e.target.value })} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              <label htmlFor="from-name" className="block text-xs font-medium text-muted-foreground mb-1">From Name</label>
+              <input id="from-name" value={form.smtp_from_name} onChange={e => setForm({ ...form, smtp_from_name: e.target.value })} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -401,8 +401,8 @@ function FlightLogImport() {
 
       <div className="flex gap-3 items-end flex-wrap">
         <div className="flex-1 min-w-[200px]">
-          <label className="block text-xs font-medium text-muted-foreground mb-1">Flight Log File(s) — select multiple with Ctrl/Shift+click</label>
-          <input
+          <label htmlFor="flight-log-files-select-multiple-with-ctrl-shift-click" className="block text-xs font-medium text-muted-foreground mb-1">Flight Log File(s) — select multiple with Ctrl/Shift+click</label>
+          <input id="flight-log-files-select-multiple-with-ctrl-shift-click"
             type="file"
             multiple
             accept=".txt,.csv,.xlsx,.xls,.json,.zip"
@@ -411,8 +411,8 @@ function FlightLogImport() {
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-muted-foreground mb-1">Format</label>
-          <select
+          <label htmlFor="format" className="block text-xs font-medium text-muted-foreground mb-1">Format</label>
+          <select id="format"
             value={format}
             onChange={e => setFormat(e.target.value)}
             className="px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
@@ -451,7 +451,7 @@ function FlightLogImport() {
           <div>Bulk import complete: {result.imported} imported, {result.skipped} skipped, {result.total} total files</div>
           {result.errors?.length > 0 && (
             <div className="text-amber-400 text-xs mt-1">
-              {result.errors.map((e, i) => <div key={i}>{e}</div>)}
+              {result.errors.map((e) => <div key={e}>{e}</div>)}
             </div>
           )}
         </div>

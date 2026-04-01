@@ -70,11 +70,17 @@ const ZONE_COLORS = {
  * @param {string} [props.height='400px'] - Map container height.
  */
 export function FlightPathMap({ telemetry = [], takeoffLat, takeoffLon, landingLat, landingLon, height = '400px' }) {
-  const path = telemetry.filter(p => p.lat && p.lon).map(p => [p.lat, p.lon])
-  const center = takeoffLat && takeoffLon
-    ? [takeoffLat, takeoffLon]
-    : path.length > 0 ? path[0] : DEFAULT_CENTER
-  const bounds = path.length > 1 ? path : takeoffLat ? [[takeoffLat, takeoffLon]] : null
+  const path = telemetry.filter(p => p.lat != null && p.lon != null).map(p => [p.lat, p.lon])
+  const center = (() => {
+    if (takeoffLat != null && takeoffLon != null) return [takeoffLat, takeoffLon]
+    if (path.length > 0) return path[0]
+    return DEFAULT_CENTER
+  })()
+  const bounds = (() => {
+    if (path.length > 1) return path
+    if (takeoffLat != null) return [[takeoffLat, takeoffLon]]
+    return null
+  })()
 
   return (
     <div style={{ height }} className="rounded-xl overflow-hidden border border-border relative z-0">
@@ -86,12 +92,12 @@ export function FlightPathMap({ telemetry = [], takeoffLat, takeoffLon, landingL
         {path.length > 1 && (
           <Polyline positions={path} pathOptions={{ color: '#818cf8', weight: 3, opacity: 0.8 }} />
         )}
-        {takeoffLat && takeoffLon && (
+        {takeoffLat != null && takeoffLon != null && (
           <Marker position={[takeoffLat, takeoffLon]}>
             <Popup>Takeoff</Popup>
           </Marker>
         )}
-        {landingLat && landingLon && (
+        {landingLat != null && landingLon != null && (
           <Marker position={[landingLat, landingLon]}>
             <Popup>Landing</Popup>
           </Marker>
@@ -113,7 +119,7 @@ export function FlightPathMap({ telemetry = [], takeoffLat, takeoffLon, landingL
  * @param {string} [props.height='400px'] - Map container height.
  */
 export function LocationPickerMap({ lat, lon, onSelect, geofences = [], height = '400px' }) {
-  const center = lat && lon ? [lat, lon] : DEFAULT_CENTER
+  const center = lat != null && lon != null ? [lat, lon] : DEFAULT_CENTER
 
   return (
     <div style={{ height }} className="rounded-xl overflow-hidden border border-border relative z-0">
@@ -122,7 +128,7 @@ export function LocationPickerMap({ lat, lon, onSelect, geofences = [], height =
           attribution='&copy; OpenStreetMap'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        {lat && lon && (
+        {lat != null && lon != null && (
           <Marker position={[lat, lon]}>
             <Popup>Selected: {lat.toFixed(5)}, {lon.toFixed(5)}</Popup>
           </Marker>
@@ -161,7 +167,7 @@ export function LocationPickerMap({ lat, lon, onSelect, geofences = [], height =
  * @param {string} [props.height='400px'] - Map container height.
  */
 export function FlightLocationsMap({ flights = [], height = '400px' }) {
-  const markers = flights.filter(f => f.takeoff_lat && f.takeoff_lon)
+  const markers = flights.filter(f => f.takeoff_lat != null && f.takeoff_lon != null)
   const center = markers.length > 0 ? [markers[0].takeoff_lat, markers[0].takeoff_lon] : DEFAULT_CENTER
   const bounds = markers.length > 1 ? markers.map(m => [m.takeoff_lat, m.takeoff_lon]) : null
 

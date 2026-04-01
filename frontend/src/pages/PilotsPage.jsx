@@ -20,8 +20,9 @@ function PilotModal({ pilot, onSave, onClose }) {
 
   const field = (label, key, type = 'text') => (
     <div>
-      <label className="block text-sm font-medium text-foreground mb-1">{label}</label>
+      <label htmlFor={`pilot-${key}`} className="block text-sm font-medium text-foreground mb-1">{label}</label>
       <input
+        id={`pilot-${key}`}
         type={type}
         value={form[key] || ''}
         onChange={(e) => setForm({ ...form, [key]: e.target.value })}
@@ -31,8 +32,8 @@ function PilotModal({ pilot, onSave, onClose }) {
   )
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" role="presentation" onClick={onClose}>
+      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl" role="dialog" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold text-foreground mb-4">{pilot ? 'Edit Pilot' : 'Add Pilot'}</h2>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
@@ -41,8 +42,8 @@ function PilotModal({ pilot, onSave, onClose }) {
           </div>
           {field('Email', 'email', 'email')}
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Personal Cell</label>
-            <input
+            <label htmlFor="personal-cell" className="block text-sm font-medium text-foreground mb-1">Personal Cell</label>
+            <input id="personal-cell"
               type="tel"
               value={form.phone || ''}
               onChange={(e) => {
@@ -57,8 +58,8 @@ function PilotModal({ pilot, onSave, onClose }) {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Work Cell</label>
-            <input
+            <label htmlFor="work-cell" className="block text-sm font-medium text-foreground mb-1">Work Cell</label>
+            <input id="work-cell"
               type="tel"
               value={form.phone_work || ''}
               onChange={(e) => {
@@ -74,8 +75,8 @@ function PilotModal({ pilot, onSave, onClose }) {
           </div>
           {field('Badge Number', 'badge_number')}
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Status</label>
-            <select
+            <label htmlFor="status" className="block text-sm font-medium text-foreground mb-1">Status</label>
+            <select id="status"
               value={form.status}
               onChange={(e) => setForm({ ...form, status: e.target.value })}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
@@ -85,8 +86,8 @@ function PilotModal({ pilot, onSave, onClose }) {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Notes</label>
-            <textarea
+            <label htmlFor="notes" className="block text-sm font-medium text-foreground mb-1">Notes</label>
+            <textarea id="notes"
               value={form.notes || ''}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm h-20 resize-none"
@@ -94,7 +95,8 @@ function PilotModal({ pilot, onSave, onClose }) {
           </div>
           <div className="flex gap-2 pt-2">
             <button type="submit" disabled={saving} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2">
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : (pilot ? 'Update' : 'Add Pilot')}
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+              {!saving && (pilot ? 'Update' : 'Add Pilot')}
             </button>
             <button type="button" onClick={onClose} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90">
               Cancel
@@ -115,7 +117,7 @@ export default function PilotsPage() {
   const [sortKey, setSortKey] = useState('last_name')
   const [sortDir, setSortDir] = useState('asc')
   const [confirmDelete, setConfirmDelete] = useState(null)
-  const { isAdmin, isPilot, isSupervisor } = useAuth()
+  const { isSupervisor } = useAuth()
   const toast = useToast()
 
   const toggleSort = (key) => {
@@ -220,16 +222,16 @@ export default function PilotsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/30">
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none" onClick={() => toggleSort('last_name')}>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none" onClick={() => toggleSort('last_name')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('last_name'))() } }} tabIndex={0} role="columnheader">
                 Name{sortKey === 'last_name' && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />)}
               </th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none hidden md:table-cell" onClick={() => toggleSort('email')}>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none hidden md:table-cell" onClick={() => toggleSort('email')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('email'))() } }} tabIndex={0} role="columnheader">
                 Email{sortKey === 'email' && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />)}
               </th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none hidden md:table-cell" onClick={() => toggleSort('badge_number')}>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none hidden md:table-cell" onClick={() => toggleSort('badge_number')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('badge_number'))() } }} tabIndex={0} role="columnheader">
                 Badge #{sortKey === 'badge_number' && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />)}
               </th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none" onClick={() => toggleSort('status')}>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none" onClick={() => toggleSort('status')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('status'))() } }} tabIndex={0} role="columnheader">
                 Status{sortKey === 'status' && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />)}
               </th>
               <th className="text-right px-4 py-3 font-medium text-muted-foreground">Actions</th>

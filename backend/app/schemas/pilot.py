@@ -36,15 +36,15 @@ class PilotOut(BaseModel):
     first_name: str
     last_name: str
     full_name: str
-    email: Optional[str]
-    phone: Optional[str]
+    email: Optional[str] = None
+    phone: Optional[str] = None
     phone_type: Optional[str] = None
     phone_work: Optional[str] = None
-    badge_number: Optional[str]
-    skydio_user_uuid: Optional[str]
+    badge_number: Optional[str] = None
+    skydio_user_uuid: Optional[str] = None
     status: str
     photo_url: Optional[str] = None
-    notes: Optional[str]
+    notes: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

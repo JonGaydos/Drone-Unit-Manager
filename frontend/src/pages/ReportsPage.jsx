@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react'
 import { api } from '@/api/client'
-import { useAuth } from '@/contexts/AuthContext'
 import { normalizeDateValue } from '@/lib/utils'
-import { sortByName, sortVehicles, sortPilotsActiveFirst } from '@/lib/formatters'
+import { sortVehicles, sortPilotsActiveFirst } from '@/lib/formatters'
 import { FileBarChart, Upload, Loader2, Download, FileText, FileDown } from 'lucide-react'
 
 const REPORT_TYPES = [
@@ -23,7 +22,7 @@ export default function ReportsPage() {
   const [generating, setGenerating] = useState(false)
   const [reportResult, setReportResult] = useState(null)
   const [error, setError] = useState(null)
-  const { isAdmin } = useAuth()
+
 
   // Form state
   const [reportType, setReportType] = useState('flight_summary')
@@ -156,8 +155,8 @@ export default function ReportsPage() {
             <div className="space-y-4">
               {/* Report Type */}
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Report Type</label>
-                <select
+                <label htmlFor="report-type" className="block text-sm font-medium text-foreground mb-1">Report Type</label>
+                <select id="report-type"
                   value={reportType}
                   onChange={(e) => setReportType(e.target.value)}
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
@@ -170,9 +169,9 @@ export default function ReportsPage() {
 
               {/* Date Range */}
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Date Range</label>
+                <label htmlFor="date-range" className="block text-sm font-medium text-foreground mb-1">Date Range</label>
                 <div className="grid grid-cols-2 gap-2">
-                  <input
+                  <input id="date-range"
                     type="date"
                     value={dateFrom}
                     onChange={(e) => setDateFrom(e.target.value)}
@@ -336,7 +335,12 @@ export default function ReportsPage() {
                     {reportResult.title || REPORT_TYPES.find(r => r.value === reportType)?.label || 'Report'}
                   </h3>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {dateFrom && dateTo ? `${dateFrom} to ${dateTo}` : dateFrom ? `From ${dateFrom}` : dateTo ? `Through ${dateTo}` : 'All dates'}
+                    {(() => {
+                      if (dateFrom && dateTo) return `${dateFrom} to ${dateTo}`
+                      if (dateFrom) return `From ${dateFrom}`
+                      if (dateTo) return `Through ${dateTo}`
+                      return 'All dates'
+                    })()}
                     {selectedPilots.length > 0 ? ` | ${selectedPilots.length} pilots` : ''}
                     {selectedVehicles.length > 0 ? ` | ${selectedVehicles.length} vehicles` : ''}
                   </p>
@@ -347,7 +351,7 @@ export default function ReportsPage() {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {Object.entries(reportResult.summary).map(([key, value]) => (
                       <div key={key} className="bg-muted/30 rounded-lg p-3">
-                        <p className="text-xs text-muted-foreground capitalize">{key.replace(/_/g, ' ')}</p>
+                        <p className="text-xs text-muted-foreground capitalize">{key.replaceAll('_', ' ')}</p>
                         <p className="text-lg font-semibold text-foreground mt-0.5">{value}</p>
                       </div>
                     ))}
@@ -360,18 +364,18 @@ export default function ReportsPage() {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-border bg-muted/30">
-                          {(reportResult.columns || Object.keys(reportResult.rows[0])).map((col, i) => (
-                            <th key={i} className="text-left px-4 py-2 font-medium text-muted-foreground text-xs capitalize">
-                              {typeof col === 'string' ? col.replace(/_/g, ' ') : col}
+                          {(reportResult.columns || Object.keys(reportResult.rows[0])).map((col) => (
+                            <th key={col} className="text-left px-4 py-2 font-medium text-muted-foreground text-xs capitalize">
+                              {typeof col === 'string' ? col.replaceAll('_', ' ') : col}
                             </th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
-                        {reportResult.rows.map((row, i) => (
-                          <tr key={i} className="border-b border-border/50 hover:bg-accent/30">
-                            {Object.values(row).map((val, j) => (
-                              <td key={j} className="px-4 py-2 text-foreground text-xs">{val != null ? String(val) : '—'}</td>
+                        {reportResult.rows.map((row, rowIdx) => (
+                          <tr key={`row-${rowIdx}`} className="border-b border-border/50 hover:bg-accent/30">
+                            {Object.entries(row).map(([colKey, val]) => (
+                              <td key={colKey} className="px-4 py-2 text-foreground text-xs">{val != null ? String(val) : '—'}</td>
                             ))}
                           </tr>
                         ))}

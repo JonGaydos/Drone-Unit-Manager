@@ -1,14 +1,13 @@
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.database import get_db
+from app.deps import DBSession, CurrentUser, PilotUser, SupervisorUser
 from app.models.equipment_checkout import EquipmentCheckout
-from app.models.user import User
-from app.routers.auth import get_current_user, require_pilot, require_supervisor
+from app.responses import responses
 
 router = APIRouter(prefix="/api/equipment-checkouts", tags=["equipment-checkouts"])
 
@@ -34,16 +33,16 @@ class CheckoutOut(BaseModel):
     id: int
     entity_type: str
     entity_id: int
-    entity_name: Optional[str]
+    entity_name: Optional[str] = None
     checked_out_by_id: int
     checked_out_at: datetime
-    expected_return: Optional[datetime]
-    checked_in_at: Optional[datetime]
-    checked_in_by_id: Optional[int]
-    condition_out: Optional[str]
-    condition_in: Optional[str]
-    notes_out: Optional[str]
-    notes_in: Optional[str]
+    expected_return: Optional[datetime] = None
+    checked_in_at: Optional[datetime] = None
+    checked_in_by_id: Optional[int] = None
+    condition_out: Optional[str] = None
+    condition_in: Optional[str] = None
+    notes_out: Optional[str] = None
+    notes_in: Optional[str] = None
     created_at: datetime
     # Virtual fields populated in endpoints
     checked_out_by_name: Optional[str] = None
@@ -53,12 +52,18 @@ class CheckoutOut(BaseModel):
 
 @router.get("")
 def list_checkouts(
+
+    db: DBSession,
+
+    user: CurrentUser,
+
     entity_type: Optional[str] = Query(None),
+
     entity_id: Optional[int] = Query(None),
+
     pilot_id: Optional[int] = Query(None),
+
     active_only: bool = Query(False),
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
 ):
     q = db.query(EquipmentCheckout)
     if entity_type:
@@ -75,8 +80,8 @@ def list_checkouts(
 
 @router.get("/active")
 def list_active_checkouts(
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    db: DBSession,
+    user: CurrentUser,
 ):
     rows = (
         db.query(EquipmentCheckout)
@@ -87,11 +92,11 @@ def list_active_checkouts(
     return [_enrich(r, db) for r in rows]
 
 
-@router.post("")
+@router.post("", responses=responses(409))
 def create_checkout(
     data: CheckoutCreate,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_pilot),
+    db: DBSession,
+    user: PilotUser,
 ):
     # Prevent double-checkout
     existing = (
@@ -113,12 +118,12 @@ def create_checkout(
     return _enrich(checkout, db)
 
 
-@router.post("/{checkout_id}/checkin")
+@router.post("/{checkout_id}/checkin", responses=responses(400, 404))
 def checkin_equipment(
     checkout_id: int,
     data: CheckinData,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_pilot),
+    db: DBSession,
+    user: PilotUser,
 ):
     checkout = db.query(EquipmentCheckout).filter(EquipmentCheckout.id == checkout_id).first()
     if not checkout:
@@ -135,11 +140,11 @@ def checkin_equipment(
     return _enrich(checkout, db)
 
 
-@router.delete("/{checkout_id}")
+@router.delete("/{checkout_id}", responses=responses(404))
 def delete_checkout(
     checkout_id: int,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_supervisor),
+    db: DBSession,
+    user: SupervisorUser,
 ):
     checkout = db.query(EquipmentCheckout).filter(EquipmentCheckout.id == checkout_id).first()
     if not checkout:

@@ -19,11 +19,11 @@ function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachmen
   const handleSubmit = async (e) => {
     e.preventDefault()
     const data = { ...form }
-    if (data.pilot_id) data.pilot_id = parseInt(data.pilot_id)
+    if (data.pilot_id) data.pilot_id = Number.parseInt(data.pilot_id, 10)
     else delete data.pilot_id
-    if (data.vehicle_id) data.vehicle_id = parseInt(data.vehicle_id)
+    if (data.vehicle_id) data.vehicle_id = Number.parseInt(data.vehicle_id, 10)
     else delete data.vehicle_id
-    if (data.duration_seconds) data.duration_seconds = parseInt(data.duration_seconds)
+    if (data.duration_seconds) data.duration_seconds = Number.parseInt(data.duration_seconds, 10)
     else delete data.duration_seconds
     Object.keys(data).forEach(k => { if (data[k] === '') delete data[k] })
     setSaving(true)
@@ -31,22 +31,22 @@ function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachmen
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-lg shadow-xl" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" role="presentation" onClick={onClose}>
+      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-lg shadow-xl" role="dialog" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold text-foreground mb-4">Add Flight</h2>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Pilot</label>
-              <select value={form.pilot_id} onChange={e => setForm({...form, pilot_id: e.target.value})}
+              <label htmlFor="pilot" className="block text-sm font-medium text-foreground mb-1">Pilot</label>
+              <select id="pilot" value={form.pilot_id} onChange={e => setForm({...form, pilot_id: e.target.value})}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                 <option value="">Select pilot...</option>
                 {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Vehicle</label>
-              <select value={form.vehicle_id} onChange={e => setForm({...form, vehicle_id: e.target.value})}
+              <label htmlFor="vehicle" className="block text-sm font-medium text-foreground mb-1">Vehicle</label>
+              <select id="vehicle" value={form.vehicle_id} onChange={e => setForm({...form, vehicle_id: e.target.value})}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                 <option value="">Select vehicle...</option>
                 {sortVehicles(vehicles).map(v => <option key={v.id} value={v.id}>{vehicleDisplayName(v)}</option>)}
@@ -55,39 +55,39 @@ function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachmen
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Date</label>
-              <input type="date" value={form.date} onChange={e => setForm({...form, date: e.target.value})}
+              <label htmlFor="date" className="block text-sm font-medium text-foreground mb-1">Date</label>
+              <input id="date" type="date" value={form.date} onChange={e => setForm({...form, date: e.target.value})}
                 onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) setForm(prev => ({...prev, date: n})) }}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Duration (seconds)</label>
-              <input type="number" value={form.duration_seconds} onChange={e => setForm({...form, duration_seconds: e.target.value})}
+              <label htmlFor="duration-seconds" className="block text-sm font-medium text-foreground mb-1">Duration (seconds)</label>
+              <input id="duration-seconds" type="number" value={form.duration_seconds} onChange={e => setForm({...form, duration_seconds: e.target.value})}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Purpose</label>
-            <select value={form.purpose} onChange={e => setForm({...form, purpose: e.target.value})}
+            <label htmlFor="purpose" className="block text-sm font-medium text-foreground mb-1">Purpose</label>
+            <select id="purpose" value={form.purpose} onChange={e => setForm({...form, purpose: e.target.value})}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
               <option value="">Select purpose...</option>
               {sortByName(purposes, 'name').map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Takeoff Address</label>
-            <input type="text" value={form.takeoff_address} onChange={e => setForm({...form, takeoff_address: e.target.value})}
+            <label htmlFor="takeoff-address" className="block text-sm font-medium text-foreground mb-1">Takeoff Address</label>
+            <input id="takeoff-address" type="text" value={form.takeoff_address} onChange={e => setForm({...form, takeoff_address: e.target.value})}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Case Number</label>
-            <input type="text" value={form.case_number} onChange={e => setForm({...form, case_number: e.target.value})}
+            <label htmlFor="case-number" className="block text-sm font-medium text-foreground mb-1">Case Number</label>
+            <input id="case-number" type="text" value={form.case_number} onChange={e => setForm({...form, case_number: e.target.value})}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Battery</label>
-              <input list="battery-list" value={form.battery_serial} onChange={e => setForm({...form, battery_serial: e.target.value})}
+              <label htmlFor="battery" className="block text-sm font-medium text-foreground mb-1">Battery</label>
+              <input id="battery" list="battery-list" value={form.battery_serial} onChange={e => setForm({...form, battery_serial: e.target.value})}
                 onFocus={e => { e.target.showPicker?.() }}
                 placeholder="Select or type..."
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
@@ -96,8 +96,8 @@ function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachmen
               </datalist>
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Sensor Package</label>
-              <input list="sensor-list" value={form.sensor_package} onChange={e => setForm({...form, sensor_package: e.target.value})}
+              <label htmlFor="sensor-package" className="block text-sm font-medium text-foreground mb-1">Sensor Package</label>
+              <input id="sensor-package" list="sensor-list" value={form.sensor_package} onChange={e => setForm({...form, sensor_package: e.target.value})}
                 onFocus={e => { e.target.showPicker?.() }}
                 placeholder="Select or type..."
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
@@ -106,8 +106,8 @@ function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachmen
               </datalist>
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Attachment (Top)</label>
-              <input list="attach-list" value={form.attachment_top} onChange={e => setForm({...form, attachment_top: e.target.value})}
+              <label htmlFor="attachment-top" className="block text-sm font-medium text-foreground mb-1">Attachment (Top)</label>
+              <input id="attachment-top" list="attach-list" value={form.attachment_top} onChange={e => setForm({...form, attachment_top: e.target.value})}
                 onFocus={e => { e.target.showPicker?.() }}
                 placeholder="Select or type..."
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
@@ -116,8 +116,8 @@ function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachmen
               </datalist>
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Attachment (Bottom)</label>
-              <input list="attach-list" value={form.attachment_bottom} onChange={e => setForm({...form, attachment_bottom: e.target.value})}
+              <label htmlFor="attachment-bottom" className="block text-sm font-medium text-foreground mb-1">Attachment (Bottom)</label>
+              <input id="attachment-bottom" list="attach-list" value={form.attachment_bottom} onChange={e => setForm({...form, attachment_bottom: e.target.value})}
                 onFocus={e => { e.target.showPicker?.() }}
                 placeholder="Select or type..."
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
@@ -147,7 +147,7 @@ export default function FlightsPage() {
   const [error, setError] = useState(null)
   const [sortKey, setSortKey] = useState('date')
   const [sortDir, setSortDir] = useState('desc')
-  const { isAdmin, isPilot, isSupervisor } = useAuth()
+  const { isPilot, isSupervisor } = useAuth()
   const toast = useToast()
 
   // Status filter: 'all' | 'needs_review' | 'reviewed'
@@ -247,9 +247,9 @@ export default function FlightsPage() {
   const saveEditing = async () => {
     try {
       const data = { ...editForm }
-      if (data.pilot_id) data.pilot_id = parseInt(data.pilot_id)
+      if (data.pilot_id) data.pilot_id = Number.parseInt(data.pilot_id, 10)
       else data.pilot_id = null
-      if (data.duration_seconds) data.duration_seconds = parseInt(data.duration_seconds)
+      if (data.duration_seconds) data.duration_seconds = Number.parseInt(data.duration_seconds, 10)
       else delete data.duration_seconds
       await api.patch(`/flights/${editingId}`, data)
       setEditingId(null)
@@ -322,7 +322,7 @@ export default function FlightsPage() {
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-secondary text-secondary-foreground hover:bg-accent/30'
             }`}>
-            {s === 'all' ? 'All' : s === 'needs_review' ? `Needs Review (${needsReviewCount})` : 'Reviewed'}
+            {{ all: 'All', needs_review: `Needs Review (${needsReviewCount})`, reviewed: 'Reviewed' }[s]}
           </button>
         ))}
       </div>
@@ -330,32 +330,32 @@ export default function FlightsPage() {
       {/* Filters row */}
       <div className="flex flex-wrap items-end gap-3">
         <div>
-          <label className="block text-xs text-muted-foreground mb-1">Date From</label>
-          <input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)}
+          <label htmlFor="date-from" className="block text-xs text-muted-foreground mb-1">Date From</label>
+          <input id="date-from" type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)}
             onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) { e.target.value = n; setFilterDateFrom(n) } }} className={inputCls} />
         </div>
         <div>
-          <label className="block text-xs text-muted-foreground mb-1">Date To</label>
-          <input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)}
+          <label htmlFor="date-to" className="block text-xs text-muted-foreground mb-1">Date To</label>
+          <input id="date-to" type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)}
             onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) { e.target.value = n; setFilterDateTo(n) } }} className={inputCls} />
         </div>
         <div>
-          <label className="block text-xs text-muted-foreground mb-1">Pilot</label>
-          <select value={filterPilotId} onChange={e => setFilterPilotId(e.target.value)} className={selectCls}>
+          <label htmlFor="pilot-1" className="block text-xs text-muted-foreground mb-1">Pilot</label>
+          <select id="pilot-1" value={filterPilotId} onChange={e => setFilterPilotId(e.target.value)} className={selectCls}>
             <option value="">All Pilots</option>
             {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
           </select>
         </div>
         <div>
-          <label className="block text-xs text-muted-foreground mb-1">Vehicle</label>
-          <select value={filterVehicleId} onChange={e => setFilterVehicleId(e.target.value)} className={selectCls}>
+          <label htmlFor="vehicle-1" className="block text-xs text-muted-foreground mb-1">Vehicle</label>
+          <select id="vehicle-1" value={filterVehicleId} onChange={e => setFilterVehicleId(e.target.value)} className={selectCls}>
             <option value="">All Vehicles</option>
             {sortVehicles(vehicles).map(v => <option key={v.id} value={v.id}>{vehicleDisplayName(v)}</option>)}
           </select>
         </div>
         <div>
-          <label className="block text-xs text-muted-foreground mb-1">Purpose</label>
-          <select value={filterPurpose} onChange={e => setFilterPurpose(e.target.value)} className={selectCls}>
+          <label htmlFor="purpose-1" className="block text-xs text-muted-foreground mb-1">Purpose</label>
+          <select id="purpose-1" value={filterPurpose} onChange={e => setFilterPurpose(e.target.value)} className={selectCls}>
             <option value="">All Purposes</option>
             {sortByName(purposes, 'name').map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
           </select>
@@ -396,23 +396,23 @@ export default function FlightsPage() {
           <thead>
             <tr className="border-b border-border bg-muted/30">
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Flight ID</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none" onClick={() => toggleSort('date')}>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none" onClick={() => toggleSort('date')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('date'))() } }} tabIndex={0} role="columnheader">
                 Date{sortKey === 'date' && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />)}
               </th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none" onClick={() => toggleSort('pilot_name')}>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none" onClick={() => toggleSort('pilot_name')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('pilot_name'))() } }} tabIndex={0} role="columnheader">
                 Pilot{sortKey === 'pilot_name' && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />)}
               </th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none hidden md:table-cell" onClick={() => toggleSort('vehicle_name')}>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none hidden md:table-cell" onClick={() => toggleSort('vehicle_name')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('vehicle_name'))() } }} tabIndex={0} role="columnheader">
                 Vehicle{sortKey === 'vehicle_name' && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />)}
               </th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none hidden md:table-cell" onClick={() => toggleSort('purpose')}>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none hidden md:table-cell" onClick={() => toggleSort('purpose')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('purpose'))() } }} tabIndex={0} role="columnheader">
                 Purpose{sortKey === 'purpose' && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />)}
               </th>
-              <th className="text-right px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none" onClick={() => toggleSort('duration_seconds')}>
+              <th className="text-right px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none" onClick={() => toggleSort('duration_seconds')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('duration_seconds'))() } }} tabIndex={0} role="columnheader">
                 Duration{sortKey === 'duration_seconds' && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />)}
               </th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden lg:table-cell">Location</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none" onClick={() => toggleSort('review_status')}>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none" onClick={() => toggleSort('review_status')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('review_status'))() } }} tabIndex={0} role="columnheader">
                 Status{sortKey === 'review_status' && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />)}
               </th>
               <th className="text-right px-4 py-3 font-medium text-muted-foreground w-20">Actions</th>

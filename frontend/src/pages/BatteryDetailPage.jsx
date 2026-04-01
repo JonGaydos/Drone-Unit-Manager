@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
-import { formatHours, formatDuration } from '@/lib/utils'
+import { formatDuration } from '@/lib/utils'
 import { STATUS_COLORS } from '@/lib/constants'
 import {
   ArrowLeft, Battery, Clock, Wrench, Edit, Zap, Activity, Save, X, Loader2, Plus
@@ -77,8 +77,8 @@ export default function BatteryDetailPage() {
     try {
       const payload = { ...editForm }
       if (payload.health_pct === '') delete payload.health_pct
-      else payload.health_pct = parseFloat(payload.health_pct)
-      payload.cycle_count = parseInt(payload.cycle_count) || 0
+      else payload.health_pct = Number.parseFloat(payload.health_pct)
+      payload.cycle_count = Number.parseInt(payload.cycle_count, 10) || 0
       if (!payload.purchase_date) delete payload.purchase_date
       const updated = await api.patch(`/batteries/${id}`, payload)
       setBattery(updated)
@@ -115,33 +115,33 @@ export default function BatteryDetailPage() {
               <div className="space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">Nickname</label>
-                    <input type="text" value={editForm.nickname} onChange={e => setEditForm({...editForm, nickname: e.target.value})}
+                    <label htmlFor="nickname" className="block text-xs font-medium text-muted-foreground mb-1">Nickname</label>
+                    <input id="nickname" type="text" value={editForm.nickname} onChange={e => setEditForm({...editForm, nickname: e.target.value})}
                       className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">Serial Number</label>
-                    <input type="text" value={editForm.serial_number} onChange={e => setEditForm({...editForm, serial_number: e.target.value})}
+                    <label htmlFor="serial-number" className="block text-xs font-medium text-muted-foreground mb-1">Serial Number</label>
+                    <input id="serial-number" type="text" value={editForm.serial_number} onChange={e => setEditForm({...editForm, serial_number: e.target.value})}
                       className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">Manufacturer</label>
-                    <input type="text" value={editForm.manufacturer} onChange={e => setEditForm({...editForm, manufacturer: e.target.value})}
+                    <label htmlFor="manufacturer" className="block text-xs font-medium text-muted-foreground mb-1">Manufacturer</label>
+                    <input id="manufacturer" type="text" value={editForm.manufacturer} onChange={e => setEditForm({...editForm, manufacturer: e.target.value})}
                       className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">Model</label>
-                    <input type="text" value={editForm.model} onChange={e => setEditForm({...editForm, model: e.target.value})}
+                    <label htmlFor="model" className="block text-xs font-medium text-muted-foreground mb-1">Model</label>
+                    <input id="model" type="text" value={editForm.model} onChange={e => setEditForm({...editForm, model: e.target.value})}
                       className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">Vehicle Model</label>
-                    <input type="text" value={editForm.vehicle_model} onChange={e => setEditForm({...editForm, vehicle_model: e.target.value})}
+                    <label htmlFor="vehicle-model" className="block text-xs font-medium text-muted-foreground mb-1">Vehicle Model</label>
+                    <input id="vehicle-model" type="text" value={editForm.vehicle_model} onChange={e => setEditForm({...editForm, vehicle_model: e.target.value})}
                       className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">Status</label>
-                    <select value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})}
+                    <label htmlFor="status" className="block text-xs font-medium text-muted-foreground mb-1">Status</label>
+                    <select id="status" value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})}
                       className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm">
                       <option value="active">Active</option>
                       <option value="inactive">Inactive</option>
@@ -150,24 +150,24 @@ export default function BatteryDetailPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">Cycle Count</label>
-                    <input type="number" min="0" value={editForm.cycle_count} onChange={e => setEditForm({...editForm, cycle_count: e.target.value})}
+                    <label htmlFor="cycle-count" className="block text-xs font-medium text-muted-foreground mb-1">Cycle Count</label>
+                    <input id="cycle-count" type="number" min="0" value={editForm.cycle_count} onChange={e => setEditForm({...editForm, cycle_count: e.target.value})}
                       className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">Health %</label>
-                    <input type="number" min="0" max="100" step="0.1" value={editForm.health_pct} onChange={e => setEditForm({...editForm, health_pct: e.target.value})}
+                    <label htmlFor="health" className="block text-xs font-medium text-muted-foreground mb-1">Health %</label>
+                    <input id="health" type="number" min="0" max="100" step="0.1" value={editForm.health_pct} onChange={e => setEditForm({...editForm, health_pct: e.target.value})}
                       className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">Purchase Date</label>
-                    <input type="date" value={editForm.purchase_date} onChange={e => setEditForm({...editForm, purchase_date: e.target.value})}
+                    <label htmlFor="purchase-date" className="block text-xs font-medium text-muted-foreground mb-1">Purchase Date</label>
+                    <input id="purchase-date" type="date" value={editForm.purchase_date} onChange={e => setEditForm({...editForm, purchase_date: e.target.value})}
                       className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-muted-foreground mb-1">Notes</label>
-                  <textarea value={editForm.notes} onChange={e => setEditForm({...editForm, notes: e.target.value})}
+                  <label htmlFor="notes" className="block text-xs font-medium text-muted-foreground mb-1">Notes</label>
+                  <textarea id="notes" value={editForm.notes} onChange={e => setEditForm({...editForm, notes: e.target.value})}
                     className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm h-16 resize-none focus:outline-none focus:ring-2 focus:ring-ring" />
                 </div>
                 <div className="flex gap-2">
@@ -321,7 +321,7 @@ export default function BatteryDetailPage() {
                   <td className="px-4 py-2 text-foreground">{m.description || '--'}</td>
                   <td className="px-4 py-2 text-foreground hidden md:table-cell">{m.maintenance_type || m.type || '--'}</td>
                   <td className="px-4 py-2 text-foreground hidden md:table-cell">{m.performed_by || '--'}</td>
-                  <td className="px-4 py-2 text-foreground text-right">{m.cost != null ? `$${parseFloat(m.cost).toFixed(2)}` : '--'}</td>
+                  <td className="px-4 py-2 text-foreground text-right">{m.cost != null ? `$${Number.parseFloat(m.cost).toFixed(2)}` : '--'}</td>
                 </tr>
               ))}
               {maintenance.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">No maintenance records</td></tr>}
@@ -381,28 +381,28 @@ export default function BatteryDetailPage() {
       </div>
 
       {showReadingForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowReadingForm(false)}>
-          <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" role="presentation" onClick={() => setShowReadingForm(false)}>
+          <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl" role="dialog" onClick={e => e.stopPropagation()}>
             <h2 className="text-lg font-semibold text-foreground mb-4">Record Battery Health Reading</h2>
             <div className="space-y-3">
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Health %</label>
-                <input type="number" min="0" max="100" value={readingForm.health_pct} onChange={e => setReadingForm({...readingForm, health_pct: e.target.value})}
+                <label htmlFor="health-1" className="block text-sm font-medium text-foreground mb-1">Health %</label>
+                <input id="health-1" type="number" min="0" max="100" value={readingForm.health_pct} onChange={e => setReadingForm({...readingForm, health_pct: e.target.value})}
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" placeholder="0-100" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Cycle Count</label>
-                <input type="number" min="0" value={readingForm.cycle_count} onChange={e => setReadingForm({...readingForm, cycle_count: e.target.value})}
+                <label htmlFor="cycle-count-1" className="block text-sm font-medium text-foreground mb-1">Cycle Count</label>
+                <input id="cycle-count-1" type="number" min="0" value={readingForm.cycle_count} onChange={e => setReadingForm({...readingForm, cycle_count: e.target.value})}
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Voltage</label>
-                <input type="number" step="0.1" value={readingForm.voltage} onChange={e => setReadingForm({...readingForm, voltage: e.target.value})}
+                <label htmlFor="voltage" className="block text-sm font-medium text-foreground mb-1">Voltage</label>
+                <input id="voltage" type="number" step="0.1" value={readingForm.voltage} onChange={e => setReadingForm({...readingForm, voltage: e.target.value})}
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Notes</label>
-                <input type="text" value={readingForm.notes} onChange={e => setReadingForm({...readingForm, notes: e.target.value})}
+                <label htmlFor="notes-1" className="block text-sm font-medium text-foreground mb-1">Notes</label>
+                <input id="notes-1" type="text" value={readingForm.notes} onChange={e => setReadingForm({...readingForm, notes: e.target.value})}
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               </div>
             </div>
@@ -412,9 +412,9 @@ export default function BatteryDetailPage() {
                   setSavingReading(true)
                   try {
                     const data = {}
-                    if (readingForm.health_pct) data.health_pct = parseFloat(readingForm.health_pct)
-                    if (readingForm.cycle_count) data.cycle_count = parseInt(readingForm.cycle_count)
-                    if (readingForm.voltage) data.voltage = parseFloat(readingForm.voltage)
+                    if (readingForm.health_pct) data.health_pct = Number.parseFloat(readingForm.health_pct)
+                    if (readingForm.cycle_count) data.cycle_count = Number.parseInt(readingForm.cycle_count, 10)
+                    if (readingForm.voltage) data.voltage = Number.parseFloat(readingForm.voltage)
                     if (readingForm.notes) data.notes = readingForm.notes
                     await api.post(`/batteries/${id}/readings`, data)
                     toast.success('Health reading recorded')

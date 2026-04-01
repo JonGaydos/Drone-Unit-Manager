@@ -12,16 +12,16 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse
-from sqlalchemy.orm import Session
 from PIL import Image as PILImage
 
 from app.config import settings
-from app.database import get_db
+from app.constants import MIME_JPEG, PHOTO_NOT_FOUND
+from app.deps import DBSession, CurrentUser, PilotUser
 from app.models.photo import Photo, PhotoPilot
 from app.models.pilot import Pilot
-from app.routers.auth import get_current_user, require_pilot
+from app.responses import responses
 
 logger = logging.getLogger(__name__)
 
@@ -47,15 +47,22 @@ def _validate_path(file_path: str) -> Path:
     return resolved
 
 
-@router.post("/upload")
+@router.post("/upload", responses=responses(400, 413))
 def upload_photo(
+
+    db: DBSession,
+
+    user: PilotUser,
+
     file: UploadFile = File(...),
+
     title: Optional[str] = Form(None),
+
     description: Optional[str] = Form(None),
+
     date_taken: Optional[str] = Form(None),
+
     pilot_ids: Optional[str] = Form(None),
-    db: Session = Depends(get_db),
-    user=Depends(require_pilot),
 ):
     """Upload a photo with optional metadata and pilot associations.
 
@@ -95,7 +102,7 @@ def upload_photo(
         title=title,
         description=description,
         date_taken=parsed_date,
-        mime_type=file.content_type or "image/jpeg",
+        mime_type=file.content_type or MIME_JPEG,
         uploaded_by_id=user.id,
     )
     db.add(photo)
@@ -143,8 +150,8 @@ def upload_photo(
     return {"id": photo.id, "message": "Photo uploaded successfully"}
 
 
-@router.get("")
-def list_photos(db: Session = Depends(get_db), _user=Depends(get_current_user)):
+@router.get("", responses=responses(401))
+def list_photos(db: DBSession, _user: CurrentUser):
     """List all photos with their tagged pilot names.
 
     Uses batch loading for pilot associations to avoid N+1 query issues.
@@ -196,8 +203,8 @@ def list_photos(db: Session = Depends(get_db), _user=Depends(get_current_user)):
     return result
 
 
-@router.get("/{photo_id}/view")
-def view_photo(photo_id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
+@router.get("/{photo_id}/view", responses=responses(401, 404))
+def view_photo(photo_id: int, db: DBSession, _user: CurrentUser):
     """Serve the full-resolution photo file."""
     photo = db.query(Photo).filter(Photo.id == photo_id).first()
     if not photo:
@@ -206,11 +213,11 @@ def view_photo(photo_id: int, db: Session = Depends(get_db), _user=Depends(get_c
     resolved = _validate_path(file_path)
     if not resolved.exists():
         raise HTTPException(404, "File not found on disk")
-    return FileResponse(str(resolved), media_type=photo.mime_type or "image/jpeg")
+    return FileResponse(str(resolved), media_type=photo.mime_type or MIME_JPEG)
 
 
-@router.get("/{photo_id}/thumbnail")
-def view_thumbnail(photo_id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
+@router.get("/{photo_id}/thumbnail", responses=responses(401, 404))
+def view_thumbnail(photo_id: int, db: DBSession, _user: CurrentUser):
     """Serve the photo thumbnail, falling back to the full image if unavailable."""
     photo = db.query(Photo).filter(Photo.id == photo_id).first()
     if not photo:
@@ -218,24 +225,31 @@ def view_thumbnail(photo_id: int, db: Session = Depends(get_db), _user=Depends(g
     if photo.thumbnail_path:
         thumb_resolved = _validate_path(photo.thumbnail_path)
         if thumb_resolved.exists():
-            return FileResponse(str(thumb_resolved), media_type="image/jpeg")
+            return FileResponse(str(thumb_resolved), media_type=MIME_JPEG)
     # Fall back to full image
     file_path = os.path.join(UPLOAD_DIR, str(photo.id), photo.filename)
     resolved = _validate_path(file_path)
     if not resolved.exists():
         raise HTTPException(404, "File not found on disk")
-    return FileResponse(str(resolved), media_type=photo.mime_type or "image/jpeg")
+    return FileResponse(str(resolved), media_type=photo.mime_type or MIME_JPEG)
 
 
-@router.patch("/{photo_id}")
+@router.patch("/{photo_id}", responses=responses(404))
 def update_photo(
+
     photo_id: int,
+
+    db: DBSession,
+
+    user: PilotUser,
+
     title: Optional[str] = Form(None),
+
     description: Optional[str] = Form(None),
+
     date_taken: Optional[str] = Form(None),
+
     pilot_ids: Optional[str] = Form(None),
-    db: Session = Depends(get_db),
-    user=Depends(require_pilot),
 ):
     """Update photo metadata and/or replace pilot associations.
 
@@ -275,8 +289,8 @@ def update_photo(
     return {"message": "Photo updated"}
 
 
-@router.delete("/{photo_id}")
-def delete_photo(photo_id: int, db: Session = Depends(get_db), user=Depends(require_pilot)):
+@router.delete("/{photo_id}", responses=responses(401, 404))
+def delete_photo(photo_id: int, db: DBSession, user: PilotUser):
     """Delete a photo, its thumbnail, pilot associations, and on-disk files."""
     from app.services.audit import log_action
     photo = db.query(Photo).filter(Photo.id == photo_id).first()

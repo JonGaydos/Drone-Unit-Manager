@@ -3,15 +3,13 @@ import io
 import xml.etree.ElementTree as ET
 from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import joinedload
 
-from app.database import get_db
 from app.models.flight import Flight
 from app.models.pilot import Pilot
 from app.models.vehicle import Vehicle
-from app.models.user import User
 from app.models.maintenance import MaintenanceRecord
 from app.models.certification import PilotCertification, CertificationType
 from app.models.training_log import TrainingLog
@@ -19,18 +17,20 @@ from app.models.training_log_pilot import TrainingLogPilot
 from app.models.mission_log import MissionLog
 from app.models.mission_log_pilot import MissionLogPilot
 from app.config import settings
-from app.routers.auth import get_current_user, require_admin
+from app.deps import DBSession, CurrentUser, AdminUser
+from app.responses import responses
 
 router = APIRouter(prefix="/api/export", tags=["export"])
+
+CSV_MEDIA_TYPE = "text/csv"
 
 
 @router.get("/flights/csv")
 def export_flights_csv(
+    db: DBSession,
+    user: CurrentUser,
     date_from: date | None = None,
-    date_to: date | None = None,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
+    date_to: date | None = None):
     q = db.query(Flight).options(joinedload(Flight.pilot), joinedload(Flight.vehicle))
     if date_from:
         q = q.filter(Flight.date >= date_from)
@@ -58,13 +58,13 @@ def export_flights_csv(
     output.seek(0)
     return StreamingResponse(
         iter([output.getvalue()]),
-        media_type="text/csv",
+        media_type=CSV_MEDIA_TYPE,
         headers={"Content-Disposition": "attachment; filename=flights_export.csv"},
     )
 
 
-@router.get("/pilots/csv")
-def export_pilots_csv(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+@router.get("/pilots/csv", responses=responses(401))
+def export_pilots_csv(db: DBSession, user: CurrentUser):
     pilots = db.query(Pilot).order_by(Pilot.last_name).all()
     output = io.StringIO()
     writer = csv.writer(output)
@@ -74,13 +74,13 @@ def export_pilots_csv(db: Session = Depends(get_db), user: User = Depends(get_cu
     output.seek(0)
     return StreamingResponse(
         iter([output.getvalue()]),
-        media_type="text/csv",
+        media_type=CSV_MEDIA_TYPE,
         headers={"Content-Disposition": "attachment; filename=pilots_export.csv"},
     )
 
 
-@router.get("/vehicles/csv")
-def export_vehicles_csv(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+@router.get("/vehicles/csv", responses=responses(401))
+def export_vehicles_csv(db: DBSession, user: CurrentUser):
     vehicles = db.query(Vehicle).order_by(Vehicle.manufacturer).all()
     output = io.StringIO()
     writer = csv.writer(output)
@@ -90,19 +90,18 @@ def export_vehicles_csv(db: Session = Depends(get_db), user: User = Depends(get_
     output.seek(0)
     return StreamingResponse(
         iter([output.getvalue()]),
-        media_type="text/csv",
+        media_type=CSV_MEDIA_TYPE,
         headers={"Content-Disposition": "attachment; filename=vehicles_export.csv"},
     )
 
 
 @router.get("/maintenance/csv")
 def export_maintenance_csv(
+    db: DBSession,
+    user: CurrentUser,
     date_from: date | None = None,
     date_to: date | None = None,
-    entity_type: str | None = None,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
+    entity_type: str | None = None):
     q = db.query(MaintenanceRecord)
     if date_from:
         q = q.filter(MaintenanceRecord.performed_date >= date_from)
@@ -127,13 +126,13 @@ def export_maintenance_csv(
     output.seek(0)
     return StreamingResponse(
         iter([output.getvalue()]),
-        media_type="text/csv",
+        media_type=CSV_MEDIA_TYPE,
         headers={"Content-Disposition": "attachment; filename=maintenance_export.csv"},
     )
 
 
-@router.get("/checklists/csv")
-def export_checklists_csv(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+@router.get("/checklists/csv", responses=responses(401))
+def export_checklists_csv(db: DBSession, user: CurrentUser):
     from app.models.checklist import ChecklistCompletion, ChecklistTemplate
     completions = db.query(ChecklistCompletion).order_by(ChecklistCompletion.completed_at.desc()).all()
 
@@ -155,18 +154,17 @@ def export_checklists_csv(db: Session = Depends(get_db), user: User = Depends(ge
     output.seek(0)
     return StreamingResponse(
         iter([output.getvalue()]),
-        media_type="text/csv",
+        media_type=CSV_MEDIA_TYPE,
         headers={"Content-Disposition": "attachment; filename=checklists_export.csv"},
     )
 
 
 @router.get("/certifications/csv")
 def export_certifications_csv(
+    db: DBSession,
+    user: CurrentUser,
     pilot_id: int | None = None,
-    status: str | None = None,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
+    status: str | None = None):
     q = db.query(PilotCertification)
     if pilot_id:
         q = q.filter(PilotCertification.pilot_id == pilot_id)
@@ -194,20 +192,19 @@ def export_certifications_csv(
     output.seek(0)
     return StreamingResponse(
         iter([output.getvalue()]),
-        media_type="text/csv",
+        media_type=CSV_MEDIA_TYPE,
         headers={"Content-Disposition": "attachment; filename=certifications_export.csv"},
     )
 
 
 @router.get("/training-logs/csv")
 def export_training_logs_csv(
+    db: DBSession,
+    user: CurrentUser,
     date_from: date | None = None,
     date_to: date | None = None,
     pilot_id: int | None = None,
-    training_type: str | None = None,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
+    training_type: str | None = None):
     q = db.query(TrainingLog)
     if date_from:
         q = q.filter(TrainingLog.date >= date_from)
@@ -239,19 +236,18 @@ def export_training_logs_csv(
     output.seek(0)
     return StreamingResponse(
         iter([output.getvalue()]),
-        media_type="text/csv",
+        media_type=CSV_MEDIA_TYPE,
         headers={"Content-Disposition": "attachment; filename=training_logs_export.csv"},
     )
 
 
 @router.get("/mission-logs/csv")
 def export_mission_logs_csv(
+    db: DBSession,
+    user: CurrentUser,
     date_from: date | None = None,
     date_to: date | None = None,
-    pilot_id: int | None = None,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
+    pilot_id: int | None = None):
     q = db.query(MissionLog)
     if date_from:
         q = q.filter(MissionLog.date >= date_from)
@@ -281,19 +277,18 @@ def export_mission_logs_csv(
     output.seek(0)
     return StreamingResponse(
         iter([output.getvalue()]),
-        media_type="text/csv",
+        media_type=CSV_MEDIA_TYPE,
         headers={"Content-Disposition": "attachment; filename=mission_logs_export.csv"},
     )
 
 
 @router.get("/incidents/csv")
 def export_incidents_csv(
+    db: DBSession,
+    user: CurrentUser,
     date_from: date | None = None,
     date_to: date | None = None,
-    report_type: str | None = None,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
+    report_type: str | None = None):
     from app.models.incident import Incident
     q = db.query(Incident)
     if date_from:
@@ -307,14 +302,15 @@ def export_incidents_csv(
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow([
-        "Date", "Title", "Report Type", "Severity", "Category", "Description",
+        "Date", "Title", "Pilot", "Report Type", "Severity", "Category", "Description",
         "Location", "Status", "Resolution", "Equipment Grounded",
         "Damage Description", "Estimated Cost", "Notes",
     ])
     for inc in incidents:
         pilot = db.query(Pilot).filter(Pilot.id == inc.pilot_id).first() if inc.pilot_id else None
         writer.writerow([
-            inc.date, inc.title, getattr(inc, 'report_type', 'incident') or 'incident',
+            inc.date, inc.title, pilot.full_name if pilot else "",
+            getattr(inc, 'report_type', 'incident') or 'incident',
             inc.severity, inc.category, inc.description or "",
             inc.location or "", inc.status, inc.resolution or "",
             "Yes" if inc.equipment_grounded else "No",
@@ -323,18 +319,17 @@ def export_incidents_csv(
     output.seek(0)
     return StreamingResponse(
         iter([output.getvalue()]),
-        media_type="text/csv",
+        media_type=CSV_MEDIA_TYPE,
         headers={"Content-Disposition": "attachment; filename=incidents_export.csv"},
     )
 
 
 @router.get("/flight-plans/csv")
 def export_flight_plans_csv(
+    db: DBSession,
+    user: CurrentUser,
     date_from: date | None = None,
-    date_to: date | None = None,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
+    date_to: date | None = None):
     from app.models.flight_approval import FlightPlan
     from sqlalchemy import func as sqlfunc
     q = db.query(FlightPlan)
@@ -364,18 +359,17 @@ def export_flight_plans_csv(
     output.seek(0)
     return StreamingResponse(
         iter([output.getvalue()]),
-        media_type="text/csv",
+        media_type=CSV_MEDIA_TYPE,
         headers={"Content-Disposition": "attachment; filename=flight_plans_export.csv"},
     )
 
 
 @router.get("/audit/csv")
 def export_audit_csv(
+    db: DBSession,
+    user: AdminUser,
     date_from: date | None = None,
-    date_to: date | None = None,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_admin),
-):
+    date_to: date | None = None):
     from app.models.audit_log import AuditLog
     from sqlalchemy import func as sqlfunc
     q = db.query(AuditLog)
@@ -401,18 +395,17 @@ def export_audit_csv(
     output.seek(0)
     return StreamingResponse(
         iter([output.getvalue()]),
-        media_type="text/csv",
+        media_type=CSV_MEDIA_TYPE,
         headers={"Content-Disposition": "attachment; filename=audit_log_export.csv"},
     )
 
 
 @router.get("/equipment-checkouts/csv")
 def export_equipment_checkouts_csv(
+    db: DBSession,
+    user: CurrentUser,
     date_from: date | None = None,
-    date_to: date | None = None,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
+    date_to: date | None = None):
     from app.models.equipment_checkout import EquipmentCheckout
     from sqlalchemy import func as sqlfunc
     q = db.query(EquipmentCheckout)
@@ -443,16 +436,16 @@ def export_equipment_checkouts_csv(
     output.seek(0)
     return StreamingResponse(
         iter([output.getvalue()]),
-        media_type="text/csv",
+        media_type=CSV_MEDIA_TYPE,
         headers={"Content-Disposition": "attachment; filename=equipment_checkouts_export.csv"},
     )
 
 
-@router.post("/flights/import")
+@router.post("/flights/import", responses=responses(400, 413))
 async def import_flights_csv(
+    db: DBSession,
+    admin: AdminUser,
     file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
 ):
     if not file.filename.endswith('.csv'):
         raise HTTPException(400, "Only CSV files are supported")
@@ -500,11 +493,11 @@ async def import_flights_csv(
     return {"imported": imported, "errors": errors}
 
 
-@router.post("/excel/import")
+@router.post("/excel/import", responses=responses(400, 413))
 async def import_excel_file(
+    db: DBSession,
+    admin: AdminUser,
     file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
 ):
     if not file.filename.endswith(('.xlsx', '.xls')):
         raise HTTPException(400, "Only Excel files (.xlsx) are supported")
@@ -516,12 +509,12 @@ async def import_excel_file(
     return result
 
 
-@router.post("/flights/import/log")
+@router.post("/flights/import/log", responses=responses(400, 413))
 async def import_flight_log(
+    db: DBSession,
+    admin: AdminUser,
     file: UploadFile = File(...),
     format: str = "auto",
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_admin),
 ):
     """Import a flight log file (DJI .txt, Litchi CSV, Airdata CSV/JSON, or ZIP).
 
@@ -585,11 +578,11 @@ async def import_flight_log(
     return result
 
 
-@router.get("/flights/{flight_id}/gpx")
+@router.get("/flights/{flight_id}/gpx", responses=responses(404))
 def export_flight_gpx(
     flight_id: int,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    db: DBSession,
+    user: CurrentUser,
 ):
     """Export a flight's telemetry as a GPX file for Google Earth / GPS tools."""
     from app.database import get_telemetry_db
@@ -646,11 +639,11 @@ def export_flight_gpx(
     )
 
 
-@router.get("/flights/{flight_id}/kml")
+@router.get("/flights/{flight_id}/kml", responses=responses(404))
 def export_flight_kml(
     flight_id: int,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    db: DBSession,
+    user: CurrentUser,
 ):
     """Export a flight's telemetry as a KML file for Google Earth."""
     from app.database import get_telemetry_db

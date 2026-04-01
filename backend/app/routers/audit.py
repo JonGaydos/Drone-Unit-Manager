@@ -1,24 +1,20 @@
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy.orm import Session
-from app.database import get_db
+from fastapi import APIRouter, Query
+from app.deps import DBSession, AdminUser
 from app.models.audit_log import AuditLog
-from app.models.user import User
-from app.routers.auth import get_current_user, require_admin
 
 router = APIRouter(prefix="/api/audit", tags=["audit"])
 
 
 @router.get("")
 def list_audit_logs(
+    db: DBSession,
+    user: AdminUser,
     entity_type: str | None = None,
     entity_id: int | None = None,
     user_id: int | None = None,
     action: str | None = None,
     page: int = 1,
-    per_page: int = 50,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_admin),
-):
+    per_page: int = 50):
     q = db.query(AuditLog)
     if entity_type:
         q = q.filter(AuditLog.entity_type == entity_type)

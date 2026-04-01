@@ -7,7 +7,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { useConfirm } from '@/hooks/useConfirm'
 import { normalizeDateValue } from '@/lib/utils'
 import { FREQUENCY_COLORS } from '@/lib/constants'
-import { sortByName, sortPilotsActiveFirst, vehicleDisplayName, equipmentDisplayName } from '@/lib/formatters'
+import { sortPilotsActiveFirst, vehicleDisplayName, equipmentDisplayName } from '@/lib/formatters'
 import { Plus, Trash2, Search, Wrench, CalendarClock, History, Download, Edit, CheckCircle, Clock } from 'lucide-react'
 
 // Map entity_type to API endpoint
@@ -51,7 +51,7 @@ function MaintenanceModal({ record, onSave, onClose, entityLists, pilots }) {
     e.preventDefault()
     setSubmitError(null)
     const data = { ...form }
-    if (data.entity_id) data.entity_id = parseInt(data.entity_id)
+    if (data.entity_id) data.entity_id = Number.parseInt(data.entity_id, 10)
     Object.keys(data).forEach(k => { if (data[k] === '') delete data[k] })
     setSubmitting(true)
     try {
@@ -64,14 +64,14 @@ function MaintenanceModal({ record, onSave, onClose, entityLists, pilots }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-lg shadow-xl" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" role="presentation" onClick={onClose}>
+      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-lg shadow-xl" role="dialog" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold text-foreground mb-4">{record ? 'Edit Maintenance' : 'Add Maintenance'}</h2>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Entity Type</label>
-              <select
+              <label htmlFor="entity-type" className="block text-sm font-medium text-foreground mb-1">Entity Type</label>
+              <select id="entity-type"
                 value={form.entity_type}
                 onChange={(e) => setForm({ ...form, entity_type: e.target.value, entity_id: '' })}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
@@ -83,8 +83,8 @@ function MaintenanceModal({ record, onSave, onClose, entityLists, pilots }) {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Entity</label>
-              <select
+              <label htmlFor="entity" className="block text-sm font-medium text-foreground mb-1">Entity</label>
+              <select id="entity"
                 value={form.entity_id || ''}
                 onChange={(e) => setForm({ ...form, entity_id: e.target.value })}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
@@ -97,8 +97,8 @@ function MaintenanceModal({ record, onSave, onClose, entityLists, pilots }) {
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Maintenance Type</label>
-            <select
+            <label htmlFor="maintenance-type" className="block text-sm font-medium text-foreground mb-1">Maintenance Type</label>
+            <select id="maintenance-type"
               value={form.maintenance_type}
               onChange={(e) => setForm({ ...form, maintenance_type: e.target.value })}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
@@ -109,8 +109,8 @@ function MaintenanceModal({ record, onSave, onClose, entityLists, pilots }) {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Description</label>
-            <input
+            <label htmlFor="description" className="block text-sm font-medium text-foreground mb-1">Description</label>
+            <input id="description"
               type="text"
               value={form.description || ''}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
@@ -119,8 +119,8 @@ function MaintenanceModal({ record, onSave, onClose, entityLists, pilots }) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Performed By</label>
-              <select
+              <label htmlFor="performed-by" className="block text-sm font-medium text-foreground mb-1">Performed By</label>
+              <select id="performed-by"
                 value={form.performed_by || ''}
                 onChange={(e) => setForm({ ...form, performed_by: e.target.value })}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
@@ -132,8 +132,8 @@ function MaintenanceModal({ record, onSave, onClose, entityLists, pilots }) {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Performed Date</label>
-              <input
+              <label htmlFor="performed-date" className="block text-sm font-medium text-foreground mb-1">Performed Date</label>
+              <input id="performed-date"
                 type="date"
                 value={form.performed_date || ''}
                 onChange={(e) => setForm({ ...form, performed_date: e.target.value })}
@@ -143,8 +143,8 @@ function MaintenanceModal({ record, onSave, onClose, entityLists, pilots }) {
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Notes</label>
-            <textarea
+            <label htmlFor="notes" className="block text-sm font-medium text-foreground mb-1">Notes</label>
+            <textarea id="notes"
               value={form.notes || ''}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm h-20 resize-none"
@@ -153,7 +153,7 @@ function MaintenanceModal({ record, onSave, onClose, entityLists, pilots }) {
           {submitError && <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg p-2">{submitError}</div>}
           <div className="flex gap-2 pt-2">
             <button type="submit" disabled={submitting} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50">
-              {submitting ? 'Saving...' : (record ? 'Update' : 'Add Maintenance')}
+              {(() => { if (submitting) return 'Saving...'; return record ? 'Update' : 'Add Maintenance' })()}
             </button>
             <button type="button" onClick={onClose} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90">
               Cancel
@@ -201,9 +201,9 @@ function ScheduleModal({ schedule, onSave, onClose }) {
     e.preventDefault()
     setSubmitError(null)
     const data = { ...form }
-    if (data.entity_id) data.entity_id = parseInt(data.entity_id)
+    if (data.entity_id) data.entity_id = Number.parseInt(data.entity_id, 10)
     else data.entity_id = null
-    if (data.assigned_to_id) data.assigned_to_id = parseInt(data.assigned_to_id)
+    if (data.assigned_to_id) data.assigned_to_id = Number.parseInt(data.assigned_to_id, 10)
     else data.assigned_to_id = null
     setSubmitting(true)
     try {
@@ -222,13 +222,13 @@ function ScheduleModal({ schedule, onSave, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-lg shadow-xl" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" role="presentation" onClick={onClose}>
+      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-lg shadow-xl" role="dialog" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold text-foreground mb-4">{schedule ? 'Edit Schedule' : 'Add Schedule'}</h2>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Name *</label>
-            <input
+            <label htmlFor="name" className="block text-sm font-medium text-foreground mb-1">Name *</label>
+            <input id="name"
               type="text"
               required
               value={form.name}
@@ -238,8 +238,8 @@ function ScheduleModal({ schedule, onSave, onClose }) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Entity Type</label>
-              <select
+              <label htmlFor="entity-type-1" className="block text-sm font-medium text-foreground mb-1">Entity Type</label>
+              <select id="entity-type-1"
                 value={form.entity_type}
                 onChange={(e) => setForm({ ...form, entity_type: e.target.value, entity_id: '' })}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
@@ -252,9 +252,9 @@ function ScheduleModal({ schedule, onSave, onClose }) {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Entity</label>
+              <label htmlFor="entity-1" className="block text-sm font-medium text-foreground mb-1">Entity</label>
               {form.entity_type === 'organization' ? (
-                <input type="text" disabled value="All" className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-muted-foreground text-sm" />
+                <input id="entity-1" type="text" disabled value="All" className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-muted-foreground text-sm" />
               ) : (
                 <select
                   value={form.entity_id}
@@ -271,8 +271,8 @@ function ScheduleModal({ schedule, onSave, onClose }) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Frequency</label>
-              <select
+              <label htmlFor="frequency" className="block text-sm font-medium text-foreground mb-1">Frequency</label>
+              <select id="frequency"
                 value={form.frequency}
                 onChange={(e) => setForm({ ...form, frequency: e.target.value })}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
@@ -283,8 +283,8 @@ function ScheduleModal({ schedule, onSave, onClose }) {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Assigned To</label>
-              <select
+              <label htmlFor="assigned-to" className="block text-sm font-medium text-foreground mb-1">Assigned To</label>
+              <select id="assigned-to"
                 value={form.assigned_to_id}
                 onChange={(e) => setForm({ ...form, assigned_to_id: e.target.value })}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
@@ -295,8 +295,8 @@ function ScheduleModal({ schedule, onSave, onClose }) {
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Description</label>
-            <textarea
+            <label htmlFor="description-1" className="block text-sm font-medium text-foreground mb-1">Description</label>
+            <textarea id="description-1"
               value={form.description || ''}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm h-20 resize-none"
@@ -305,7 +305,7 @@ function ScheduleModal({ schedule, onSave, onClose }) {
           {submitError && <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg p-2">{submitError}</div>}
           <div className="flex gap-2 pt-2">
             <button type="submit" disabled={submitting} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50">
-              {submitting ? 'Saving...' : (schedule ? 'Update' : 'Add Schedule')}
+              {(() => { if (submitting) return 'Saving...'; return schedule ? 'Update' : 'Add Schedule' })()}
             </button>
             <button type="button" onClick={onClose} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90">
               Cancel
@@ -342,7 +342,7 @@ export default function MaintenancePage() {
   const [scheduleModal, setScheduleModal] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showAllUpcoming, setShowAllUpcoming] = useState(false)
-  const { isAdmin, isPilot, isSupervisor } = useAuth()
+  const { isPilot, isSupervisor } = useAuth()
   const toast = useToast()
   const [confirmProps, requestConfirm] = useConfirm()
 
@@ -521,9 +521,12 @@ export default function MaintenancePage() {
                 const dueDate = r.next_due_date ? new Date(r.next_due_date) : null
                 const now = new Date()
                 const daysUntil = dueDate ? Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24)) : null
-                const urgencyColor = daysUntil !== null
-                  ? daysUntil <= 0 ? 'text-red-400' : daysUntil <= 7 ? 'text-amber-400' : 'text-emerald-400'
-                  : 'text-muted-foreground'
+                const urgencyColor = (() => {
+                  if (daysUntil === null) return 'text-muted-foreground'
+                  if (daysUntil <= 0) return 'text-red-400'
+                  if (daysUntil <= 7) return 'text-amber-400'
+                  return 'text-emerald-400'
+                })()
 
                 return (
                   <div key={r.id} className="bg-secondary/30 border border-border/50 rounded-lg p-3">
@@ -668,9 +671,12 @@ export default function MaintenancePage() {
                 const dueDate = s.next_due ? new Date(s.next_due) : null
                 const now = new Date()
                 const daysUntil = dueDate ? Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24)) : null
-                const urgencyColor = daysUntil !== null
-                  ? daysUntil <= 0 ? 'text-red-400' : daysUntil <= 7 ? 'text-amber-400' : 'text-emerald-400'
-                  : 'text-muted-foreground'
+                const urgencyColor = (() => {
+                  if (daysUntil === null) return 'text-muted-foreground'
+                  if (daysUntil <= 0) return 'text-red-400'
+                  if (daysUntil <= 7) return 'text-amber-400'
+                  return 'text-emerald-400'
+                })()
 
                 return (
                   <tr key={s.id} className="border-b border-border/50 hover:bg-accent/30 transition-colors">

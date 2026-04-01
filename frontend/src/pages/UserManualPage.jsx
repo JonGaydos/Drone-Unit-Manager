@@ -371,11 +371,12 @@ export default function UserManualPage() {
 
   const renderMarkdown = (text) => {
     return text.split('\n').map((line, i) => {
+      const lineKey = `line-${i}-${line.slice(0, 20)}`
       if (line.startsWith('• **')) {
         const match = line.match(/^• \*\*(.+?)\*\*(.*)$/)
         if (match) {
           return (
-            <div key={i} className="flex gap-2 ml-2 mt-1">
+            <div key={lineKey} className="flex gap-2 ml-2 mt-1">
               <span className="text-muted-foreground">•</span>
               <span><strong className="text-foreground">{match[1]}</strong>{match[2]}</span>
             </div>
@@ -384,7 +385,7 @@ export default function UserManualPage() {
       }
       if (line.startsWith('• ')) {
         return (
-          <div key={i} className="flex gap-2 ml-2 mt-1">
+          <div key={lineKey} className="flex gap-2 ml-2 mt-1">
             <span className="text-muted-foreground">•</span>
             <span>{line.slice(2)}</span>
           </div>
@@ -392,11 +393,11 @@ export default function UserManualPage() {
       }
       if (line.match(/^\d+\./)) {
         return (
-          <div key={i} className="ml-2 mt-1">{line}</div>
+          <div key={lineKey} className="ml-2 mt-1">{line}</div>
         )
       }
-      if (line.trim() === '') return <div key={i} className="h-2" />
-      return <span key={i}>{line} </span>
+      if (line.trim() === '') return <div key={lineKey} className="h-2" />
+      return <span key={lineKey}>{line} </span>
     })
   }
 
@@ -444,8 +445,8 @@ export default function UserManualPage() {
           </button>
           {expandedSections.has(section.id) && (
             <div className="px-5 pb-5 space-y-4">
-              {section.content.map((item, idx) => (
-                <div key={idx}>
+              {section.content.map((item) => (
+                <div key={item.title}>
                   <h3 className="text-sm font-semibold text-foreground mb-1.5">{item.title}</h3>
                   <div className="text-sm text-muted-foreground leading-relaxed">
                     {renderMarkdown(item.body)}

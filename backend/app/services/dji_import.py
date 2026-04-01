@@ -436,11 +436,8 @@ def parse_airdata_json(content: str) -> dict:
     gps_data = ft.get("gps", {}).get("data", [])
     gps_ts = ft.get("gps", {}).get("timestamps", [])
     hat_data = ft.get("height_above_takeoff", {}).get("data", [])
-    hat_ts = ft.get("height_above_takeoff", {}).get("timestamps", [])
     bat_data = ft.get("battery_percentage", {}).get("data", [])
-    bat_ts = ft.get("battery_percentage", {}).get("timestamps", [])
     vel_data = ft.get("velocity", {}).get("data", [])
-    vel_ts = ft.get("velocity", {}).get("timestamps", [])
     sat_data = ft.get("gps_num_satellites", {}).get("data", [])
 
     # Use GPS timestamps as the primary time axis

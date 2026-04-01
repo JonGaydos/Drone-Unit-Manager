@@ -4,11 +4,11 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { useConfirm } from '@/hooks/useConfirm'
-import { sortByName, sortVehicles, sortPilotsActiveFirst, vehicleDisplayName } from '@/lib/formatters'
+import { sortVehicles, sortPilotsActiveFirst, vehicleDisplayName } from '@/lib/formatters'
 import { Link } from 'react-router-dom'
 import {
   AlertTriangle, Plus, Filter, Search, ChevronDown, ChevronUp,
-  X, Loader2, CheckCircle, Eye, Shield, Download,
+  X, Loader2, CheckCircle, Shield, Download,
 } from 'lucide-react'
 
 const SEVERITY_COLORS = {
@@ -54,7 +54,7 @@ const SEVERITIES = ['minor', 'moderate', 'major', 'critical']
 const STATUSES = ['open', 'investigating', 'resolved', 'closed']
 
 function formatCategory(cat) {
-  return cat ? cat.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) : ''
+  return cat ? cat.replaceAll('_', ' ').replace(/\b\w/g, l => l.toUpperCase()) : ''
 }
 
 function IncidentModal({ pilots, vehicles, flights, onSave, onClose }) {
@@ -71,20 +71,20 @@ function IncidentModal({ pilots, vehicles, flights, onSave, onClose }) {
     e.preventDefault()
     if (!form.title || !form.description) return
     const data = { ...form }
-    if (data.pilot_id) data.pilot_id = parseInt(data.pilot_id); else delete data.pilot_id
-    if (data.vehicle_id) data.vehicle_id = parseInt(data.vehicle_id); else delete data.vehicle_id
-    if (data.flight_id) data.flight_id = parseInt(data.flight_id); else delete data.flight_id
-    if (data.lat) data.lat = parseFloat(data.lat); else delete data.lat
-    if (data.lon) data.lon = parseFloat(data.lon); else delete data.lon
-    if (data.estimated_cost) data.estimated_cost = parseFloat(data.estimated_cost); else delete data.estimated_cost
+    if (data.pilot_id) data.pilot_id = Number.parseInt(data.pilot_id, 10); else delete data.pilot_id
+    if (data.vehicle_id) data.vehicle_id = Number.parseInt(data.vehicle_id, 10); else delete data.vehicle_id
+    if (data.flight_id) data.flight_id = Number.parseInt(data.flight_id, 10); else delete data.flight_id
+    if (data.lat) data.lat = Number.parseFloat(data.lat); else delete data.lat
+    if (data.lon) data.lon = Number.parseFloat(data.lon); else delete data.lon
+    if (data.estimated_cost) data.estimated_cost = Number.parseFloat(data.estimated_cost); else delete data.estimated_cost
     Object.keys(data).forEach(k => { if (data[k] === '') delete data[k] })
     setSaving(true)
     try { await onSave(data) } finally { setSaving(false) }
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-2xl shadow-xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" role="presentation" onClick={onClose}>
+      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-2xl shadow-xl max-h-[90vh] overflow-y-auto" role="dialog" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold text-foreground mb-4">
           {form.report_type === 'success' ? 'Report Success' : 'Report Incident'}
         </h2>
@@ -102,22 +102,22 @@ function IncidentModal({ pilots, vehicles, flights, onSave, onClose }) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Date *</label>
-              <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })}
+              <label htmlFor="date" className="block text-sm font-medium text-foreground mb-1">Date *</label>
+              <input id="date" type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" required />
             </div>
             {form.report_type === 'incident' ? (
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Severity *</label>
-                <select value={form.severity} onChange={e => setForm({ ...form, severity: e.target.value })}
+                <label htmlFor="severity" className="block text-sm font-medium text-foreground mb-1">Severity *</label>
+                <select id="severity" value={form.severity} onChange={e => setForm({ ...form, severity: e.target.value })}
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                   {SEVERITIES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
                 </select>
               </div>
             ) : (
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Impact Level</label>
-                <select value={form.impact_level} onChange={e => setForm({ ...form, impact_level: e.target.value })}
+                <label htmlFor="impact-level" className="block text-sm font-medium text-foreground mb-1">Impact Level</label>
+                <select id="impact-level" value={form.impact_level} onChange={e => setForm({ ...form, impact_level: e.target.value })}
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                   <option value="">Select...</option>
                   {IMPACT_LEVELS.map(il => <option key={il.value} value={il.value}>{il.label}</option>)}
@@ -126,49 +126,49 @@ function IncidentModal({ pilots, vehicles, flights, onSave, onClose }) {
             )}
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Title *</label>
-            <input type="text" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })}
+            <label htmlFor="title" className="block text-sm font-medium text-foreground mb-1">Title *</label>
+            <input id="title" type="text" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" required />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Category *</label>
-              <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}
+              <label htmlFor="category" className="block text-sm font-medium text-foreground mb-1">Category *</label>
+              <select id="category" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                 {(form.report_type === 'success' ? SUCCESS_CATEGORIES : CATEGORIES).map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Location</label>
-              <input type="text" value={form.location} onChange={e => setForm({ ...form, location: e.target.value })}
+              <label htmlFor="location" className="block text-sm font-medium text-foreground mb-1">Location</label>
+              <input id="location" type="text" value={form.location} onChange={e => setForm({ ...form, location: e.target.value })}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Description *</label>
-            <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
+            <label htmlFor="description" className="block text-sm font-medium text-foreground mb-1">Description *</label>
+            <textarea id="description" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
               rows={3} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm resize-none" required />
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Pilot</label>
-              <select value={form.pilot_id} onChange={e => setForm({ ...form, pilot_id: e.target.value })}
+              <label htmlFor="pilot" className="block text-sm font-medium text-foreground mb-1">Pilot</label>
+              <select id="pilot" value={form.pilot_id} onChange={e => setForm({ ...form, pilot_id: e.target.value })}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                 <option value="">Select...</option>
                 {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Vehicle</label>
-              <select value={form.vehicle_id} onChange={e => setForm({ ...form, vehicle_id: e.target.value })}
+              <label htmlFor="vehicle" className="block text-sm font-medium text-foreground mb-1">Vehicle</label>
+              <select id="vehicle" value={form.vehicle_id} onChange={e => setForm({ ...form, vehicle_id: e.target.value })}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                 <option value="">Select...</option>
                 {sortVehicles(vehicles).map(v => <option key={v.id} value={v.id}>{vehicleDisplayName(v)}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Linked Flight</label>
-              <select value={form.flight_id} onChange={e => setForm({ ...form, flight_id: e.target.value })}
+              <label htmlFor="linked-flight" className="block text-sm font-medium text-foreground mb-1">Linked Flight</label>
+              <select id="linked-flight" value={form.flight_id} onChange={e => setForm({ ...form, flight_id: e.target.value })}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                 <option value="">None</option>
                 {flights.map(f => <option key={f.id} value={f.id}>#{f.id} — {f.date || 'No date'}</option>)}
@@ -177,13 +177,13 @@ function IncidentModal({ pilots, vehicles, flights, onSave, onClose }) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Damage Description</label>
-              <textarea value={form.damage_description} onChange={e => setForm({ ...form, damage_description: e.target.value })}
+              <label htmlFor="damage-description" className="block text-sm font-medium text-foreground mb-1">Damage Description</label>
+              <textarea id="damage-description" value={form.damage_description} onChange={e => setForm({ ...form, damage_description: e.target.value })}
                 rows={2} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm resize-none" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Estimated Cost ($)</label>
-              <input type="number" step="0.01" value={form.estimated_cost} onChange={e => setForm({ ...form, estimated_cost: e.target.value })}
+              <label htmlFor="estimated-cost" className="block text-sm font-medium text-foreground mb-1">Estimated Cost ($)</label>
+              <input id="estimated-cost" type="number" step="0.01" value={form.estimated_cost} onChange={e => setForm({ ...form, estimated_cost: e.target.value })}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
           </div>
@@ -195,21 +195,22 @@ function IncidentModal({ pilots, vehicles, flights, onSave, onClose }) {
           </div>
           {form.report_type === 'success' && (
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Outcome Description</label>
-              <textarea value={form.outcome_description} onChange={e => setForm({ ...form, outcome_description: e.target.value })}
+              <label htmlFor="outcome-description" className="block text-sm font-medium text-foreground mb-1">Outcome Description</label>
+              <textarea id="outcome-description" value={form.outcome_description} onChange={e => setForm({ ...form, outcome_description: e.target.value })}
                 rows={3} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm resize-none"
                 placeholder="Describe the positive outcome..." />
             </div>
           )}
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Notes</label>
-            <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })}
+            <label htmlFor="notes" className="block text-sm font-medium text-foreground mb-1">Notes</label>
+            <textarea id="notes" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })}
               rows={2} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm resize-none" />
           </div>
           <div className="flex gap-2 pt-2">
             <button type="submit" disabled={saving}
               className={`flex-1 py-2 rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2 ${form.report_type === 'success' ? 'bg-emerald-600 text-white' : 'bg-primary text-primary-foreground'}`}>
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : (form.report_type === 'success' ? 'Report Success' : 'Report Incident')}
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+              {!saving && (form.report_type === 'success' ? 'Report Success' : 'Report Incident')}
             </button>
             <button type="button" onClick={onClose}
               className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm">Cancel</button>
@@ -236,13 +237,13 @@ function ResolveModal({ incident, onSave, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-lg shadow-xl" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" role="presentation" onClick={onClose}>
+      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-lg shadow-xl" role="dialog" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold text-foreground mb-4">Resolve Incident</h2>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Status</label>
-            <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}
+            <label htmlFor="status" className="block text-sm font-medium text-foreground mb-1">Status</label>
+            <select id="status" value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
               <option value="investigating">Investigating</option>
               <option value="resolved">Resolved</option>
@@ -250,18 +251,18 @@ function ResolveModal({ incident, onSave, onClose }) {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Resolution</label>
-            <textarea value={form.resolution} onChange={e => setForm({ ...form, resolution: e.target.value })}
+            <label htmlFor="resolution" className="block text-sm font-medium text-foreground mb-1">Resolution</label>
+            <textarea id="resolution" value={form.resolution} onChange={e => setForm({ ...form, resolution: e.target.value })}
               rows={3} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm resize-none" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Corrective Actions</label>
-            <textarea value={form.corrective_actions} onChange={e => setForm({ ...form, corrective_actions: e.target.value })}
+            <label htmlFor="corrective-actions" className="block text-sm font-medium text-foreground mb-1">Corrective Actions</label>
+            <textarea id="corrective-actions" value={form.corrective_actions} onChange={e => setForm({ ...form, corrective_actions: e.target.value })}
               rows={3} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm resize-none" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Resolution Date</label>
-            <input type="date" value={form.resolution_date} onChange={e => setForm({ ...form, resolution_date: e.target.value })}
+            <label htmlFor="resolution-date" className="block text-sm font-medium text-foreground mb-1">Resolution Date</label>
+            <input id="resolution-date" type="date" value={form.resolution_date} onChange={e => setForm({ ...form, resolution_date: e.target.value })}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
           </div>
           <div className="flex gap-2 pt-2">
@@ -289,7 +290,7 @@ export default function IncidentPage() {
   const [resolveTarget, setResolveTarget] = useState(null)
   const [expandedId, setExpandedId] = useState(null)
   const [filters, setFilters] = useState({ status: '', severity: '', category: '', date_from: '', date_to: '', report_type: '' })
-  const { user, isAdmin, isPilot, isSupervisor } = useAuth()
+  const { isPilot, isSupervisor } = useAuth()
   const toast = useToast()
   const [confirmProps, requestConfirm] = useConfirm()
 
@@ -398,7 +399,7 @@ export default function IncidentPage() {
       <div className="flex items-center gap-3">
         <div className="flex items-center bg-secondary rounded-lg border border-border">
           <button onClick={() => setFilters({ ...filters, report_type: '' })}
-            className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${!filters.report_type ? 'bg-primary text-primary-foreground font-medium' : 'text-muted-foreground hover:text-foreground'}`}>
+            className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${filters.report_type ? 'text-muted-foreground hover:text-foreground' : 'bg-primary text-primary-foreground font-medium'}`}>
             All
           </button>
           <button onClick={() => setFilters({ ...filters, report_type: 'incident' })}
@@ -468,7 +469,9 @@ export default function IncidentPage() {
               {incidents.map(inc => (
                 <React.Fragment key={inc.id}>
                   <tr className="border-b border-border hover:bg-secondary/30 cursor-pointer"
-                    onClick={() => setExpandedId(expandedId === inc.id ? null : inc.id)}>
+                    onClick={() => setExpandedId(expandedId === inc.id ? null : inc.id)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpandedId(expandedId === inc.id ? null : inc.id) } }}
+                    tabIndex={0} role="row">
                     <td className="px-4 py-3 text-foreground whitespace-nowrap">{inc.date}</td>
                     <td className="px-4 py-3 text-foreground font-medium">{inc.title}</td>
                     <td className="px-4 py-3">

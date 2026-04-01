@@ -125,8 +125,8 @@ export default function AuditLogPage() {
       {showFilters && (
         <div className="bg-card border border-border rounded-xl p-4 flex flex-wrap gap-4">
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">Entity Type</label>
-            <select
+            <label htmlFor="entity-type" className="block text-xs font-medium text-muted-foreground mb-1">Entity Type</label>
+            <select id="entity-type"
               value={entityType}
               onChange={e => { setEntityType(e.target.value); setPage(1) }}
               className="px-3 py-1.5 bg-secondary border border-border rounded-lg text-sm text-foreground"
@@ -138,8 +138,8 @@ export default function AuditLogPage() {
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">Action</label>
-            <select
+            <label htmlFor="action" className="block text-xs font-medium text-muted-foreground mb-1">Action</label>
+            <select id="action"
               value={action}
               onChange={e => { setAction(e.target.value); setPage(1) }}
               className="px-3 py-1.5 bg-secondary border border-border rounded-lg text-sm text-foreground"

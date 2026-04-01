@@ -10,8 +10,8 @@ import threading
 from typing import Optional
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query
-from app.routers.auth import get_current_user
+from fastapi import APIRouter, HTTPException, Query
+from app.deps import CurrentUser
 
 logger = logging.getLogger(__name__)
 
@@ -25,10 +25,14 @@ _CACHE_TTL = 5  # seconds
 
 @router.get("/nearby")
 def get_nearby_aircraft(
+
+    _user: CurrentUser,
+
     lat: float = Query(..., ge=-90, le=90, description="Latitude"),
+
     lon: float = Query(..., ge=-180, le=180, description="Longitude"),
+
     radius_nm: int = Query(30, ge=5, le=250, description="Search radius in nautical miles"),
-    _user=Depends(get_current_user),
 ):
     """Fetch nearby aircraft positions from the airplanes.live ADS-B API.
 

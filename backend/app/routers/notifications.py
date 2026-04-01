@@ -4,15 +4,14 @@ import json
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.database import get_db
+from app.deps import CurrentUser, DBSession
 from app.models.notification_preference import NotificationPreference
 from app.models.notification_log import NotificationLog
-from app.models.user import User
-from app.routers.auth import get_current_user, require_admin
+from app.responses import responses
 
 logger = logging.getLogger(__name__)
 
@@ -40,9 +39,9 @@ class NotificationPrefOut(BaseModel):
     enabled: bool
     frequency: str
     send_time: str
-    send_day: Optional[int]
+    send_day: Optional[int] = None
     categories: list[str]
-    email_override: Optional[str]
+    email_override: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -62,8 +61,8 @@ def _get_or_create_pref(db: Session, user_id: int) -> NotificationPreference:
 
 @router.get("/preferences")
 def get_preferences(
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    db: DBSession,
+    user: CurrentUser,
 ):
     """Get the current user's email notification preferences."""
     pref = _get_or_create_pref(db, user.id)
@@ -81,11 +80,11 @@ def get_preferences(
     }
 
 
-@router.put("/preferences")
+@router.put("/preferences", responses=responses(400))
 def update_preferences(
     data: NotificationPrefUpdate,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    db: DBSession,
+    user: CurrentUser,
 ):
     """Update the current user's email notification preferences."""
     pref = _get_or_create_pref(db, user.id)
@@ -109,8 +108,8 @@ def update_preferences(
 
 @router.get("/preview")
 def preview_digest(
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    db: DBSession,
+    user: CurrentUser,
 ):
     """Preview what the next digest email would contain for the current user."""
     from app.services.email_digest import build_digest
@@ -120,10 +119,10 @@ def preview_digest(
     return {"empty": False, "sections": digest}
 
 
-@router.post("/send-test")
+@router.post("/send-test", responses=responses(400))
 def send_test_digest(
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    db: DBSession,
+    user: CurrentUser,
 ):
     """Send a test digest email to the current user immediately."""
     from app.services.email_digest import build_digest, render_digest_html, send_email
@@ -169,10 +168,9 @@ def send_test_digest(
 
 @router.get("/log")
 def get_notification_log(
-    limit: int = 50,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
+    db: DBSession,
+    user: CurrentUser,
+    limit: int = 50):
     """Get notification send history for the current user."""
     q = db.query(NotificationLog)
     if user.role != "admin":

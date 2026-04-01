@@ -2,12 +2,11 @@ import httpx
 import json
 import logging
 from math import radians, sin, cos, sqrt, atan2
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Query
 from sqlalchemy.orm import Session
-from app.database import get_db
+from app.deps import DBSession, CurrentUser
 from app.models.setting import Setting
-from app.models.user import User
-from app.routers.auth import get_current_user
+from app.responses import responses
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/weather", tags=["weather"])
@@ -39,10 +38,14 @@ def _get_thresholds(db: Session):
 
 @router.get("/briefing")
 def get_weather_briefing(
+
+    db: DBSession,
+
+    user: CurrentUser,
+
     lat: float = Query(...),
+
     lon: float = Query(...),
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
 ):
     """Get comprehensive weather briefing for a GPS location."""
     result = {
@@ -167,8 +170,8 @@ def get_weather_briefing(
     return result
 
 
-@router.get("/thresholds")
-def get_thresholds(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+@router.get("/thresholds", responses=responses(401))
+def get_thresholds(db: DBSession, user: CurrentUser):
     """Return the current weather thresholds (custom + defaults merged)."""
     return _get_thresholds(db)
 

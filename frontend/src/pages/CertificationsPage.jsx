@@ -20,23 +20,23 @@ function CertTypeModal({ certType, onSave, onClose }) {
     e.preventDefault()
     const data = { ...form }
     if (data.renewal_period_months === '') data.renewal_period_months = null
-    else data.renewal_period_months = parseInt(data.renewal_period_months)
+    else data.renewal_period_months = Number.parseInt(data.renewal_period_months, 10)
     setSaving(true)
     try { await onSave(data) } finally { setSaving(false) }
   }
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" role="presentation" onClick={onClose}>
+      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl" role="dialog" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold text-foreground mb-4">{certType ? 'Edit Certification Type' : 'Add Certification Type'}</h2>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Name</label>
-            <input type="text" value={form.name} onChange={e => setForm({...form, name: e.target.value})} required
+            <label htmlFor="name" className="block text-sm font-medium text-foreground mb-1">Name</label>
+            <input id="name" type="text" value={form.name} onChange={e => setForm({...form, name: e.target.value})} required
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Category</label>
-            <select value={form.category} onChange={e => setForm({...form, category: e.target.value})}
+            <label htmlFor="category" className="block text-sm font-medium text-foreground mb-1">Category</label>
+            <select id="category" value={form.category} onChange={e => setForm({...form, category: e.target.value})}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
               <option value="faa">FAA</option>
               <option value="nist">NIST</option>
@@ -55,19 +55,20 @@ function CertTypeModal({ certType, onSave, onClose }) {
           </div>
           {form.has_expiration && (
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Renewal Period (months)</label>
-              <input type="number" value={form.renewal_period_months || ''} onChange={e => setForm({...form, renewal_period_months: e.target.value})}
+              <label htmlFor="renewal-period-months" className="block text-sm font-medium text-foreground mb-1">Renewal Period (months)</label>
+              <input id="renewal-period-months" type="number" value={form.renewal_period_months || ''} onChange={e => setForm({...form, renewal_period_months: e.target.value})}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" placeholder="e.g. 24" />
             </div>
           )}
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Description</label>
-            <textarea value={form.description || ''} onChange={e => setForm({...form, description: e.target.value})}
+            <label htmlFor="description" className="block text-sm font-medium text-foreground mb-1">Description</label>
+            <textarea id="description" value={form.description || ''} onChange={e => setForm({...form, description: e.target.value})}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm h-16 resize-none" />
           </div>
           <div className="flex gap-2 pt-2">
             <button type="submit" disabled={saving} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2">
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : (certType ? 'Update' : 'Add')}
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+              {!saving && (certType ? 'Update' : 'Add')}
             </button>
             <button type="button" onClick={onClose} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm">Cancel</button>
           </div>
@@ -95,22 +96,22 @@ function AssignCertModal({ pilots, certTypes, existingCert, onSave, onClose, cer
   const handleSubmit = async (e) => {
     e.preventDefault()
     const data = { ...form }
-    data.pilot_id = parseInt(data.pilot_id)
-    data.certification_type_id = parseInt(data.certification_type_id)
-    if (data.nist_level) data.nist_level = parseInt(data.nist_level)
+    data.pilot_id = Number.parseInt(data.pilot_id, 10)
+    data.certification_type_id = Number.parseInt(data.certification_type_id, 10)
+    if (data.nist_level) data.nist_level = Number.parseInt(data.nist_level, 10)
     else data.nist_level = null
     Object.keys(data).forEach(k => { if (data[k] === '') delete data[k] })
     setSaving(true)
     try { await onSave(data, isEditing ? existingCert.id : null) } finally { setSaving(false) }
   }
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" role="presentation" onClick={onClose}>
+      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl" role="dialog" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold text-foreground mb-4">{isEditing ? 'Edit Certification' : 'Assign Certification'}</h2>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Pilot</label>
-            <select value={form.pilot_id} onChange={e => setForm({...form, pilot_id: e.target.value})} required
+            <label htmlFor="pilot" className="block text-sm font-medium text-foreground mb-1">Pilot</label>
+            <select id="pilot" value={form.pilot_id} onChange={e => setForm({...form, pilot_id: e.target.value})} required
               disabled={isEditing}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm disabled:opacity-60">
               <option value="">Select pilot...</option>
@@ -118,8 +119,8 @@ function AssignCertModal({ pilots, certTypes, existingCert, onSave, onClose, cer
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Certification</label>
-            <select value={form.certification_type_id} onChange={e => setForm({...form, certification_type_id: e.target.value})} required
+            <label htmlFor="certification" className="block text-sm font-medium text-foreground mb-1">Certification</label>
+            <select id="certification" value={form.certification_type_id} onChange={e => setForm({...form, certification_type_id: e.target.value})} required
               disabled={isEditing}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm disabled:opacity-60">
               <option value="">Select cert type...</option>
@@ -127,33 +128,33 @@ function AssignCertModal({ pilots, certTypes, existingCert, onSave, onClose, cer
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Status</label>
-            <select value={form.status} onChange={e => setForm({...form, status: e.target.value})}
+            <label htmlFor="status" className="block text-sm font-medium text-foreground mb-1">Status</label>
+            <select id="status" value={form.status} onChange={e => setForm({...form, status: e.target.value})}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
-              {Object.keys(CERT_STATUS_COLORS).map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+              {Object.keys(CERT_STATUS_COLORS).map(s => <option key={s} value={s}>{s.replaceAll('_', ' ')}</option>)}
             </select>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Issue Date</label>
-              <input type="date" value={form.issue_date} onChange={e => setForm({...form, issue_date: e.target.value})}
+              <label htmlFor="issue-date" className="block text-sm font-medium text-foreground mb-1">Issue Date</label>
+              <input id="issue-date" type="date" value={form.issue_date} onChange={e => setForm({...form, issue_date: e.target.value})}
                 onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) setForm(prev => ({...prev, issue_date: n})) }}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Expiration Date</label>
-              <input type="date" value={form.expiration_date} onChange={e => setForm({...form, expiration_date: e.target.value})}
+              <label htmlFor="expiration-date" className="block text-sm font-medium text-foreground mb-1">Expiration Date</label>
+              <input id="expiration-date" type="date" value={form.expiration_date} onChange={e => setForm({...form, expiration_date: e.target.value})}
                 onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) setForm(prev => ({...prev, expiration_date: n})) }}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Certificate Number</label>
-            <input type="text" value={form.certificate_number} onChange={e => setForm({...form, certificate_number: e.target.value})}
+            <label htmlFor="certificate-number" className="block text-sm font-medium text-foreground mb-1">Certificate Number</label>
+            <input id="certificate-number" type="text" value={form.certificate_number} onChange={e => setForm({...form, certificate_number: e.target.value})}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
           </div>
           <div className="flex gap-2 pt-2">
-            <button type="submit" disabled={saving} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2">{saving ? <Loader2 className="w-4 h-4 animate-spin" /> : (isEditing ? 'Update' : 'Assign')}</button>
+            <button type="submit" disabled={saving} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2">{saving && <Loader2 className="w-4 h-4 animate-spin" />}{!saving && (isEditing ? 'Update' : 'Assign')}</button>
             <button type="button" onClick={onClose} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm">Cancel</button>
           </div>
         </form>
@@ -175,7 +176,7 @@ export default function CertificationsPage() {
   const [modal, setModal] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const { isAdmin, isPilot, isSupervisor } = useAuth()
+  const { isSupervisor } = useAuth()
   const toast = useToast()
   const [confirmProps, requestConfirm] = useConfirm()
 
@@ -362,7 +363,7 @@ export default function CertificationsPage() {
               >
                 <option value="all">All Statuses</option>
                 {Object.keys(CERT_STATUS_COLORS).map(s => (
-                  <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
+                  <option key={s} value={s}>{s.replaceAll('_', ' ')}</option>
                 ))}
               </select>
 
@@ -447,6 +448,7 @@ export default function CertificationsPage() {
                       const status = cert?.status || 'not_started'
                       return (
                         <td key={ct.id} className="px-3 py-2 text-center cursor-pointer hover:bg-accent/40 transition-colors"
+                          role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.click() } }}
                           onClick={() => {
                             if (cert) {
                               setEditCert({
@@ -467,7 +469,7 @@ export default function CertificationsPage() {
                             }
                           }}>
                           <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${CERT_STATUS_COLORS[status] || CERT_STATUS_COLORS.not_started}`}>
-                            {certStatusLabels[status] || status.replace(/_/g, ' ')}
+                            {certStatusLabels[status] || status.replaceAll('_', ' ')}
                           </span>
                           {cert?.expiration_date && (
                             <div className="text-xs text-muted-foreground mt-0.5">{cert.expiration_date}</div>

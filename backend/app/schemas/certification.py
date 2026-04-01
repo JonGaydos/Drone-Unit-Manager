@@ -31,8 +31,8 @@ class CertificationTypeOut(BaseModel):
     name: str
     category: str
     has_expiration: bool
-    renewal_period_months: Optional[int]
-    description: Optional[str]
+    renewal_period_months: Optional[int] = None
+    description: Optional[str] = None
     sort_order: int
     is_active: bool
     created_at: datetime
@@ -67,11 +67,11 @@ class PilotCertificationOut(BaseModel):
     pilot_id: int
     certification_type_id: int
     status: str
-    issue_date: Optional[date]
-    expiration_date: Optional[date]
-    certificate_number: Optional[str]
-    nist_level: Optional[int]
-    notes: Optional[str]
+    issue_date: Optional[date] = None
+    expiration_date: Optional[date] = None
+    certificate_number: Optional[str] = None
+    nist_level: Optional[int] = None
+    notes: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     pilot_name: Optional[str] = None
@@ -102,11 +102,11 @@ class PilotEquipmentQualUpdate(BaseModel):
 class PilotEquipmentQualOut(BaseModel):
     id: int
     pilot_id: int
-    vehicle_id: Optional[int]
-    vehicle_model: Optional[str]
-    qualification_date: Optional[date]
+    vehicle_id: Optional[int] = None
+    vehicle_model: Optional[str] = None
+    qualification_date: Optional[date] = None
     status: str
-    notes: Optional[str]
+    notes: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

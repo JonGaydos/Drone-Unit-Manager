@@ -65,8 +65,8 @@ export default function SetupPage() {
                 <Shield className="w-5 h-5 text-primary" /> Organization
               </h2>
               <div>
-                <label className="block text-sm font-medium mb-1">Organization Name</label>
-                <input
+                <label htmlFor="organization-name" className="block text-sm font-medium mb-1">Organization Name</label>
+                <input id="organization-name"
                   type="text"
                   value={form.org_name}
                   onChange={e => setForm({...form, org_name: e.target.value})}
@@ -75,8 +75,8 @@ export default function SetupPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Your Name</label>
-                <input
+                <label htmlFor="your-name" className="block text-sm font-medium mb-1">Your Name</label>
+                <input id="your-name"
                   type="text"
                   value={form.display_name}
                   onChange={e => setForm({...form, display_name: e.target.value})}
@@ -100,8 +100,8 @@ export default function SetupPage() {
                 <Shield className="w-5 h-5 text-primary" /> Create Admin Account
               </h2>
               <div>
-                <label className="block text-sm font-medium mb-1">Username</label>
-                <input
+                <label htmlFor="username" className="block text-sm font-medium mb-1">Username</label>
+                <input id="username"
                   type="text"
                   value={form.username}
                   onChange={e => setForm({...form, username: e.target.value})}
@@ -110,8 +110,8 @@ export default function SetupPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Password</label>
-                <input
+                <label htmlFor="password" className="block text-sm font-medium mb-1">Password</label>
+                <input id="password"
                   type="password"
                   value={form.password}
                   onChange={e => setForm({...form, password: e.target.value})}
@@ -120,8 +120,8 @@ export default function SetupPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Confirm Password</label>
-                <input
+                <label htmlFor="confirm-password" className="block text-sm font-medium mb-1">Confirm Password</label>
+                <input id="confirm-password"
                   type="password"
                   value={form.password_confirm}
                   onChange={e => setForm({...form, password_confirm: e.target.value})}

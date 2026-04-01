@@ -1,14 +1,13 @@
 """Folder management router for document storage."""
 from typing import Optional
 from pydantic import BaseModel
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, HTTPException
 from sqlalchemy import func
 
-from app.database import get_db
 from app.models.folder import Folder
 from app.models.document import Document
-from app.routers.auth import get_current_user, require_pilot
+from app.deps import DBSession, CurrentUser, PilotUser
+from app.responses import responses
 
 router = APIRouter(prefix="/api/folders", tags=["folders"])
 
@@ -24,8 +23,8 @@ class FolderUpdate(BaseModel):
     description: Optional[str] = None
 
 
-@router.get("")
-def list_folders(db: Session = Depends(get_db), _user=Depends(get_current_user)):
+@router.get("", responses=responses(401))
+def list_folders(db: DBSession, _user: CurrentUser):
     folders = db.query(Folder).order_by(Folder.name).all()
     result = []
     for f in folders:
@@ -42,8 +41,8 @@ def list_folders(db: Session = Depends(get_db), _user=Depends(get_current_user))
     return result
 
 
-@router.get("/{folder_id}/documents")
-def get_folder_documents(folder_id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)):
+@router.get("/{folder_id}/documents", responses=responses(401, 404))
+def get_folder_documents(folder_id: int, db: DBSession, _user: CurrentUser):
     folder = db.query(Folder).filter(Folder.id == folder_id).first()
     if not folder:
         raise HTTPException(404, "Folder not found")
@@ -62,8 +61,8 @@ def get_folder_documents(folder_id: int, db: Session = Depends(get_db), _user=De
     } for d in docs]
 
 
-@router.post("")
-def create_folder(data: FolderCreate, db: Session = Depends(get_db), _user=Depends(require_pilot)):
+@router.post("", responses=responses(401))
+def create_folder(data: FolderCreate, db: DBSession, _user: PilotUser):
     folder = Folder(
         name=data.name,
         parent_id=data.parent_id,
@@ -75,8 +74,8 @@ def create_folder(data: FolderCreate, db: Session = Depends(get_db), _user=Depen
     return {"id": folder.id, "name": folder.name, "message": "Folder created"}
 
 
-@router.patch("/{folder_id}")
-def update_folder(folder_id: int, data: FolderUpdate, db: Session = Depends(get_db), _user=Depends(require_pilot)):
+@router.patch("/{folder_id}", responses=responses(400, 401, 404))
+def update_folder(folder_id: int, data: FolderUpdate, db: DBSession, _user: PilotUser):
     folder = db.query(Folder).filter(Folder.id == folder_id).first()
     if not folder:
         raise HTTPException(404, "Folder not found")
@@ -90,8 +89,8 @@ def update_folder(folder_id: int, data: FolderUpdate, db: Session = Depends(get_
     return {"message": "Folder updated"}
 
 
-@router.delete("/{folder_id}")
-def delete_folder(folder_id: int, db: Session = Depends(get_db), _user=Depends(require_pilot)):
+@router.delete("/{folder_id}", responses=responses(400, 401, 404))
+def delete_folder(folder_id: int, db: DBSession, _user: PilotUser):
     folder = db.query(Folder).filter(Folder.id == folder_id).first()
     if not folder:
         raise HTTPException(404, "Folder not found")

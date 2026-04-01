@@ -1,16 +1,15 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.database import get_db
+from app.deps import DBSession, CurrentUser, SupervisorUser
 from app.models.currency_rule import CurrencyRule
 from app.models.pilot import Pilot
 from app.models.flight import Flight
-from app.models.user import User
-from app.routers.auth import get_current_user, require_supervisor
+from app.responses import responses
 from sqlalchemy import func
 
 router = APIRouter(prefix="/api/currency", tags=["currency"])
@@ -40,23 +39,23 @@ class RuleUpdate(BaseModel):
 class RuleOut(BaseModel):
     id: int
     name: str
-    description: Optional[str]
-    vehicle_model: Optional[str]
+    description: Optional[str] = None
+    vehicle_model: Optional[str] = None
     required_hours: float
     period_days: int
-    required_flights: Optional[int]
+    required_flights: Optional[int] = None
     is_active: bool
     created_at: datetime
     model_config = {"from_attributes": True}
 
 
-@router.get("/rules", response_model=list[RuleOut])
-def list_rules(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+@router.get("/rules", response_model=list[RuleOut], responses=responses(401))
+def list_rules(db: DBSession, user: CurrentUser):
     return db.query(CurrencyRule).order_by(CurrencyRule.name).all()
 
 
-@router.post("/rules", response_model=RuleOut)
-def create_rule(data: RuleCreate, db: Session = Depends(get_db), user: User = Depends(require_supervisor)):
+@router.post("/rules", response_model=RuleOut, responses=responses(401))
+def create_rule(data: RuleCreate, db: DBSession, user: SupervisorUser):
     rule = CurrencyRule(**data.model_dump())
     db.add(rule)
     db.commit()
@@ -64,8 +63,8 @@ def create_rule(data: RuleCreate, db: Session = Depends(get_db), user: User = De
     return rule
 
 
-@router.patch("/rules/{rule_id}", response_model=RuleOut)
-def update_rule(rule_id: int, data: RuleUpdate, db: Session = Depends(get_db), user: User = Depends(require_supervisor)):
+@router.patch("/rules/{rule_id}", response_model=RuleOut, responses=responses(401, 404))
+def update_rule(rule_id: int, data: RuleUpdate, db: DBSession, user: SupervisorUser):
     rule = db.query(CurrencyRule).filter(CurrencyRule.id == rule_id).first()
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")
@@ -76,8 +75,8 @@ def update_rule(rule_id: int, data: RuleUpdate, db: Session = Depends(get_db), u
     return rule
 
 
-@router.delete("/rules/{rule_id}")
-def delete_rule(rule_id: int, db: Session = Depends(get_db), user: User = Depends(require_supervisor)):
+@router.delete("/rules/{rule_id}", responses=responses(401, 404))
+def delete_rule(rule_id: int, db: DBSession, user: SupervisorUser):
     rule = db.query(CurrencyRule).filter(CurrencyRule.id == rule_id).first()
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")
@@ -90,7 +89,7 @@ def _pilot_currency(pilot: Pilot, rules: list[CurrencyRule], db: Session):
     """Evaluate currency for a single pilot against all active rules."""
     rule_results = []
     for rule in rules:
-        cutoff = datetime.utcnow() - timedelta(days=rule.period_days)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=rule.period_days)
 
         q = db.query(Flight).filter(
             Flight.pilot_id == pilot.id,
@@ -140,8 +139,8 @@ def _pilot_currency(pilot: Pilot, rules: list[CurrencyRule], db: Session):
     return rule_results
 
 
-@router.get("/status")
-def get_all_currency_status(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+@router.get("/status", responses=responses(401))
+def get_all_currency_status(db: DBSession, user: CurrentUser):
     """Get currency status for all active pilots."""
     rules = db.query(CurrencyRule).filter(CurrencyRule.is_active.is_(True)).all()
     pilots = db.query(Pilot).filter(Pilot.status == "active").order_by(Pilot.last_name).all()
@@ -160,8 +159,8 @@ def get_all_currency_status(db: Session = Depends(get_db), user: User = Depends(
     return results
 
 
-@router.get("/status/{pilot_id}")
-def get_pilot_currency_status(pilot_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+@router.get("/status/{pilot_id}", responses=responses(401, 404))
+def get_pilot_currency_status(pilot_id: int, db: DBSession, user: CurrentUser):
     """Get currency status for a single pilot."""
     pilot = db.query(Pilot).filter(Pilot.id == pilot_id).first()
     if not pilot:

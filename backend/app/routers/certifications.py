@@ -1,12 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
 
-from app.database import get_db
+from app.constants import CERTIFICATION_TYPE_NOT_FOUND, PILOT_CERTIFICATION_NOT_FOUND, EQUIPMENT_QUAL_NOT_FOUND, PILOT_NOT_FOUND
+from app.deps import DBSession, CurrentUser, SupervisorUser
+from app.responses import responses
 from app.models.certification import CertificationType, PilotCertification, PilotEquipmentQual
 from app.models.pilot import Pilot
-from app.models.user import User
-from app.routers.auth import get_current_user, require_supervisor
 from app.schemas.certification import (
     CertificationTypeCreate, CertificationTypeUpdate, CertificationTypeOut,
     PilotCertificationCreate, PilotCertificationUpdate, PilotCertificationOut,
@@ -27,18 +26,18 @@ router = APIRouter(tags=["certifications"])
 
 @router.get("/api/certification-types", response_model=list[CertificationTypeOut])
 def list_certification_types(
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    db: DBSession,
+    user: CurrentUser,
 ):
     rows = db.query(CertificationType).order_by(CertificationType.sort_order, CertificationType.name).all()
     return [CertificationTypeOut.model_validate(r) for r in rows]
 
 
-@router.post("/api/certification-types", response_model=CertificationTypeOut)
+@router.post("/api/certification-types", response_model=CertificationTypeOut, responses=responses(400))
 def create_certification_type(
     data: CertificationTypeCreate,
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_supervisor),
+    db: DBSession,
+    admin: SupervisorUser,
 ):
     from app.services.audit import log_action
     if db.query(CertificationType).filter(CertificationType.name == data.name).first():
@@ -55,8 +54,8 @@ def create_certification_type(
 @router.patch("/api/certification-types/reorder")
 def reorder_certification_types(
     data: ReorderRequest,
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_supervisor),
+    db: DBSession,
+    admin: SupervisorUser,
 ):
     for item in data.items:
         ct = db.query(CertificationType).filter(CertificationType.id == item.id).first()
@@ -66,17 +65,17 @@ def reorder_certification_types(
     return {"ok": True}
 
 
-@router.patch("/api/certification-types/{ct_id}", response_model=CertificationTypeOut)
+@router.patch("/api/certification-types/{ct_id}", response_model=CertificationTypeOut, responses=responses(404))
 def update_certification_type(
     ct_id: int,
     data: CertificationTypeUpdate,
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_supervisor),
+    db: DBSession,
+    admin: SupervisorUser,
 ):
     from app.services.audit import log_action
     ct = db.query(CertificationType).filter(CertificationType.id == ct_id).first()
     if not ct:
-        raise HTTPException(status_code=404, detail="Certification type not found")
+        raise HTTPException(status_code=404, detail=CERTIFICATION_TYPE_NOT_FOUND)
     for key, value in data.model_dump(exclude_unset=True).items():
         setattr(ct, key, value)
     log_action(db, admin.id, admin.display_name, "update", "certification_type", ct.id, ct.name)
@@ -85,16 +84,16 @@ def update_certification_type(
     return CertificationTypeOut.model_validate(ct)
 
 
-@router.delete("/api/certification-types/{ct_id}")
+@router.delete("/api/certification-types/{ct_id}", responses=responses(404))
 def delete_certification_type(
     ct_id: int,
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_supervisor),
+    db: DBSession,
+    admin: SupervisorUser,
 ):
     from app.services.audit import log_action
     ct = db.query(CertificationType).filter(CertificationType.id == ct_id).first()
     if not ct:
-        raise HTTPException(status_code=404, detail="Certification type not found")
+        raise HTTPException(status_code=404, detail=CERTIFICATION_TYPE_NOT_FOUND)
     ct_name = ct.name
     log_action(db, admin.id, admin.display_name, "delete", "certification_type", ct_id, ct_name)
     db.delete(ct)
@@ -113,11 +112,10 @@ def _pilot_cert_to_out(pc: PilotCertification) -> PilotCertificationOut:
 
 @router.get("/api/pilot-certifications", response_model=list[PilotCertificationOut])
 def list_pilot_certifications(
+    db: DBSession,
+    user: CurrentUser,
     pilot_id: int | None = None,
-    cert_type_id: int | None = None,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
+    cert_type_id: int | None = None):
     q = db.query(PilotCertification)
     if pilot_id:
         q = q.filter(PilotCertification.pilot_id == pilot_id)
@@ -130,8 +128,8 @@ def list_pilot_certifications(
 @router.post("/api/pilot-certifications", response_model=PilotCertificationOut)
 def create_pilot_certification(
     data: PilotCertificationCreate,
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_supervisor),
+    db: DBSession,
+    admin: SupervisorUser,
 ):
     from app.services.audit import log_action
     pc = PilotCertification(**data.model_dump())
@@ -146,17 +144,17 @@ def create_pilot_certification(
     return _pilot_cert_to_out(pc)
 
 
-@router.patch("/api/pilot-certifications/{pc_id}", response_model=PilotCertificationOut)
+@router.patch("/api/pilot-certifications/{pc_id}", response_model=PilotCertificationOut, responses=responses(404))
 def update_pilot_certification(
     pc_id: int,
     data: PilotCertificationUpdate,
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_supervisor),
+    db: DBSession,
+    admin: SupervisorUser,
 ):
     from app.services.audit import log_action
     pc = db.query(PilotCertification).filter(PilotCertification.id == pc_id).first()
     if not pc:
-        raise HTTPException(status_code=404, detail="Pilot certification not found")
+        raise HTTPException(status_code=404, detail=PILOT_CERTIFICATION_NOT_FOUND)
     for key, value in data.model_dump(exclude_unset=True).items():
         setattr(pc, key, value)
     pilot = db.query(Pilot).filter(Pilot.id == pc.pilot_id).first()
@@ -168,16 +166,16 @@ def update_pilot_certification(
     return _pilot_cert_to_out(pc)
 
 
-@router.delete("/api/pilot-certifications/{pc_id}")
+@router.delete("/api/pilot-certifications/{pc_id}", responses=responses(404))
 def delete_pilot_certification(
     pc_id: int,
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_supervisor),
+    db: DBSession,
+    admin: SupervisorUser,
 ):
     from app.services.audit import log_action
     pc = db.query(PilotCertification).filter(PilotCertification.id == pc_id).first()
     if not pc:
-        raise HTTPException(status_code=404, detail="Pilot certification not found")
+        raise HTTPException(status_code=404, detail=PILOT_CERTIFICATION_NOT_FOUND)
     log_action(db, admin.id, admin.display_name, "delete", "pilot_certification", pc_id)
     db.delete(pc)
     db.commit()
@@ -186,10 +184,9 @@ def delete_pilot_certification(
 
 @router.get("/api/pilot-equipment-quals", response_model=list[PilotEquipmentQualOut])
 def list_pilot_equipment_quals(
-    pilot_id: int | None = None,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
+    db: DBSession,
+    user: CurrentUser,
+    pilot_id: int | None = None):
     q = db.query(PilotEquipmentQual)
     if pilot_id:
         q = q.filter(PilotEquipmentQual.pilot_id == pilot_id)
@@ -200,8 +197,8 @@ def list_pilot_equipment_quals(
 @router.post("/api/pilot-equipment-quals", response_model=PilotEquipmentQualOut)
 def create_pilot_equipment_qual(
     data: PilotEquipmentQualCreate,
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_supervisor),
+    db: DBSession,
+    admin: SupervisorUser,
 ):
     peq = PilotEquipmentQual(**data.model_dump())
     db.add(peq)
@@ -210,16 +207,16 @@ def create_pilot_equipment_qual(
     return PilotEquipmentQualOut.model_validate(peq)
 
 
-@router.patch("/api/pilot-equipment-quals/{peq_id}", response_model=PilotEquipmentQualOut)
+@router.patch("/api/pilot-equipment-quals/{peq_id}", response_model=PilotEquipmentQualOut, responses=responses(404))
 def update_pilot_equipment_qual(
     peq_id: int,
     data: PilotEquipmentQualUpdate,
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_supervisor),
+    db: DBSession,
+    admin: SupervisorUser,
 ):
     peq = db.query(PilotEquipmentQual).filter(PilotEquipmentQual.id == peq_id).first()
     if not peq:
-        raise HTTPException(status_code=404, detail="Equipment qualification not found")
+        raise HTTPException(status_code=404, detail=EQUIPMENT_QUAL_NOT_FOUND)
     for key, value in data.model_dump(exclude_unset=True).items():
         setattr(peq, key, value)
     db.commit()
@@ -227,15 +224,15 @@ def update_pilot_equipment_qual(
     return PilotEquipmentQualOut.model_validate(peq)
 
 
-@router.delete("/api/pilot-equipment-quals/{peq_id}")
+@router.delete("/api/pilot-equipment-quals/{peq_id}", responses=responses(404))
 def delete_pilot_equipment_qual(
     peq_id: int,
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_supervisor),
+    db: DBSession,
+    admin: SupervisorUser,
 ):
     peq = db.query(PilotEquipmentQual).filter(PilotEquipmentQual.id == peq_id).first()
     if not peq:
-        raise HTTPException(status_code=404, detail="Equipment qualification not found")
+        raise HTTPException(status_code=404, detail=EQUIPMENT_QUAL_NOT_FOUND)
     db.delete(peq)
     db.commit()
     return {"ok": True}
@@ -243,8 +240,8 @@ def delete_pilot_equipment_qual(
 
 @router.get("/api/certifications/matrix")
 def certification_matrix(
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    db: DBSession,
+    user: CurrentUser,
 ):
     pilots = db.query(Pilot).filter(Pilot.status == "active").order_by(Pilot.last_name, Pilot.first_name).all()
     cert_types = db.query(CertificationType).filter(CertificationType.is_active.is_(True)).order_by(

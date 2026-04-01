@@ -7,6 +7,7 @@ password policy enforcement, and full CRUD for user accounts.
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from time import time
+from typing import Annotated
 
 import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -18,6 +19,9 @@ from app.config import settings
 from app.database import get_db
 from app.models.user import User
 from app.schemas.user import LoginRequest, LoginResponse, UserOut, UserCreate, UserUpdate, ChangePasswordRequest, AdminResetPasswordRequest, SetupRequest
+from app.responses import responses
+
+DBSession = Annotated[Session, Depends(get_db)]
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 security = HTTPBearer(auto_error=False)
@@ -64,8 +68,8 @@ def create_token(user_id: int) -> str:
 
 
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials | None = Depends(security),
-    db: Session = Depends(get_db),
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(security)],
+    db: DBSession,
 ) -> User:
     """FastAPI dependency that extracts and validates the current user from the JWT.
 
@@ -92,28 +96,28 @@ def get_current_user(
     return user
 
 
-def require_admin(user: User = Depends(get_current_user)) -> User:
+def require_admin(user: Annotated[User, Depends(get_current_user)]) -> User:
     """Dependency that restricts access to admin-role users only."""
     if user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     return user
 
 
-def require_supervisor(user: User = Depends(get_current_user)) -> User:
+def require_supervisor(user: Annotated[User, Depends(get_current_user)]) -> User:
     """Allow admin or supervisor roles."""
     if user.role not in ("admin", "supervisor"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Requires supervisor role or higher")
     return user
 
 
-def require_pilot(user: User = Depends(get_current_user)) -> User:
+def require_pilot(user: Annotated[User, Depends(get_current_user)]) -> User:
     """Allow admin, supervisor, or pilot roles."""
     if user.role not in ("admin", "supervisor", "pilot"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Requires pilot role or higher")
     return user
 
 
-def require_manager(user: User = Depends(get_current_user)) -> User:
+def require_manager(user: Annotated[User, Depends(get_current_user)]) -> User:
     """Legacy alias — allow admin, supervisor, or pilot roles."""
     if user.role not in ("admin", "supervisor", "manager", "pilot"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager access required")
@@ -162,14 +166,14 @@ def _validate_password(password: str):
 
 
 @router.get("/setup-required")
-def check_setup_required(db: Session = Depends(get_db)):
+def check_setup_required(db: DBSession):
     """Check if initial setup is needed (no users exist)."""
     user_count = db.query(User).count()
     return {"setup_required": user_count == 0}
 
 
-@router.post("/setup")
-def initial_setup(data: SetupRequest, db: Session = Depends(get_db)):
+@router.post("/setup", responses=responses(400, 403))
+def initial_setup(data: SetupRequest, db: DBSession):
     """Create the first admin account. Only works when no users exist."""
     user_count = db.query(User).count()
     if user_count > 0:
@@ -227,8 +231,8 @@ def initial_setup(data: SetupRequest, db: Session = Depends(get_db)):
     }
 
 
-@router.post("/login", response_model=LoginResponse)
-def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
+@router.post("/login", response_model=LoginResponse, responses=responses(401, 403))
+def login(req: LoginRequest, request: Request, db: DBSession):
     """Authenticate a user with username and password.
 
     Applies rate limiting, logs success/failure to the audit trail,
@@ -258,13 +262,13 @@ def login(req: LoginRequest, request: Request, db: Session = Depends(get_db)):
 
 
 @router.get("/me", response_model=UserOut)
-def get_me(user: User = Depends(get_current_user)):
+def get_me(user: Annotated[User, Depends(get_current_user)]):
     """Return the currently authenticated user's profile."""
     return UserOut.model_validate(user)
 
 
 @router.patch("/me", response_model=UserOut)
-def update_me(data: UserUpdate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def update_me(data: UserUpdate, user: Annotated[User, Depends(get_current_user)], db: DBSession):
     """Update the current user's own profile (theme, display name)."""
     if data.theme is not None:
         user.theme = data.theme
@@ -277,8 +281,8 @@ def update_me(data: UserUpdate, user: User = Depends(get_current_user), db: Sess
     return UserOut.model_validate(user)
 
 
-@router.post("/users", response_model=UserOut)
-def create_user(data: UserCreate, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+@router.post("/users", response_model=UserOut, responses=responses(409))
+def create_user(data: UserCreate, admin: Annotated[User, Depends(require_admin)], db: DBSession):
     """Create a new user account. Admin only.
 
     Args:
@@ -318,13 +322,13 @@ def create_user(data: UserCreate, admin: User = Depends(require_admin), db: Sess
 
 
 @router.get("/users", response_model=list[UserOut])
-def list_users(admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+def list_users(admin: Annotated[User, Depends(require_admin)], db: DBSession):
     """List all user accounts. Admin only."""
     return [UserOut.model_validate(u) for u in db.query(User).all()]
 
 
-@router.post("/change-password")
-def change_password(req: ChangePasswordRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+@router.post("/change-password", responses=responses(400))
+def change_password(req: ChangePasswordRequest, user: Annotated[User, Depends(get_current_user)], db: DBSession):
     """Change the current user's own password after verifying the old one."""
     from app.services.audit import log_action
     if not verify_password(req.current_password, user.password_hash):
@@ -336,8 +340,8 @@ def change_password(req: ChangePasswordRequest, user: User = Depends(get_current
     return {"ok": True, "message": "Password changed successfully"}
 
 
-@router.patch("/users/{user_id}", response_model=UserOut)
-def update_user(user_id: int, data: UserUpdate, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+@router.patch("/users/{user_id}", response_model=UserOut, responses=responses(404))
+def update_user(user_id: int, data: UserUpdate, admin: Annotated[User, Depends(require_admin)], db: DBSession):
     """Update a user's profile, role, or active status. Admin only."""
     target = db.query(User).filter(User.id == user_id).first()
     if not target:
@@ -363,8 +367,8 @@ def update_user(user_id: int, data: UserUpdate, admin: User = Depends(require_ad
     return UserOut.model_validate(target)
 
 
-@router.post("/users/{user_id}/reset-password")
-def admin_reset_password(user_id: int, req: AdminResetPasswordRequest, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+@router.post("/users/{user_id}/reset-password", responses=responses(404))
+def admin_reset_password(user_id: int, req: AdminResetPasswordRequest, admin: Annotated[User, Depends(require_admin)], db: DBSession):
     """Reset another user's password without requiring the old one. Admin only."""
     target = db.query(User).filter(User.id == user_id).first()
     if not target:
@@ -375,8 +379,8 @@ def admin_reset_password(user_id: int, req: AdminResetPasswordRequest, admin: Us
     return {"ok": True, "message": f"Password reset for {target.username}"}
 
 
-@router.delete("/users/{user_id}")
-def delete_user(user_id: int, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+@router.delete("/users/{user_id}", responses=responses(400, 404))
+def delete_user(user_id: int, admin: Annotated[User, Depends(require_admin)], db: DBSession):
     """Permanently delete a user account. Admin only. Cannot delete self."""
     from app.services.audit import log_action
     target = db.query(User).filter(User.id == user_id).first()

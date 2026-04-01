@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { formatDuration, normalizeDateValue, metersToFeet, mpsToMph } from '@/lib/utils'
 import { sortByName, sortVehicles, sortPilotsActiveFirst, vehicleDisplayName } from '@/lib/formatters'
-import { ArrowLeft, MapPin, Clock, Gauge, Battery, Save, RefreshCw, Loader2, Download } from 'lucide-react'
+import { ArrowLeft, MapPin, Battery, Save, RefreshCw, Loader2, Download } from 'lucide-react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 import { FlightPathMap } from '@/components/FlightMap'
 import {
@@ -83,11 +83,11 @@ export default function FlightDetailPage() {
   const handleSave = async () => {
     try {
       const data = { ...editForm }
-      if (data.pilot_id) data.pilot_id = parseInt(data.pilot_id)
+      if (data.pilot_id) data.pilot_id = Number.parseInt(data.pilot_id, 10)
       else data.pilot_id = null
-      if (data.vehicle_id) data.vehicle_id = parseInt(data.vehicle_id)
+      if (data.vehicle_id) data.vehicle_id = Number.parseInt(data.vehicle_id, 10)
       else data.vehicle_id = null
-      if (data.duration_seconds) data.duration_seconds = parseInt(data.duration_seconds)
+      if (data.duration_seconds) data.duration_seconds = Number.parseInt(data.duration_seconds, 10)
       else delete data.duration_seconds
       // Clean empty strings
       Object.keys(data).forEach(k => { if (data[k] === '') data[k] = null })
@@ -204,7 +204,7 @@ export default function FlightDetailPage() {
                       await api.patch(`/flights/${flight.id}/telemetry-status`, { telemetry_synced: !flight.telemetry_synced })
                       const updated = await api.get(`/flights/${id}`)
                       setFlight(updated)
-                      toast.success(`Telemetry ${!flight.telemetry_synced ? 'marked as synced' : 'marked as pending'}`)
+                      toast.success(`Telemetry ${flight.telemetry_synced ? 'marked as pending' : 'marked as synced'}`)
                     } catch (err) { toast.error(err.message) }
                   }}
                   className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium cursor-pointer transition-colors ${
@@ -220,7 +220,7 @@ export default function FlightDetailPage() {
               )}
               {flight.data_source && (
                 <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/15 text-blue-400">
-                  {flight.data_source.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                  {flight.data_source.replaceAll('_', ' ').replace(/\b\w/g, c => c.toUpperCase())}
                 </span>
               )}
               {flight.api_provider && <span>Source: {flight.api_provider}</span>}
@@ -232,16 +232,16 @@ export default function FlightDetailPage() {
           <div className="space-y-3 border-t border-border pt-4">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Pilot</label>
-                <select value={editForm.pilot_id} onChange={e => setEditForm({...editForm, pilot_id: e.target.value})}
+                <label htmlFor="pilot" className="block text-sm font-medium text-foreground mb-1">Pilot</label>
+                <select id="pilot" value={editForm.pilot_id} onChange={e => setEditForm({...editForm, pilot_id: e.target.value})}
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                   <option value="">Unassigned</option>
                   {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Vehicle</label>
-                <select value={editForm.vehicle_id} onChange={e => setEditForm({...editForm, vehicle_id: e.target.value})}
+                <label htmlFor="vehicle" className="block text-sm font-medium text-foreground mb-1">Vehicle</label>
+                <select id="vehicle" value={editForm.vehicle_id} onChange={e => setEditForm({...editForm, vehicle_id: e.target.value})}
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                   <option value="">Unassigned</option>
                   {sortVehicles(vehicles).map(v => <option key={v.id} value={v.id}>{vehicleDisplayName(v)}</option>)}
@@ -250,41 +250,41 @@ export default function FlightDetailPage() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Purpose</label>
-                <select value={editForm.purpose} onChange={e => setEditForm({...editForm, purpose: e.target.value})}
+                <label htmlFor="purpose" className="block text-sm font-medium text-foreground mb-1">Purpose</label>
+                <select id="purpose" value={editForm.purpose} onChange={e => setEditForm({...editForm, purpose: e.target.value})}
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                   <option value="">None</option>
                   {sortByName(purposes, 'name').map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Date</label>
-                <input type="date" value={editForm.date} onChange={e => setEditForm({...editForm, date: e.target.value})}
+                <label htmlFor="date" className="block text-sm font-medium text-foreground mb-1">Date</label>
+                <input id="date" type="date" value={editForm.date} onChange={e => setEditForm({...editForm, date: e.target.value})}
                   onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) setEditForm(prev => ({...prev, date: n})) }}
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Takeoff Time</label>
-                <input type="datetime-local" value={editForm.takeoff_time} onChange={e => setEditForm({...editForm, takeoff_time: e.target.value})}
+                <label htmlFor="takeoff-time" className="block text-sm font-medium text-foreground mb-1">Takeoff Time</label>
+                <input id="takeoff-time" type="datetime-local" value={editForm.takeoff_time} onChange={e => setEditForm({...editForm, takeoff_time: e.target.value})}
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Landing Time</label>
-                <input type="datetime-local" value={editForm.landing_time} onChange={e => setEditForm({...editForm, landing_time: e.target.value})}
+                <label htmlFor="landing-time" className="block text-sm font-medium text-foreground mb-1">Landing Time</label>
+                <input id="landing-time" type="datetime-local" value={editForm.landing_time} onChange={e => setEditForm({...editForm, landing_time: e.target.value})}
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Duration (seconds)</label>
-                <input type="number" value={editForm.duration_seconds} onChange={e => setEditForm({...editForm, duration_seconds: e.target.value})}
+                <label htmlFor="duration-seconds" className="block text-sm font-medium text-foreground mb-1">Duration (seconds)</label>
+                <input id="duration-seconds" type="number" value={editForm.duration_seconds} onChange={e => setEditForm({...editForm, duration_seconds: e.target.value})}
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Status</label>
-                <select value={editForm.review_status} onChange={e => setEditForm({...editForm, review_status: e.target.value})}
+                <label htmlFor="status" className="block text-sm font-medium text-foreground mb-1">Status</label>
+                <select id="status" value={editForm.review_status} onChange={e => setEditForm({...editForm, review_status: e.target.value})}
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                   <option value="needs_review">Needs Review</option>
                   <option value="reviewed">Reviewed</option>
@@ -292,19 +292,19 @@ export default function FlightDetailPage() {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Takeoff Address / Location</label>
-              <input type="text" value={editForm.takeoff_address} onChange={e => setEditForm({...editForm, takeoff_address: e.target.value})}
+              <label htmlFor="takeoff-address-location" className="block text-sm font-medium text-foreground mb-1">Takeoff Address / Location</label>
+              <input id="takeoff-address-location" type="text" value={editForm.takeoff_address} onChange={e => setEditForm({...editForm, takeoff_address: e.target.value})}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Case Number</label>
-              <input type="text" value={editForm.case_number} onChange={e => setEditForm({...editForm, case_number: e.target.value})}
+              <label htmlFor="case-number" className="block text-sm font-medium text-foreground mb-1">Case Number</label>
+              <input id="case-number" type="text" value={editForm.case_number} onChange={e => setEditForm({...editForm, case_number: e.target.value})}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Battery Serial</label>
-                <input list="detail-battery-list" value={editForm.battery_serial} onChange={e => setEditForm({...editForm, battery_serial: e.target.value})}
+                <label htmlFor="battery-serial" className="block text-sm font-medium text-foreground mb-1">Battery Serial</label>
+                <input id="battery-serial" list="detail-battery-list" value={editForm.battery_serial} onChange={e => setEditForm({...editForm, battery_serial: e.target.value})}
                   onFocus={e => { e.target.showPicker?.() }}
                   placeholder="Select or type..." className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
                 <datalist id="detail-battery-list">
@@ -312,8 +312,8 @@ export default function FlightDetailPage() {
                 </datalist>
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Sensor Package</label>
-                <input list="detail-sensor-list" value={editForm.sensor_package} onChange={e => setEditForm({...editForm, sensor_package: e.target.value})}
+                <label htmlFor="sensor-package" className="block text-sm font-medium text-foreground mb-1">Sensor Package</label>
+                <input id="sensor-package" list="detail-sensor-list" value={editForm.sensor_package} onChange={e => setEditForm({...editForm, sensor_package: e.target.value})}
                   onFocus={e => { e.target.showPicker?.() }}
                   placeholder="Select or type..." className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
                 <datalist id="detail-sensor-list">
@@ -323,8 +323,8 @@ export default function FlightDetailPage() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Attachment (TOP)</label>
-                <input list="detail-attach-list" value={editForm.attachment_top} onChange={e => setEditForm({...editForm, attachment_top: e.target.value})}
+                <label htmlFor="attachment-top" className="block text-sm font-medium text-foreground mb-1">Attachment (TOP)</label>
+                <input id="attachment-top" list="detail-attach-list" value={editForm.attachment_top} onChange={e => setEditForm({...editForm, attachment_top: e.target.value})}
                   onFocus={e => { e.target.showPicker?.() }}
                   placeholder="Select or type..." className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
                 <datalist id="detail-attach-list">
@@ -332,34 +332,34 @@ export default function FlightDetailPage() {
                 </datalist>
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Attachment (BOTTOM)</label>
-                <input list="detail-attach-list" value={editForm.attachment_bottom} onChange={e => setEditForm({...editForm, attachment_bottom: e.target.value})}
+                <label htmlFor="attachment-bottom" className="block text-sm font-medium text-foreground mb-1">Attachment (BOTTOM)</label>
+                <input id="attachment-bottom" list="detail-attach-list" value={editForm.attachment_bottom} onChange={e => setEditForm({...editForm, attachment_bottom: e.target.value})}
                   onFocus={e => { e.target.showPicker?.() }}
                   placeholder="Select or type..." className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Attachment (LEFT)</label>
-                <input list="detail-attach-list" value={editForm.attachment_left} onChange={e => setEditForm({...editForm, attachment_left: e.target.value})}
+                <label htmlFor="attachment-left" className="block text-sm font-medium text-foreground mb-1">Attachment (LEFT)</label>
+                <input id="attachment-left" list="detail-attach-list" value={editForm.attachment_left} onChange={e => setEditForm({...editForm, attachment_left: e.target.value})}
                   onFocus={e => { e.target.showPicker?.() }}
                   placeholder="Select or type..." className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Attachment (RIGHT)</label>
-                <input list="detail-attach-list" value={editForm.attachment_right} onChange={e => setEditForm({...editForm, attachment_right: e.target.value})}
+                <label htmlFor="attachment-right" className="block text-sm font-medium text-foreground mb-1">Attachment (RIGHT)</label>
+                <input id="attachment-right" list="detail-attach-list" value={editForm.attachment_right} onChange={e => setEditForm({...editForm, attachment_right: e.target.value})}
                   onFocus={e => { e.target.showPicker?.() }}
                   placeholder="Select or type..." className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Carrier(s)</label>
-              <input type="text" value={editForm.carrier} onChange={e => setEditForm({...editForm, carrier: e.target.value})}
+              <label htmlFor="carriers" className="block text-sm font-medium text-foreground mb-1">Carrier(s)</label>
+              <input id="carriers" type="text" value={editForm.carrier} onChange={e => setEditForm({...editForm, carrier: e.target.value})}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Notes</label>
-              <textarea value={editForm.notes} onChange={e => setEditForm({...editForm, notes: e.target.value})}
+              <label htmlFor="notes" className="block text-sm font-medium text-foreground mb-1">Notes</label>
+              <textarea id="notes" value={editForm.notes} onChange={e => setEditForm({...editForm, notes: e.target.value})}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm h-20 resize-none" />
             </div>
             <div className="flex gap-2">
@@ -393,7 +393,7 @@ export default function FlightDetailPage() {
             })() : '—'}</p></div>
             <div><p className="text-xs text-muted-foreground">Sensor Package</p><p className="text-sm text-foreground">{flight.sensor_package ? (() => {
               const sen = sensors.find(s => s.serial_number === flight.sensor_package)
-              return <Link to={sen ? `/fleet?tab=sensors` : `/fleet?tab=sensors`} className="text-primary hover:underline">{flight.sensor_package}</Link>
+              return <Link to="/fleet?tab=sensors" className="text-primary hover:underline">{flight.sensor_package}</Link>
             })() : '—'}</p></div>
             <div><p className="text-xs text-muted-foreground">Carrier(s)</p><p className="text-sm text-foreground">{flight.carrier || '—'}</p></div>
             <div><p className="text-xs text-muted-foreground">&nbsp;</p></div>

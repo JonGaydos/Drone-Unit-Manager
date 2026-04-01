@@ -1,15 +1,15 @@
 from datetime import date
 from math import ceil
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import func
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import joinedload
 
-from app.database import get_db
+from app.constants import FLIGHT_NOT_FOUND
 from app.models.flight import Flight, FlightPurpose
-from app.models.user import User
-from app.routers.auth import get_current_user, require_admin, require_pilot, require_supervisor
+from app.deps import DBSession, CurrentUser, AdminUser, PilotUser, SupervisorUser
+from app.responses import responses
 from app.schemas.flight import (
     FlightCreate, FlightUpdate, FlightOut,
     FlightPurposeCreate, FlightPurposeOut,
@@ -31,6 +31,8 @@ def _flight_to_out(flight: Flight) -> FlightOut:
 
 @router.get("")
 def list_flights(
+    db: DBSession,
+    user: CurrentUser,
     pilot_id: int | None = None,
     vehicle_id: int | None = None,
     purpose: str | None = None,
@@ -38,10 +40,7 @@ def list_flights(
     date_to: date | None = None,
     review_status: str | None = None,
     page: int = 1,
-    per_page: int = 100,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
+    per_page: int = 100):
     filters = []
     if pilot_id:
         filters.append(Flight.pilot_id == pilot_id)
@@ -73,10 +72,9 @@ def list_flights(
 
 @router.get("/count")
 def count_flights(
-    review_status: str | None = None,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
+    db: DBSession,
+    user: CurrentUser,
+    review_status: str | None = None):
     q = db.query(func.count(Flight.id))
     if review_status:
         q = q.filter(Flight.review_status == review_status)
@@ -85,8 +83,8 @@ def count_flights(
 
 @router.get("/review", response_model=list[FlightOut])
 def list_review_queue(
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    db: DBSession,
+    user: CurrentUser,
 ):
     flights = db.query(Flight).options(
         joinedload(Flight.pilot), joinedload(Flight.vehicle)
@@ -96,23 +94,23 @@ def list_review_queue(
     return [_flight_to_out(f) for f in flights]
 
 
-@router.get("/purposes/list", response_model=list[FlightPurposeOut])
-def list_purposes(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+@router.get("/purposes/list", response_model=list[FlightPurposeOut], responses=responses(401))
+def list_purposes(db: DBSession, user: CurrentUser):
     return [FlightPurposeOut.model_validate(p) for p in db.query(FlightPurpose).order_by(FlightPurpose.sort_order, FlightPurpose.name).all()]
 
 
-@router.get("/{flight_id}", response_model=FlightOut)
-def get_flight(flight_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+@router.get("/{flight_id}", response_model=FlightOut, responses=responses(401, 404))
+def get_flight(flight_id: int, db: DBSession, user: CurrentUser):
     flight = db.query(Flight).options(
         joinedload(Flight.pilot), joinedload(Flight.vehicle)
     ).filter(Flight.id == flight_id).first()
     if not flight:
-        raise HTTPException(status_code=404, detail="Flight not found")
+        raise HTTPException(status_code=404, detail=FLIGHT_NOT_FOUND)
     return _flight_to_out(flight)
 
 
-@router.post("/{flight_id}/refresh")
-def refresh_flight_from_api(flight_id: int, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+@router.post("/{flight_id}/refresh", responses=responses(400, 401, 404, 502))
+def refresh_flight_from_api(flight_id: int, db: DBSession, admin: AdminUser):
     """Fetch fresh data from Skydio API for a single flight."""
     import logging
     from datetime import datetime
@@ -124,7 +122,7 @@ def refresh_flight_from_api(flight_id: int, db: Session = Depends(get_db), admin
 
     flight = db.query(Flight).filter(Flight.id == flight_id).first()
     if not flight:
-        raise HTTPException(status_code=404, detail="Flight not found")
+        raise HTTPException(status_code=404, detail=FLIGHT_NOT_FOUND)
     if not flight.external_id:
         raise HTTPException(status_code=400, detail="Flight has no external ID to look up")
 
@@ -255,7 +253,11 @@ def refresh_flight_from_api(flight_id: int, db: Session = Depends(get_db), admin
         updated_fields.append("sensor_package")
 
     # Vehicle serial from detail
-    vs = detail.get("vehicle_serial") or detail.get("vehicle", {}).get("serial_number") if isinstance(detail.get("vehicle"), dict) else detail.get("vehicle_serial")
+    vehicle_data = detail.get("vehicle")
+    if isinstance(vehicle_data, dict):
+        vs = detail.get("vehicle_serial") or vehicle_data.get("serial_number")
+    else:
+        vs = detail.get("vehicle_serial")
     if vs and not flight.vehicle_id:
         vehicle = db.query(Vehicle).filter(
             (Vehicle.provider_serial == str(vs)) |
@@ -276,7 +278,6 @@ def refresh_flight_from_api(flight_id: int, db: Session = Depends(get_db), admin
     if telemetry_data and isinstance(telemetry_data, list) and len(telemetry_data) > 0:
         from app.models.telemetry import TelemetryPoint
         from app.database import TelemetrySessionLocal
-        import math
 
         tdb = TelemetrySessionLocal()
         try:
@@ -361,8 +362,8 @@ def refresh_flight_from_api(flight_id: int, db: Session = Depends(get_db), admin
     }
 
 
-@router.post("", response_model=FlightOut)
-def create_flight(data: FlightCreate, db: Session = Depends(get_db), admin: User = Depends(require_pilot)):
+@router.post("", response_model=FlightOut, responses=responses(401))
+def create_flight(data: FlightCreate, db: DBSession, admin: PilotUser):
     from app.services.audit import log_action
     flight = Flight(**data.model_dump(), review_status="reviewed", pilot_confirmed=True, data_source="manual")
     db.add(flight)
@@ -379,12 +380,12 @@ def create_flight(data: FlightCreate, db: Session = Depends(get_db), admin: User
     return _flight_to_out(flight)
 
 
-@router.patch("/{flight_id}", response_model=FlightOut)
-def update_flight(flight_id: int, data: FlightUpdate, db: Session = Depends(get_db), admin: User = Depends(require_pilot)):
+@router.patch("/{flight_id}", response_model=FlightOut, responses=responses(401, 404))
+def update_flight(flight_id: int, data: FlightUpdate, db: DBSession, admin: PilotUser):
     from app.services.audit import log_action, compute_changes
     flight = db.query(Flight).filter(Flight.id == flight_id).first()
     if not flight:
-        raise HTTPException(status_code=404, detail="Flight not found")
+        raise HTTPException(status_code=404, detail=FLIGHT_NOT_FOUND)
     update_data = data.model_dump(exclude_unset=True)
     changes = compute_changes(flight, update_data, ["pilot_id", "vehicle_id", "purpose", "review_status", "date", "notes"])
     for key, value in update_data.items():
@@ -402,8 +403,8 @@ def update_flight(flight_id: int, data: FlightUpdate, db: Session = Depends(get_
     return _flight_to_out(flight)
 
 
-@router.post("/bulk-update")
-def bulk_update_flights(data: FlightBulkUpdate, db: Session = Depends(get_db), admin: User = Depends(require_supervisor)):
+@router.post("/bulk-update", responses=responses(401))
+def bulk_update_flights(data: FlightBulkUpdate, db: DBSession, admin: SupervisorUser):
     from app.services.audit import log_action
     flights = db.query(Flight).filter(Flight.id.in_(data.flight_ids)).all()
     for flight in flights:
@@ -425,12 +426,12 @@ class TelemetryStatusUpdate(BaseModel):
     telemetry_synced: bool
 
 
-@router.patch("/{flight_id}/telemetry-status")
+@router.patch("/{flight_id}/telemetry-status", responses=responses(404))
 def update_telemetry_status(
     flight_id: int,
     data: TelemetryStatusUpdate,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_supervisor),
+    db: DBSession,
+    user: SupervisorUser,
 ):
     """Toggle the telemetry synced flag on a flight."""
     from app.services.audit import log_action
@@ -444,12 +445,12 @@ def update_telemetry_status(
     return {"ok": True, "telemetry_synced": flight.telemetry_synced}
 
 
-@router.delete("/{flight_id}")
-def delete_flight(flight_id: int, db: Session = Depends(get_db), admin: User = Depends(require_pilot)):
+@router.delete("/{flight_id}", responses=responses(401, 404))
+def delete_flight(flight_id: int, db: DBSession, admin: PilotUser):
     from app.services.audit import log_action
     flight = db.query(Flight).filter(Flight.id == flight_id).first()
     if not flight:
-        raise HTTPException(status_code=404, detail="Flight not found")
+        raise HTTPException(status_code=404, detail=FLIGHT_NOT_FOUND)
     flight_name = f"Flight {flight.external_id or flight.id}"
     log_action(db, admin.id, admin.display_name, "delete", "flight", flight.id, flight_name)
     db.delete(flight)
@@ -457,8 +458,8 @@ def delete_flight(flight_id: int, db: Session = Depends(get_db), admin: User = D
     return {"ok": True}
 
 
-@router.post("/purposes", response_model=FlightPurposeOut)
-def create_purpose(data: FlightPurposeCreate, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+@router.post("/purposes", response_model=FlightPurposeOut, responses=responses(400, 401))
+def create_purpose(data: FlightPurposeCreate, db: DBSession, admin: AdminUser):
     if db.query(FlightPurpose).filter(FlightPurpose.name == data.name).first():
         raise HTTPException(status_code=400, detail="Purpose already exists")
     purpose = FlightPurpose(**data.model_dump())
@@ -468,8 +469,8 @@ def create_purpose(data: FlightPurposeCreate, db: Session = Depends(get_db), adm
     return FlightPurposeOut.model_validate(purpose)
 
 
-@router.delete("/purposes/{purpose_id}")
-def delete_purpose(purpose_id: int, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+@router.delete("/purposes/{purpose_id}", responses=responses(401, 404))
+def delete_purpose(purpose_id: int, db: DBSession, admin: AdminUser):
     purpose = db.query(FlightPurpose).filter(FlightPurpose.id == purpose_id).first()
     if not purpose:
         raise HTTPException(status_code=404, detail="Purpose not found")

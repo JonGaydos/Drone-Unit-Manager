@@ -82,28 +82,28 @@ export default function ControllerDetailPage() {
               <div className="space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">Nickname</label>
-                    <input type="text" value={editForm.nickname} onChange={e => setEditForm({...editForm, nickname: e.target.value})}
+                    <label htmlFor="nickname" className="block text-xs font-medium text-muted-foreground mb-1">Nickname</label>
+                    <input id="nickname" type="text" value={editForm.nickname} onChange={e => setEditForm({...editForm, nickname: e.target.value})}
                       className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">Serial Number</label>
-                    <input type="text" value={editForm.serial_number} onChange={e => setEditForm({...editForm, serial_number: e.target.value})}
+                    <label htmlFor="serial-number" className="block text-xs font-medium text-muted-foreground mb-1">Serial Number</label>
+                    <input id="serial-number" type="text" value={editForm.serial_number} onChange={e => setEditForm({...editForm, serial_number: e.target.value})}
                       className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">Manufacturer</label>
-                    <input type="text" value={editForm.manufacturer} onChange={e => setEditForm({...editForm, manufacturer: e.target.value})}
+                    <label htmlFor="manufacturer" className="block text-xs font-medium text-muted-foreground mb-1">Manufacturer</label>
+                    <input id="manufacturer" type="text" value={editForm.manufacturer} onChange={e => setEditForm({...editForm, manufacturer: e.target.value})}
                       className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">Model</label>
-                    <input type="text" value={editForm.model} onChange={e => setEditForm({...editForm, model: e.target.value})}
+                    <label htmlFor="model" className="block text-xs font-medium text-muted-foreground mb-1">Model</label>
+                    <input id="model" type="text" value={editForm.model} onChange={e => setEditForm({...editForm, model: e.target.value})}
                       className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">Status</label>
-                    <select value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})}
+                    <label htmlFor="status" className="block text-xs font-medium text-muted-foreground mb-1">Status</label>
+                    <select id="status" value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})}
                       className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm">
                       <option value="active">Active</option>
                       <option value="inactive">Inactive</option>
@@ -113,8 +113,8 @@ export default function ControllerDetailPage() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-muted-foreground mb-1">Notes</label>
-                  <textarea value={editForm.notes} onChange={e => setEditForm({...editForm, notes: e.target.value})}
+                  <label htmlFor="notes" className="block text-xs font-medium text-muted-foreground mb-1">Notes</label>
+                  <textarea id="notes" value={editForm.notes} onChange={e => setEditForm({...editForm, notes: e.target.value})}
                     className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm h-16 resize-none focus:outline-none focus:ring-2 focus:ring-ring" />
                 </div>
                 <div className="flex gap-2">
@@ -176,7 +176,7 @@ export default function ControllerDetailPage() {
                   <td className="px-4 py-2 text-muted-foreground">{m.description || '--'}</td>
                   <td className="px-4 py-2 text-muted-foreground hidden md:table-cell">{m.maintenance_type || m.type || '--'}</td>
                   <td className="px-4 py-2 text-muted-foreground hidden md:table-cell">{m.performed_by || '--'}</td>
-                  <td className="px-4 py-2 text-muted-foreground text-right">{m.cost != null ? `$${parseFloat(m.cost).toFixed(2)}` : '--'}</td>
+                  <td className="px-4 py-2 text-muted-foreground text-right">{m.cost != null ? `$${Number.parseFloat(m.cost).toFixed(2)}` : '--'}</td>
                 </tr>
               ))}
               {maintenance.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">No maintenance records</td></tr>}

@@ -36,8 +36,8 @@ const ALT_BANDS = [
 
 function getAltColor(altBaro) {
   if (altBaro == null || altBaro === 'ground') return '#6b7280'
-  const alt = typeof altBaro === 'string' ? parseInt(altBaro, 10) : altBaro
-  if (isNaN(alt)) return '#6b7280'
+  const alt = typeof altBaro === 'string' ? Number.parseInt(altBaro, 10) : altBaro
+  if (Number.isNaN(alt)) return '#6b7280'
   for (const band of ALT_BANDS) {
     if (alt < band.max) return band.color
   }
@@ -125,7 +125,7 @@ export default function AirspacePage() {
       const wLat = get('adsb_default_lat') || get('weather_location_lat')
       const wLon = get('adsb_default_lon') || get('weather_location_lon')
       if (wLat && wLon) {
-        setMapCenter([parseFloat(wLat), parseFloat(wLon)])
+        setMapCenter([Number.parseFloat(wLat), Number.parseFloat(wLon)])
       }
     }).catch(() => {})
   }, [])
@@ -190,8 +190,8 @@ export default function AirspacePage() {
 
           {/* Radius */}
           <div className="flex items-center gap-2">
-            <label className="text-xs font-medium text-muted-foreground">Radius</label>
-            <select
+            <label htmlFor="radius" className="text-xs font-medium text-muted-foreground">Radius</label>
+            <select id="radius"
               value={radius}
               onChange={e => setRadius(Number(e.target.value))}
               className="px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
@@ -204,8 +204,8 @@ export default function AirspacePage() {
 
           {/* Refresh Interval */}
           <div className="flex items-center gap-2">
-            <label className="text-xs font-medium text-muted-foreground">Refresh</label>
-            <select
+            <label htmlFor="refresh" className="text-xs font-medium text-muted-foreground">Refresh</label>
+            <select id="refresh"
               value={refreshInterval}
               onChange={e => setRefreshInterval(Number(e.target.value))}
               className="px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"

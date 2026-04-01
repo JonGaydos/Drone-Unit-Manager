@@ -20,7 +20,7 @@ function EquipmentModal({ title, record, fields, onSave, onClose, vehicleModels 
     e.preventDefault()
     const data = { ...form }
     fields.forEach(f => {
-      if (f.type === 'number' && data[f.key]) data[f.key] = parseFloat(data[f.key])
+      if (f.type === 'number' && data[f.key]) data[f.key] = Number.parseFloat(data[f.key])
       if (data[f.key] === '') delete data[f.key]
     })
     setSaving(true)
@@ -28,16 +28,17 @@ function EquipmentModal({ title, record, fields, onSave, onClose, vehicleModels 
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" role="presentation" onClick={onClose}>
+      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto" role="dialog" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold text-foreground mb-4">{record?.id ? `Edit ${title}` : `Add ${title}`}</h2>
         <form onSubmit={handleSubmit} className="space-y-3">
           {fields.map(f => {
             if (f.type === 'select') {
               return (
                 <div key={f.key}>
-                  <label className="block text-sm font-medium text-foreground mb-1">{f.label}</label>
+                  <label htmlFor={`field-${f.key}`} className="block text-sm font-medium text-foreground mb-1">{f.label}</label>
                   <select
+                    id={`field-${f.key}`}
                     value={form[f.key] || ''}
                     onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
                     className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
@@ -50,8 +51,9 @@ function EquipmentModal({ title, record, fields, onSave, onClose, vehicleModels 
             if (f.type === 'combobox') {
               return (
                 <div key={f.key}>
-                  <label className="block text-sm font-medium text-foreground mb-1">{f.label}</label>
+                  <label htmlFor={`field-${f.key}`} className="block text-sm font-medium text-foreground mb-1">{f.label}</label>
                   <input
+                    id={`field-${f.key}`}
                     type="text"
                     list={`${f.key}-options`}
                     value={form[f.key] || ''}
@@ -67,8 +69,9 @@ function EquipmentModal({ title, record, fields, onSave, onClose, vehicleModels 
             }
             return (
               <div key={f.key}>
-                <label className="block text-sm font-medium text-foreground mb-1">{f.label}</label>
+                <label htmlFor={`field-${f.key}`} className="block text-sm font-medium text-foreground mb-1">{f.label}</label>
                 <input
+                  id={`field-${f.key}`}
                   type={f.type || 'text'}
                   value={form[f.key] || ''}
                   onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
@@ -79,7 +82,8 @@ function EquipmentModal({ title, record, fields, onSave, onClose, vehicleModels 
           })}
           <div className="flex gap-2 pt-2">
             <button type="submit" disabled={saving} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2">
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : (record?.id ? 'Update' : `Add ${title}`)}
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+              {!saving && (record?.id ? 'Update' : `Add ${title}`)}
             </button>
             <button type="button" onClick={onClose} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90">
               Cancel
@@ -103,7 +107,10 @@ function EquipmentTable({ items, columns, isAdmin, onEdit, onDelete, onMerge, em
             {columns.map(c => (
               <th key={c.key}
                 className={`${c.align === 'right' ? 'text-right' : 'text-left'} px-4 py-3 font-medium text-muted-foreground${c.sortable !== false ? ' cursor-pointer hover:text-foreground select-none' : ''}`}
-                onClick={() => c.sortable !== false && onToggleSort && onToggleSort(c.key)}>
+                onClick={() => c.sortable !== false && onToggleSort && onToggleSort(c.key)}
+                onKeyDown={c.sortable !== false ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggleSort && onToggleSort(c.key) } } : undefined}
+                tabIndex={c.sortable !== false ? 0 : undefined}
+                role={c.sortable !== false ? 'columnheader' : undefined}>
                 {c.label}
                 {sortKey === c.key && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />)}
               </th>
@@ -290,8 +297,8 @@ const TAB_CONFIGS = {
       { key: 'name', label: 'Name', primary: true },
       { key: 'serial_number', label: 'Serial' },
       { key: 'location_name', label: 'Location' },
-      { key: 'lat', label: 'Lat', render: d => d.lat != null ? parseFloat(d.lat).toFixed(6) : '—' },
-      { key: 'lon', label: 'Lon', render: d => d.lon != null ? parseFloat(d.lon).toFixed(6) : '—' },
+      { key: 'lat', label: 'Lat', render: d => d.lat != null ? Number.parseFloat(d.lat).toFixed(6) : '—' },
+      { key: 'lon', label: 'Lon', render: d => d.lon != null ? Number.parseFloat(d.lon).toFixed(6) : '—' },
       { key: 'status', label: 'Status', render: d => <StatusBadge status={d.status} /> },
     ],
     fields: [
@@ -369,7 +376,7 @@ export default function FleetPage() {
   const [sortKey, setSortKey] = useState('name')
   const [sortDir, setSortDir] = useState('asc')
   const [vehicleModels, setVehicleModels] = useState([])
-  const { isAdmin, isPilot, isSupervisor } = useAuth()
+  const { isAdmin, isSupervisor } = useAuth()
   const toast = useToast()
   const [confirmProps, requestConfirm] = useConfirm()
 
@@ -377,7 +384,7 @@ export default function FleetPage() {
   useEffect(() => {
     api.get('/vehicles').then(vehicles => {
       const models = [...new Set(vehicles.map(v => v.model).filter(Boolean))]
-      setVehicleModels(models.sort())
+      setVehicleModels(models.sort((a, b) => a.localeCompare(b)))
     }).catch(() => {})
   }, [])
 
@@ -580,15 +587,15 @@ export default function FleetPage() {
       )}
       {/* Merge Modal */}
       {mergeTarget && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setMergeTarget(null)}>
-          <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" role="presentation" onClick={() => setMergeTarget(null)}>
+          <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl" role="dialog" onClick={e => e.stopPropagation()}>
             <h2 className="text-lg font-semibold text-foreground mb-2">Merge {singularize(config.label)}</h2>
             <p className="text-sm text-muted-foreground mb-4">
               Select a duplicate to merge into <strong className="text-foreground">{mergeTarget.nickname || mergeTarget.name || mergeTarget.serial_number}</strong>. All flight references will be updated and the duplicate will be deleted.
             </p>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Merge from (duplicate to remove)</label>
-              <select
+              <label htmlFor="merge-from-duplicate-to-remove" className="block text-sm font-medium text-foreground mb-1">Merge from (duplicate to remove)</label>
+              <select id="merge-from-duplicate-to-remove"
                 value={mergeFromId}
                 onChange={e => setMergeFromId(e.target.value)}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"

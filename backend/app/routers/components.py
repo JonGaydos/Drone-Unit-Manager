@@ -1,15 +1,14 @@
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
 
-from app.database import get_db
+from app.constants import COMPONENT_NOT_FOUND
+from app.deps import DBSession, CurrentUser, PilotUser, SupervisorUser
 from app.models.component import Component
-from app.models.user import User
-from app.routers.auth import get_current_user, require_pilot, require_supervisor
 from app.services.audit import log_action
+from app.responses import responses
 
 router = APIRouter(prefix="/api/components", tags=["components"])
 
@@ -70,12 +69,11 @@ def _serialize(c: Component) -> dict:
 
 @router.get("")
 def list_components(
+    db: DBSession,
+    user: CurrentUser,
     vehicle_id: Optional[int] = None,
     component_type: Optional[str] = None,
-    status: Optional[str] = None,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
+    status: Optional[str] = None):
     q = db.query(Component)
     if vehicle_id is not None:
         q = q.filter(Component.vehicle_id == vehicle_id)
@@ -86,16 +84,16 @@ def list_components(
     return [_serialize(c) for c in q.order_by(Component.name).all()]
 
 
-@router.get("/{component_id}")
-def get_component(component_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+@router.get("/{component_id}", responses=responses(401, 404))
+def get_component(component_id: int, db: DBSession, user: CurrentUser):
     c = db.query(Component).filter(Component.id == component_id).first()
     if not c:
-        raise HTTPException(404, "Component not found")
+        raise HTTPException(404, COMPONENT_NOT_FOUND)
     return _serialize(c)
 
 
-@router.post("", status_code=201)
-def create_component(data: ComponentCreate, db: Session = Depends(get_db), user: User = Depends(require_pilot)):
+@router.post("", status_code=201, responses=responses(401))
+def create_component(data: ComponentCreate, db: DBSession, user: PilotUser):
     c = Component(
         name=data.name,
         component_type=data.component_type,
@@ -118,11 +116,11 @@ def create_component(data: ComponentCreate, db: Session = Depends(get_db), user:
     return _serialize(c)
 
 
-@router.patch("/{component_id}")
-def update_component(component_id: int, data: ComponentUpdate, db: Session = Depends(get_db), user: User = Depends(require_pilot)):
+@router.patch("/{component_id}", responses=responses(401, 404))
+def update_component(component_id: int, data: ComponentUpdate, db: DBSession, user: PilotUser):
     c = db.query(Component).filter(Component.id == component_id).first()
     if not c:
-        raise HTTPException(404, "Component not found")
+        raise HTTPException(404, COMPONENT_NOT_FOUND)
     update_data = data.model_dump(exclude_unset=True)
     for field in ("install_date", "warranty_expiry"):
         if field in update_data and update_data[field]:
@@ -135,11 +133,11 @@ def update_component(component_id: int, data: ComponentUpdate, db: Session = Dep
     return _serialize(c)
 
 
-@router.delete("/{component_id}")
-def delete_component(component_id: int, db: Session = Depends(get_db), user: User = Depends(require_supervisor)):
+@router.delete("/{component_id}", responses=responses(401, 404))
+def delete_component(component_id: int, db: DBSession, user: SupervisorUser):
     c = db.query(Component).filter(Component.id == component_id).first()
     if not c:
-        raise HTTPException(404, "Component not found")
+        raise HTTPException(404, COMPONENT_NOT_FOUND)
     log_action(db, user.id, user.display_name, "delete", "component", c.id, c.name)
     db.delete(c)
     db.commit()

@@ -132,25 +132,25 @@ export default function PilotDetailPage() {
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">First Name</label>
-                    <input type="text" value={editForm.first_name} onChange={e => setEditForm({...editForm, first_name: e.target.value})}
+                    <label htmlFor="first-name" className="block text-xs font-medium text-muted-foreground mb-1">First Name</label>
+                    <input id="first-name" type="text" value={editForm.first_name} onChange={e => setEditForm({...editForm, first_name: e.target.value})}
                       className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">Last Name</label>
-                    <input type="text" value={editForm.last_name} onChange={e => setEditForm({...editForm, last_name: e.target.value})}
+                    <label htmlFor="last-name" className="block text-xs font-medium text-muted-foreground mb-1">Last Name</label>
+                    <input id="last-name" type="text" value={editForm.last_name} onChange={e => setEditForm({...editForm, last_name: e.target.value})}
                       className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">Email</label>
-                    <input type="email" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})}
+                    <label htmlFor="email" className="block text-xs font-medium text-muted-foreground mb-1">Email</label>
+                    <input id="email" type="email" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})}
                       className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">Personal Cell</label>
-                    <input
+                    <label htmlFor="personal-cell" className="block text-xs font-medium text-muted-foreground mb-1">Personal Cell</label>
+                    <input id="personal-cell"
                       type="tel"
                       value={editForm.phone || ''}
                       onChange={(e) => {
@@ -166,8 +166,8 @@ export default function PilotDetailPage() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-muted-foreground mb-1">Work Cell</label>
-                  <input
+                  <label htmlFor="work-cell" className="block text-xs font-medium text-muted-foreground mb-1">Work Cell</label>
+                  <input id="work-cell"
                     type="tel"
                     value={editForm.phone_work || ''}
                     onChange={(e) => {
@@ -183,13 +183,13 @@ export default function PilotDetailPage() {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">Badge Number</label>
-                    <input type="text" value={editForm.badge_number} onChange={e => setEditForm({...editForm, badge_number: e.target.value})}
+                    <label htmlFor="badge-number" className="block text-xs font-medium text-muted-foreground mb-1">Badge Number</label>
+                    <input id="badge-number" type="text" value={editForm.badge_number} onChange={e => setEditForm({...editForm, badge_number: e.target.value})}
                       className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">Status</label>
-                    <select value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})}
+                    <label htmlFor="status" className="block text-xs font-medium text-muted-foreground mb-1">Status</label>
+                    <select id="status" value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})}
                       className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                       <option value="active">Active</option>
                       <option value="inactive">Inactive</option>
@@ -197,8 +197,8 @@ export default function PilotDetailPage() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-muted-foreground mb-1">Notes</label>
-                  <textarea value={editForm.notes} onChange={e => setEditForm({...editForm, notes: e.target.value})}
+                  <label htmlFor="notes" className="block text-xs font-medium text-muted-foreground mb-1">Notes</label>
+                  <textarea id="notes" value={editForm.notes} onChange={e => setEditForm({...editForm, notes: e.target.value})}
                     className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm h-20 resize-none focus:outline-none focus:ring-2 focus:ring-ring" />
                 </div>
                 <div className="flex gap-2">
@@ -216,7 +216,7 @@ export default function PilotDetailPage() {
               <>
                 <div className="flex items-center gap-3">
                   <h2 className="text-xl font-bold text-foreground">{pilot.full_name}</h2>
-                  {(isSupervisor || (isPilot && user?.pilot_id === parseInt(id))) && (
+                  {(isSupervisor || (isPilot && user?.pilot_id === Number.parseInt(id, 10))) && (
                     <button onClick={startEditing}
                       className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent transition-colors">
                       <Edit className="w-4 h-4" />
@@ -335,8 +335,8 @@ export default function PilotDetailPage() {
                       outerRadius={90}
                       label={({ purpose, count }) => `${purpose} (${count})`}
                     >
-                      {performance.flights_by_purpose.map((_, i) => (
-                        <Cell key={i} fill={['#6366f1','#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#06b6d4'][i % 10]} />
+                      {performance.flights_by_purpose.map((entry, i) => (
+                        <Cell key={entry.purpose || `purpose-${i}`} fill={['#6366f1','#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#06b6d4'][i % 10]} />
                       ))}
                     </Pie>
                     <Tooltip
@@ -403,7 +403,7 @@ export default function PilotDetailPage() {
                 <td className="px-4 py-2 text-foreground font-medium">{c.cert_type_name}</td>
                 <td className="px-4 py-2">
                   <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${CERT_STATUS_COLORS[c.status] || CERT_STATUS_COLORS.not_started}`}>
-                    {(c.status || 'not_started').replace(/_/g, ' ')}
+                    {(c.status || 'not_started').replaceAll('_', ' ')}
                   </span>
                 </td>
                 <td className="px-4 py-2 text-foreground hidden md:table-cell">{c.issue_date || '—'}</td>

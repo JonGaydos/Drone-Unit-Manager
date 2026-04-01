@@ -4,8 +4,8 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { useConfirm } from '@/hooks/useConfirm'
-import { sortByName, sortPilotsActiveFirst } from '@/lib/formatters'
-import { Save, TestTube, Loader2, Upload, FileSpreadsheet, RefreshCw, UserPlus, Key, Trash2, Shield, ShieldCheck, Eye, Image as ImageIcon, ChevronUp, ChevronDown, ExternalLink, X, Edit2 } from 'lucide-react'
+import { sortPilotsActiveFirst } from '@/lib/formatters'
+import { Save, Loader2, Upload, UserPlus, Key, Trash2, Shield, Image as ImageIcon, ChevronUp, ChevronDown, ExternalLink, X, Edit2 } from 'lucide-react'
 
 const IntegrationsContent = React.lazy(() => import('@/pages/IntegrationsPage'))
 
@@ -13,11 +13,11 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('general')
   const [settings, setSettings] = useState({})
   const [saving, setSaving] = useState(false)
-  const [testing, setTesting] = useState(false)
-  const [syncing, setSyncing] = useState(false)
-  const [testResult, setTestResult] = useState(null)
-  const [importResult, setImportResult] = useState(null)
-  const [importing, setImporting] = useState(false)
+  const [, setTesting] = useState(false)
+  const [, setSyncing] = useState(false)
+  const [, setTestResult] = useState(null)
+  const [, setImportResult] = useState(null)
+  const [, setImporting] = useState(false)
   const { isAdmin, user: currentUser } = useAuth()
   const toast = useToast()
   const [confirmProps, requestConfirm] = useConfirm()
@@ -87,7 +87,7 @@ export default function SettingsPage() {
     setSavingEditUser(true)
     try {
       const payload = { display_name: editUserForm.display_name, role: editUserForm.role }
-      payload.pilot_id = editUserForm.pilot_id ? parseInt(editUserForm.pilot_id) : 0
+      payload.pilot_id = editUserForm.pilot_id ? Number.parseInt(editUserForm.pilot_id, 10) : 0
       const updated = await api.patch(`/auth/users/${editUser.id}`, payload)
       setUsers(users.map(x => x.id === editUser.id ? updated : x))
       setEditUser(null)
@@ -185,7 +185,7 @@ export default function SettingsPage() {
     try {
       const payload = { ...newUser }
       if (payload.pilot_id) {
-        payload.pilot_id = parseInt(payload.pilot_id)
+        payload.pilot_id = Number.parseInt(payload.pilot_id, 10)
       } else {
         delete payload.pilot_id
       }
@@ -363,11 +363,13 @@ export default function SettingsPage() {
   const field = (label, key, type = 'text', description = '') => {
     const isPassword = type === 'password'
     const hasMaskedValue = isPassword && settings[key] && settings[key].includes('...')
+    const fieldId = `setting-${key}`
     return (
       <div>
-        <label className="block text-sm font-medium text-foreground mb-1">{label}</label>
+        <label htmlFor={fieldId} className="block text-sm font-medium text-foreground mb-1">{label}</label>
         {description && <p className="text-xs text-muted-foreground mb-1.5">{description}</p>}
         <input
+          id={fieldId}
           type={type}
           ref={el => { inputRefs.current[key] = el }}
           key={`${key}-${settings[key] === undefined ? 'loading' : 'loaded'}`}
@@ -424,18 +426,18 @@ export default function SettingsPage() {
               </h3>
               <div className="space-y-3">
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-1">Current Password</label>
-                  <input type="password" value={pwForm.current_password} onChange={e => setPwForm({...pwForm, current_password: e.target.value})} required
+                  <label htmlFor="current-password" className="block text-sm font-medium text-foreground mb-1">Current Password</label>
+                  <input id="current-password" type="password" value={pwForm.current_password} onChange={e => setPwForm({...pwForm, current_password: e.target.value})} required
                     className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-1">New Password</label>
-                  <input type="password" value={pwForm.new_password} onChange={e => setPwForm({...pwForm, new_password: e.target.value})} required minLength={12}
+                  <label htmlFor="new-password" className="block text-sm font-medium text-foreground mb-1">New Password</label>
+                  <input id="new-password" type="password" value={pwForm.new_password} onChange={e => setPwForm({...pwForm, new_password: e.target.value})} required minLength={12}
                     className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-1">Confirm New Password</label>
-                  <input type="password" value={pwForm.confirm_password} onChange={e => setPwForm({...pwForm, confirm_password: e.target.value})} required minLength={6}
+                  <label htmlFor="confirm-new-password" className="block text-sm font-medium text-foreground mb-1">Confirm New Password</label>
+                  <input id="confirm-new-password" type="password" value={pwForm.confirm_password} onChange={e => setPwForm({...pwForm, confirm_password: e.target.value})} required minLength={6}
                     className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                 </div>
                 <button type="submit" disabled={changingPw}
@@ -475,24 +477,24 @@ export default function SettingsPage() {
               <form onSubmit={handleAddUser} className="mb-4 p-4 bg-muted/20 rounded-lg border border-border space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-sm font-medium text-foreground mb-1">Username</label>
-                    <input type="text" value={newUser.username} onChange={e => setNewUser({...newUser, username: e.target.value})} required
+                    <label htmlFor="username" className="block text-sm font-medium text-foreground mb-1">Username</label>
+                    <input id="username" type="text" value={newUser.username} onChange={e => setNewUser({...newUser, username: e.target.value})} required
                       className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-foreground mb-1">Display Name</label>
-                    <input type="text" value={newUser.display_name} onChange={e => setNewUser({...newUser, display_name: e.target.value})} required
+                    <label htmlFor="display-name" className="block text-sm font-medium text-foreground mb-1">Display Name</label>
+                    <input id="display-name" type="text" value={newUser.display_name} onChange={e => setNewUser({...newUser, display_name: e.target.value})} required
                       className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-foreground mb-1">Password</label>
-                    <input type="password" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} required minLength={6}
+                    <label htmlFor="password" className="block text-sm font-medium text-foreground mb-1">Password</label>
+                    <input id="password" type="password" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} required minLength={6}
                       className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                     <p className="text-xs text-muted-foreground mt-2">Username and password are case-sensitive.</p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-foreground mb-1">Role</label>
-                    <select value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value})}
+                    <label htmlFor="role" className="block text-sm font-medium text-foreground mb-1">Role</label>
+                    <select id="role" value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value})}
                       className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                       <option value="admin">Admin</option>
                       <option value="supervisor">Supervisor</option>
@@ -501,8 +503,8 @@ export default function SettingsPage() {
                     </select>
                   </div>
                   <div className="sm:col-span-2">
-                    <label className="block text-sm font-medium text-foreground mb-1">Link to Pilot</label>
-                    <select value={newUser.pilot_id} onChange={e => setNewUser({...newUser, pilot_id: e.target.value})}
+                    <label htmlFor="link-to-pilot" className="block text-sm font-medium text-foreground mb-1">Link to Pilot</label>
+                    <select id="link-to-pilot" value={newUser.pilot_id} onChange={e => setNewUser({...newUser, pilot_id: e.target.value})}
                       className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                       <option value="">-- No pilot linked --</option>
                       {sortPilotsActiveFirst(pilots).map(p => (
@@ -649,11 +651,11 @@ export default function SettingsPage() {
           <div className="space-y-2">
             {['not_issued', 'pending', 'complete', 'active', 'expired', 'not_eligible'].map(status => (
               <div key={status} className="flex items-center gap-3">
-                <span className="text-sm text-muted-foreground w-28 shrink-0">{status.replace(/_/g, ' ')}</span>
+                <span className="text-sm text-muted-foreground w-28 shrink-0">{status.replaceAll('_', ' ')}</span>
                 <input
                   type="text"
                   defaultValue={certLabels[status] || ''}
-                  placeholder={status.replace(/_/g, ' ')}
+                  placeholder={status.replaceAll('_', ' ')}
                   onBlur={e => setCertLabels(prev => ({ ...prev, [status]: e.target.value }))}
                   className="flex-1 px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 />
@@ -699,14 +701,15 @@ export default function SettingsPage() {
               { key: 'precip_caution', label: 'Precip CAUTION (in)', default: 0.01 },
             ].map(t => (
               <div key={t.key}>
-                <label className="block text-xs text-muted-foreground mb-1">{t.label}</label>
+                <label htmlFor={`weather-${t.key}`} className="block text-xs text-muted-foreground mb-1">{t.label}</label>
                 <input
+                  id={`weather-${t.key}`}
                   type="number"
                   step="any"
                   defaultValue={weatherThresholds[t.key] ?? t.default}
                   onBlur={e => {
-                    const val = parseFloat(e.target.value)
-                    if (!isNaN(val)) setWeatherThresholds(prev => ({ ...prev, [t.key]: val }))
+                    const val = Number.parseFloat(e.target.value)
+                    if (!Number.isNaN(val)) setWeatherThresholds(prev => ({ ...prev, [t.key]: val }))
                   }}
                   className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 />
@@ -737,10 +740,10 @@ export default function SettingsPage() {
           <h3 className="text-lg font-semibold text-foreground mb-1">Mission / Flight Purposes</h3>
           <p className="text-sm text-muted-foreground mb-3">Add or remove purpose options for missions and flights.</p>
           <div className="flex flex-wrap gap-2 mb-3">
-            {missionPurposes.map((p, i) => (
-              <div key={i} className="flex items-center gap-1 px-3 py-1 bg-secondary border border-border rounded-full text-sm text-foreground">
+            {missionPurposes.map((p) => (
+              <div key={p} className="flex items-center gap-1 px-3 py-1 bg-secondary border border-border rounded-full text-sm text-foreground">
                 <span>{p}</span>
-                <button onClick={() => setMissionPurposes(prev => prev.filter((_, idx) => idx !== i))} className="text-muted-foreground hover:text-destructive ml-1">
+                <button onClick={() => setMissionPurposes(prev => prev.filter(item => item !== p))} className="text-muted-foreground hover:text-destructive ml-1">
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -896,18 +899,18 @@ export default function SettingsPage() {
 
       {/* Edit User Modal */}
       {editUser && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setEditUser(null)}>
-          <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" role="presentation" onClick={() => setEditUser(null)}>
+          <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl" role="dialog" onClick={e => e.stopPropagation()}>
             <h2 className="text-lg font-semibold text-foreground mb-4">Edit User: {editUser.username}</h2>
             <div className="space-y-3">
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Display Name</label>
-                <input type="text" value={editUserForm.display_name} onChange={e => setEditUserForm({...editUserForm, display_name: e.target.value})}
+                <label htmlFor="display-name-1" className="block text-sm font-medium text-foreground mb-1">Display Name</label>
+                <input id="display-name-1" type="text" value={editUserForm.display_name} onChange={e => setEditUserForm({...editUserForm, display_name: e.target.value})}
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Role</label>
-                <select value={editUserForm.role} onChange={e => setEditUserForm({...editUserForm, role: e.target.value})}
+                <label htmlFor="role-1" className="block text-sm font-medium text-foreground mb-1">Role</label>
+                <select id="role-1" value={editUserForm.role} onChange={e => setEditUserForm({...editUserForm, role: e.target.value})}
                   disabled={editUser.id === currentUser?.id}
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm disabled:opacity-50">
                   <option value="admin">Admin</option>
@@ -917,8 +920,8 @@ export default function SettingsPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Link to Pilot</label>
-                <select value={editUserForm.pilot_id} onChange={e => setEditUserForm({...editUserForm, pilot_id: e.target.value})}
+                <label htmlFor="link-to-pilot-1" className="block text-sm font-medium text-foreground mb-1">Link to Pilot</label>
+                <select id="link-to-pilot-1" value={editUserForm.pilot_id} onChange={e => setEditUserForm({...editUserForm, pilot_id: e.target.value})}
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                   <option value="">-- No pilot linked --</option>
                   {sortPilotsActiveFirst(pilots).map(p => (

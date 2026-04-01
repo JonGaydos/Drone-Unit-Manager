@@ -84,7 +84,7 @@ function DataTable({
             ) : (
               data.map((row, idx) => (
                 <tr
-                  key={row.id ?? idx}
+                  key={row.id || `row-${idx}`}
                   className="hover:bg-muted/50 transition-colors"
                 >
                   {columns.map((col) => (

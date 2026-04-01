@@ -9,7 +9,7 @@ import { formatHours, formatDuration, normalizeDateValue } from '@/lib/utils'
 import { STATUS_COLORS } from '@/lib/constants'
 import {
   ArrowLeft, Clock, Calendar, Battery, Edit,
-  FileText, Wrench, Gamepad2, Cpu, Paperclip, Camera,
+  Wrench, Gamepad2, Cpu, Paperclip, Camera,
   ShieldCheck, Plus, Trash2, AlertTriangle, LogIn, LogOut,
   CheckCircle, User, Cog, X, Save
 } from 'lucide-react'
@@ -204,33 +204,33 @@ export default function VehicleDetailPage() {
               <div className="space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">Nickname</label>
-                    <input type="text" value={editForm.nickname} onChange={e => setEditForm({...editForm, nickname: e.target.value})}
+                    <label htmlFor="nickname" className="block text-xs font-medium text-muted-foreground mb-1">Nickname</label>
+                    <input id="nickname" type="text" value={editForm.nickname} onChange={e => setEditForm({...editForm, nickname: e.target.value})}
                       className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">Manufacturer</label>
-                    <input type="text" value={editForm.manufacturer} onChange={e => setEditForm({...editForm, manufacturer: e.target.value})}
+                    <label htmlFor="manufacturer" className="block text-xs font-medium text-muted-foreground mb-1">Manufacturer</label>
+                    <input id="manufacturer" type="text" value={editForm.manufacturer} onChange={e => setEditForm({...editForm, manufacturer: e.target.value})}
                       className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">Model</label>
-                    <input type="text" value={editForm.model} onChange={e => setEditForm({...editForm, model: e.target.value})}
+                    <label htmlFor="model" className="block text-xs font-medium text-muted-foreground mb-1">Model</label>
+                    <input id="model" type="text" value={editForm.model} onChange={e => setEditForm({...editForm, model: e.target.value})}
                       className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">Serial Number</label>
-                    <input type="text" value={editForm.serial_number} onChange={e => setEditForm({...editForm, serial_number: e.target.value})}
+                    <label htmlFor="serial-number" className="block text-xs font-medium text-muted-foreground mb-1">Serial Number</label>
+                    <input id="serial-number" type="text" value={editForm.serial_number} onChange={e => setEditForm({...editForm, serial_number: e.target.value})}
                       className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">FAA Registration</label>
-                    <input type="text" value={editForm.faa_registration} onChange={e => setEditForm({...editForm, faa_registration: e.target.value})}
+                    <label htmlFor="faa-registration" className="block text-xs font-medium text-muted-foreground mb-1">FAA Registration</label>
+                    <input id="faa-registration" type="text" value={editForm.faa_registration} onChange={e => setEditForm({...editForm, faa_registration: e.target.value})}
                       className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1">Status</label>
-                    <select value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})}
+                    <label htmlFor="status" className="block text-xs font-medium text-muted-foreground mb-1">Status</label>
+                    <select id="status" value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})}
                       className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm">
                       <option value="active">Active</option>
                       <option value="inactive">Inactive</option>
@@ -240,8 +240,8 @@ export default function VehicleDetailPage() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-muted-foreground mb-1">Notes</label>
-                  <textarea value={editForm.notes} onChange={e => setEditForm({...editForm, notes: e.target.value})}
+                  <label htmlFor="notes" className="block text-xs font-medium text-muted-foreground mb-1">Notes</label>
+                  <textarea id="notes" value={editForm.notes} onChange={e => setEditForm({...editForm, notes: e.target.value})}
                     className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm h-16 resize-none focus:outline-none focus:ring-2 focus:ring-ring" />
                 </div>
                 <div className="flex gap-2">
@@ -471,7 +471,7 @@ export default function VehicleDetailPage() {
                 <td className="px-4 py-2 text-foreground">{m.description || '—'}</td>
                 <td className="px-4 py-2 text-foreground hidden md:table-cell">{m.maintenance_type || m.type || '—'}</td>
                 <td className="px-4 py-2 text-foreground hidden md:table-cell">{m.performed_by || '—'}</td>
-                <td className="px-4 py-2 text-foreground text-right">{m.cost != null ? `$${parseFloat(m.cost).toFixed(2)}` : '—'}</td>
+                <td className="px-4 py-2 text-foreground text-right">{m.cost != null ? `$${Number.parseFloat(m.cost).toFixed(2)}` : '—'}</td>
               </tr>
             ))}
             {maintenance.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">No maintenance records</td></tr>}
@@ -508,10 +508,20 @@ export default function VehicleDetailPage() {
             const isUrgent = daysUntil !== null && daysUntil >= 0 && daysUntil < 30
             const isWarning = daysUntil !== null && daysUntil >= 30 && daysUntil <= 90
             const isGood = daysUntil !== null && daysUntil > 90
+            const rowBg = (() => {
+              if (isExpired) return 'bg-red-900/10'
+              if (isUrgent) return 'bg-red-500/5'
+              if (isWarning) return 'bg-amber-500/5'
+              return 'bg-emerald-500/5'
+            })()
+            const badgeStyle = (() => {
+              if (isExpired) return 'bg-red-900/20 text-red-300'
+              if (isUrgent) return 'bg-red-500/15 text-red-400'
+              if (isWarning) return 'bg-amber-500/15 text-amber-400'
+              return 'bg-emerald-500/15 text-emerald-400'
+            })()
             return (
-              <div className={`px-4 py-3 border-b border-border flex items-center gap-4 ${
-                isExpired ? 'bg-red-900/10' : isUrgent ? 'bg-red-500/5' : isWarning ? 'bg-amber-500/5' : 'bg-emerald-500/5'
-              }`}>
+              <div className={`px-4 py-3 border-b border-border flex items-center gap-4 ${rowBg}`}>
                 <div className="flex-1">
                   <p className="text-lg font-semibold text-foreground">
                     Next Due: {current.expiry_date || 'N/A'}
@@ -522,12 +532,7 @@ export default function VehicleDetailPage() {
                 </div>
                 <div className="text-right">
                   {daysUntil !== null && (
-                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold ${
-                      isExpired ? 'bg-red-900/20 text-red-300' :
-                      isUrgent ? 'bg-red-500/15 text-red-400' :
-                      isWarning ? 'bg-amber-500/15 text-amber-400' :
-                      'bg-emerald-500/15 text-emerald-400'
-                    }`}>
+                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold ${badgeStyle}`}>
                       {isExpired && <AlertTriangle className="w-3.5 h-3.5" />}
                       {isUrgent && <AlertTriangle className="w-3.5 h-3.5" />}
                       {isExpired ? `Overdue ${Math.abs(daysUntil)}d` :
@@ -546,22 +551,22 @@ export default function VehicleDetailPage() {
           <div className="px-4 py-3 border-b border-border bg-muted/20 space-y-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Registration #</label>
-                <input type="text" value={regForm.registration_number}
+                <label htmlFor="registration" className="block text-xs font-medium text-foreground mb-1">Registration #</label>
+                <input id="registration" type="text" value={regForm.registration_number}
                   onChange={e => setRegForm({...regForm, registration_number: e.target.value})}
                   placeholder="FA..."
                   className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Registration Date</label>
-                <input type="date" value={regForm.registration_date}
+                <label htmlFor="registration-date" className="block text-xs font-medium text-foreground mb-1">Registration Date</label>
+                <input id="registration-date" type="date" value={regForm.registration_date}
                   onChange={e => setRegForm({...regForm, registration_date: e.target.value})}
                   onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) setRegForm(prev => ({...prev, registration_date: n})) }}
                   className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Expiry (auto: +2 years)</label>
-                <input type="text" readOnly
+                <label htmlFor="expiry-auto-2-years" className="block text-xs font-medium text-foreground mb-1">Expiry (auto: +2 years)</label>
+                <input id="expiry-auto-2-years" type="text" readOnly
                   value={regForm.registration_date ? (() => {
                     const d = new Date(regForm.registration_date)
                     d.setDate(d.getDate() + 730)
@@ -570,8 +575,8 @@ export default function VehicleDetailPage() {
                   className="w-full px-3 py-1.5 bg-muted border border-border rounded-lg text-muted-foreground text-sm cursor-not-allowed" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Notes</label>
-                <input type="text" value={regForm.notes}
+                <label htmlFor="notes-1" className="block text-xs font-medium text-foreground mb-1">Notes</label>
+                <input id="notes-1" type="text" value={regForm.notes}
                   onChange={e => setRegForm({...regForm, notes: e.target.value})}
                   placeholder="Optional"
                   className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
@@ -620,10 +625,16 @@ export default function VehicleDetailPage() {
               <tbody>
                 {registrations.map(r => {
                   const isExpired = r.expiry_date && new Date(r.expiry_date) < new Date()
-                  const statusLabel = r.is_current ? (isExpired ? 'Expired' : 'Current') : (isExpired ? 'Expired' : 'Previous')
-                  const statusColor = r.is_current && !isExpired
-                    ? 'bg-emerald-500/15 text-emerald-400'
-                    : isExpired ? 'bg-red-500/15 text-red-400' : 'bg-zinc-500/15 text-zinc-400'
+                  const statusLabel = (() => {
+                    if (isExpired) return 'Expired'
+                    if (r.is_current) return 'Current'
+                    return 'Previous'
+                  })()
+                  const statusColor = (() => {
+                    if (r.is_current && !isExpired) return 'bg-emerald-500/15 text-emerald-400'
+                    if (isExpired) return 'bg-red-500/15 text-red-400'
+                    return 'bg-zinc-500/15 text-zinc-400'
+                  })()
                   return (
                   <tr key={r.id} className="border-b border-border/50 hover:bg-accent/30">
                     <td className="px-4 py-2 text-foreground font-medium">{r.registration_number || '--'}</td>
@@ -713,8 +724,8 @@ export default function VehicleDetailPage() {
           <div className="px-4 py-3 border-b border-border bg-muted/20 space-y-2">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Returning Pilot</label>
-                <select
+                <label htmlFor="returning-pilot" className="block text-xs font-medium text-foreground mb-1">Returning Pilot</label>
+                <select id="returning-pilot"
                   value={checkinForm.pilot_id || ''}
                   onChange={e => setCheckinForm({ ...checkinForm, pilot_id: e.target.value })}
                   className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm"
@@ -726,8 +737,8 @@ export default function VehicleDetailPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Condition</label>
-                <select
+                <label htmlFor="condition" className="block text-xs font-medium text-foreground mb-1">Condition</label>
+                <select id="condition"
                   value={checkinForm.condition_in}
                   onChange={e => setCheckinForm({ ...checkinForm, condition_in: e.target.value })}
                   className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm"
@@ -738,8 +749,8 @@ export default function VehicleDetailPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Notes</label>
-                <input type="text" value={checkinForm.notes_in}
+                <label htmlFor="notes-2" className="block text-xs font-medium text-foreground mb-1">Notes</label>
+                <input id="notes-2" type="text" value={checkinForm.notes_in}
                   onChange={e => setCheckinForm({ ...checkinForm, notes_in: e.target.value })}
                   placeholder="Optional"
                   className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm" />
@@ -751,7 +762,7 @@ export default function VehicleDetailPage() {
                   if (!checkinForm.pilot_id) { toast.error('Select a pilot'); return }
                   try {
                     await api.post(`/equipment-checkouts/${activeCheckout.id}/checkin`, {
-                      checked_in_by_id: parseInt(checkinForm.pilot_id),
+                      checked_in_by_id: Number.parseInt(checkinForm.pilot_id, 10),
                       condition_in: checkinForm.condition_in,
                       notes_in: checkinForm.notes_in || null,
                     })
@@ -778,8 +789,8 @@ export default function VehicleDetailPage() {
           <div className="px-4 py-3 border-b border-border bg-muted/20 space-y-2">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Pilot</label>
-                <select
+                <label htmlFor="pilot" className="block text-xs font-medium text-foreground mb-1">Pilot</label>
+                <select id="pilot"
                   value={checkoutForm.pilot_id}
                   onChange={e => setCheckoutForm({ ...checkoutForm, pilot_id: e.target.value })}
                   className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm"
@@ -791,8 +802,8 @@ export default function VehicleDetailPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Condition</label>
-                <select
+                <label htmlFor="condition-1" className="block text-xs font-medium text-foreground mb-1">Condition</label>
+                <select id="condition-1"
                   value={checkoutForm.condition_out}
                   onChange={e => setCheckoutForm({ ...checkoutForm, condition_out: e.target.value })}
                   className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm"
@@ -803,8 +814,8 @@ export default function VehicleDetailPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Notes</label>
-                <input type="text" value={checkoutForm.notes_out}
+                <label htmlFor="notes-3" className="block text-xs font-medium text-foreground mb-1">Notes</label>
+                <input id="notes-3" type="text" value={checkoutForm.notes_out}
                   onChange={e => setCheckoutForm({ ...checkoutForm, notes_out: e.target.value })}
                   placeholder="Optional"
                   className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm" />
@@ -817,9 +828,9 @@ export default function VehicleDetailPage() {
                   try {
                     await api.post('/equipment-checkouts', {
                       entity_type: 'vehicle',
-                      entity_id: parseInt(id),
+                      entity_id: Number.parseInt(id, 10),
                       entity_name: displayName,
-                      checked_out_by_id: parseInt(checkoutForm.pilot_id),
+                      checked_out_by_id: Number.parseInt(checkoutForm.pilot_id, 10),
                       condition_out: checkoutForm.condition_out,
                       notes_out: checkoutForm.notes_out || null,
                     })
@@ -903,15 +914,15 @@ export default function VehicleDetailPage() {
           <div className="px-4 py-3 border-b border-border bg-muted/20 space-y-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Name *</label>
-                <input type="text" value={componentForm.name}
+                <label htmlFor="name" className="block text-xs font-medium text-foreground mb-1">Name *</label>
+                <input id="name" type="text" value={componentForm.name}
                   onChange={e => setComponentForm({...componentForm, name: e.target.value})}
                   placeholder="e.g. Front Left Propeller"
                   className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Type *</label>
-                <select value={componentForm.component_type}
+                <label htmlFor="type" className="block text-xs font-medium text-foreground mb-1">Type *</label>
+                <select id="type" value={componentForm.component_type}
                   onChange={e => setComponentForm({...componentForm, component_type: e.target.value})}
                   className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm">
                   <option value="propeller">Propeller</option>
@@ -925,26 +936,26 @@ export default function VehicleDetailPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Serial Number</label>
-                <input type="text" value={componentForm.serial_number}
+                <label htmlFor="serial-number-1" className="block text-xs font-medium text-foreground mb-1">Serial Number</label>
+                <input id="serial-number-1" type="text" value={componentForm.serial_number}
                   onChange={e => setComponentForm({...componentForm, serial_number: e.target.value})}
                   className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Manufacturer</label>
-                <input type="text" value={componentForm.manufacturer}
+                <label htmlFor="manufacturer-1" className="block text-xs font-medium text-foreground mb-1">Manufacturer</label>
+                <input id="manufacturer-1" type="text" value={componentForm.manufacturer}
                   onChange={e => setComponentForm({...componentForm, manufacturer: e.target.value})}
                   className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Model</label>
-                <input type="text" value={componentForm.model}
+                <label htmlFor="model-1" className="block text-xs font-medium text-foreground mb-1">Model</label>
+                <input id="model-1" type="text" value={componentForm.model}
                   onChange={e => setComponentForm({...componentForm, model: e.target.value})}
                   className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Status</label>
-                <select value={componentForm.status}
+                <label htmlFor="status-1" className="block text-xs font-medium text-foreground mb-1">Status</label>
+                <select id="status-1" value={componentForm.status}
                   onChange={e => setComponentForm({...componentForm, status: e.target.value})}
                   className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm">
                   <option value="active">Active</option>
@@ -954,40 +965,40 @@ export default function VehicleDetailPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Install Date</label>
-                <input type="date" value={componentForm.install_date}
+                <label htmlFor="install-date" className="block text-xs font-medium text-foreground mb-1">Install Date</label>
+                <input id="install-date" type="date" value={componentForm.install_date}
                   onChange={e => setComponentForm({...componentForm, install_date: e.target.value})}
                   className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Flight Hours</label>
-                <input type="number" step="0.1" value={componentForm.flight_hours}
-                  onChange={e => setComponentForm({...componentForm, flight_hours: parseFloat(e.target.value) || 0})}
+                <label htmlFor="flight-hours" className="block text-xs font-medium text-foreground mb-1">Flight Hours</label>
+                <input id="flight-hours" type="number" step="0.1" value={componentForm.flight_hours}
+                  onChange={e => setComponentForm({...componentForm, flight_hours: Number.parseFloat(e.target.value) || 0})}
                   className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Max Flight Hours</label>
-                <input type="number" step="0.1" value={componentForm.max_flight_hours}
+                <label htmlFor="max-flight-hours" className="block text-xs font-medium text-foreground mb-1">Max Flight Hours</label>
+                <input id="max-flight-hours" type="number" step="0.1" value={componentForm.max_flight_hours}
                   onChange={e => setComponentForm({...componentForm, max_flight_hours: e.target.value})}
                   placeholder="Optional"
                   className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Warranty Expiry</label>
-                <input type="date" value={componentForm.warranty_expiry}
+                <label htmlFor="warranty-expiry" className="block text-xs font-medium text-foreground mb-1">Warranty Expiry</label>
+                <input id="warranty-expiry" type="date" value={componentForm.warranty_expiry}
                   onChange={e => setComponentForm({...componentForm, warranty_expiry: e.target.value})}
                   className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Replacement Cost</label>
-                <input type="number" step="0.01" value={componentForm.replacement_cost}
+                <label htmlFor="replacement-cost" className="block text-xs font-medium text-foreground mb-1">Replacement Cost</label>
+                <input id="replacement-cost" type="number" step="0.01" value={componentForm.replacement_cost}
                   onChange={e => setComponentForm({...componentForm, replacement_cost: e.target.value})}
                   placeholder="$"
                   className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-foreground mb-1">Notes</label>
-                <input type="text" value={componentForm.notes}
+                <label htmlFor="notes-4" className="block text-xs font-medium text-foreground mb-1">Notes</label>
+                <input id="notes-4" type="text" value={componentForm.notes}
                   onChange={e => setComponentForm({...componentForm, notes: e.target.value})}
                   className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               </div>
@@ -999,9 +1010,9 @@ export default function VehicleDetailPage() {
                   try {
                     await api.post('/components', {
                       ...componentForm,
-                      vehicle_id: parseInt(id),
-                      max_flight_hours: componentForm.max_flight_hours ? parseFloat(componentForm.max_flight_hours) : null,
-                      replacement_cost: componentForm.replacement_cost ? parseFloat(componentForm.replacement_cost) : null,
+                      vehicle_id: Number.parseInt(id, 10),
+                      max_flight_hours: componentForm.max_flight_hours ? Number.parseFloat(componentForm.max_flight_hours) : null,
+                      replacement_cost: componentForm.replacement_cost ? Number.parseFloat(componentForm.replacement_cost) : null,
                       install_date: componentForm.install_date || null,
                       warranty_expiry: componentForm.warranty_expiry || null,
                       serial_number: componentForm.serial_number || null,
@@ -1062,11 +1073,11 @@ export default function VehicleDetailPage() {
                   return (
                     <tr key={c.id} className="border-b border-border/50 hover:bg-accent/30">
                       <td className="px-4 py-2 text-foreground font-medium">{c.name}</td>
-                      <td className="px-4 py-2 text-foreground capitalize">{(c.component_type || '').replace(/_/g, ' ')}</td>
+                      <td className="px-4 py-2 text-foreground capitalize">{(c.component_type || '').replaceAll('_', ' ')}</td>
                       <td className="px-4 py-2 text-foreground hidden md:table-cell">{c.serial_number || '--'}</td>
                       <td className="px-4 py-2">
                         <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[c.status] || 'bg-zinc-500/15 text-zinc-400'}`}>
-                          {(c.status || '').replace(/_/g, ' ')}
+                          {(c.status || '').replaceAll('_', ' ')}
                         </span>
                       </td>
                       <td className={`px-4 py-2 hidden md:table-cell ${hoursWarning ? 'text-amber-400 font-medium' : 'text-muted-foreground'}`}>

@@ -1,18 +1,19 @@
 from datetime import date, datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.database import get_db
+from app.deps import CurrentUser, DBSession, PilotUser, SupervisorUser
 from app.models.incident import Incident
 from app.models.pilot import Pilot
 from app.models.vehicle import Vehicle
 from app.models.user import User
-from app.routers.auth import get_current_user, require_pilot, require_supervisor
+from app.constants import INCIDENT_NOT_FOUND
 from app.services.audit import log_action
+from app.responses import responses
 
 router = APIRouter(prefix="/api/incidents", tags=["incidents"])
 
@@ -71,21 +72,21 @@ class IncidentOut(BaseModel):
     severity: str
     category: str
     description: str
-    location: Optional[str]
-    lat: Optional[float]
-    lon: Optional[float]
-    flight_id: Optional[int]
-    pilot_id: Optional[int]
-    vehicle_id: Optional[int]
-    reported_by_id: Optional[int]
+    location: Optional[str] = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    flight_id: Optional[int] = None
+    pilot_id: Optional[int] = None
+    vehicle_id: Optional[int] = None
+    reported_by_id: Optional[int] = None
     status: str
-    resolution: Optional[str]
-    resolution_date: Optional[date]
+    resolution: Optional[str] = None
+    resolution_date: Optional[date] = None
     equipment_grounded: bool
-    damage_description: Optional[str]
-    corrective_actions: Optional[str]
-    estimated_cost: Optional[float]
-    notes: Optional[str]
+    damage_description: Optional[str] = None
+    corrective_actions: Optional[str] = None
+    estimated_cost: Optional[float] = None
+    notes: Optional[str] = None
     report_type: Optional[str] = "incident"
     impact_level: Optional[str] = None
     outcome_description: Optional[str] = None
@@ -116,8 +117,8 @@ def _enrich(incident: Incident, db: Session) -> IncidentOut:
 
 
 
-@router.get("/stats")
-def incident_stats(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+@router.get("/stats", responses=responses(401))
+def incident_stats(db: DBSession, user: CurrentUser):
     status_counts = dict(
         db.query(Incident.status, func.count(Incident.id))
         .group_by(Incident.status).all()
@@ -140,18 +141,30 @@ def incident_stats(db: Session = Depends(get_db), user: User = Depends(get_curre
 
 @router.get("", response_model=list[IncidentOut])
 def list_incidents(
+
+    db: DBSession,
+
+    user: CurrentUser,
+
     status: str | None = None,
+
     severity: str | None = None,
+
     category: str | None = None,
+
     pilot_id: int | None = None,
+
     vehicle_id: int | None = None,
+
     date_from: date | None = None,
+
     date_to: date | None = None,
+
     report_type: str | None = None,
+
     page: int = Query(default=1, ge=1),
+
     per_page: int = Query(default=50, le=200),
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
 ):
     q = db.query(Incident)
     if status:
@@ -174,16 +187,16 @@ def list_incidents(
     return [_enrich(i, db) for i in incidents]
 
 
-@router.get("/{incident_id}", response_model=IncidentOut)
-def get_incident(incident_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+@router.get("/{incident_id}", response_model=IncidentOut, responses=responses(401, 404))
+def get_incident(incident_id: int, db: DBSession, user: CurrentUser):
     incident = db.query(Incident).filter(Incident.id == incident_id).first()
     if not incident:
-        raise HTTPException(status_code=404, detail="Incident not found")
+        raise HTTPException(status_code=404, detail=INCIDENT_NOT_FOUND)
     return _enrich(incident, db)
 
 
-@router.post("", response_model=IncidentOut)
-def create_incident(data: IncidentCreate, db: Session = Depends(get_db), user: User = Depends(require_pilot)):
+@router.post("", response_model=IncidentOut, responses=responses(401, 422))
+def create_incident(data: IncidentCreate, db: DBSession, user: PilotUser):
     try:
         parsed_date = date.fromisoformat(data.date)
     except ValueError:
@@ -218,11 +231,11 @@ def create_incident(data: IncidentCreate, db: Session = Depends(get_db), user: U
     return _enrich(incident, db)
 
 
-@router.patch("/{incident_id}", response_model=IncidentOut)
-def update_incident(incident_id: int, data: IncidentUpdate, db: Session = Depends(get_db), user: User = Depends(require_pilot)):
+@router.patch("/{incident_id}", response_model=IncidentOut, responses=responses(401, 403, 404, 422))
+def update_incident(incident_id: int, data: IncidentUpdate, db: DBSession, user: PilotUser):
     incident = db.query(Incident).filter(Incident.id == incident_id).first()
     if not incident:
-        raise HTTPException(status_code=404, detail="Incident not found")
+        raise HTTPException(status_code=404, detail=INCIDENT_NOT_FOUND)
     # Pilots can only update their own reports; supervisors can update any
     if user.role not in ("admin", "supervisor") and incident.reported_by_id != user.id:
         raise HTTPException(status_code=403, detail="You can only edit your own incident reports")
@@ -246,11 +259,11 @@ def update_incident(incident_id: int, data: IncidentUpdate, db: Session = Depend
     return _enrich(incident, db)
 
 
-@router.delete("/{incident_id}")
-def delete_incident(incident_id: int, db: Session = Depends(get_db), user: User = Depends(require_supervisor)):
+@router.delete("/{incident_id}", responses=responses(401, 404))
+def delete_incident(incident_id: int, db: DBSession, user: SupervisorUser):
     incident = db.query(Incident).filter(Incident.id == incident_id).first()
     if not incident:
-        raise HTTPException(status_code=404, detail="Incident not found")
+        raise HTTPException(status_code=404, detail=INCIDENT_NOT_FOUND)
     title = incident.title
     log_action(db, user.id, user.display_name, "delete", "incident", incident_id, title,
                details=f"Deleted incident: {title}")

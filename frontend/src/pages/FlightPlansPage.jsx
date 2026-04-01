@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { useConfirm } from '@/hooks/useConfirm'
-import { sortByName, sortVehicles, sortPilotsActiveFirst, vehicleDisplayName } from '@/lib/formatters'
+import { sortVehicles, sortPilotsActiveFirst, vehicleDisplayName } from '@/lib/formatters'
 import {
   ClipboardCheck, Plus, Filter, X, Loader2, Check, Ban, Clock,
   ChevronDown, ChevronUp, Cloud, Download,
@@ -44,41 +44,41 @@ function PlanModal({ pilots, vehicles, currentUser, onSave, onClose }) {
     if (!form.title || !form.date_planned || !form.pilot_id) return
     // Validate altitude
     if (form.max_altitude_planned) {
-      const alt = parseFloat(form.max_altitude_planned)
+      const alt = Number.parseFloat(form.max_altitude_planned)
       if (alt < 0 || alt > 400) {
         toast.error('Altitude must be between 0 and 400 ft AGL (FAA Part 107)')
         return
       }
     }
     const data = { ...form }
-    data.pilot_id = parseInt(data.pilot_id)
-    if (data.vehicle_id) data.vehicle_id = parseInt(data.vehicle_id); else delete data.vehicle_id
-    if (data.max_altitude_planned) data.max_altitude_planned = parseFloat(data.max_altitude_planned); else delete data.max_altitude_planned
-    if (data.estimated_duration_min) data.estimated_duration_min = parseInt(data.estimated_duration_min); else delete data.estimated_duration_min
+    data.pilot_id = Number.parseInt(data.pilot_id, 10)
+    if (data.vehicle_id) data.vehicle_id = Number.parseInt(data.vehicle_id, 10); else delete data.vehicle_id
+    if (data.max_altitude_planned) data.max_altitude_planned = Number.parseFloat(data.max_altitude_planned); else delete data.max_altitude_planned
+    if (data.estimated_duration_min) data.estimated_duration_min = Number.parseInt(data.estimated_duration_min, 10); else delete data.estimated_duration_min
     Object.keys(data).forEach(k => { if (data[k] === '') delete data[k] })
     setSaving(true)
     try { await onSave(data) } finally { setSaving(false) }
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-2xl shadow-xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" role="presentation" onClick={onClose}>
+      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-2xl shadow-xl max-h-[90vh] overflow-y-auto" role="dialog" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold text-foreground mb-4">Submit Flight Plan</h2>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Title *</label>
-            <input type="text" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })}
+            <label htmlFor="title" className="block text-sm font-medium text-foreground mb-1">Title *</label>
+            <input id="title" type="text" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" required />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Planned Date/Time *</label>
-              <input type="datetime-local" value={form.date_planned} onChange={e => setForm({ ...form, date_planned: e.target.value })}
+              <label htmlFor="planned-date-time" className="block text-sm font-medium text-foreground mb-1">Planned Date/Time *</label>
+              <input id="planned-date-time" type="datetime-local" value={form.date_planned} onChange={e => setForm({ ...form, date_planned: e.target.value })}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" required />
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Pilot *</label>
-              <select value={form.pilot_id} onChange={e => setForm({ ...form, pilot_id: e.target.value })}
+              <label htmlFor="pilot" className="block text-sm font-medium text-foreground mb-1">Pilot *</label>
+              <select id="pilot" value={form.pilot_id} onChange={e => setForm({ ...form, pilot_id: e.target.value })}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" required>
                 <option value="">Select pilot...</option>
                 {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
@@ -87,45 +87,45 @@ function PlanModal({ pilots, vehicles, currentUser, onSave, onClose }) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Vehicle</label>
-              <select value={form.vehicle_id} onChange={e => setForm({ ...form, vehicle_id: e.target.value })}
+              <label htmlFor="vehicle" className="block text-sm font-medium text-foreground mb-1">Vehicle</label>
+              <select id="vehicle" value={form.vehicle_id} onChange={e => setForm({ ...form, vehicle_id: e.target.value })}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                 <option value="">Select vehicle...</option>
                 {sortVehicles(vehicles).map(v => <option key={v.id} value={v.id}>{vehicleDisplayName(v)}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Location</label>
-              <input type="text" value={form.location} onChange={e => setForm({ ...form, location: e.target.value })}
+              <label htmlFor="location" className="block text-sm font-medium text-foreground mb-1">Location</label>
+              <input id="location" type="text" value={form.location} onChange={e => setForm({ ...form, location: e.target.value })}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Purpose</label>
-              <input type="text" value={form.purpose} onChange={e => setForm({ ...form, purpose: e.target.value })}
+              <label htmlFor="purpose" className="block text-sm font-medium text-foreground mb-1">Purpose</label>
+              <input id="purpose" type="text" value={form.purpose} onChange={e => setForm({ ...form, purpose: e.target.value })}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Case Number</label>
-              <input type="text" value={form.case_number} onChange={e => setForm({ ...form, case_number: e.target.value })}
+              <label htmlFor="case-number" className="block text-sm font-medium text-foreground mb-1">Case Number</label>
+              <input id="case-number" type="text" value={form.case_number} onChange={e => setForm({ ...form, case_number: e.target.value })}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Description</label>
-            <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
+            <label htmlFor="description" className="block text-sm font-medium text-foreground mb-1">Description</label>
+            <textarea id="description" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
               rows={3} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm resize-none" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Max Altitude (ft)</label>
-              <input type="number" min="0" max="400" step="1" value={form.max_altitude_planned} onChange={e => setForm({ ...form, max_altitude_planned: e.target.value })}
+              <label htmlFor="max-altitude-ft" className="block text-sm font-medium text-foreground mb-1">Max Altitude (ft)</label>
+              <input id="max-altitude-ft" type="number" min="0" max="400" step="1" value={form.max_altitude_planned} onChange={e => setForm({ ...form, max_altitude_planned: e.target.value })}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" placeholder="Max 400 ft AGL" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Est. Duration (min)</label>
-              <input type="number" value={form.estimated_duration_min} onChange={e => setForm({ ...form, estimated_duration_min: e.target.value })}
+              <label htmlFor="est-duration-min" className="block text-sm font-medium text-foreground mb-1">Est. Duration (min)</label>
+              <input id="est-duration-min" type="number" value={form.estimated_duration_min} onChange={e => setForm({ ...form, estimated_duration_min: e.target.value })}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
           </div>
@@ -136,8 +136,8 @@ function PlanModal({ pilots, vehicles, currentUser, onSave, onClose }) {
             <label htmlFor="checklist" className="text-sm text-foreground">Pre-flight checklist completed</label>
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Notes</label>
-            <textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })}
+            <label htmlFor="notes" className="block text-sm font-medium text-foreground mb-1">Notes</label>
+            <textarea id="notes" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })}
               rows={2} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm resize-none" />
           </div>
           <div className="flex gap-2 pt-2">
@@ -167,18 +167,18 @@ function DenyModal({ plan, onDeny, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" role="presentation" onClick={onClose}>
+      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl" role="dialog" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold text-foreground mb-4">Deny Flight Plan</h2>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Denial Reason *</label>
-            <textarea value={reason} onChange={e => setReason(e.target.value)}
+            <label htmlFor="denial-reason" className="block text-sm font-medium text-foreground mb-1">Denial Reason *</label>
+            <textarea id="denial-reason" value={reason} onChange={e => setReason(e.target.value)}
               rows={3} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm resize-none" required />
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Review Notes</label>
-            <textarea value={notes} onChange={e => setNotes(e.target.value)}
+            <label htmlFor="review-notes" className="block text-sm font-medium text-foreground mb-1">Review Notes</label>
+            <textarea id="review-notes" value={notes} onChange={e => setNotes(e.target.value)}
               rows={2} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm resize-none" />
           </div>
           <div className="flex gap-2 pt-2">

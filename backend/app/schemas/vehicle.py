@@ -32,16 +32,16 @@ class VehicleOut(BaseModel):
     serial_number: str
     manufacturer: str
     model: str
-    nickname: Optional[str]
-    faa_registration: Optional[str]
+    nickname: Optional[str] = None
+    faa_registration: Optional[str] = None
     status: str
     total_flight_hours: float
     total_flights: int
-    provider_serial: Optional[str]
-    api_provider: Optional[str]
-    acquired_date: Optional[date]
+    provider_serial: Optional[str] = None
+    api_provider: Optional[str] = None
+    acquired_date: Optional[date] = None
     photo_url: Optional[str] = None
-    notes: Optional[str]
+    notes: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

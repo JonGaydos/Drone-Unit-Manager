@@ -1,16 +1,14 @@
 from datetime import date, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
 
-from app.database import get_db
+from app.deps import CurrentUser, DBSession, PilotUser
 from app.models.maintenance_schedule import MaintenanceSchedule
 from app.models.maintenance import MaintenanceRecord
 from app.models.pilot import Pilot
-from app.models.user import User
-from app.routers.auth import get_current_user, require_pilot
+from app.responses import responses
 
 router = APIRouter(prefix="/api/maintenance/schedules", tags=["maintenance-schedules"])
 
@@ -51,10 +49,9 @@ def _calc_next_due(frequency: str, from_date: date | None = None) -> date:
 
 @router.get("")
 def list_schedules(
-    all: bool = False,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
+    db: DBSession,
+    user: CurrentUser,
+    all: bool = False):
     q = db.query(MaintenanceSchedule)
     if not all:
         q = q.filter(MaintenanceSchedule.is_active.is_(True))
@@ -81,11 +78,11 @@ def list_schedules(
     return results
 
 
-@router.get("/{schedule_id}")
+@router.get("/{schedule_id}", responses=responses(404))
 def get_schedule(
     schedule_id: int,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    db: DBSession,
+    user: CurrentUser,
 ):
     s = db.query(MaintenanceSchedule).filter(MaintenanceSchedule.id == schedule_id).first()
     if not s:
@@ -112,8 +109,8 @@ def get_schedule(
 @router.post("")
 def create_schedule(
     data: ScheduleCreate,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_pilot),
+    db: DBSession,
+    user: PilotUser,
 ):
     schedule = MaintenanceSchedule(
         name=data.name,
@@ -131,12 +128,12 @@ def create_schedule(
     return {"ok": True, "id": schedule.id}
 
 
-@router.patch("/{schedule_id}")
+@router.patch("/{schedule_id}", responses=responses(404))
 def update_schedule(
     schedule_id: int,
     data: ScheduleUpdate,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_pilot),
+    db: DBSession,
+    user: PilotUser,
 ):
     schedule = db.query(MaintenanceSchedule).filter(MaintenanceSchedule.id == schedule_id).first()
     if not schedule:
@@ -148,11 +145,11 @@ def update_schedule(
     return {"ok": True}
 
 
-@router.delete("/{schedule_id}")
+@router.delete("/{schedule_id}", responses=responses(404))
 def delete_schedule(
     schedule_id: int,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_pilot),
+    db: DBSession,
+    user: PilotUser,
 ):
     schedule = db.query(MaintenanceSchedule).filter(MaintenanceSchedule.id == schedule_id).first()
     if not schedule:
@@ -162,11 +159,11 @@ def delete_schedule(
     return {"ok": True}
 
 
-@router.post("/{schedule_id}/complete")
+@router.post("/{schedule_id}/complete", responses=responses(404))
 def complete_schedule(
     schedule_id: int,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_pilot),
+    db: DBSession,
+    user: PilotUser,
 ):
     schedule = db.query(MaintenanceSchedule).filter(MaintenanceSchedule.id == schedule_id).first()
     if not schedule:

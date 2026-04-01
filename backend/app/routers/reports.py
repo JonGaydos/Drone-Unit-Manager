@@ -3,18 +3,17 @@ import os
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.database import get_db
+from app.deps import DBSession, PilotUser
 from app.models.flight import Flight
 from app.models.pilot import Pilot
 from app.models.vehicle import Vehicle
-from app.models.user import User
 from app.models.certification import CertificationType, PilotCertification
 from app.models.battery import Battery
 from app.models.maintenance import MaintenanceRecord
@@ -23,7 +22,7 @@ from app.models.mission_log import MissionLog
 from app.models.mission_log_pilot import MissionLogPilot
 from app.models.training_log import TrainingLog
 from app.models.training_log_pilot import TrainingLogPilot
-from app.routers.auth import get_current_user, require_pilot
+from app.responses import responses
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
@@ -41,8 +40,8 @@ class ReportRow(BaseModel):
     values: dict
 
 
-@router.post("/generate")
-def generate_report(config: ReportConfig, db: Session = Depends(get_db), user: User = Depends(require_pilot)):
+@router.post("/generate", responses=responses(401))
+def generate_report(config: ReportConfig, db: DBSession, user: PilotUser):
     if config.report_type == "flight_summary":
         return _flight_summary(config, db)
     elif config.report_type == "pilot_hours":
@@ -62,8 +61,8 @@ def generate_report(config: ReportConfig, db: Session = Depends(get_db), user: U
     return {"error": "Unknown report type"}
 
 
-@router.post("/generate/pdf")
-def generate_report_pdf(config: ReportConfig, db: Session = Depends(get_db), user: User = Depends(require_pilot)):
+@router.post("/generate/pdf", responses=responses(401))
+def generate_report_pdf(config: ReportConfig, db: DBSession, user: PilotUser):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt

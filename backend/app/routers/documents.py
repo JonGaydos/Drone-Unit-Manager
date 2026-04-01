@@ -7,17 +7,16 @@ file-type validation and path-traversal protection.
 import os
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.database import get_db
+from app.constants import DOCUMENT_NOT_FOUND, ACCESS_DENIED
+from app.deps import DBSession, CurrentUser, PilotUser
 from app.models.document import Document
-from app.models.user import User
-from app.routers.auth import get_current_user, require_pilot
 from app.schemas.document import DocumentOut
+from app.responses import responses
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
@@ -36,8 +35,10 @@ def _doc_to_out(doc: Document) -> DocumentOut:
     return out
 
 
-@router.post("/upload", response_model=DocumentOut)
+@router.post("/upload", response_model=DocumentOut, responses=responses(400, 413))
 async def upload_document(
+    db: DBSession,
+    admin: PilotUser,
     file: UploadFile = File(...),
     entity_type: str = Form(...),
     entity_id: int = Form(...),
@@ -45,8 +46,6 @@ async def upload_document(
     title: str = Form(...),
     notes: str | None = Form(default=None),
     folder_id: int | None = Form(default=None),
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_pilot),
 ):
     """Upload a document and attach it to a pilot, vehicle, or certification.
 
@@ -116,11 +115,10 @@ async def upload_document(
 
 @router.get("", response_model=list[DocumentOut])
 def list_documents(
+    db: DBSession,
+    user: CurrentUser,
     entity_type: str | None = None,
-    entity_id: int | None = None,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
+    entity_id: int | None = None):
     """List documents with optional filtering by entity type and ID.
 
     Args:
@@ -139,11 +137,11 @@ def list_documents(
     return [_doc_to_out(r) for r in rows]
 
 
-@router.get("/{doc_id}/view")
+@router.get("/{doc_id}/view", responses=responses(403, 404))
 def view_document(
     doc_id: int,
-    db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    db: DBSession,
+    _user: CurrentUser,
 ):
     """Serve a document file for viewing or download.
 
@@ -158,13 +156,13 @@ def view_document(
     """
     doc = db.query(Document).filter(Document.id == doc_id).first()
     if not doc:
-        raise HTTPException(status_code=404, detail="Document not found")
+        raise HTTPException(status_code=404, detail=DOCUMENT_NOT_FOUND)
 
     # Path traversal prevention
     resolved = Path(doc.file_path).resolve()
     upload_root = Path(settings.UPLOAD_DIR).resolve()
     if not str(resolved).startswith(str(upload_root)):
-        raise HTTPException(status_code=403, detail="Access denied")
+        raise HTTPException(status_code=403, detail=ACCESS_DENIED)
 
     file_path = Path(doc.file_path)
     if not file_path.exists():
@@ -192,12 +190,12 @@ class DocumentUpdate(BaseModel):
     folder_id: int | None = None
 
 
-@router.patch("/{doc_id}", response_model=DocumentOut)
+@router.patch("/{doc_id}", response_model=DocumentOut, responses=responses(404))
 def update_document(
     doc_id: int,
     data: DocumentUpdate,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_pilot),
+    db: DBSession,
+    user: PilotUser,
 ):
     """Update a document's metadata (title, type, notes, folder).
 
@@ -210,7 +208,7 @@ def update_document(
     """
     doc = db.query(Document).filter(Document.id == doc_id).first()
     if not doc:
-        raise HTTPException(status_code=404, detail="Document not found")
+        raise HTTPException(status_code=404, detail=DOCUMENT_NOT_FOUND)
     update_fields = data.model_dump(exclude_unset=True)
     for key, value in update_fields.items():
         setattr(doc, key, value)
@@ -219,17 +217,17 @@ def update_document(
     return _doc_to_out(doc)
 
 
-@router.delete("/{doc_id}")
+@router.delete("/{doc_id}", responses=responses(404))
 def delete_document(
     doc_id: int,
-    db: Session = Depends(get_db),
-    admin: User = Depends(require_pilot),
+    db: DBSession,
+    admin: PilotUser,
 ):
     """Delete a document record and remove the file from disk."""
     from app.services.audit import log_action
     doc = db.query(Document).filter(Document.id == doc_id).first()
     if not doc:
-        raise HTTPException(status_code=404, detail="Document not found")
+        raise HTTPException(status_code=404, detail=DOCUMENT_NOT_FOUND)
 
     file_path = Path(doc.file_path)
     if file_path.exists():

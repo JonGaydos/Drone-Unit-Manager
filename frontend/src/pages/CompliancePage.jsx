@@ -8,10 +8,14 @@ import {
 } from 'lucide-react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 
+function getScoreTheme(score) {
+  if (score > 80) return { color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30' }
+  if (score > 60) return { color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/30' }
+  return { color: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/30' }
+}
+
 function ScoreCircle({ score }) {
-  const color = score > 80 ? 'text-emerald-400' : score > 60 ? 'text-amber-400' : 'text-red-400'
-  const bgColor = score > 80 ? 'bg-emerald-500/10' : score > 60 ? 'bg-amber-500/10' : 'bg-red-500/10'
-  const borderColor = score > 80 ? 'border-emerald-500/30' : score > 60 ? 'border-amber-500/30' : 'border-red-500/30'
+  const { color, bg: bgColor, border: borderColor } = getScoreTheme(score)
   const circumference = 2 * Math.PI * 54
   const offset = circumference - (score / 100) * circumference
 
@@ -292,9 +296,9 @@ export default function CompliancePage() {
           </div>
         ) : (
           <div className="divide-y divide-border">
-            {attentionItems.map((item, i) => (
+            {attentionItems.map((item) => (
               <button
-                key={i}
+                key={`${item.severity}-${item.label}`}
                 onClick={() => navigate(item.link)}
                 className="w-full flex items-center gap-3 px-5 py-3 hover:bg-secondary/50 transition-colors text-left"
               >

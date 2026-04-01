@@ -1,16 +1,14 @@
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from sqlalchemy import func, extract
-from sqlalchemy.orm import Session
 
-from app.database import get_db
+from app.deps import DBSession, CurrentUser
+from app.responses import responses
 from app.models.flight import Flight
 from app.models.pilot import Pilot
 from app.models.vehicle import Vehicle
 from app.models.certification import PilotCertification, CertificationType
-from app.models.user import User
-from app.routers.auth import get_current_user
 from app.schemas.dashboard import (
     DashboardStats, FlightsByPurpose, FlightsByYear,
     FlightsByYearPurpose, FlightsByPilot, AvgDurationByYear,
@@ -20,8 +18,8 @@ from app.schemas.dashboard import (
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
 
-@router.get("/stats", response_model=DashboardStats)
-def get_stats(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+@router.get("/stats", response_model=DashboardStats, responses=responses(401))
+def get_stats(db: DBSession, user: CurrentUser):
     total_flights = db.query(func.count(Flight.id)).scalar()
     total_seconds = db.query(func.coalesce(func.sum(Flight.duration_seconds), 0)).scalar()
     active_pilots = db.query(func.count(Pilot.id)).filter(Pilot.status == "active").scalar()
@@ -47,11 +45,10 @@ def get_stats(db: Session = Depends(get_db), user: User = Depends(get_current_us
 
 @router.get("/analytics/flights-by-purpose", response_model=list[FlightsByPurpose])
 def flights_by_purpose(
+    db: DBSession,
+    user: CurrentUser,
     date_from: date | None = None,
-    date_to: date | None = None,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
+    date_to: date | None = None):
     q = db.query(
         func.coalesce(Flight.purpose, "Unknown").label("purpose"),
         func.count(Flight.id).label("count"),
@@ -64,8 +61,8 @@ def flights_by_purpose(
     return [FlightsByPurpose(purpose=r.purpose, count=r.count) for r in rows]
 
 
-@router.get("/analytics/flights-by-year", response_model=list[FlightsByYear])
-def flights_by_year(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+@router.get("/analytics/flights-by-year", response_model=list[FlightsByYear], responses=responses(401))
+def flights_by_year(db: DBSession, user: CurrentUser):
     rows = db.query(
         extract("year", Flight.date).label("year"),
         func.count(Flight.id).label("count"),
@@ -75,8 +72,8 @@ def flights_by_year(db: Session = Depends(get_db), user: User = Depends(get_curr
 
 @router.get("/analytics/flights-by-year-purpose", response_model=list[FlightsByYearPurpose])
 def flights_by_year_purpose(
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    db: DBSession,
+    user: CurrentUser,
 ):
     rows = db.query(
         extract("year", Flight.date).label("year"),
@@ -88,11 +85,10 @@ def flights_by_year_purpose(
 
 @router.get("/analytics/flights-by-pilot", response_model=list[FlightsByPilot])
 def flights_by_pilot(
+    db: DBSession,
+    user: CurrentUser,
     date_from: date | None = None,
-    date_to: date | None = None,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
+    date_to: date | None = None):
     q = db.query(
         Pilot.first_name,
         Pilot.last_name,
@@ -114,8 +110,8 @@ def flights_by_pilot(
     ]
 
 
-@router.get("/analytics/avg-duration-by-year", response_model=list[AvgDurationByYear])
-def avg_duration_by_year(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+@router.get("/analytics/avg-duration-by-year", response_model=list[AvgDurationByYear], responses=responses(401))
+def avg_duration_by_year(db: DBSession, user: CurrentUser):
     rows = db.query(
         extract("year", Flight.date).label("year"),
         func.avg(Flight.duration_seconds).label("avg_seconds"),
@@ -123,8 +119,8 @@ def avg_duration_by_year(db: Session = Depends(get_db), user: User = Depends(get
     return [AvgDurationByYear(year=int(r.year), avg_seconds=float(r.avg_seconds)) for r in rows]
 
 
-@router.get("/analytics/monthly-flights", response_model=list[MonthlyFlights])
-def monthly_flights(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+@router.get("/analytics/monthly-flights", response_model=list[MonthlyFlights], responses=responses(401))
+def monthly_flights(db: DBSession, user: CurrentUser):
     rows = db.query(
         extract("year", Flight.date).label("year"),
         extract("month", Flight.date).label("month"),
@@ -133,8 +129,8 @@ def monthly_flights(db: Session = Depends(get_db), user: User = Depends(get_curr
     return [MonthlyFlights(year=int(r.year), month=int(r.month), count=r.count) for r in rows]
 
 
-@router.get("/analytics/vehicle-hours", response_model=list[VehicleHours])
-def vehicle_hours(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+@router.get("/analytics/vehicle-hours", response_model=list[VehicleHours], responses=responses(401))
+def vehicle_hours(db: DBSession, user: CurrentUser):
     rows = db.query(
         Vehicle.manufacturer,
         Vehicle.model,
@@ -152,8 +148,8 @@ def vehicle_hours(db: Session = Depends(get_db), user: User = Depends(get_curren
     ]
 
 
-@router.get("/analytics/pilot-hours", response_model=list[PilotHours])
-def pilot_hours(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+@router.get("/analytics/pilot-hours", response_model=list[PilotHours], responses=responses(401))
+def pilot_hours(db: DBSession, user: CurrentUser):
     rows = db.query(
         Pilot.first_name,
         Pilot.last_name,
@@ -172,8 +168,8 @@ def pilot_hours(db: Session = Depends(get_db), user: User = Depends(get_current_
     ]
 
 
-@router.get("/analytics/pilot-performance/{pilot_id}")
-def pilot_performance(pilot_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+@router.get("/analytics/pilot-performance/{pilot_id}", responses=responses(401, 404))
+def pilot_performance(pilot_id: int, db: DBSession, user: CurrentUser):
     from app.models.incident import Incident
     from app.models.training_log_pilot import TrainingLogPilot
     from app.models.mission_log_pilot import MissionLogPilot
@@ -240,8 +236,8 @@ def pilot_performance(pilot_id: int, db: Session = Depends(get_db), user: User =
     }
 
 
-@router.get("/analytics/fleet-health")
-def fleet_health(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+@router.get("/analytics/fleet-health", responses=responses(401))
+def fleet_health(db: DBSession, user: CurrentUser):
     from app.models.battery import Battery
     from app.models.maintenance_schedule import MaintenanceSchedule
 
@@ -303,8 +299,8 @@ def fleet_health(db: Session = Depends(get_db), user: User = Depends(get_current
     }
 
 
-@router.get("/compliance")
-def compliance_dashboard(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+@router.get("/compliance", responses=responses(401))
+def compliance_dashboard(db: DBSession, user: CurrentUser):
     from app.models.vehicle_registration import VehicleRegistration
     from app.models.maintenance_schedule import MaintenanceSchedule
     from app.models.incident import Incident
@@ -389,8 +385,8 @@ def _calc_compliance_score(pilots, exp_certs, vehicles, exp_regs, overdue, incid
     return max(0, round(100 - deductions))
 
 
-@router.get("/upcoming-expirations")
-def upcoming_expirations(days: int = 90, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+@router.get("/upcoming-expirations", responses=responses(401))
+def upcoming_expirations(db: DBSession, user: CurrentUser, days: int = 90):
     cutoff = date.today() + timedelta(days=days)
     rows = db.query(
         PilotCertification, Pilot, CertificationType,

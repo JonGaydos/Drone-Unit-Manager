@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { api } from '@/api/client'
-import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { useConfirm } from '@/hooks/useConfirm'
@@ -17,7 +16,6 @@ export default function AlertsPage() {
   const [count, setCount] = useState(0)
   const [severityFilter, setSeverityFilter] = useState('')
   const [loading, setLoading] = useState(true)
-  const { isAdmin } = useAuth()
   const toast = useToast()
   const [confirmProps, requestConfirm] = useConfirm()
 

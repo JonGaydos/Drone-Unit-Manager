@@ -1,15 +1,15 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.database import get_db
+from app.constants import TRAINING_LOG_NOT_FOUND
+from app.deps import DBSession, CurrentUser, PilotUser
+from app.responses import responses
 from app.models.training_log import TrainingLog
 from app.models.training_log_pilot import TrainingLogPilot
 from app.models.pilot import Pilot
 from app.models.vehicle import Vehicle
-from app.models.user import User
-from app.routers.auth import get_current_user, require_pilot
 from app.schemas.training_log import (
     TrainingLogCreate, TrainingLogUpdate, TrainingLogOut,
     TrainingLogPilotIn, TrainingLogPilotOut,
@@ -56,15 +56,24 @@ def _sync_pilots(db: Session, training: TrainingLog, pilots_data: list[TrainingL
 
 @router.get("", response_model=list[TrainingLogOut])
 def list_training_logs(
+
+    db: DBSession,
+
+    user: CurrentUser,
+
     date_from: date | None = None,
+
     date_to: date | None = None,
+
     pilot_id: int | None = None,
+
     training_type: str | None = None,
+
     outcome: str | None = None,
+
     limit: int = Query(default=200, le=1000),
+
     offset: int = 0,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
 ):
     q = db.query(TrainingLog)
     if date_from:
@@ -85,16 +94,16 @@ def list_training_logs(
     return [_training_to_out(t, db) for t in trainings]
 
 
-@router.get("/{training_id}", response_model=TrainingLogOut)
-def get_training_log(training_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+@router.get("/{training_id}", response_model=TrainingLogOut, responses=responses(401, 404))
+def get_training_log(training_id: int, db: DBSession, user: CurrentUser):
     training = db.query(TrainingLog).filter(TrainingLog.id == training_id).first()
     if not training:
-        raise HTTPException(status_code=404, detail="Training log not found")
+        raise HTTPException(status_code=404, detail=TRAINING_LOG_NOT_FOUND)
     return _training_to_out(training, db)
 
 
-@router.post("", response_model=TrainingLogOut)
-def create_training_log(data: TrainingLogCreate, db: Session = Depends(get_db), admin: User = Depends(require_pilot)):
+@router.post("", response_model=TrainingLogOut, responses=responses(401))
+def create_training_log(data: TrainingLogCreate, db: DBSession, admin: PilotUser):
     from app.services.audit import log_action
     pilots_data = data.pilots
     training_dict = data.model_dump(exclude={"pilots"})
@@ -114,11 +123,11 @@ def create_training_log(data: TrainingLogCreate, db: Session = Depends(get_db), 
     return _training_to_out(training, db)
 
 
-@router.patch("/{training_id}", response_model=TrainingLogOut)
-def update_training_log(training_id: int, data: TrainingLogUpdate, db: Session = Depends(get_db), admin: User = Depends(require_pilot)):
+@router.patch("/{training_id}", response_model=TrainingLogOut, responses=responses(401, 404))
+def update_training_log(training_id: int, data: TrainingLogUpdate, db: DBSession, admin: PilotUser):
     training = db.query(TrainingLog).filter(TrainingLog.id == training_id).first()
     if not training:
-        raise HTTPException(status_code=404, detail="Training log not found")
+        raise HTTPException(status_code=404, detail=TRAINING_LOG_NOT_FOUND)
     update_data = data.model_dump(exclude_unset=True)
     pilots_data = update_data.pop("pilots", None)
     for key, value in update_data.items():
@@ -132,23 +141,23 @@ def update_training_log(training_id: int, data: TrainingLogUpdate, db: Session =
     return _training_to_out(training, db)
 
 
-@router.delete("/{training_id}")
-def delete_training_log(training_id: int, db: Session = Depends(get_db), admin: User = Depends(require_pilot)):
+@router.delete("/{training_id}", responses=responses(401, 404))
+def delete_training_log(training_id: int, db: DBSession, admin: PilotUser):
     from app.services.audit import log_action
     training = db.query(TrainingLog).filter(TrainingLog.id == training_id).first()
     if not training:
-        raise HTTPException(status_code=404, detail="Training log not found")
+        raise HTTPException(status_code=404, detail=TRAINING_LOG_NOT_FOUND)
     log_action(db, admin.id, admin.display_name, "delete", "training_log", training.id, training.title or f"Training {training.id}")
     db.delete(training)
     db.commit()
     return {"ok": True}
 
 
-@router.post("/{training_id}/pilots", response_model=TrainingLogPilotOut)
-def add_pilot_to_training(training_id: int, data: TrainingLogPilotIn, db: Session = Depends(get_db), admin: User = Depends(require_pilot)):
+@router.post("/{training_id}/pilots", response_model=TrainingLogPilotOut, responses=responses(401, 404))
+def add_pilot_to_training(training_id: int, data: TrainingLogPilotIn, db: DBSession, admin: PilotUser):
     training = db.query(TrainingLog).filter(TrainingLog.id == training_id).first()
     if not training:
-        raise HTTPException(status_code=404, detail="Training log not found")
+        raise HTTPException(status_code=404, detail=TRAINING_LOG_NOT_FOUND)
     tp = TrainingLogPilot(
         training_log_id=training_id,
         pilot_id=data.pilot_id,
@@ -165,8 +174,8 @@ def add_pilot_to_training(training_id: int, data: TrainingLogPilotIn, db: Sessio
     return out
 
 
-@router.delete("/{training_id}/pilots/{pilot_id}")
-def remove_pilot_from_training(training_id: int, pilot_id: int, db: Session = Depends(get_db), admin: User = Depends(require_pilot)):
+@router.delete("/{training_id}/pilots/{pilot_id}", responses=responses(401, 404))
+def remove_pilot_from_training(training_id: int, pilot_id: int, db: DBSession, admin: PilotUser):
     tp = db.query(TrainingLogPilot).filter(
         TrainingLogPilot.training_log_id == training_id,
         TrainingLogPilot.pilot_id == pilot_id,

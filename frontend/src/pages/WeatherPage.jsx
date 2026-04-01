@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { api } from '@/api/client'
 import { useToast } from '@/contexts/ToastContext'
 import {
@@ -59,7 +59,7 @@ export default function WeatherPage() {
     try {
       const data = await api.get(`/weather/briefing?lat=${lat}&lon=${lon}`)
       setBriefing(data)
-      saveRecentLocation(parseFloat(lat), parseFloat(lon), addressInput || null)
+      saveRecentLocation(Number.parseFloat(lat), Number.parseFloat(lon), addressInput || null)
     } catch (err) {
       toast.error(err.message)
     } finally {
@@ -87,9 +87,9 @@ export default function WeatherPage() {
     // Try to parse address input as coordinates
     const parts = addressInput.trim().split(/[,\s]+/)
     if (parts.length >= 2) {
-      const lat = parseFloat(parts[0])
-      const lon = parseFloat(parts[1])
-      if (!isNaN(lat) && !isNaN(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+      const lat = Number.parseFloat(parts[0])
+      const lon = Number.parseFloat(parts[1])
+      if (!Number.isNaN(lat) && !Number.isNaN(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
         setCoords({ lat: lat.toString(), lon: lon.toString() })
         fetchBriefing(lat, lon)
         return
@@ -134,8 +134,8 @@ export default function WeatherPage() {
 
             <form onSubmit={handleSubmit} className="space-y-3">
               <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">Coordinates or Address</label>
-                <input
+                <label htmlFor="coordinates-or-address" className="block text-xs font-medium text-muted-foreground mb-1">Coordinates or Address</label>
+                <input id="coordinates-or-address"
                   type="text"
                   value={addressInput}
                   onChange={e => setAddressInput(e.target.value)}
@@ -145,16 +145,16 @@ export default function WeatherPage() {
               </div>
 
               <LocationPickerMap
-                lat={coords.lat ? parseFloat(coords.lat) : null}
-                lon={coords.lon ? parseFloat(coords.lon) : null}
+                lat={coords.lat ? Number.parseFloat(coords.lat) : null}
+                lon={coords.lon ? Number.parseFloat(coords.lon) : null}
                 onSelect={(newLat, newLon) => setCoords({ lat: newLat.toFixed(6), lon: newLon.toFixed(6) })}
                 height="250px"
               />
 
               <div className="grid grid-cols-2 gap-2 mt-2">
                 <div>
-                  <label className="block text-xs font-medium text-muted-foreground mb-1">Latitude</label>
-                  <input
+                  <label htmlFor="latitude" className="block text-xs font-medium text-muted-foreground mb-1">Latitude</label>
+                  <input id="latitude"
                     type="number" step="any" value={coords.lat}
                     onChange={e => setCoords({ ...coords, lat: e.target.value })}
                     placeholder="40.7128"
@@ -162,8 +162,8 @@ export default function WeatherPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-muted-foreground mb-1">Longitude</label>
-                  <input
+                  <label htmlFor="longitude" className="block text-xs font-medium text-muted-foreground mb-1">Longitude</label>
+                  <input id="longitude"
                     type="number" step="any" value={coords.lon}
                     onChange={e => setCoords({ ...coords, lon: e.target.value })}
                     placeholder="-74.0060"
@@ -200,9 +200,9 @@ export default function WeatherPage() {
           {recentLocations.length > 0 && (
             <div className="bg-card border border-border rounded-xl p-4 space-y-2">
               <h4 className="text-sm font-medium text-muted-foreground">Recent Locations</h4>
-              {recentLocations.map((loc, i) => (
+              {recentLocations.map((loc) => (
                 <button
-                  key={i}
+                  key={`${loc.lat}-${loc.lon}`}
                   onClick={() => {
                     setCoords({ lat: loc.lat.toString(), lon: loc.lon.toString() })
                     setAddressInput(loc.label || '')
@@ -249,8 +249,8 @@ export default function WeatherPage() {
                   </div>
                 </div>
                 <div className="mt-4 space-y-1.5">
-                  {advisory.reasons.map((r, i) => (
-                    <div key={i} className="flex items-start gap-2 text-sm">
+                  {advisory.reasons.map((r) => (
+                    <div key={r} className="flex items-start gap-2 text-sm">
                       <span className={`mt-0.5 w-1.5 h-1.5 rounded-full shrink-0 ${statusCfg.color}`} />
                       <span className="text-foreground">{r}</span>
                     </div>
@@ -351,11 +351,7 @@ export default function WeatherPage() {
                     </div>
                     <div>
                       <p className={`text-lg font-bold ${
-                        briefing.metar?.flight_category === 'VFR' ? 'text-emerald-400' :
-                        briefing.metar?.flight_category === 'MVFR' ? 'text-blue-400' :
-                        briefing.metar?.flight_category === 'IFR' ? 'text-red-400' :
-                        briefing.metar?.flight_category === 'LIFR' ? 'text-fuchsia-400' :
-                        'text-foreground'
+                        { VFR: 'text-emerald-400', MVFR: 'text-blue-400', IFR: 'text-red-400', LIFR: 'text-fuchsia-400' }[briefing.metar?.flight_category] || 'text-foreground'
                       }`}>
                         {briefing.metar?.flight_category ?? '--'}
                       </p>
@@ -466,8 +462,8 @@ export default function WeatherPage() {
                   <div className="px-4 pb-4">
                     <p className="text-xs font-medium text-muted-foreground mb-2">Hourly Detail</p>
                     <div className="flex gap-2 overflow-x-auto pb-2">
-                      {(briefing.forecast || []).map((f, i) => (
-                        <div key={i} className="shrink-0 w-28 bg-secondary/50 rounded-lg p-3 text-center">
+                      {(briefing.forecast || []).map((f) => (
+                        <div key={f.time} className="shrink-0 w-28 bg-secondary/50 rounded-lg p-3 text-center">
                           <p className="text-xs font-medium text-foreground">
                             {new Date(f.time).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
                           </p>

@@ -20,7 +20,7 @@ export default function MediaPage() {
   const [showUpload, setShowUpload] = useState(false)
   const [showEdit, setShowEdit] = useState(null)
   const [lightbox, setLightbox] = useState(null)
-  const { isAdmin, isPilot, isSupervisor } = useAuth()
+  const { isPilot } = useAuth()
   const [confirmProps, requestConfirm] = useConfirm()
 
   const load = useCallback(() => {
@@ -158,6 +158,9 @@ export default function MediaPage() {
                       {/* Thumbnail */}
                       <div
                         className="aspect-[4/3] bg-muted/30 relative cursor-pointer overflow-hidden"
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setLightbox(idx) } }}
                         onClick={() => setLightbox(idx)}
                       >
                         <img
@@ -256,7 +259,7 @@ function LightboxModal({ photos, index, onClose, onPrev, onNext, formatDate, for
   const API = import.meta.env.VITE_API_URL || '/api'
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center" onClick={onClose}>
+    <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center" role="presentation" onClick={onClose}>
       <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
         <button
           onClick={(e) => { e.stopPropagation(); setShowInfo(s => !s) }}
@@ -292,7 +295,7 @@ function LightboxModal({ photos, index, onClose, onPrev, onNext, formatDate, for
       )}
 
       {/* Image */}
-      <div className="max-w-[90vw] max-h-[85vh] flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+      <div className="max-w-[90vw] max-h-[85vh] flex items-center justify-center" role="dialog" onClick={(e) => e.stopPropagation()}>
         <img
           src={`${API}/photos/${photo.id}/view`}
           alt={photo.title || photo.filename}
@@ -376,7 +379,7 @@ function UploadModal({ pilots, onClose, onSuccess }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" role="presentation" onClick={onClose}>
       <div
         className="bg-card border border-border rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
@@ -388,7 +391,7 @@ function UploadModal({ pilots, onClose, onSuccess }) {
         <div className="p-4 space-y-4">
           {/* File drop */}
           <div
-            onClick={() => fileRef.current?.click()}
+            role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileRef.current?.click() } }} onClick={() => fileRef.current?.click()}
             className="border-2 border-dashed border-border rounded-xl p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
           >
             {preview ? (
@@ -408,8 +411,8 @@ function UploadModal({ pilots, onClose, onSuccess }) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Title</label>
-            <input
+            <label htmlFor="title" className="block text-sm font-medium text-foreground mb-1">Title</label>
+            <input id="title"
               value={title} onChange={(e) => setTitle(e.target.value)}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               placeholder="Optional title"
@@ -417,8 +420,8 @@ function UploadModal({ pilots, onClose, onSuccess }) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Description</label>
-            <textarea
+            <label htmlFor="description" className="block text-sm font-medium text-foreground mb-1">Description</label>
+            <textarea id="description"
               value={description} onChange={(e) => setDescription(e.target.value)}
               rows={2}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
@@ -427,8 +430,8 @@ function UploadModal({ pilots, onClose, onSuccess }) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Date Taken</label>
-            <input
+            <label htmlFor="date-taken" className="block text-sm font-medium text-foreground mb-1">Date Taken</label>
+            <input id="date-taken"
               type="date" value={dateTaken} onChange={(e) => setDateTaken(e.target.value)}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
@@ -466,7 +469,11 @@ function UploadModal({ pilots, onClose, onSuccess }) {
             disabled={files.length === 0 || uploading}
             className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
           >
-            {uploading ? (uploadProgress || 'Uploading...') : (files.length > 1 ? `Upload ${files.length} Photos` : 'Upload')}
+            {(() => {
+              if (uploading) return uploadProgress || 'Uploading...'
+              if (files.length > 1) return `Upload ${files.length} Photos`
+              return 'Upload'
+            })()}
           </button>
         </div>
       </div>
@@ -522,7 +529,7 @@ function EditModal({ photo, pilots, onClose, onSuccess }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" role="presentation" onClick={onClose}>
       <div
         className="bg-card border border-border rounded-xl w-full max-w-lg"
         onClick={(e) => e.stopPropagation()}
@@ -533,23 +540,23 @@ function EditModal({ photo, pilots, onClose, onSuccess }) {
         </div>
         <div className="p-4 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Title</label>
-            <input
+            <label htmlFor="title-1" className="block text-sm font-medium text-foreground mb-1">Title</label>
+            <input id="title-1"
               value={title} onChange={(e) => setTitle(e.target.value)}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Description</label>
-            <textarea
+            <label htmlFor="description-1" className="block text-sm font-medium text-foreground mb-1">Description</label>
+            <textarea id="description-1"
               value={description} onChange={(e) => setDescription(e.target.value)}
               rows={2}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Date Taken</label>
-            <input
+            <label htmlFor="date-taken-1" className="block text-sm font-medium text-foreground mb-1">Date Taken</label>
+            <input id="date-taken-1"
               type="date" value={dateTaken} onChange={(e) => setDateTaken(e.target.value)}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />

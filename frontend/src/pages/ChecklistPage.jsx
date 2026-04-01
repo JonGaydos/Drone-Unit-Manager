@@ -66,8 +66,8 @@ function TemplateModal({ template, vehicles, onSave, onClose }) {
   const models = [...new Set((vehicles || []).map(v => `${v.manufacturer} ${v.model}`).filter(Boolean))]
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-2xl shadow-xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" role="presentation" onClick={onClose}>
+      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-2xl shadow-xl max-h-[90vh] overflow-y-auto" role="dialog" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-foreground">
             {template ? 'Edit Template' : 'Create Checklist Template'}
@@ -78,8 +78,8 @@ function TemplateModal({ template, vehicles, onSave, onClose }) {
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Name *</label>
-            <input
+            <label htmlFor="name" className="block text-sm font-medium text-foreground mb-1">Name *</label>
+            <input id="name"
               type="text"
               value={form.name}
               onChange={e => setForm({ ...form, name: e.target.value })}
@@ -89,8 +89,8 @@ function TemplateModal({ template, vehicles, onSave, onClose }) {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Description</label>
-            <textarea
+            <label htmlFor="description" className="block text-sm font-medium text-foreground mb-1">Description</label>
+            <textarea id="description"
               value={form.description}
               onChange={e => setForm({ ...form, description: e.target.value })}
               rows={2}
@@ -99,8 +99,8 @@ function TemplateModal({ template, vehicles, onSave, onClose }) {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Vehicle Model</label>
-            <select
+            <label htmlFor="vehicle-model" className="block text-sm font-medium text-foreground mb-1">Vehicle Model</label>
+            <select id="vehicle-model"
               value={form.vehicle_model}
               onChange={e => setForm({ ...form, vehicle_model: e.target.value })}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
@@ -117,7 +117,7 @@ function TemplateModal({ template, vehicles, onSave, onClose }) {
             </label>
             <div className="space-y-2">
               {form.items.map((item, idx) => (
-                <div key={idx} className="flex items-center gap-2 bg-secondary/50 border border-border rounded-lg p-2">
+                <div key={`checklist-item-${idx}-${item}`} className="flex items-center gap-2 bg-secondary/50 border border-border rounded-lg p-2">
                   <div className="flex flex-col gap-0.5">
                     <button type="button" onClick={() => moveItem(idx, -1)} className="text-muted-foreground hover:text-foreground" disabled={idx === 0}>
                       <ChevronDown className="w-3 h-3 rotate-180" />
@@ -191,7 +191,7 @@ function CompleteModal({ templates, pilots, vehicles, onSave, onClose }) {
 
   useEffect(() => {
     if (templateId) {
-      const t = templates.find(t => t.id === parseInt(templateId))
+      const t = templates.find(t => t.id === Number.parseInt(templateId, 10))
       setSelectedTemplate(t)
       setResponses((t?.items || []).map(item => ({
         label: item.label,
@@ -223,9 +223,9 @@ function CompleteModal({ templates, pilots, vehicles, onSave, onClose }) {
     setSaving(true)
     try {
       await onSave({
-        template_id: parseInt(templateId),
-        pilot_id: parseInt(form.pilot_id),
-        vehicle_id: form.vehicle_id ? parseInt(form.vehicle_id) : null,
+        template_id: Number.parseInt(templateId, 10),
+        pilot_id: Number.parseInt(form.pilot_id, 10),
+        vehicle_id: form.vehicle_id ? Number.parseInt(form.vehicle_id, 10) : null,
         responses: responses.map(r => ({ label: r.label, checked: r.checked, notes: r.notes })),
         notes: form.notes || null,
       })
@@ -237,8 +237,8 @@ function CompleteModal({ templates, pilots, vehicles, onSave, onClose }) {
   const allRequiredChecked = responses.filter(r => r.required).every(r => r.checked)
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-2xl shadow-xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" role="presentation" onClick={onClose}>
+      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-2xl shadow-xl max-h-[90vh] overflow-y-auto" role="dialog" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-foreground">Complete Pre-Flight Checklist</h2>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
@@ -248,8 +248,8 @@ function CompleteModal({ templates, pilots, vehicles, onSave, onClose }) {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Template *</label>
-              <select
+              <label htmlFor="template" className="block text-sm font-medium text-foreground mb-1">Template *</label>
+              <select id="template"
                 value={templateId}
                 onChange={e => setTemplateId(e.target.value)}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
@@ -260,8 +260,8 @@ function CompleteModal({ templates, pilots, vehicles, onSave, onClose }) {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Pilot *</label>
-              <select
+              <label htmlFor="pilot" className="block text-sm font-medium text-foreground mb-1">Pilot *</label>
+              <select id="pilot"
                 value={form.pilot_id}
                 onChange={e => setForm({ ...form, pilot_id: e.target.value })}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
@@ -272,8 +272,8 @@ function CompleteModal({ templates, pilots, vehicles, onSave, onClose }) {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Vehicle</label>
-              <select
+              <label htmlFor="vehicle" className="block text-sm font-medium text-foreground mb-1">Vehicle</label>
+              <select id="vehicle"
                 value={form.vehicle_id}
                 onChange={e => setForm({ ...form, vehicle_id: e.target.value })}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
@@ -297,7 +297,7 @@ function CompleteModal({ templates, pilots, vehicles, onSave, onClose }) {
               {/* Checklist Items */}
               <div className="space-y-1">
                 {responses.map((resp, idx) => (
-                  <div key={idx} className={`border rounded-lg p-3 transition-colors ${resp.checked ? 'bg-emerald-500/5 border-emerald-500/30' : 'bg-secondary/30 border-border'}`}>
+                  <div key={`resp-${idx}-${resp.label}`} className={`border rounded-lg p-3 transition-colors ${resp.checked ? 'bg-emerald-500/5 border-emerald-500/30' : 'bg-secondary/30 border-border'}`}>
                     <div className="flex items-start gap-3">
                       <button
                         type="button"
@@ -311,7 +311,7 @@ function CompleteModal({ templates, pilots, vehicles, onSave, onClose }) {
                         {resp.checked && <CheckCircle className="w-3.5 h-3.5" />}
                       </button>
                       <div className="flex-1">
-                        <span className={`text-sm ${resp.checked ? 'text-foreground' : 'text-foreground'}`}>
+                        <span className="text-sm text-foreground">
                           {resp.label}
                           {resp.required && <span className="text-red-400 ml-1">*</span>}
                         </span>
@@ -338,8 +338,8 @@ function CompleteModal({ templates, pilots, vehicles, onSave, onClose }) {
           )}
 
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Overall Notes</label>
-            <textarea
+            <label htmlFor="overall-notes" className="block text-sm font-medium text-foreground mb-1">Overall Notes</label>
+            <textarea id="overall-notes"
               value={form.notes}
               onChange={e => setForm({ ...form, notes: e.target.value })}
               rows={2}
@@ -373,8 +373,8 @@ function ViewCompletionModal({ completion, onClose }) {
   if (!completion) return null
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" role="presentation" onClick={onClose}>
+      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto" role="dialog" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-foreground">Checklist Details</h2>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
@@ -414,8 +414,8 @@ function ViewCompletionModal({ completion, onClose }) {
           </div>
 
           <div className="space-y-1.5 mt-3">
-            {(completion.responses || []).map((r, i) => (
-              <div key={i} className={`flex items-start gap-2 p-2 rounded-lg ${r.checked ? 'bg-emerald-500/5' : 'bg-red-500/5'}`}>
+            {(completion.responses || []).map((r) => (
+              <div key={r.label} className={`flex items-start gap-2 p-2 rounded-lg ${r.checked ? 'bg-emerald-500/5' : 'bg-red-500/5'}`}>
                 {r.checked
                   ? <CheckCircle className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
                   : <XCircle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />

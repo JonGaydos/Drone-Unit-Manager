@@ -1,13 +1,11 @@
 """Telemetry data endpoints for flight path and sensor visualization."""
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, HTTPException
 
-from app.database import get_db, get_telemetry_db
+from app.deps import DBSession, TelemetryDBSession, CurrentUser
 from app.models.flight import Flight
 from app.models.telemetry import TelemetryPoint
-from app.models.user import User
-from app.routers.auth import get_current_user
+from app.responses import responses
 
 router = APIRouter(prefix="/api/telemetry", tags=["telemetry"])
 
@@ -66,14 +64,13 @@ def _downsample_with_averaging(points, max_points):
     return result
 
 
-@router.get("/flight/{flight_id}")
+@router.get("/flight/{flight_id}", responses=responses(404))
 def get_flight_telemetry(
     flight_id: int,
-    max_points: int = 2000,
-    db: Session = Depends(get_db),
-    tdb: Session = Depends(get_telemetry_db),
-    user: User = Depends(get_current_user),
-):
+    db: DBSession,
+    tdb: TelemetryDBSession,
+    user: CurrentUser,
+    max_points: int = 2000):
     """Get telemetry data points for a specific flight.
 
     Returns up to max_points telemetry records. When the flight has more

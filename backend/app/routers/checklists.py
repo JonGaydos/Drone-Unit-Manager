@@ -1,17 +1,17 @@
 from datetime import datetime, date
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.database import get_db
+from app.constants import TEMPLATE_NOT_FOUND
+from app.deps import DBSession, CurrentUser, PilotUser, SupervisorUser
 from app.models.checklist import ChecklistTemplate, ChecklistCompletion
 from app.models.pilot import Pilot
 from app.models.vehicle import Vehicle
-from app.models.user import User
-from app.routers.auth import get_current_user, require_pilot, require_supervisor
+from app.responses import responses
 
 router = APIRouter(prefix="/api/checklists", tags=["checklists"])
 
@@ -55,10 +55,9 @@ class ChecklistCompleteIn(BaseModel):
 
 @router.get("/templates")
 def list_templates(
-    active_only: bool = True,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
+    db: DBSession,
+    user: CurrentUser,
+    active_only: bool = True):
     q = db.query(ChecklistTemplate)
     if active_only:
         q = q.filter(ChecklistTemplate.is_active.is_(True))
@@ -66,23 +65,23 @@ def list_templates(
     return [_template_out(t) for t in templates]
 
 
-@router.get("/templates/{template_id}")
+@router.get("/templates/{template_id}", responses=responses(404))
 def get_template(
     template_id: int,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    db: DBSession,
+    user: CurrentUser,
 ):
     t = db.query(ChecklistTemplate).filter(ChecklistTemplate.id == template_id).first()
     if not t:
-        raise HTTPException(status_code=404, detail="Template not found")
+        raise HTTPException(status_code=404, detail=TEMPLATE_NOT_FOUND)
     return _template_out(t)
 
 
-@router.post("/templates")
+@router.post("/templates", responses=responses(400))
 def create_template(
     data: ChecklistTemplateCreate,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_supervisor),
+    db: DBSession,
+    user: SupervisorUser,
 ):
     if not data.items:
         raise HTTPException(status_code=400, detail="At least one checklist item is required")
@@ -98,16 +97,16 @@ def create_template(
     return _template_out(template)
 
 
-@router.patch("/templates/{template_id}")
+@router.patch("/templates/{template_id}", responses=responses(404))
 def update_template(
     template_id: int,
     data: ChecklistTemplateUpdate,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_supervisor),
+    db: DBSession,
+    user: SupervisorUser,
 ):
     t = db.query(ChecklistTemplate).filter(ChecklistTemplate.id == template_id).first()
     if not t:
-        raise HTTPException(status_code=404, detail="Template not found")
+        raise HTTPException(status_code=404, detail=TEMPLATE_NOT_FOUND)
     updates = data.model_dump(exclude_unset=True)
     if "items" in updates and updates["items"] is not None:
         updates["items"] = [item if isinstance(item, dict) else item.model_dump() for item in data.items]
@@ -118,29 +117,29 @@ def update_template(
     return _template_out(t)
 
 
-@router.delete("/templates/{template_id}")
+@router.delete("/templates/{template_id}", responses=responses(404))
 def delete_template(
     template_id: int,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_supervisor),
+    db: DBSession,
+    user: SupervisorUser,
 ):
     t = db.query(ChecklistTemplate).filter(ChecklistTemplate.id == template_id).first()
     if not t:
-        raise HTTPException(status_code=404, detail="Template not found")
+        raise HTTPException(status_code=404, detail=TEMPLATE_NOT_FOUND)
     db.delete(t)
     db.commit()
     return {"ok": True}
 
 
-@router.post("/complete")
+@router.post("/complete", responses=responses(404))
 def complete_checklist(
     data: ChecklistCompleteIn,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_pilot),
+    db: DBSession,
+    user: PilotUser,
 ):
     template = db.query(ChecklistTemplate).filter(ChecklistTemplate.id == data.template_id).first()
     if not template:
-        raise HTTPException(status_code=404, detail="Template not found")
+        raise HTTPException(status_code=404, detail=TEMPLATE_NOT_FOUND)
 
     # Validate pilot exists
     pilot = db.query(Pilot).filter(Pilot.id == data.pilot_id).first()
@@ -170,14 +169,13 @@ def complete_checklist(
 
 @router.get("/completions")
 def list_completions(
+    db: DBSession,
+    user: CurrentUser,
     pilot_id: Optional[int] = None,
     vehicle_id: Optional[int] = None,
     flight_plan_id: Optional[int] = None,
     date_from: Optional[date] = None,
-    date_to: Optional[date] = None,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
+    date_to: Optional[date] = None):
     q = db.query(ChecklistCompletion)
     if pilot_id:
         q = q.filter(ChecklistCompletion.pilot_id == pilot_id)
@@ -193,11 +191,11 @@ def list_completions(
     return [_completion_out(c, db) for c in completions]
 
 
-@router.get("/completions/{completion_id}")
+@router.get("/completions/{completion_id}", responses=responses(404))
 def get_completion(
     completion_id: int,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    db: DBSession,
+    user: CurrentUser,
 ):
     c = db.query(ChecklistCompletion).filter(ChecklistCompletion.id == completion_id).first()
     if not c:

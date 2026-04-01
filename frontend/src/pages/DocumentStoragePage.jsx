@@ -27,7 +27,7 @@ export default function DocumentStoragePage() {
   const [expandedFolders, setExpandedFolders] = useState(new Set())
   const [search, setSearch] = useState('')
   const [confirmDeleteFolder, setConfirmDeleteFolder] = useState(null)
-  const { isAdmin, isPilot, isSupervisor } = useAuth()
+  const { isPilot, isSupervisor } = useAuth()
   const toast = useToast()
 
   const loadFolders = useCallback(async () => {

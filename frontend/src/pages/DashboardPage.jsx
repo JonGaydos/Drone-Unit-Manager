@@ -406,7 +406,7 @@ function FlightStatusBadge({ status }) {
     completed: 'bg-blue-500/15 text-blue-400',
   }
 
-  const label = status ? status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'Unknown'
+  const label = status ? status.replaceAll('_', ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'Unknown'
   const style = styles[status] || 'bg-muted text-muted-foreground'
 
   return (

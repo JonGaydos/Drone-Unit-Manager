@@ -258,7 +258,7 @@ def send_email(to_address: str, subject: str, html_body: str, db: Session) -> bo
     msg["To"] = to_address
 
     # Plain text fallback
-    plain = f"Daily Digest for Drone Unit Manager. View the full digest in the app."
+    plain = "Daily Digest for Drone Unit Manager. View the full digest in the app."
     msg.attach(MIMEText(plain, "plain"))
     msg.attach(MIMEText(html_body, "html"))
 

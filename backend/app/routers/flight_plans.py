@@ -1,18 +1,19 @@
 from datetime import date, datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.database import get_db
 from app.models.flight_approval import FlightPlan
 from app.models.pilot import Pilot
 from app.models.vehicle import Vehicle
 from app.models.user import User
-from app.routers.auth import get_current_user, require_pilot, require_supervisor
+from app.constants import FLIGHT_PLAN_NOT_FOUND
+from app.deps import DBSession, CurrentUser, PilotUser, SupervisorUser
 from app.services.audit import log_action
+from app.responses import responses
 
 router = APIRouter(prefix="/api/flight-plans", tags=["flight-plans"])
 
@@ -68,25 +69,25 @@ class FlightPlanOut(BaseModel):
     title: str
     date_planned: datetime
     pilot_id: int
-    vehicle_id: Optional[int]
-    location: Optional[str]
-    lat: Optional[float]
-    lon: Optional[float]
-    purpose: Optional[str]
-    case_number: Optional[str]
-    description: Optional[str]
-    max_altitude_planned: Optional[float]
-    estimated_duration_min: Optional[int]
+    vehicle_id: Optional[int] = None
+    location: Optional[str] = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    purpose: Optional[str] = None
+    case_number: Optional[str] = None
+    description: Optional[str] = None
+    max_altitude_planned: Optional[float] = None
+    estimated_duration_min: Optional[int] = None
     checklist_completed: bool
-    weather_briefing_id: Optional[int]
+    weather_briefing_id: Optional[int] = None
     status: str
     submitted_by_id: int
-    reviewed_by_id: Optional[int]
-    review_date: Optional[datetime]
-    review_notes: Optional[str]
-    denial_reason: Optional[str]
-    linked_flight_id: Optional[int]
-    notes: Optional[str]
+    reviewed_by_id: Optional[int] = None
+    review_date: Optional[datetime] = None
+    review_notes: Optional[str] = None
+    denial_reason: Optional[str] = None
+    linked_flight_id: Optional[int] = None
+    notes: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     pilot_name: Optional[str] = None
@@ -126,23 +127,32 @@ def _enrich(plan: FlightPlan, db: Session) -> FlightPlanOut:
 
 
 
-@router.get("/pending/count")
-def pending_count(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+@router.get("/pending/count", responses=responses(401))
+def pending_count(db: DBSession, user: CurrentUser):
     count = db.query(func.count(FlightPlan.id)).filter(FlightPlan.status == "pending").scalar() or 0
     return {"count": count}
 
 
 @router.get("", response_model=list[FlightPlanOut])
 def list_flight_plans(
+
+    db: DBSession,
+
+    user: CurrentUser,
+
     status: str | None = None,
+
     pilot_id: int | None = None,
+
     date_from: date | None = None,
+
     date_to: date | None = None,
+
     submitted_by_id: int | None = None,
+
     page: int = Query(default=1, ge=1),
+
     per_page: int = Query(default=50, le=200),
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
 ):
     q = db.query(FlightPlan)
     if status:
@@ -159,16 +169,16 @@ def list_flight_plans(
     return [_enrich(p, db) for p in plans]
 
 
-@router.get("/{plan_id}", response_model=FlightPlanOut)
-def get_flight_plan(plan_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+@router.get("/{plan_id}", response_model=FlightPlanOut, responses=responses(401, 404))
+def get_flight_plan(plan_id: int, db: DBSession, user: CurrentUser):
     plan = db.query(FlightPlan).filter(FlightPlan.id == plan_id).first()
     if not plan:
-        raise HTTPException(status_code=404, detail="Flight plan not found")
+        raise HTTPException(status_code=404, detail=FLIGHT_PLAN_NOT_FOUND)
     return _enrich(plan, db)
 
 
-@router.post("", response_model=FlightPlanOut)
-def create_flight_plan(data: FlightPlanCreate, db: Session = Depends(get_db), user: User = Depends(require_pilot)):
+@router.post("", response_model=FlightPlanOut, responses=responses(401, 422))
+def create_flight_plan(data: FlightPlanCreate, db: DBSession, user: PilotUser):
     # Validate altitude (FAA Part 107: max 400ft AGL)
     if data.max_altitude_planned is not None:
         if data.max_altitude_planned < 0:
@@ -202,11 +212,11 @@ def create_flight_plan(data: FlightPlanCreate, db: Session = Depends(get_db), us
     return _enrich(plan, db)
 
 
-@router.patch("/{plan_id}", response_model=FlightPlanOut)
-def update_flight_plan(plan_id: int, data: FlightPlanUpdate, db: Session = Depends(get_db), user: User = Depends(require_pilot)):
+@router.patch("/{plan_id}", response_model=FlightPlanOut, responses=responses(400, 401, 403, 404))
+def update_flight_plan(plan_id: int, data: FlightPlanUpdate, db: DBSession, user: PilotUser):
     plan = db.query(FlightPlan).filter(FlightPlan.id == plan_id).first()
     if not plan:
-        raise HTTPException(status_code=404, detail="Flight plan not found")
+        raise HTTPException(status_code=404, detail=FLIGHT_PLAN_NOT_FOUND)
     if user.role not in ("admin", "supervisor") and plan.submitted_by_id != user.id:
         raise HTTPException(status_code=403, detail="You can only edit your own flight plans")
     if plan.status not in ("pending", "denied") and user.role != "admin":
@@ -223,11 +233,11 @@ def update_flight_plan(plan_id: int, data: FlightPlanUpdate, db: Session = Depen
     return _enrich(plan, db)
 
 
-@router.post("/{plan_id}/approve", response_model=FlightPlanOut)
-def approve_flight_plan(plan_id: int, data: ApproveRequest, db: Session = Depends(get_db), user: User = Depends(require_supervisor)):
+@router.post("/{plan_id}/approve", response_model=FlightPlanOut, responses=responses(400, 401, 404))
+def approve_flight_plan(plan_id: int, data: ApproveRequest, db: DBSession, user: SupervisorUser):
     plan = db.query(FlightPlan).filter(FlightPlan.id == plan_id).first()
     if not plan:
-        raise HTTPException(status_code=404, detail="Flight plan not found")
+        raise HTTPException(status_code=404, detail=FLIGHT_PLAN_NOT_FOUND)
     if plan.status != "pending":
         raise HTTPException(status_code=400, detail="Only pending plans can be approved")
     plan.status = "approved"
@@ -241,11 +251,11 @@ def approve_flight_plan(plan_id: int, data: ApproveRequest, db: Session = Depend
     return _enrich(plan, db)
 
 
-@router.post("/{plan_id}/deny", response_model=FlightPlanOut)
-def deny_flight_plan(plan_id: int, data: DenyRequest, db: Session = Depends(get_db), user: User = Depends(require_supervisor)):
+@router.post("/{plan_id}/deny", response_model=FlightPlanOut, responses=responses(400, 401, 404))
+def deny_flight_plan(plan_id: int, data: DenyRequest, db: DBSession, user: SupervisorUser):
     plan = db.query(FlightPlan).filter(FlightPlan.id == plan_id).first()
     if not plan:
-        raise HTTPException(status_code=404, detail="Flight plan not found")
+        raise HTTPException(status_code=404, detail=FLIGHT_PLAN_NOT_FOUND)
     if plan.status != "pending":
         raise HTTPException(status_code=400, detail="Only pending plans can be denied")
     plan.status = "denied"
@@ -260,11 +270,11 @@ def deny_flight_plan(plan_id: int, data: DenyRequest, db: Session = Depends(get_
     return _enrich(plan, db)
 
 
-@router.post("/{plan_id}/cancel", response_model=FlightPlanOut)
-def cancel_flight_plan(plan_id: int, db: Session = Depends(get_db), user: User = Depends(require_pilot)):
+@router.post("/{plan_id}/cancel", response_model=FlightPlanOut, responses=responses(400, 401, 403, 404))
+def cancel_flight_plan(plan_id: int, db: DBSession, user: PilotUser):
     plan = db.query(FlightPlan).filter(FlightPlan.id == plan_id).first()
     if not plan:
-        raise HTTPException(status_code=404, detail="Flight plan not found")
+        raise HTTPException(status_code=404, detail=FLIGHT_PLAN_NOT_FOUND)
     if plan.submitted_by_id != user.id and user.role not in ("admin", "supervisor"):
         raise HTTPException(status_code=403, detail="Only the submitter can cancel a flight plan")
     if plan.status not in ("pending", "approved"):
@@ -277,11 +287,11 @@ def cancel_flight_plan(plan_id: int, db: Session = Depends(get_db), user: User =
     return _enrich(plan, db)
 
 
-@router.delete("/{plan_id}")
-def delete_flight_plan(plan_id: int, db: Session = Depends(get_db), user: User = Depends(require_supervisor)):
+@router.delete("/{plan_id}", responses=responses(401, 404))
+def delete_flight_plan(plan_id: int, db: DBSession, user: SupervisorUser):
     plan = db.query(FlightPlan).filter(FlightPlan.id == plan_id).first()
     if not plan:
-        raise HTTPException(status_code=404, detail="Flight plan not found")
+        raise HTTPException(status_code=404, detail=FLIGHT_PLAN_NOT_FOUND)
     title = plan.title
     log_action(db, user.id, user.display_name, "delete", "flight_plan", plan_id, title,
                details=f"Deleted flight plan: {title}")

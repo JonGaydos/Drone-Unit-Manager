@@ -6,7 +6,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { useConfirm } from '@/hooks/useConfirm'
 import { normalizeDateValue } from '@/lib/utils'
 import { MISSION_STATUS_COLORS } from '@/lib/constants'
-import { sortByName, sortVehicles, formatStatusText, sortPilotsActiveFirst, vehicleDisplayName } from '@/lib/formatters'
+import { sortVehicles, formatStatusText, sortPilotsActiveFirst, vehicleDisplayName } from '@/lib/formatters'
 import { Link } from 'react-router-dom'
 import { Plus, Search, X, ChevronDown, ChevronUp, Trash2, Download, Loader2 } from 'lucide-react'
 
@@ -36,49 +36,53 @@ function MissionModal({ pilots, vehicles, purposes, onSave, onClose, initial }) 
   const handleSubmit = async (e) => {
     e.preventDefault()
     const data = { ...form }
-    if (data.vehicle_id) data.vehicle_id = parseInt(data.vehicle_id)
+    if (data.vehicle_id) data.vehicle_id = Number.parseInt(data.vehicle_id, 10)
     else delete data.vehicle_id
-    if (data.man_hours) data.man_hours = parseFloat(data.man_hours)
+    if (data.man_hours) data.man_hours = Number.parseFloat(data.man_hours)
     else data.man_hours = 0
     Object.keys(data).forEach(k => { if (data[k] === '') delete data[k] })
     data.pilots = pilotEntries
       .filter(p => p.pilot_id)
-      .map(p => ({ pilot_id: parseInt(p.pilot_id), role: p.role || null, hours: parseFloat(p.hours) || 0 }))
+      .map(p => ({ pilot_id: Number.parseInt(p.pilot_id, 10), role: p.role || null, hours: Number.parseFloat(p.hours) || 0 }))
     setSaving(true)
     try { await onSave(data) } finally { setSaving(false) }
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-2xl shadow-xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" role="presentation" onClick={onClose}>
+      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-2xl shadow-xl max-h-[90vh] overflow-y-auto" role="dialog" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-semibold text-foreground mb-4">{initial ? 'Edit Mission' : 'Add Mission'}</h2>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Date *</label>
-              <input type="date" required value={form.date} onChange={e => setForm({...form, date: e.target.value})}
+              <label htmlFor="date" className="block text-sm font-medium text-foreground mb-1">Date *</label>
+              <input id="date" type="date" required value={form.date} onChange={e => setForm({...form, date: e.target.value})}
                 onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) setForm(prev => ({...prev, date: n})) }}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Status</label>
-              <select value={form.status} onChange={e => setForm({...form, status: e.target.value})}
+              <label htmlFor="status" className="block text-sm font-medium text-foreground mb-1">Status</label>
+              <select id="status" value={form.status} onChange={e => setForm({...form, status: e.target.value})}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                 {STATUS_OPTIONS.map(s => <option key={s} value={s}>{formatStatusText(s)}</option>)}
               </select>
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Title *</label>
-            <input type="text" required value={form.title} onChange={e => setForm({...form, title: e.target.value})}
+            <label htmlFor="title" className="block text-sm font-medium text-foreground mb-1">Title *</label>
+            <input id="title" type="text" required value={form.title} onChange={e => setForm({...form, title: e.target.value})}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Reason / Purpose</label>
+            <label htmlFor="reason-purpose" className="block text-sm font-medium text-foreground mb-1">Reason / Purpose</label>
             {purposes && purposes.length > 0 ? (
               <div className="flex gap-2">
-                <select
-                  value={purposes.includes(form.reason) ? form.reason : (form.reason ? '__other__' : '')}
+                <select id="reason-purpose"
+                  value={(() => {
+                    if (purposes.includes(form.reason)) return form.reason
+                    if (form.reason) return '__other__'
+                    return ''
+                  })()}
                   onChange={e => {
                     if (e.target.value === '__other__') setForm({...form, reason: ''})
                     else setForm({...form, reason: e.target.value})
@@ -102,49 +106,49 @@ function MissionModal({ pilots, vehicles, purposes, onSave, onClose, initial }) 
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Location</label>
-              <input type="text" value={form.location || ''} onChange={e => setForm({...form, location: e.target.value})}
+              <label htmlFor="location" className="block text-sm font-medium text-foreground mb-1">Location</label>
+              <input id="location" type="text" value={form.location || ''} onChange={e => setForm({...form, location: e.target.value})}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Case Number</label>
-              <input type="text" value={form.case_number || ''} onChange={e => setForm({...form, case_number: e.target.value})}
+              <label htmlFor="case-number" className="block text-sm font-medium text-foreground mb-1">Case Number</label>
+              <input id="case-number" type="text" value={form.case_number || ''} onChange={e => setForm({...form, case_number: e.target.value})}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Man Hours</label>
-              <input type="number" step="0.1" value={form.man_hours} onChange={e => setForm({...form, man_hours: e.target.value})}
+              <label htmlFor="man-hours" className="block text-sm font-medium text-foreground mb-1">Man Hours</label>
+              <input id="man-hours" type="number" step="0.1" value={form.man_hours} onChange={e => setForm({...form, man_hours: e.target.value})}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Start Time</label>
-              <input type="datetime-local" value={form.start_time || ''} onChange={e => setForm({...form, start_time: e.target.value})}
+              <label htmlFor="start-time" className="block text-sm font-medium text-foreground mb-1">Start Time</label>
+              <input id="start-time" type="datetime-local" value={form.start_time || ''} onChange={e => setForm({...form, start_time: e.target.value})}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">End Time</label>
-              <input type="datetime-local" value={form.end_time || ''} onChange={e => setForm({...form, end_time: e.target.value})}
+              <label htmlFor="end-time" className="block text-sm font-medium text-foreground mb-1">End Time</label>
+              <input id="end-time" type="datetime-local" value={form.end_time || ''} onChange={e => setForm({...form, end_time: e.target.value})}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Drone Used</label>
-            <select value={form.vehicle_id} onChange={e => setForm({...form, vehicle_id: e.target.value})}
+            <label htmlFor="drone-used" className="block text-sm font-medium text-foreground mb-1">Drone Used</label>
+            <select id="drone-used" value={form.vehicle_id} onChange={e => setForm({...form, vehicle_id: e.target.value})}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
               <option value="">Select vehicle...</option>
               {sortVehicles(vehicles).map(v => <option key={v.id} value={v.id}>{vehicleDisplayName(v)}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Description</label>
-            <textarea rows={2} value={form.description || ''} onChange={e => setForm({...form, description: e.target.value})}
+            <label htmlFor="description" className="block text-sm font-medium text-foreground mb-1">Description</label>
+            <textarea id="description" rows={2} value={form.description || ''} onChange={e => setForm({...form, description: e.target.value})}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Notes</label>
-            <textarea rows={2} value={form.notes || ''} onChange={e => setForm({...form, notes: e.target.value})}
+            <label htmlFor="notes" className="block text-sm font-medium text-foreground mb-1">Notes</label>
+            <textarea id="notes" rows={2} value={form.notes || ''} onChange={e => setForm({...form, notes: e.target.value})}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
           </div>
 
@@ -156,7 +160,7 @@ function MissionModal({ pilots, vehicles, purposes, onSave, onClose, initial }) 
             </div>
             {pilotEntries.length === 0 && <p className="text-xs text-muted-foreground">No pilots added yet.</p>}
             {pilotEntries.map((pe, i) => (
-              <div key={i} className="flex items-center gap-2 mb-2">
+              <div key={`pilot-${i}-${pe.pilot_id || 'empty'}`} className="flex items-center gap-2 mb-2">
                 <select value={pe.pilot_id} onChange={e => updatePilotEntry(i, 'pilot_id', e.target.value)}
                   className="flex-1 px-2 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm">
                   <option value="">Select pilot...</option>
@@ -179,7 +183,8 @@ function MissionModal({ pilots, vehicles, purposes, onSave, onClose, initial }) 
 
           <div className="flex gap-2 pt-2">
             <button type="submit" disabled={saving} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2">
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : (initial ? 'Save Changes' : 'Add Mission')}
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+              {!saving && (initial ? 'Save Changes' : 'Add Mission')}
             </button>
             <button type="button" onClick={onClose} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm">Cancel</button>
           </div>
@@ -203,7 +208,7 @@ export default function MissionLogPage() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [filterPilot, setFilterPilot] = useState('')
-  const { isAdmin, isPilot, isSupervisor } = useAuth()
+  const { isPilot } = useAuth()
   const toast = useToast()
   const [confirmProps, requestConfirm] = useConfirm()
 

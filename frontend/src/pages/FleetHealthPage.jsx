@@ -112,19 +112,19 @@ export default function FleetHealthPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/30">
-                <th className="text-left px-4 py-2 text-foreground font-medium cursor-pointer select-none" onClick={() => handleSort('name')}>
+                <th className="text-left px-4 py-2 text-foreground font-medium cursor-pointer select-none" onClick={() => handleSort('name')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => handleSort('name'))() } }} tabIndex={0} role="columnheader">
                   Vehicle <SortIcon col="name" />
                 </th>
-                <th className="text-left px-4 py-2 text-foreground font-medium cursor-pointer select-none" onClick={() => handleSort('flights')}>
+                <th className="text-left px-4 py-2 text-foreground font-medium cursor-pointer select-none" onClick={() => handleSort('flights')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => handleSort('flights'))() } }} tabIndex={0} role="columnheader">
                   Flights <SortIcon col="flights" />
                 </th>
-                <th className="text-left px-4 py-2 text-foreground font-medium cursor-pointer select-none" onClick={() => handleSort('hours')}>
+                <th className="text-left px-4 py-2 text-foreground font-medium cursor-pointer select-none" onClick={() => handleSort('hours')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => handleSort('hours'))() } }} tabIndex={0} role="columnheader">
                   Hours <SortIcon col="hours" />
                 </th>
-                <th className="text-left px-4 py-2 text-foreground font-medium cursor-pointer select-none hidden md:table-cell" onClick={() => handleSort('last_flight')}>
+                <th className="text-left px-4 py-2 text-foreground font-medium cursor-pointer select-none hidden md:table-cell" onClick={() => handleSort('last_flight')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => handleSort('last_flight'))() } }} tabIndex={0} role="columnheader">
                   Last Flight <SortIcon col="last_flight" />
                 </th>
-                <th className="text-left px-4 py-2 text-foreground font-medium cursor-pointer select-none" onClick={() => handleSort('overdue_maintenance')}>
+                <th className="text-left px-4 py-2 text-foreground font-medium cursor-pointer select-none" onClick={() => handleSort('overdue_maintenance')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => handleSort('overdue_maintenance'))() } }} tabIndex={0} role="columnheader">
                   Overdue <SortIcon col="overdue_maintenance" />
                 </th>
               </tr>
@@ -175,7 +175,7 @@ export default function FleetHealthPage() {
               />
               <Bar dataKey="health" radius={[0, 4, 4, 0]} name="Health %">
                 {batteryChartData.map((entry, i) => (
-                  <Cell key={i} fill={entry.fill} />
+                  <Cell key={entry.name} fill={entry.fill} />
                 ))}
               </Bar>
             </BarChart>

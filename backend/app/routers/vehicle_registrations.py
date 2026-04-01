@@ -1,15 +1,13 @@
 from datetime import date, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
 
-from app.database import get_db
+from app.deps import DBSession, CurrentUser, AdminUser
 from app.models.vehicle import Vehicle
 from app.models.vehicle_registration import VehicleRegistration
-from app.models.user import User
-from app.routers.auth import get_current_user, require_admin
+from app.responses import responses
 
 router = APIRouter(tags=["vehicle-registrations"])
 
@@ -25,22 +23,22 @@ class RegistrationCreate(BaseModel):
 class RegistrationOut(BaseModel):
     id: int
     vehicle_id: int
-    registration_number: Optional[str]
-    registration_date: Optional[date]
-    expiry_date: Optional[date]
-    document_id: Optional[int]
+    registration_number: Optional[str] = None
+    registration_date: Optional[date] = None
+    expiry_date: Optional[date] = None
+    document_id: Optional[int] = None
     is_current: bool
-    notes: Optional[str]
+    notes: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
 
-@router.post("/api/vehicles/{vehicle_id}/registrations", response_model=RegistrationOut)
+@router.post("/api/vehicles/{vehicle_id}/registrations", response_model=RegistrationOut, responses=responses(404))
 def create_registration(
     vehicle_id: int,
     data: RegistrationCreate,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_admin),
+    db: DBSession,
+    user: AdminUser,
 ):
     vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
     if not vehicle:
@@ -74,8 +72,8 @@ def create_registration(
 @router.get("/api/vehicles/{vehicle_id}/registrations", response_model=list[RegistrationOut])
 def list_registrations(
     vehicle_id: int,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    db: DBSession,
+    user: CurrentUser,
 ):
     regs = (
         db.query(VehicleRegistration)
@@ -86,11 +84,11 @@ def list_registrations(
     return [RegistrationOut.model_validate(r) for r in regs]
 
 
-@router.delete("/api/vehicle-registrations/{reg_id}")
+@router.delete("/api/vehicle-registrations/{reg_id}", responses=responses(404))
 def delete_registration(
     reg_id: int,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_admin),
+    db: DBSession,
+    user: AdminUser,
 ):
     reg = db.query(VehicleRegistration).filter(VehicleRegistration.id == reg_id).first()
     if not reg:

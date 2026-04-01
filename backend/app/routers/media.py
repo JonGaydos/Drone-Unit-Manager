@@ -1,10 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, HTTPException
 
-from app.database import get_db
+from app.deps import CurrentUser, DBSession
 from app.models.media import MediaFile
-from app.models.user import User
-from app.routers.auth import get_current_user
+from app.responses import responses
 from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
@@ -14,15 +12,15 @@ router = APIRouter(prefix="/api/media", tags=["media"])
 
 class MediaOut(BaseModel):
     id: int
-    external_uuid: Optional[str]
-    flight_id: Optional[int]
+    external_uuid: Optional[str] = None
+    flight_id: Optional[int] = None
     filename: str
     kind: str
-    captured_time: Optional[datetime]
-    size_bytes: Optional[int]
-    download_url: Optional[str]
+    captured_time: Optional[datetime] = None
+    size_bytes: Optional[int] = None
+    download_url: Optional[str] = None
     thumbnail_cached: bool
-    api_provider: Optional[str]
+    api_provider: Optional[str] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -30,13 +28,12 @@ class MediaOut(BaseModel):
 
 @router.get("", response_model=list[MediaOut])
 def list_media(
+    db: DBSession,
+    user: CurrentUser,
     flight_id: int | None = None,
     kind: str | None = None,
     limit: int = 100,
-    offset: int = 0,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
+    offset: int = 0):
     q = db.query(MediaFile)
     if flight_id:
         q = q.filter(MediaFile.flight_id == flight_id)
@@ -45,14 +42,14 @@ def list_media(
     return [MediaOut.model_validate(m) for m in q.order_by(MediaFile.captured_time.desc()).offset(offset).limit(limit).all()]
 
 
-@router.get("/count")
-def count_media(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+@router.get("/count", responses=responses(401))
+def count_media(db: DBSession, user: CurrentUser):
     from sqlalchemy import func
     return {"count": db.query(func.count(MediaFile.id)).scalar()}
 
 
-@router.delete("/{media_id}")
-def delete_media(media_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+@router.delete("/{media_id}", responses=responses(401, 404))
+def delete_media(media_id: int, db: DBSession, user: CurrentUser):
     media = db.query(MediaFile).filter(MediaFile.id == media_id).first()
     if not media:
         raise HTTPException(status_code=404, detail="Media not found")

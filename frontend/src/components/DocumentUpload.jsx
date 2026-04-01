@@ -148,8 +148,8 @@ export default function DocumentUpload({ entityType, entityId, folderId }) {
         <div className="px-4 py-3 border-b border-border bg-muted/20 space-y-2">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <div>
-              <label className="block text-xs font-medium text-foreground mb-1">Title</label>
-              <input
+              <label htmlFor="title" className="block text-xs font-medium text-foreground mb-1">Title</label>
+              <input id="title"
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
@@ -158,8 +158,8 @@ export default function DocumentUpload({ entityType, entityId, folderId }) {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-foreground mb-1">Type</label>
-              <select
+              <label htmlFor="type" className="block text-xs font-medium text-foreground mb-1">Type</label>
+              <select id="type"
                 value={docType}
                 onChange={(e) => setDocType(e.target.value)}
                 className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm"
@@ -246,7 +246,7 @@ export default function DocumentUpload({ entityType, entityId, folderId }) {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-foreground truncate">{doc.title || doc.filename}</p>
                 <p className="text-xs text-muted-foreground">
-                  {doc.document_type !== 'general' ? doc.document_type.replace(/_/g, ' ') + ' | ' : ''}
+                  {doc.document_type !== 'general' ? doc.document_type.replaceAll('_', ' ') + ' | ' : ''}
                   {doc.mime_type}
                 </p>
               </div>
