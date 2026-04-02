@@ -94,9 +94,9 @@ def check_geofences(
 
     user: CurrentUser,
 
-    lat: Annotated[float, Query()],
+    lat: Annotated[float, Query(...)],
 
-    lon: Annotated[float, Query()],
+    lon: Annotated[float, Query(...)],
 ):
     """Check if a lat/lon point is inside any active geofence."""
     fences = db.query(Geofence).filter(Geofence.is_active.is_(True)).all()

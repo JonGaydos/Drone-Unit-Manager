@@ -159,8 +159,8 @@ def _fetch_local_weather(lat: float, lon: float) -> tuple[dict | None, list | No
 def get_weather_briefing(
     db: DBSession,
     user: CurrentUser,
-    lat: Annotated[float, Query()],
-    lon: Annotated[float, Query()],
+    lat: Annotated[float, Query(...)],
+    lon: Annotated[float, Query(...)],
 ):
     """Get comprehensive weather briefing for a GPS location."""
     result = {
