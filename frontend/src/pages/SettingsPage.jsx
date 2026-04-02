@@ -626,6 +626,7 @@ export default function SettingsPage() {
                 <label htmlFor={`weather-${t.key}`} className="block text-xs text-muted-foreground mb-1">{t.label}</label>
                 <input
                   id={`weather-${t.key}`}
+                  key={`weather-${t.key}-${weatherThresholds[t.key] ?? t.default}`}
                   type="number"
                   step="any"
                   defaultValue={weatherThresholds[t.key] ?? t.default}

@@ -168,15 +168,26 @@ function ProviderCard({ provider, settings, onSave, onTest, onSync }) {
             <button onClick={handleTest} disabled={testing} className="px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90 flex items-center gap-1.5 disabled:opacity-50">
               {testing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />} Test Connection
             </button>
-            <button onClick={() => handleSync(false)} disabled={syncing} className="px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90 flex items-center gap-1.5 disabled:opacity-50">
-              {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />} Sync Now
-            </button>
-            <button onClick={() => handleSync(true)} disabled={syncing} className="px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90 flex items-center gap-1.5 disabled:opacity-50">
-              <RefreshCw className="w-3.5 h-3.5" /> Full Sync
-            </button>
-            <button onClick={handleSyncTelemetry} disabled={syncingTelemetry} className="px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90 flex items-center gap-1.5 disabled:opacity-50" title="Fetch detailed telemetry data for up to 10 flights at a time">
-              {syncingTelemetry ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />} Sync Telemetry (10)
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <div className="flex flex-col items-start">
+                <button onClick={() => handleSync(false)} disabled={syncing} className="px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90 flex items-center gap-1.5 disabled:opacity-50">
+                  {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />} Sync Now
+                </button>
+                <span className="text-[10px] text-muted-foreground mt-0.5 px-1">New flights since last sync + telemetry</span>
+              </div>
+              <div className="flex flex-col items-start">
+                <button onClick={() => handleSync(true)} disabled={syncing} className="px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90 flex items-center gap-1.5 disabled:opacity-50">
+                  <RefreshCw className="w-3.5 h-3.5" /> Full Sync
+                </button>
+                <span className="text-[10px] text-muted-foreground mt-0.5 px-1">All flights + cleanup empties + telemetry</span>
+              </div>
+              <div className="flex flex-col items-start">
+                <button onClick={handleSyncTelemetry} disabled={syncingTelemetry} className="px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90 flex items-center gap-1.5 disabled:opacity-50">
+                  {syncingTelemetry ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />} Sync Telemetry (10)
+                </button>
+                <span className="text-[10px] text-muted-foreground mt-0.5 px-1">Fetch GPS/altitude data for 10 flights</span>
+              </div>
+            </div>
           </div>
         </div>
       )}
