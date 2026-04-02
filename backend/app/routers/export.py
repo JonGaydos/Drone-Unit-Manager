@@ -565,12 +565,18 @@ async def import_flight_log(
     Returns:
         Import result with flight_id, points_imported, and format_detected.
     """
-    if not file.filename.endswith(('.txt', '.csv', '.json', '.zip')):
-        raise HTTPException(400, "Only .txt, .csv, .json, and .zip files are supported")
+    if not file.filename.endswith(('.txt', '.csv', '.json', '.zip', '.xlsx', '.xls')):
+        raise HTTPException(400, "Only .txt, .csv, .json, .zip, and .xlsx files are supported")
 
     content = await file.read()
     if len(content) > settings.MAX_UPLOAD_SIZE:
         raise HTTPException(413, f"File too large. Maximum size is {settings.MAX_UPLOAD_SIZE // (1024*1024)}MB")
+
+    # Handle Excel files — route to Excel import
+    if file.filename.endswith(('.xlsx', '.xls')):
+        from app.services.excel_import import import_excel
+        result = import_excel(db, content)
+        return result
 
     from app.services.dji_import import import_flight_log as do_import
     from app.database import get_telemetry_db
