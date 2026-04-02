@@ -31,7 +31,7 @@ class Flight(Base):
     data_source: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     pilot_id: Mapped[Optional[int]] = mapped_column(ForeignKey("pilots.id"), nullable=True)
     vehicle_id: Mapped[Optional[int]] = mapped_column(ForeignKey("vehicles.id"), nullable=True)
-    date: Mapped[Optional[date]] = mapped_column(Date, nullable=True, index=True)
+    date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     takeoff_time: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     landing_time: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     duration_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
