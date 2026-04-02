@@ -176,6 +176,17 @@ docker compose up -d
 
 On first launch with an empty database, the application displays a setup wizard. Enter your organization name, your name, and create an admin account. No default credentials exist.
 
+### Recommended Getting Started Workflow
+
+Follow these steps in order for the best experience:
+
+1. **Initial Setup** — Complete the setup wizard to create your admin account and organization
+2. **Import Excel Data** — If you have existing flight data in Excel spreadsheets, import them first via Settings > Integrations > Flight Log Import. This creates your pilots, vehicles, and flight history in one step. You can also import Airdata CSV/JSON/ZIP or DJI .txt files at this stage.
+3. **Set Up Pilot Profiles** — Go to the Pilots page and add email addresses to each pilot. This is critical for API sync matching — the system matches API pilots to local profiles by email address.
+4. **Connect Skydio API** — Now go to Settings > Integrations > Skydio, enter your API credentials, and sync. Because pilots already have email addresses, the sync will automatically match Skydio users to your pilots.
+5. **Sync Telemetry** — After the initial sync, click "Sync Telemetry (10)" repeatedly to backfill GPS/altitude data for your flights. Each click fetches data for 10 flights.
+6. **Configure Settings** — Set up weather thresholds, certification types, sidebar layout, email notifications, and any other preferences.
+
 ### Skydio API Integration
 
 1. Log into Skydio Cloud at cloud.skydio.com
@@ -183,14 +194,20 @@ On first launch with an empty database, the application displays a setup wizard.
 3. Create a token with read access to: Flights, Flight Telemetry, Vehicles, Batteries, Controllers, Users, Attachments, Sensor Packages
 4. In Drone Unit Manager, go to Settings > Integrations tab > Skydio
 5. Enter the API Token and Token ID
-6. Click Test Connection, then Sync All
-7. Use the "Sync Telemetry (10)" button to fetch detailed telemetry for recent flights
+6. Click Test Connection, then Sync Now
 
-For automatic pilot matching, ensure each pilot's profile has their Skydio account email address.
+The sync buttons:
+- **Sync Now** — Fetches new flights since last sync, plus telemetry for up to 10 flights
+- **Full Sync** — Fetches all flights, cleans up empty records, plus telemetry
+- **Sync Telemetry (10)** — Fetches GPS/altitude telemetry data for 10 flights that don't have it yet. Click repeatedly to backfill all flights.
+
+For automatic pilot matching, ensure each pilot's profile has their Skydio account email address before syncing.
 
 ### Excel Import
 
-The application imports flight data from Excel spreadsheets with a sheet named "Skydio" containing these columns:
+The application imports flight data from Excel spreadsheets (.xlsx). Use the Flight Log Import section in Settings > Integrations with Auto-detect format selected.
+
+A sheet named "Skydio" should contain these columns:
 
 ```
 Flight ID, Vehicle, Pilot, Local Takeoff Time, Takeoff, Takeoff Address,
@@ -199,7 +216,7 @@ Sensor Package, Attachment (TOP), Attachment (BOTTOM), Attachment (LEFT),
 Attachment (RIGHT), Carrier(s), Purpose
 ```
 
-An optional "Pilot Info" sheet imports certification data.
+An optional "Pilot Info" sheet imports pilot profiles and certification data. The import automatically creates pilots and vehicles that don't exist yet.
 
 ### Airdata Import
 
