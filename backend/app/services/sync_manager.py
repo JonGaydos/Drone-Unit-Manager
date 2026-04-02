@@ -67,6 +67,7 @@ def _ensure_simple_equipment(db: Session, serial_raw: str | None, model_class, l
     serial = serial_raw.strip()
     if serial and not db.query(model_class).filter(model_class.serial_number == serial).first():
         db.add(model_class(serial_number=serial, status="active"))
+        db.flush()
         logger.info("Auto-created %s record: %s", label, serial)
 
 
@@ -81,9 +82,11 @@ def _ensure_attachment_record(db: Session, val: str):
         serial_inner = parts[1].rstrip(")")
         if not db.query(Attachment).filter(Attachment.serial_number == serial_inner).first():
             db.add(Attachment(serial_number=serial_inner, name=name, status="active"))
+            db.flush()
             logger.info("Auto-created attachment record: %s (%s)", name, serial_inner)
     else:
         db.add(Attachment(serial_number=serial, status="active"))
+        db.flush()
         logger.info("Auto-created attachment record: %s", serial)
 
 
