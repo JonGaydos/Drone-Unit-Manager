@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { STATUS_COLORS } from '@/lib/constants'
 import {
-  ArrowLeft, Gamepad2, Wrench, Edit, Save, X, Loader2
+  ArrowLeft, Gamepad2, Wrench, Edit, Save, X, Loader2, User, Activity, Calendar
 } from 'lucide-react'
 import DocumentUpload from '@/components/DocumentUpload'
 
@@ -15,18 +15,26 @@ export default function ControllerDetailPage() {
   const toast = useToast()
   const [controller, setController] = useState(null)
   const [maintenance, setMaintenance] = useState([])
+  const [pilot, setPilot] = useState(null)
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState(false)
   const [editForm, setEditForm] = useState({})
   const [saving, setSaving] = useState(false)
+  const [pilots, setPilots] = useState([])
 
   useEffect(() => {
     Promise.all([
       api.get(`/controllers/${id}`),
       api.get(`/maintenance?entity_type=controller&entity_id=${id}`).catch(() => []),
-    ]).then(([c, m]) => {
+      api.get('/pilots').catch(() => []),
+    ]).then(([c, m, allPilots]) => {
       setController(c)
       setMaintenance(m)
+      setPilots(allPilots)
+      if (c.assigned_pilot_id && allPilots.length) {
+        const found = allPilots.find(p => p.id === c.assigned_pilot_id)
+        setPilot(found || null)
+      }
     }).catch(() => {}).finally(() => setLoading(false))
   }, [id])
 
@@ -37,6 +45,7 @@ export default function ControllerDetailPage() {
       manufacturer: controller.manufacturer || '',
       model: controller.model || '',
       status: controller.status || 'active',
+      assigned_pilot_id: controller.assigned_pilot_id || '',
       notes: controller.notes || '',
     })
     setEditing(true)
@@ -50,8 +59,20 @@ export default function ControllerDetailPage() {
   const handleSave = async () => {
     setSaving(true)
     try {
-      const updated = await api.patch(`/controllers/${id}`, editForm)
+      const payload = { ...editForm }
+      if (payload.assigned_pilot_id === '') {
+        payload.assigned_pilot_id = null
+      } else {
+        payload.assigned_pilot_id = Number.parseInt(payload.assigned_pilot_id, 10) || null
+      }
+      const updated = await api.patch(`/controllers/${id}`, payload)
       setController(updated)
+      if (updated.assigned_pilot_id) {
+        const found = pilots.find(p => p.id === updated.assigned_pilot_id)
+        setPilot(found || null)
+      } else {
+        setPilot(null)
+      }
       setEditing(false)
     } catch (err) {
       toast.error(err.message)
@@ -64,6 +85,10 @@ export default function ControllerDetailPage() {
   if (!controller) return <div className="text-center text-muted-foreground py-12">Controller not found</div>
 
   const displayName = controller.nickname || controller.serial_number
+  const lastMaintenance = maintenance.length > 0
+    ? [...maintenance].sort((a, b) => (b.date || b.performed_date || '').localeCompare(a.date || a.performed_date || ''))[0]
+    : null
+  const lastMaintenanceDate = lastMaintenance ? (lastMaintenance.date || lastMaintenance.performed_date || '--') : '--'
 
   return (
     <div className="space-y-6">
@@ -111,6 +136,14 @@ export default function ControllerDetailPage() {
                       <option value="retired">Retired</option>
                     </select>
                   </div>
+                  <div>
+                    <label htmlFor="assigned-pilot" className="block text-xs font-medium text-muted-foreground mb-1">Assigned Pilot</label>
+                    <select id="assigned-pilot" value={editForm.assigned_pilot_id} onChange={e => setEditForm({...editForm, assigned_pilot_id: e.target.value})}
+                      className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm">
+                      <option value="">None</option>
+                      {pilots.map(p => <option key={p.id} value={p.id}>{p.full_name || `${p.first_name || ''} ${p.last_name || ''}`.trim() || `Pilot #${p.id}`}</option>)}
+                    </select>
+                  </div>
                 </div>
                 <div>
                   <label htmlFor="notes" className="block text-xs font-medium text-muted-foreground mb-1">Notes</label>
@@ -151,6 +184,48 @@ export default function ControllerDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Stats Row */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-500/15 flex items-center justify-center text-blue-400"><User className="w-5 h-5" /></div>
+          <div>
+            {pilot ? (
+              <Link to={`/pilots/${pilot.id}`} className="text-base font-bold text-primary hover:underline">
+                {pilot.full_name || `${pilot.first_name || ''} ${pilot.last_name || ''}`.trim() || `Pilot #${pilot.id}`}
+              </Link>
+            ) : (
+              <p className="text-base font-bold text-foreground">--</p>
+            )}
+            <p className="text-xs text-muted-foreground">Assigned Pilot</p>
+          </div>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center text-emerald-400"><Activity className="w-5 h-5" /></div>
+          <div>
+            <p className="text-base font-bold text-foreground capitalize">{controller.status || 'unknown'}</p>
+            <p className="text-xs text-muted-foreground">Status</p>
+          </div>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-amber-500/15 flex items-center justify-center text-amber-400"><Calendar className="w-5 h-5" /></div>
+          <div>
+            <p className="text-base font-bold text-foreground">{lastMaintenanceDate}</p>
+            <p className="text-xs text-muted-foreground">Last Maintenance</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Assigned Pilot */}
+      {pilot && (
+        <div className="bg-card border border-border rounded-xl p-4">
+          <h3 className="text-sm font-semibold text-foreground mb-2">Assigned Pilot</h3>
+          <Link to={`/pilots/${pilot.id}`} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-secondary rounded-lg text-sm text-foreground hover:bg-accent/30 transition-colors">
+            <User className="w-4 h-4 text-primary" />
+            {pilot.full_name || `${pilot.first_name || ''} ${pilot.last_name || ''}`.trim() || `Pilot #${pilot.id}`}
+          </Link>
+        </div>
+      )}
 
       {/* Maintenance History */}
       <div className="bg-card border border-border rounded-xl overflow-hidden">

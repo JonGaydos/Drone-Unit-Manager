@@ -51,6 +51,9 @@ const FleetPage = lazy(() => import('@/pages/FleetPage'))
 const VehicleDetailPage = lazy(() => import('@/pages/VehicleDetailPage'))
 const BatteryDetailPage = lazy(() => import('@/pages/BatteryDetailPage'))
 const ControllerDetailPage = lazy(() => import('@/pages/ControllerDetailPage'))
+const SensorDetailPage = lazy(() => import('@/pages/SensorDetailPage'))
+const AttachmentDetailPage = lazy(() => import('@/pages/AttachmentDetailPage'))
+const DockDetailPage = lazy(() => import('@/pages/DockDetailPage'))
 const CertificationsPage = lazy(() => import('@/pages/CertificationsPage'))
 const MaintenancePage = lazy(() => import('@/pages/MaintenancePage'))
 const MediaPage = lazy(() => import('@/pages/MediaPage'))
@@ -133,6 +136,9 @@ function AppRoutes() {
           <Route path="/fleet/vehicles/:id" element={<VehicleDetailPage />} />
           <Route path="/fleet/batteries/:id" element={<BatteryDetailPage />} />
           <Route path="/fleet/controllers/:id" element={<ControllerDetailPage />} />
+          <Route path="/fleet/sensors/:id" element={<SensorDetailPage />} />
+          <Route path="/fleet/attachments/:id" element={<AttachmentDetailPage />} />
+          <Route path="/fleet/docks/:id" element={<DockDetailPage />} />
           <Route path="/certifications" element={<CertificationsPage />} />
           <Route path="/maintenance" element={<MaintenancePage />} />
           <Route path="/media" element={<MediaPage />} />

@@ -295,7 +295,10 @@ const TAB_CONFIGS = {
     label: 'Docks',
     endpoint: '/docks',
     columns: [
-      { key: 'name', label: 'Name', primary: true },
+      { key: 'name', label: 'Name', primary: true, render: d => {
+        const name = d.name || d.serial_number || '—'
+        return <Link to={`/fleet/docks/${d.id}`} className="text-primary hover:underline">{name}</Link>
+      }},
       { key: 'serial_number', label: 'Serial' },
       { key: 'location_name', label: 'Location' },
       { key: 'lat', label: 'Lat', render: d => d.lat == null ? '—' : Number.parseFloat(d.lat).toFixed(6) },
@@ -318,7 +321,10 @@ const TAB_CONFIGS = {
     label: 'Sensors',
     endpoint: '/sensors',
     columns: [
-      { key: 'name', label: 'Name', primary: true },
+      { key: 'name', label: 'Name', primary: true, render: s => {
+        const name = s.name || s.serial_number || '—'
+        return <Link to={`/fleet/sensors/${s.id}`} className="text-primary hover:underline">{name}</Link>
+      }},
       { key: 'serial_number', label: 'Serial' },
       { key: 'type', label: 'Type' },
       { key: 'manufacturer', label: 'Manufacturer' },
@@ -341,7 +347,10 @@ const TAB_CONFIGS = {
     label: 'Attachments',
     endpoint: '/attachments',
     columns: [
-      { key: 'name', label: 'Name', primary: true },
+      { key: 'name', label: 'Name', primary: true, render: a => {
+        const name = a.name || a.serial_number || '—'
+        return <Link to={`/fleet/attachments/${a.id}`} className="text-primary hover:underline">{name}</Link>
+      }},
       { key: 'serial_number', label: 'Serial' },
       { key: 'type', label: 'Type' },
       { key: 'manufacturer', label: 'Manufacturer' },

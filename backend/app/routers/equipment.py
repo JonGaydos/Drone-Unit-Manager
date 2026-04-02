@@ -332,6 +332,15 @@ def get_controller(cid: int, db: DBSession, user: CurrentUser):
     return ControllerOut.model_validate(c)
 
 
+@router.get("/controllers/{cid}/stats", responses=responses(401, 404))
+def get_controller_stats(cid: int, db: DBSession, user: CurrentUser):
+    """Get basic stats for a controller."""
+    ctrl = db.query(Controller).filter(Controller.id == cid).first()
+    if not ctrl:
+        raise HTTPException(404, CONTROLLER_NOT_FOUND)
+    return {"total_flights": 0, "total_hours": 0, "assigned_pilot": ctrl.assigned_pilot_id}
+
+
 class DockCreate(BaseModel):
     serial_number: str
     name: Optional[str] = None
@@ -392,6 +401,23 @@ def delete_dock(did: int, db: DBSession, admin: AdminUser):
     db.delete(d)
     db.commit()
     return {"ok": True}
+
+
+@router.get("/docks/{did}", response_model=DockOut, responses=responses(401, 404))
+def get_dock(did: int, db: DBSession, user: CurrentUser):
+    d = db.query(Dock).filter(Dock.id == did).first()
+    if not d:
+        raise HTTPException(404, DOCK_NOT_FOUND)
+    return DockOut.model_validate(d)
+
+
+@router.get("/docks/{did}/stats", responses=responses(401, 404))
+def get_dock_stats(did: int, db: DBSession, user: CurrentUser):
+    """Get basic stats for a dock. Docks don't link to flights directly."""
+    d = db.query(Dock).filter(Dock.id == did).first()
+    if not d:
+        raise HTTPException(404, DOCK_NOT_FOUND)
+    return {"name": d.name, "location_name": d.location_name, "status": d.status}
 
 
 class SensorCreate(BaseModel):
@@ -456,6 +482,66 @@ def delete_sensor(sid: int, db: DBSession, admin: AdminUser):
     return {"ok": True}
 
 
+@router.get("/sensors/{sid}", response_model=SensorOut, responses=responses(401, 404))
+def get_sensor(sid: int, db: DBSession, user: CurrentUser):
+    s = db.query(SensorPackage).filter(SensorPackage.id == sid).first()
+    if not s:
+        raise HTTPException(404, SENSOR_NOT_FOUND)
+    return SensorOut.model_validate(s)
+
+
+@router.get("/sensors/{sid}/stats", responses=responses(401, 404))
+def get_sensor_stats(sid: int, db: DBSession, user: CurrentUser):
+    """Get flight stats for a sensor package."""
+    from app.models.flight import Flight
+    sensor = db.query(SensorPackage).filter(SensorPackage.id == sid).first()
+    if not sensor:
+        raise HTTPException(404, SENSOR_NOT_FOUND)
+    flight_count = db.query(func.count(Flight.id)).filter(Flight.sensor_package == sensor.serial_number).scalar()
+    total_seconds = db.query(func.coalesce(func.sum(Flight.duration_seconds), 0)).filter(Flight.sensor_package == sensor.serial_number).scalar()
+    return {"total_flights": flight_count, "total_hours": round(total_seconds / 3600, 2)}
+
+
+@router.get("/sensors/{sid}/flights", responses=responses(401, 404))
+def get_sensor_flights(sid: int, db: DBSession, user: CurrentUser):
+    """Get all flights that used a specific sensor package."""
+    from app.models.flight import Flight
+    from app.models.pilot import Pilot
+    sensor = db.query(SensorPackage).filter(SensorPackage.id == sid).first()
+    if not sensor:
+        raise HTTPException(404, SENSOR_NOT_FOUND)
+    flights = db.query(Flight).filter(Flight.sensor_package == sensor.serial_number).order_by(Flight.date.desc()).all()
+    return [
+        {
+            "id": f.id,
+            "date": str(f.date) if f.date else None,
+            "pilot_name": f"{f.pilot.first_name} {f.pilot.last_name}" if f.pilot else None,
+            "pilot_id": f.pilot_id,
+            "vehicle_name": f.vehicle.nickname or f"{f.vehicle.manufacturer} {f.vehicle.model}" if f.vehicle else None,
+            "duration_seconds": f.duration_seconds,
+            "purpose": f.purpose,
+            "max_altitude_m": f.max_altitude_m,
+        }
+        for f in flights
+    ]
+
+
+@router.get("/sensors/{sid}/pilots", responses=responses(401, 404))
+def get_sensor_pilots(sid: int, db: DBSession, user: CurrentUser):
+    """Get unique pilots who have used a specific sensor package."""
+    from app.models.flight import Flight
+    from app.models.pilot import Pilot
+    sensor = db.query(SensorPackage).filter(SensorPackage.id == sid).first()
+    if not sensor:
+        raise HTTPException(404, SENSOR_NOT_FOUND)
+    pilot_ids = db.query(Flight.pilot_id).filter(
+        Flight.sensor_package == sensor.serial_number,
+        Flight.pilot_id.isnot(None),
+    ).distinct().all()
+    pilots = db.query(Pilot).filter(Pilot.id.in_([p[0] for p in pilot_ids])).all()
+    return [{"id": p.id, "name": f"{p.first_name} {p.last_name}", "badge_number": p.badge_number} for p in pilots]
+
+
 class AttachmentCreate(BaseModel):
     serial_number: str
     name: Optional[str] = None
@@ -516,3 +602,97 @@ def delete_attachment(aid: int, db: DBSession, admin: AdminUser):
     db.delete(a)
     db.commit()
     return {"ok": True}
+
+
+@router.get("/attachments/{aid}", response_model=AttachmentOut, responses=responses(401, 404))
+def get_attachment(aid: int, db: DBSession, user: CurrentUser):
+    a = db.query(Attachment).filter(Attachment.id == aid).first()
+    if not a:
+        raise HTTPException(404, ATTACHMENT_NOT_FOUND)
+    return AttachmentOut.model_validate(a)
+
+
+@router.get("/attachments/{aid}/stats", responses=responses(401, 404))
+def get_attachment_stats(aid: int, db: DBSession, user: CurrentUser):
+    """Get flight stats for an attachment across all positions."""
+    from app.models.flight import Flight
+    from sqlalchemy import or_
+    attachment = db.query(Attachment).filter(Attachment.id == aid).first()
+    if not attachment:
+        raise HTTPException(404, ATTACHMENT_NOT_FOUND)
+    sn = attachment.serial_number
+    attachment_filter = or_(
+        Flight.attachment_top == sn,
+        Flight.attachment_bottom == sn,
+        Flight.attachment_left == sn,
+        Flight.attachment_right == sn,
+    )
+    flight_count = db.query(func.count(Flight.id)).filter(attachment_filter).scalar()
+    total_seconds = db.query(func.coalesce(func.sum(Flight.duration_seconds), 0)).filter(attachment_filter).scalar()
+    return {"total_flights": flight_count, "total_hours": round(total_seconds / 3600, 2)}
+
+
+@router.get("/attachments/{aid}/flights", responses=responses(401, 404))
+def get_attachment_flights(aid: int, db: DBSession, user: CurrentUser):
+    """Get all flights that used a specific attachment, including which position."""
+    from app.models.flight import Flight
+    from app.models.pilot import Pilot
+    from sqlalchemy import or_
+    attachment = db.query(Attachment).filter(Attachment.id == aid).first()
+    if not attachment:
+        raise HTTPException(404, ATTACHMENT_NOT_FOUND)
+    sn = attachment.serial_number
+    attachment_filter = or_(
+        Flight.attachment_top == sn,
+        Flight.attachment_bottom == sn,
+        Flight.attachment_left == sn,
+        Flight.attachment_right == sn,
+    )
+    flights = db.query(Flight).filter(attachment_filter).order_by(Flight.date.desc()).all()
+    results = []
+    for f in flights:
+        positions = []
+        if f.attachment_top == sn:
+            positions.append("top")
+        if f.attachment_bottom == sn:
+            positions.append("bottom")
+        if f.attachment_left == sn:
+            positions.append("left")
+        if f.attachment_right == sn:
+            positions.append("right")
+        results.append({
+            "id": f.id,
+            "date": str(f.date) if f.date else None,
+            "pilot_name": f"{f.pilot.first_name} {f.pilot.last_name}" if f.pilot else None,
+            "pilot_id": f.pilot_id,
+            "vehicle_name": f.vehicle.nickname or f"{f.vehicle.manufacturer} {f.vehicle.model}" if f.vehicle else None,
+            "duration_seconds": f.duration_seconds,
+            "purpose": f.purpose,
+            "max_altitude_m": f.max_altitude_m,
+            "positions": positions,
+        })
+    return results
+
+
+@router.get("/attachments/{aid}/pilots", responses=responses(401, 404))
+def get_attachment_pilots(aid: int, db: DBSession, user: CurrentUser):
+    """Get unique pilots who have used a specific attachment."""
+    from app.models.flight import Flight
+    from app.models.pilot import Pilot
+    from sqlalchemy import or_
+    attachment = db.query(Attachment).filter(Attachment.id == aid).first()
+    if not attachment:
+        raise HTTPException(404, ATTACHMENT_NOT_FOUND)
+    sn = attachment.serial_number
+    attachment_filter = or_(
+        Flight.attachment_top == sn,
+        Flight.attachment_bottom == sn,
+        Flight.attachment_left == sn,
+        Flight.attachment_right == sn,
+    )
+    pilot_ids = db.query(Flight.pilot_id).filter(
+        attachment_filter,
+        Flight.pilot_id.isnot(None),
+    ).distinct().all()
+    pilots = db.query(Pilot).filter(Pilot.id.in_([p[0] for p in pilot_ids])).all()
+    return [{"id": p.id, "name": f"{p.first_name} {p.last_name}", "badge_number": p.badge_number} for p in pilots]
