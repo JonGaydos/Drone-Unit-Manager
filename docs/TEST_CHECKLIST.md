@@ -21,7 +21,9 @@ Test from a completely clean database. Check each item as we go.
 - [x] Theme switcher works (Dark, Light, Glass, Grafana)
 - [x] Settings save without errors
 - [x] Organization logo upload works
-- [ ] Weather thresholds configurable — **BUG FIXED: key not in allowlist**
+- [ ] Weather thresholds configurable — **NEEDS RETEST after v2.0.7 fix**
+- [ ] Weather thresholds "Reset to Defaults" button works — **NEEDS TEST**
+- [ ] Sidebar config shows "Airspace" and "Activity Reports" — **NEEDS TEST**
 
 ## 4. Settings — Users
 - [x] Create a second user (supervisor role)
@@ -32,11 +34,13 @@ Test from a completely clean database. Check each item as we go.
 - [x] Disable/enable a user account
 
 ## 5. Settings — Integrations (Skydio)
-- [ ] Enter Skydio API token and Token ID
-- [ ] Test Connection — shows success with user info
-- [ ] Sync Now — imports flights, vehicles, batteries, etc.
-- [ ] Sync results display (flights imported, vehicles, equipment)
-- [ ] No errors during sync
+- [x] Enter Skydio API token and Token ID
+- [x] Test Connection — shows success with user info
+- [x] Sync Now — imports flights, vehicles, batteries, etc.
+- [x] Sync results display (flights imported, vehicles, equipment)
+- [ ] Sync interval selector (6h/12h/24h) — **MISSING, needs restore**
+- [ ] Sync progress indicator — **MISSING, needs adding**
+- [ ] No errors during sync — **Skydio media API returns 500 (their side)**
 
 ## 6. Pilots
 - [ ] Add a pilot manually (name, badge, email, phone)
@@ -59,11 +63,13 @@ Test from a completely clean database. Check each item as we go.
 - [ ] Health trending chart displays
 - [ ] Edit battery details
 
-## 9. Fleet — Controllers, Sensors, Attachments
+## 9. Fleet — Controllers, Sensors, Attachments, Docks
 - [ ] Each tab displays items
 - [ ] Can add new items manually
 - [ ] Can edit/delete items
-- [ ] Click item — detail page loads (if applicable)
+- [ ] Click item — detail page loads — **MISSING: need detail pages like vehicles**
+- [ ] Attachments syncing from API — **EMPTY after sync, needs investigation**
+- [ ] Each fleet item shows: flight history, maintenance, relevant stats
 
 ## 10. Fleet — Equipment Merge
 - [ ] Select two duplicate items
