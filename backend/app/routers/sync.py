@@ -162,8 +162,8 @@ def sync_now(
             logger.info("Auto-cleanup: removed %d empty flights", len(empty))
             result.errors.append(f"Auto-cleaned {len(empty)} flights with no data")
 
-    # Auto-fetch telemetry for newly synced flights
-    if sync_telemetry and result.flights_new > 0:
+    # Auto-fetch telemetry for flights that don't have it yet
+    if sync_telemetry:
         try:
             telemetry_result = _batch_sync_telemetry(db, limit=10)
             if telemetry_result > 0:
