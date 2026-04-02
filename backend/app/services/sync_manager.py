@@ -722,17 +722,29 @@ class SyncManager:
             logger.error("Flights sync error: %s", exc)
             db.rollback()
 
+        # --- Commit flights + vehicles before enrichment ---
+        try:
+            db.commit()
+            logger.info("Committed %d new flights + vehicles to database", result.flights_new)
+        except Exception as exc:
+            result.errors.append(f"Flight commit error: {exc}")
+            logger.error("Flight commit error: %s", exc)
+            db.rollback()
+
         # --- Enrich flights with full details ---
         try:
             _enrich_flights(provider, creds, db, result)
+            db.commit()
         except Exception as exc:
             result.errors.append(f"Flight enrichment error: {exc}")
             logger.error("Flight enrichment error: %s", exc)
+            db.rollback()
 
         # --- Sync batteries ---
         try:
             _sync_entity_list(provider.sync_batteries, creds, db, Battery, "serial_number",
                               _update_battery, _create_battery, "batteries_synced", result)
+            db.commit()
         except Exception as exc:
             result.errors.append(f"Batteries sync error: {exc}")
             logger.error("Batteries sync error: %s", exc)
@@ -742,6 +754,7 @@ class SyncManager:
         try:
             _sync_entity_list(provider.sync_controllers, creds, db, Controller, "serial_number",
                               _update_controller, _create_controller, "controllers_synced", result)
+            db.commit()
         except Exception as exc:
             result.errors.append(f"Controllers sync error: {exc}")
             logger.error("Controllers sync error: %s", exc)
@@ -751,6 +764,7 @@ class SyncManager:
         try:
             _sync_entity_list(provider.sync_docks, creds, db, Dock, "serial_number",
                               _update_dock, _create_dock, "docks_synced", result)
+            db.commit()
         except Exception as exc:
             result.errors.append(f"Docks sync error: {exc}")
             logger.error("Docks sync error: %s", exc)
@@ -760,6 +774,7 @@ class SyncManager:
         try:
             _sync_entity_list(provider.sync_sensor_packages, creds, db, SensorPackage, "serial_number",
                               _update_sensor, _create_sensor, "sensors_synced", result)
+            db.commit()
         except Exception as exc:
             result.errors.append(f"Sensors sync error: {exc}")
             logger.error("Sensors sync error: %s", exc)
@@ -769,6 +784,7 @@ class SyncManager:
         try:
             _sync_entity_list(provider.sync_attachments, creds, db, Attachment, "serial_number",
                               _update_attachment, _create_attachment, "attachments_synced", result)
+            db.commit()
         except Exception as exc:
             result.errors.append(f"Attachments sync error: {exc}")
             logger.error("Attachments sync error: %s", exc)
@@ -777,6 +793,7 @@ class SyncManager:
         # --- Sync media ---
         try:
             _sync_media(provider, creds, since, db, result)
+            db.commit()
         except Exception as exc:
             result.errors.append(f"Media sync error: {exc}")
             logger.error("Media sync error: %s", exc)
@@ -828,6 +845,7 @@ class SyncManager:
         # --- Sync vehicles (needed for flight vehicle matching) ---
         try:
             _sync_vehicles(provider, creds, db, result)
+            db.commit()
         except Exception as exc:
             result.errors.append(f"Vehicles sync error: {exc}")
             logger.error("Deep sync vehicles error: %s", exc)
@@ -838,6 +856,8 @@ class SyncManager:
             flights_data = provider.sync_flights_deep(creds)
             logger.info("Deep sync returned %d flights", len(flights_data))
             _upsert_flights(flights_data, skydio_users, db, result)
+            db.commit()
+            logger.info("Committed %d new flights to database", result.flights_new)
         except Exception as exc:
             result.errors.append(f"Deep flight sync error: {exc}")
             logger.error("Deep flight sync error: %s", exc, exc_info=True)

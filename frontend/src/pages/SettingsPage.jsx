@@ -99,6 +99,7 @@ export default function SettingsPage() {
   const DEFAULT_SIDEBAR_ITEMS = [
     { to: '/', label: 'Dashboard' },
     { to: '/weather', label: 'Weather' },
+    { to: '/airspace', label: 'Airspace' },
     { to: '/analytics', label: 'Analytics' },
     { to: '/flight-plans', label: 'Flight Plans' },
     { to: '/checklists', label: 'Checklists' },
@@ -114,7 +115,7 @@ export default function SettingsPage() {
     { to: '/reports', label: 'Reports' },
     { to: '/compliance', label: 'Compliance' },
     { to: '/alerts', label: 'Alerts' },
-    { to: '/incidents', label: 'Incidents' },
+    { to: '/incidents', label: 'Activity Reports' },
     { to: '/settings', label: 'Settings' },
     { to: '/audit-log', label: 'Audit Log' },
   ]
@@ -637,21 +638,43 @@ export default function SettingsPage() {
               </div>
             ))}
           </div>
-          <button
-            onClick={async () => {
-              setSavingWeatherThresholds(true)
-              try {
-                await api.put('/settings/bulk', [{ key: 'weather_thresholds', value: JSON.stringify(weatherThresholds) }])
-                toast.success('Weather thresholds saved')
-              } catch (err) { toast.error(err.message) }
-              finally { setSavingWeatherThresholds(false) }
-            }}
-            disabled={savingWeatherThresholds}
-            className="mt-4 flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50"
-          >
-            {savingWeatherThresholds ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            Save Thresholds
-          </button>
+          <div className="mt-4 flex items-center gap-3">
+            <button
+              onClick={async () => {
+                setSavingWeatherThresholds(true)
+                try {
+                  await api.put('/settings/bulk', [{ key: 'weather_thresholds', value: JSON.stringify(weatherThresholds) }])
+                  toast.success('Weather thresholds saved')
+                } catch (err) { toast.error(err.message) }
+                finally { setSavingWeatherThresholds(false) }
+              }}
+              disabled={savingWeatherThresholds}
+              className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50"
+            >
+              {savingWeatherThresholds ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              Save Thresholds
+            </button>
+            <button
+              onClick={async () => {
+                const defaults = {
+                  wind_sustained_go: 15, wind_sustained_caution: 25,
+                  wind_gusts_go: 20, wind_gusts_caution: 30,
+                  visibility_go: 3, visibility_caution: 1,
+                  ceiling_go: 500, ceiling_caution: 200,
+                  temp_low_go: 32, temp_low_caution: 20,
+                  temp_high_go: 100, precip_caution: 0.01,
+                }
+                setWeatherThresholds(defaults)
+                try {
+                  await api.put('/settings/bulk', [{ key: 'weather_thresholds', value: JSON.stringify(defaults) }])
+                  toast.success('Weather thresholds reset to defaults')
+                } catch (err) { toast.error(err.message) }
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm font-medium hover:opacity-90"
+            >
+              Reset to Defaults
+            </button>
+          </div>
         </div>
       )}
 

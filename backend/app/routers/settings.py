@@ -30,6 +30,7 @@ ALLOWED_SETTING_KEYS = {
     "adsb_default_lat", "adsb_default_lon", "adsb_radius_nm", "adsb_refresh_seconds",
     "smtp_host", "smtp_port", "smtp_username", "smtp_password",
     "smtp_from_address", "smtp_from_name", "smtp_tls", "smtp_enabled",
+    "weather_thresholds",
 }
 
 
