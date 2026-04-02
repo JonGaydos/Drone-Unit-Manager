@@ -40,15 +40,21 @@ function ProviderCard({ provider, settings, onSave, onTest, onSync }) {
   const [testing, setTesting] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [syncingTelemetry, setSyncingTelemetry] = useState(false)
+  const [syncInterval, setSyncInterval] = useState('')
+  const [syncStatus, setSyncStatus] = useState(null)
   const toast = useToast()
 
   useEffect(() => {
     if (provider.tokenKey && settings) {
       const t = settings.find(s => s.key === provider.tokenKey)
       const tid = settings.find(s => s.key === provider.tokenIdKey)
+      const interval = settings.find(s => s.key === 'sync_interval')
       if (t) setToken(t.value || '')
       if (tid) setTokenId(tid.value || '')
+      if (interval) setSyncInterval(interval.value || '')
     }
+    // Fetch sync status
+    api.get('/sync/status').then(s => setSyncStatus(s)).catch(() => {})
   }, [settings, provider])
 
   // A masked token (e.g. "abc12345...xyz9") means it IS configured
@@ -72,7 +78,15 @@ function ProviderCard({ provider, settings, onSave, onTest, onSync }) {
     setSyncing(true)
     try {
       const res = await api.post(`/sync/now?full=${full}`)
-      toast.success(`Synced: ${res.flights_new} new flights, ${res.vehicles_synced} vehicles`)
+      const parts = [`${res.flights_new} new flights`]
+      if (res.flights_skipped) parts.push(`${res.flights_skipped} existing`)
+      if (res.vehicles_synced) parts.push(`${res.vehicles_synced} vehicles`)
+      if (res.batteries_synced) parts.push(`${res.batteries_synced} batteries`)
+      if (res.controllers_synced) parts.push(`${res.controllers_synced} controllers`)
+      if (res.errors?.length) parts.push(`${res.errors.length} warnings`)
+      toast.success(`Synced: ${parts.join(', ')}`)
+      // Refresh sync status
+      api.get('/sync/status').then(s => setSyncStatus(s)).catch(() => {})
     } catch (err) {
       toast.error(err.message)
     } finally {
@@ -188,6 +202,34 @@ function ProviderCard({ provider, settings, onSave, onTest, onSync }) {
                 <span className="text-[10px] text-muted-foreground mt-0.5 px-1">Fetch GPS/altitude data for 10 flights</span>
               </div>
             </div>
+          </div>
+
+          {/* Auto-Sync Interval */}
+          <div className="flex items-center gap-3 pt-2 border-t border-border">
+            <label htmlFor="sync-interval" className="text-xs text-muted-foreground whitespace-nowrap">Auto-Sync Interval</label>
+            <select
+              id="sync-interval"
+              value={syncInterval}
+              onChange={async (e) => {
+                const val = e.target.value
+                setSyncInterval(val)
+                try {
+                  await api.put('/settings/bulk', [{ key: 'sync_interval', value: val }])
+                  toast.success(val ? `Auto-sync set to every ${val} minutes` : 'Auto-sync disabled')
+                } catch (err) { toast.error(err.message) }
+              }}
+              className="px-2 py-1 bg-secondary border border-border rounded-lg text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="">Disabled</option>
+              <option value="360">Every 6 hours</option>
+              <option value="720">Every 12 hours</option>
+              <option value="1440">Every 24 hours</option>
+            </select>
+            {syncStatus?.last_sync && (
+              <span className="text-[10px] text-muted-foreground">
+                Last sync: {new Date(syncStatus.last_sync).toLocaleString()}
+              </span>
+            )}
           </div>
         </div>
       )}
