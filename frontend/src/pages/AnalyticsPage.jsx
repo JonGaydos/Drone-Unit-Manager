@@ -546,7 +546,7 @@ export default function AnalyticsPage() {
                 </tr>
               </thead>
               <tbody>
-                {pilotHours.map((p) => {
+                {pilotHours.map((p, i) => {
                   const isSelected = filters.pilot === p.pilot_name
                   const hasFilteredData = filteredPilotHours?.[p.pilot_name]
                   const isDimmed = hasActiveFilter && !isSelected && !hasFilteredData

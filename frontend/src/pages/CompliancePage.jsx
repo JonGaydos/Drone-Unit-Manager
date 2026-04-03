@@ -298,7 +298,7 @@ export default function CompliancePage() {
           <div className="divide-y divide-border">
             {attentionItems.map((item) => (
               <button
-                key={`${item.severity}-${item.label}`}
+                key={`${item.severity}-${item.type}-${item.count || ''}`}
                 onClick={() => navigate(item.link)}
                 className="w-full flex items-center gap-3 px-5 py-3 hover:bg-secondary/50 transition-colors text-left"
               >
