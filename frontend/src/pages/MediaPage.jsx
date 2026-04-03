@@ -162,7 +162,7 @@ export default function MediaPage() {
                         onClick={() => setLightbox(idx)}
                       >
                         <img
-                          src={`${API_BASE}/photos/${photo.id}/thumbnail`}
+                          src={`${API_BASE}/photos/${photo.id}/thumbnail?token=${localStorage.getItem('token')}`}
                           alt={photo.title || photo.filename}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                           loading="lazy"
@@ -296,7 +296,7 @@ function LightboxModal({ photos, index, onClose, onPrev, onNext, formatDate, for
       {/* Image */}
       <div className="relative max-w-[90vw] max-h-[85vh] flex items-center justify-center">
         <img
-          src={`${API}/photos/${photo.id}/view`}
+          src={`${API}/photos/${photo.id}/view?token=${localStorage.getItem('token')}`}
           alt={photo.title || photo.filename}
           className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
         />

@@ -12,13 +12,18 @@ from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from fastapi.responses import FileResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import JWTError, jwt
 from PIL import Image as PILImage
+from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.constants import MIME_JPEG, PHOTO_NOT_FOUND, UTC_OFFSET
+from app.database import get_db
 from app.deps import DBSession, CurrentUser, PilotUser
+from app.models.user import User
 from app.models.photo import Photo, PhotoPilot
 from app.models.pilot import Pilot
 from app.responses import responses
@@ -31,6 +36,36 @@ UPLOAD_DIR = str(Path(settings.UPLOAD_DIR) / "photos")
 THUMB_WIDTH = 400  # Maximum thumbnail width in pixels
 
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif"}
+
+_security = HTTPBearer(auto_error=False)
+_ALGORITHM = "HS256"
+
+
+def _get_user_from_header_or_query(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_security),
+    token: str | None = Query(None),
+    db: Session = Depends(get_db),
+) -> User:
+    """Authenticate via Authorization header or ?token= query param.
+
+    The query param fallback allows <img> tags to load authenticated images
+    since browsers don't send custom headers for <img src="...">.
+    """
+    raw_token = credentials.credentials if credentials else token
+    if not raw_token:
+        raise HTTPException(401, "Not authenticated")
+    try:
+        payload = jwt.decode(raw_token, settings.SECRET_KEY, algorithms=[_ALGORITHM])
+        user_id = int(payload["sub"])
+    except (JWTError, KeyError, ValueError):
+        raise HTTPException(401, "Invalid token")
+    user = db.query(User).filter(User.id == user_id, User.is_active.is_(True)).first()
+    if not user:
+        raise HTTPException(401, "User not found or inactive")
+    return user
+
+
+ImageUser = Annotated[User, Depends(_get_user_from_header_or_query)]
 
 
 def _ensure_dir(path: str):
@@ -204,7 +239,7 @@ def list_photos(db: DBSession, _user: CurrentUser):
 
 
 @router.get("/{photo_id}/view", responses=responses(401, 404))
-def view_photo(photo_id: int, db: DBSession, _user: CurrentUser):
+def view_photo(photo_id: int, db: DBSession, _user: ImageUser):
     """Serve the full-resolution photo file."""
     photo = db.query(Photo).filter(Photo.id == photo_id).first()
     if not photo:
@@ -217,7 +252,7 @@ def view_photo(photo_id: int, db: DBSession, _user: CurrentUser):
 
 
 @router.get("/{photo_id}/thumbnail", responses=responses(401, 404))
-def view_thumbnail(photo_id: int, db: DBSession, _user: CurrentUser):
+def view_thumbnail(photo_id: int, db: DBSession, _user: ImageUser):
     """Serve the photo thumbnail, falling back to the full image if unavailable."""
     photo = db.query(Photo).filter(Photo.id == photo_id).first()
     if not photo:

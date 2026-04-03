@@ -40,7 +40,12 @@ async function request(path, options = {}) {
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: res.statusText }))
-    const sanitized = error.detail || 'An error occurred. Please try again.'
+    let sanitized = 'An error occurred. Please try again.'
+    if (typeof error.detail === 'string') {
+      sanitized = error.detail
+    } else if (Array.isArray(error.detail)) {
+      sanitized = error.detail.map(e => e.msg || e.message || JSON.stringify(e)).join('; ')
+    }
     // Don't expose SQL errors, tracebacks, or internal paths
     if (sanitized.includes('SQL') || sanitized.includes('Traceback') || sanitized.includes('/app/')) {
       throw new Error('An unexpected error occurred. Please try again.')
