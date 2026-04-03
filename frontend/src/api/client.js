@@ -156,7 +156,12 @@ export const api = {
     }
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
-      const msg = data.detail || 'Upload failed'
+      let msg = 'Upload failed'
+      if (typeof data.detail === 'string') {
+        msg = data.detail
+      } else if (Array.isArray(data.detail)) {
+        msg = data.detail.map(e => e.msg || e.message || JSON.stringify(e)).join('; ')
+      }
       if (msg.includes('SQL') || msg.includes('Traceback') || msg.includes('/app/')) {
         throw new Error('An unexpected error occurred')
       }

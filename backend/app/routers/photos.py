@@ -77,7 +77,7 @@ def _validate_path(file_path: str) -> Path:
     """Validate that file_path is within the upload directory (path traversal prevention)."""
     resolved = Path(file_path).resolve()
     upload_root = Path(UPLOAD_DIR).resolve()
-    if not str(resolved).startswith(str(upload_root)):
+    if not resolved.is_relative_to(upload_root):
         raise HTTPException(status_code=403, detail="Access denied")
     return resolved
 
@@ -127,7 +127,7 @@ def upload_photo(
         try:
             parsed_date = datetime.fromisoformat(date_taken.replace("Z", UTC_OFFSET).replace(UTC_OFFSET, ""))
         except (ValueError, AttributeError):
-            pass
+            raise HTTPException(400, "Invalid date format. Use ISO 8601 (e.g., 2026-04-02).")
 
     stored_name = f"{uuid.uuid4().hex}{ext}"
 
@@ -151,13 +151,21 @@ def upload_photo(
     # Validate path before writing
     _validate_path(file_path)
 
-    content = file.file.read()
-    if len(content) > settings.MAX_UPLOAD_SIZE:
-        raise HTTPException(413, f"File too large. Maximum size is {settings.MAX_UPLOAD_SIZE // (1024*1024)}MB")
+    total = 0
+    chunk_size = 64 * 1024
     with open(file_path, "wb") as f:
-        f.write(content)
+        while True:
+            chunk = file.file.read(chunk_size)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > settings.MAX_UPLOAD_SIZE:
+                f.close()
+                os.remove(file_path)
+                raise HTTPException(413, f"File too large. Maximum size is {settings.MAX_UPLOAD_SIZE // (1024*1024)}MB")
+            f.write(chunk)
 
-    photo.file_size = os.path.getsize(file_path)
+    photo.file_size = total
 
     # Generate thumbnail
     try:
@@ -248,7 +256,10 @@ def view_photo(photo_id: int, db: DBSession, _user: ImageUser):
     resolved = _validate_path(file_path)
     if not resolved.exists():
         raise HTTPException(404, "File not found on disk")
-    return FileResponse(str(resolved), media_type=photo.mime_type or MIME_JPEG)
+    response = FileResponse(str(resolved), media_type=photo.mime_type or MIME_JPEG)
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 @router.get("/{photo_id}/thumbnail", responses=responses(401, 404))
@@ -260,13 +271,19 @@ def view_thumbnail(photo_id: int, db: DBSession, _user: ImageUser):
     if photo.thumbnail_path:
         thumb_resolved = _validate_path(photo.thumbnail_path)
         if thumb_resolved.exists():
-            return FileResponse(str(thumb_resolved), media_type=MIME_JPEG)
+            response = FileResponse(str(thumb_resolved), media_type=MIME_JPEG)
+            response.headers["Referrer-Policy"] = "no-referrer"
+            response.headers["X-Content-Type-Options"] = "nosniff"
+            return response
     # Fall back to full image
     file_path = os.path.join(UPLOAD_DIR, str(photo.id), photo.filename)
     resolved = _validate_path(file_path)
     if not resolved.exists():
         raise HTTPException(404, "File not found on disk")
-    return FileResponse(str(resolved), media_type=photo.mime_type or MIME_JPEG)
+    response = FileResponse(str(resolved), media_type=photo.mime_type or MIME_JPEG)
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 @router.patch("/{photo_id}", responses=responses(404))
@@ -310,7 +327,7 @@ def update_photo(
         try:
             photo.date_taken = datetime.fromisoformat(date_taken.replace("Z", UTC_OFFSET).replace(UTC_OFFSET, ""))
         except (ValueError, AttributeError):
-            pass
+            raise HTTPException(400, "Invalid date format. Use ISO 8601 (e.g., 2026-04-02).")
 
     if pilot_ids is not None:
         # Replace pilot associations

@@ -516,7 +516,10 @@ function EditModal({ photo, pilots, onClose, onSuccess }) {
       }
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
-        throw new Error(data.detail || 'Update failed')
+        let msg = 'Update failed'
+        if (typeof data.detail === 'string') msg = data.detail
+        else if (Array.isArray(data.detail)) msg = data.detail.map(e => e.msg || e.message || JSON.stringify(e)).join('; ')
+        throw new Error(msg)
       }
       onSuccess()
     } catch (err) {

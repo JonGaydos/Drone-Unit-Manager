@@ -89,7 +89,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=APP_TITLE,
-    version="3.0.0",
+    version="2.2.0",
     lifespan=lifespan,
 )
 
@@ -154,7 +154,7 @@ def health_check():
     db = SessionLocal()
     try:
         db.execute(text("SELECT 1"))
-        return {"status": "ok", "app": APP_TITLE, "version": "3.0.0", "database": "connected"}
+        return {"status": "ok", "app": APP_TITLE, "version": "2.2.0", "database": "connected"}
     except Exception as e:
         logger.error("Health check failed: %s", e)
         return JSONResponse(
