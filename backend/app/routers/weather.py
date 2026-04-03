@@ -226,6 +226,10 @@ def _check_threshold_pair(value, go_limit, caution_limit, status, reasons,
     """Check a value against go/caution thresholds. Returns updated status."""
     if value is None:
         return status
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return status
     if value > caution_limit:
         reasons.append(no_go_msg)
         return "no_go"
@@ -239,6 +243,10 @@ def _check_threshold_pair_below(value, go_limit, caution_limit, status, reasons,
                                 no_go_msg: str, caution_msg: str) -> str:
     """Check a value against go/caution thresholds where LOWER is worse. Returns updated status."""
     if value is None:
+        return status
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
         return status
     if value < caution_limit:
         reasons.append(no_go_msg)

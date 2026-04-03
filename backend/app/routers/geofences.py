@@ -81,7 +81,7 @@ def _point_in_polygon(lat, lon, polygon):
     for i in range(n):
         yi, xi = polygon[i]
         yj, xj = polygon[j]
-        if ((yi > lon) != (yj > lon)) and (lat < (xj - xi) * (lon - yi) / (yj - yi) + xi):
+        if ((yi > lon) != (yj > lon)) and yj != yi and (lat < (xj - xi) * (lon - yi) / (yj - yi) + xi):
             inside = not inside
         j = i
     return inside

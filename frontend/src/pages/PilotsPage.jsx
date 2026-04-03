@@ -264,7 +264,7 @@ export default function PilotsPage() {
                       <button onClick={() => setModal(p)} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent" aria-label="Edit">
                         <Edit className="w-4 h-4" />
                       </button>
-                      <button onClick={() => setConfirmDelete(p)} className="p-1.5 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10" aria-label="Deactivate pilot">
+                      <button onClick={() => setConfirmDelete(p)} className="p-1.5 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10" aria-label="Deactivate pilot" title="Deactivate">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>

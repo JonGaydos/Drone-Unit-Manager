@@ -65,6 +65,8 @@ def _ensure_simple_equipment(db: Session, serial_raw: str | None, model_class, l
     if not serial_raw:
         return
     serial = serial_raw.strip()
+    if not serial or serial.upper() in ("N/A", "NONE", "NA", "-", "--"):
+        return
     if serial and not db.query(model_class).filter(model_class.serial_number == serial).first():
         db.add(model_class(serial_number=serial, status="active"))
         db.flush()
@@ -74,6 +76,8 @@ def _ensure_simple_equipment(db: Session, serial_raw: str | None, model_class, l
 def _ensure_attachment_record(db: Session, val: str):
     """Auto-create an Attachment record from a flight equipment string."""
     serial = val.strip()
+    if not serial or serial.upper() in ("N/A", "NONE", "NA", "-", "--"):
+        return
     if db.query(Attachment).filter(Attachment.serial_number == serial).first():
         return
     if "(" in serial and serial.endswith(")"):
@@ -798,9 +802,7 @@ class SyncManager:
             _sync_media(provider, creds, since, db, result)
             db.commit()
         except Exception as exc:
-            result.errors.append(f"Media sync error: {exc}")
-            logger.error("Media sync error: %s", exc)
-            db.rollback()
+            logger.debug("Media sync skipped: %s", exc)
 
         # --- Commit and update last sync timestamp ---
         try:

@@ -38,7 +38,7 @@ function ProviderCard({ provider, settings, onSave, onTest, onSync }) {
   const [token, setToken] = useState('')
   const [tokenId, setTokenId] = useState('')
   const [testing, setTesting] = useState(false)
-  const [syncing, setSyncing] = useState(false)
+  const [syncType, setSyncType] = useState(null) // null | 'sync' | 'full'
   const [syncingTelemetry, setSyncingTelemetry] = useState(false)
   const [syncInterval, setSyncInterval] = useState('')
   const [syncStatus, setSyncStatus] = useState(null)
@@ -75,7 +75,7 @@ function ProviderCard({ provider, settings, onSave, onTest, onSync }) {
   }
 
   const handleSync = async (full = false) => {
-    setSyncing(true)
+    setSyncType(full ? 'full' : 'sync')
     try {
       const res = await api.post(`/sync/now?full=${full}`)
       const parts = [`${res.flights_new} new flights`]
@@ -90,7 +90,7 @@ function ProviderCard({ provider, settings, onSave, onTest, onSync }) {
     } catch (err) {
       toast.error(err.message)
     } finally {
-      setSyncing(false)
+      setSyncType(null)
     }
   }
 
@@ -184,14 +184,14 @@ function ProviderCard({ provider, settings, onSave, onTest, onSync }) {
             </button>
             <div className="flex flex-wrap gap-2">
               <div className="flex flex-col items-start">
-                <button onClick={() => handleSync(false)} disabled={syncing} className="px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90 flex items-center gap-1.5 disabled:opacity-50">
-                  {syncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />} Sync Now
+                <button onClick={() => handleSync(false)} disabled={!!syncType} className="px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90 flex items-center gap-1.5 disabled:opacity-50">
+                  {syncType === 'sync' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />} Sync Now
                 </button>
                 <span className="text-[10px] text-muted-foreground mt-0.5 px-1">New flights since last sync + telemetry</span>
               </div>
               <div className="flex flex-col items-start">
-                <button onClick={() => handleSync(true)} disabled={syncing} className="px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90 flex items-center gap-1.5 disabled:opacity-50">
-                  <RefreshCw className="w-3.5 h-3.5" /> Full Sync
+                <button onClick={() => handleSync(true)} disabled={!!syncType} className="px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90 flex items-center gap-1.5 disabled:opacity-50">
+                  {syncType === 'full' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />} Full Sync
                 </button>
                 <span className="text-[10px] text-muted-foreground mt-0.5 px-1">All flights + cleanup empties + telemetry</span>
               </div>
@@ -513,8 +513,10 @@ function FlightLogImport() {
         <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-lg p-3 text-sm">
           {result.skipped
             ? `Flight #${result.flight_id} already exists (skipped)`
-            : <>Flight #{result.flight_id} imported successfully — {result.points_imported} telemetry points, format: {result.format_detected}
-              {result.date && ` — ${result.date}`}</>
+            : result.flight_id
+              ? <>Flight #{result.flight_id} imported successfully — {result.points_imported} telemetry points, format: {result.format_detected}
+                {result.date && ` — ${result.date}`}</>
+              : <>Imported {result.points_imported || result.flights_imported || 0} flight{(result.points_imported || result.flights_imported || 0) === 1 ? '' : 's'} ({result.format_detected})</>
           }
         </div>
       )}

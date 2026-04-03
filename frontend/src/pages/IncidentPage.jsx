@@ -176,6 +176,8 @@ function IncidentModal({ pilots, vehicles, flights, onSave, onClose }) {
               </select>
             </div>
           </div>
+          {form.report_type !== 'success' && (
+          <>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label htmlFor="damage-description" className="block text-sm font-medium text-foreground mb-1">Damage Description</label>
@@ -194,6 +196,8 @@ function IncidentModal({ pilots, vehicles, flights, onSave, onClose }) {
               className="rounded border-border" />
             <label htmlFor="equip_grounded" className="text-sm text-foreground">Equipment Grounded</label>
           </div>
+          </>
+          )}
           {form.report_type === 'success' && (
             <div>
               <label htmlFor="outcome-description" className="block text-sm font-medium text-foreground mb-1">Outcome Description</label>

@@ -254,7 +254,20 @@ export default function DocumentUpload({ entityType, entityId, folderId }) {
             {editingDoc !== doc.id && (
               <div className="flex items-center gap-1 shrink-0">
                 <button
-                  onClick={() => globalThis.open(doc.view_url, '_blank')}
+                  onClick={async () => {
+                    try {
+                      const res = await fetch(doc.view_url, {
+                        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                      })
+                      if (!res.ok) throw new Error('Failed to fetch document')
+                      const blob = await res.blob()
+                      const url = URL.createObjectURL(blob)
+                      globalThis.open(url, '_blank')
+                      setTimeout(() => URL.revokeObjectURL(url), 60000)
+                    } catch (err) {
+                      toast.error(err.message || 'Could not open document')
+                    }
+                  }}
                   className="p-1.5 text-muted-foreground hover:text-foreground rounded hover:bg-accent/30"
                   title="View"
                 >

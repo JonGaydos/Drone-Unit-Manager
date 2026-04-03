@@ -500,14 +500,25 @@ export default function DocumentStoragePage() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <a
-                          href={`${import.meta.env.VITE_API_URL || '/api'}/documents/${doc.id}/view`}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                        <button
+                          onClick={async () => {
+                            try {
+                              const res = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/documents/${doc.id}/view`, {
+                                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                              })
+                              if (!res.ok) throw new Error('Failed to fetch document')
+                              const blob = await res.blob()
+                              const url = URL.createObjectURL(blob)
+                              globalThis.open(url, '_blank')
+                              setTimeout(() => URL.revokeObjectURL(url), 60000)
+                            } catch (err) {
+                              toast.error(err.message || 'Could not open document')
+                            }
+                          }}
                           className="text-xs text-primary hover:opacity-80 px-1.5 py-1"
                         >
                           View
-                        </a>
+                        </button>
                         {isPilot && (
                           <>
                             <button
