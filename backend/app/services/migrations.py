@@ -103,6 +103,8 @@ def run_migrations():
         ("flights", "tags", "ALTER TABLE flights ADD COLUMN tags TEXT"),
         # Email field for users (notification digest)
         ("users", "email", "ALTER TABLE users ADD COLUMN email VARCHAR(255)"),
+        # Certification renewal history
+        ("pilot_certifications", "renewed_from_id", "ALTER TABLE pilot_certifications ADD COLUMN renewed_from_id INTEGER REFERENCES pilot_certifications(id)"),
     ]
 
     with engine.connect() as conn:

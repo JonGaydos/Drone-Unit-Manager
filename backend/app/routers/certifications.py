@@ -10,6 +10,7 @@ from app.schemas.certification import (
     CertificationTypeCreate, CertificationTypeUpdate, CertificationTypeOut,
     PilotCertificationCreate, PilotCertificationUpdate, PilotCertificationOut,
     PilotEquipmentQualCreate, PilotEquipmentQualUpdate, PilotEquipmentQualOut,
+    CertRenewRequest,
 )
 
 
@@ -166,6 +167,86 @@ def update_pilot_certification(
     return _pilot_cert_to_out(pc)
 
 
+@router.post("/api/pilot-certifications/{pc_id}/renew", response_model=PilotCertificationOut, responses=responses(404))
+def renew_pilot_certification(
+    pc_id: int,
+    data: CertRenewRequest,
+    db: DBSession,
+    admin: SupervisorUser,
+):
+    """Renew a certification: mark old as renewed, create new with history link."""
+    from app.services.audit import log_action
+    from datetime import date as date_type
+
+    old = db.query(PilotCertification).filter(PilotCertification.id == pc_id).first()
+    if not old:
+        raise HTTPException(status_code=404, detail=PILOT_CERTIFICATION_NOT_FOUND)
+
+    # Auto-calculate expiration from cert type renewal_period_months if not provided
+    expiry = data.expiration_date
+    if not expiry:
+        ct = db.query(CertificationType).filter(CertificationType.id == old.certification_type_id).first()
+        if ct and ct.renewal_period_months:
+            # Add months to issue_date (handle year rollover)
+            m = data.issue_date.month + ct.renewal_period_months
+            y = data.issue_date.year + (m - 1) // 12
+            m = (m - 1) % 12 + 1
+            expiry = data.issue_date.replace(year=y, month=m)
+
+    # Mark old cert as renewed
+    old.status = "renewed"
+
+    # Create new cert linked to old
+    new_cert = PilotCertification(
+        pilot_id=old.pilot_id,
+        certification_type_id=old.certification_type_id,
+        status="complete",
+        issue_date=data.issue_date,
+        expiration_date=expiry,
+        certificate_number=data.certificate_number or old.certificate_number,
+        nist_level=old.nist_level,
+        notes=data.notes,
+        renewed_from_id=old.id,
+    )
+    db.add(new_cert)
+    db.flush()
+
+    pilot = db.query(Pilot).filter(Pilot.id == old.pilot_id).first()
+    ct = db.query(CertificationType).filter(CertificationType.id == old.certification_type_id).first()
+    log_action(db, admin.id, admin.display_name, "create", "pilot_certification", new_cert.id,
+               f"Renewed: {pilot.full_name if pilot else 'Unknown'} - {ct.name if ct else 'Unknown'}")
+
+    db.commit()
+    db.refresh(new_cert)
+    return _pilot_cert_to_out(new_cert)
+
+
+@router.get("/api/pilot-certifications/{pc_id}/history", responses=responses(404))
+def get_certification_history(
+    pc_id: int,
+    db: DBSession,
+    user: CurrentUser,
+):
+    """Get renewal history chain for a certification."""
+    cert = db.query(PilotCertification).filter(PilotCertification.id == pc_id).first()
+    if not cert:
+        raise HTTPException(status_code=404, detail=PILOT_CERTIFICATION_NOT_FOUND)
+
+    # Walk backwards through renewed_from_id chain
+    history = []
+    current = cert
+    while current.renewed_from_id:
+        prev = db.query(PilotCertification).filter(PilotCertification.id == current.renewed_from_id).first()
+        if not prev:
+            break
+        history.append(_pilot_cert_to_out(prev))
+        current = prev
+        if len(history) > 50:
+            break
+
+    return history
+
+
 @router.delete("/api/pilot-certifications/{pc_id}", responses=responses(404))
 def delete_pilot_certification(
     pc_id: int,
@@ -250,9 +331,12 @@ def certification_matrix(
 
     # Pre-load all pilot certifications for active pilots in one query
     pilot_ids = [p.id for p in pilots]
-    all_certs = db.query(PilotCertification).filter(PilotCertification.pilot_id.in_(pilot_ids)).all()
+    all_certs = db.query(PilotCertification).filter(
+        PilotCertification.pilot_id.in_(pilot_ids),
+        PilotCertification.status != "renewed",
+    ).all()
 
-    # Index by (pilot_id, cert_type_id)
+    # Index by (pilot_id, cert_type_id) — latest cert wins
     cert_map: dict[tuple[int, int], PilotCertification] = {}
     for pc in all_certs:
         cert_map[(pc.pilot_id, pc.certification_type_id)] = pc

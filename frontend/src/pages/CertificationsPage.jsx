@@ -79,7 +79,7 @@ function CertTypeModal({ certType, onSave, onClose }) {
   )
 }
 
-function AssignCertModal({ pilots, certTypes, existingCert, onSave, onClose, certFolderId }) {
+function AssignCertModal({ pilots, certTypes, existingCert, onSave, onRenew, onClose, certFolderId }) {
   const [form, setForm] = useState(existingCert ? {
     pilot_id: String(existingCert.pilot_id || ''),
     certification_type_id: String(existingCert.certification_type_id || ''),
@@ -94,6 +94,31 @@ function AssignCertModal({ pilots, certTypes, existingCert, onSave, onClose, cer
   })
   const isEditing = !!existingCert
   const [saving, setSaving] = useState(false)
+  const [showRenew, setShowRenew] = useState(false)
+  const [renewForm, setRenewForm] = useState({ issue_date: '', expiration_date: '', certificate_number: existingCert?.certificate_number || '', notes: '' })
+  const [history, setHistory] = useState([])
+  const toast = useToast()
+
+  // Load renewal history when editing
+  useEffect(() => {
+    if (isEditing && existingCert?.id) {
+      api.get(`/pilot-certifications/${existingCert.id}/history`).then(setHistory).catch(() => {})
+    }
+  }, [isEditing, existingCert?.id])
+
+  // Check if this cert type has expiration (for showing Renew button)
+  const certType = certTypes.find(c => c.id === Number(form.certification_type_id))
+  const hasExpiration = certType?.has_expiration !== false
+
+  // Auto-calculate expiry when renewal issue_date changes
+  useEffect(() => {
+    if (showRenew && renewForm.issue_date && certType?.renewal_period_months) {
+      const d = new Date(renewForm.issue_date)
+      d.setMonth(d.getMonth() + certType.renewal_period_months)
+      setRenewForm(prev => ({ ...prev, expiration_date: d.toISOString().split('T')[0] }))
+    }
+  }, [renewForm.issue_date, showRenew])
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     const data = { ...form }
@@ -105,64 +130,140 @@ function AssignCertModal({ pilots, certTypes, existingCert, onSave, onClose, cer
     setSaving(true)
     try { await onSave(data, isEditing ? existingCert.id : null) } finally { setSaving(false) }
   }
+
+  const handleRenew = async () => {
+    if (!renewForm.issue_date) { toast.error('Issue date is required for renewal'); return }
+    setSaving(true)
+    try {
+      const data = { ...renewForm }
+      Object.keys(data).forEach(k => { if (data[k] === '') delete data[k] })
+      await onRenew(existingCert.id, data)
+    } finally { setSaving(false) }
+  }
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <button className="absolute inset-0 bg-transparent cursor-default" onClick={onClose} aria-label="Close dialog" />
-      <div className="relative bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl">
+      <div className="relative bg-card border border-border rounded-xl p-6 w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto">
         <h2 className="text-lg font-semibold text-foreground mb-4">{isEditing ? 'Edit Certification' : 'Assign Certification'}</h2>
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <div>
-            <label htmlFor="pilot" className="block text-sm font-medium text-foreground mb-1">Pilot</label>
-            <select id="pilot" value={form.pilot_id} onChange={e => setForm({...form, pilot_id: e.target.value})} required
-              disabled={isEditing}
-              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm disabled:opacity-60">
-              <option value="">Select pilot...</option>
-              {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
-            </select>
-          </div>
-          <div>
-            <label htmlFor="certification" className="block text-sm font-medium text-foreground mb-1">Certification</label>
-            <select id="certification" value={form.certification_type_id} onChange={e => setForm({...form, certification_type_id: e.target.value})} required
-              disabled={isEditing}
-              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm disabled:opacity-60">
-              <option value="">Select cert type...</option>
-              {sortByName(certTypes, 'name').map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <label htmlFor="status" className="block text-sm font-medium text-foreground mb-1">Status</label>
-            <select id="status" value={form.status} onChange={e => setForm({...form, status: e.target.value})}
-              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
-              {Object.keys(CERT_STATUS_COLORS).map(s => <option key={s} value={s}>{s.replaceAll('_', ' ')}</option>)}
-            </select>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
+
+        {/* Renewal Form */}
+        {showRenew ? (
+          <div className="space-y-3">
+            <div className="bg-primary/10 border border-primary/30 rounded-lg p-3 text-sm text-foreground">
+              Renewing certification. The current record will be archived and a new one created with updated dates.
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="renew-issue" className="block text-sm font-medium text-foreground mb-1">New Issue Date</label>
+                <input id="renew-issue" type="date" value={renewForm.issue_date} onChange={e => setRenewForm({...renewForm, issue_date: e.target.value})}
+                  onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) setRenewForm(prev => ({...prev, issue_date: n})) }}
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              </div>
+              <div>
+                <label htmlFor="renew-expiry" className="block text-sm font-medium text-foreground mb-1">New Expiration{certType?.renewal_period_months ? ` (auto: +${certType.renewal_period_months}mo)` : ''}</label>
+                <input id="renew-expiry" type="date" value={renewForm.expiration_date} onChange={e => setRenewForm({...renewForm, expiration_date: e.target.value})}
+                  onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) setRenewForm(prev => ({...prev, expiration_date: n})) }}
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              </div>
+            </div>
             <div>
-              <label htmlFor="issue-date" className="block text-sm font-medium text-foreground mb-1">Issue Date</label>
-              <input id="issue-date" type="date" value={form.issue_date} onChange={e => setForm({...form, issue_date: e.target.value})}
-                onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) setForm(prev => ({...prev, issue_date: n})) }}
+              <label htmlFor="renew-cert-num" className="block text-sm font-medium text-foreground mb-1">Certificate Number</label>
+              <input id="renew-cert-num" type="text" value={renewForm.certificate_number} onChange={e => setRenewForm({...renewForm, certificate_number: e.target.value})}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
             <div>
-              <label htmlFor="expiration-date" className="block text-sm font-medium text-foreground mb-1">Expiration Date</label>
-              <input id="expiration-date" type="date" value={form.expiration_date} onChange={e => setForm({...form, expiration_date: e.target.value})}
-                onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) setForm(prev => ({...prev, expiration_date: n})) }}
+              <label htmlFor="renew-notes" className="block text-sm font-medium text-foreground mb-1">Notes</label>
+              <input id="renew-notes" type="text" value={renewForm.notes} onChange={e => setRenewForm({...renewForm, notes: e.target.value})}
+                placeholder="Optional renewal notes"
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
+            <div className="flex gap-2 pt-2">
+              <button type="button" onClick={handleRenew} disabled={saving || !renewForm.issue_date}
+                className="flex-1 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2">
+                {saving && <Loader2 className="w-4 h-4 animate-spin" />}{!saving && 'Renew Certification'}
+              </button>
+              <button type="button" onClick={() => setShowRenew(false)} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm">Back</button>
+            </div>
           </div>
-          <div>
-            <label htmlFor="certificate-number" className="block text-sm font-medium text-foreground mb-1">Certificate Number</label>
-            <input id="certificate-number" type="text" value={form.certificate_number} onChange={e => setForm({...form, certificate_number: e.target.value})}
-              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
-          </div>
-          <div className="flex gap-2 pt-2">
-            <button type="submit" disabled={saving} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2">{saving && <Loader2 className="w-4 h-4 animate-spin" />}{!saving && (isEditing ? 'Update' : 'Assign')}</button>
-            <button type="button" onClick={onClose} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm">Cancel</button>
-          </div>
-        </form>
-        {isEditing && existingCert?.id && (
+        ) : (
+          /* Standard Edit/Assign Form */
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <div>
+              <label htmlFor="pilot" className="block text-sm font-medium text-foreground mb-1">Pilot</label>
+              <select id="pilot" value={form.pilot_id} onChange={e => setForm({...form, pilot_id: e.target.value})} required
+                disabled={isEditing}
+                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm disabled:opacity-60">
+                <option value="">Select pilot...</option>
+                {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="certification" className="block text-sm font-medium text-foreground mb-1">Certification</label>
+              <select id="certification" value={form.certification_type_id} onChange={e => setForm({...form, certification_type_id: e.target.value})} required
+                disabled={isEditing}
+                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm disabled:opacity-60">
+                <option value="">Select cert type...</option>
+                {sortByName(certTypes, 'name').map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="status" className="block text-sm font-medium text-foreground mb-1">Status</label>
+              <select id="status" value={form.status} onChange={e => setForm({...form, status: e.target.value})}
+                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
+                {Object.keys(CERT_STATUS_COLORS).map(s => <option key={s} value={s}>{s.replaceAll('_', ' ')}</option>)}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="issue-date" className="block text-sm font-medium text-foreground mb-1">Issue Date</label>
+                <input id="issue-date" type="date" value={form.issue_date} onChange={e => setForm({...form, issue_date: e.target.value})}
+                  onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) setForm(prev => ({...prev, issue_date: n})) }}
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              </div>
+              <div>
+                <label htmlFor="expiration-date" className="block text-sm font-medium text-foreground mb-1">Expiration Date</label>
+                <input id="expiration-date" type="date" value={form.expiration_date} onChange={e => setForm({...form, expiration_date: e.target.value})}
+                  onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) setForm(prev => ({...prev, expiration_date: n})) }}
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+              </div>
+            </div>
+            <div>
+              <label htmlFor="certificate-number" className="block text-sm font-medium text-foreground mb-1">Certificate Number</label>
+              <input id="certificate-number" type="text" value={form.certificate_number} onChange={e => setForm({...form, certificate_number: e.target.value})}
+                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+            </div>
+            <div className="flex gap-2 pt-2">
+              <button type="submit" disabled={saving} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2">{saving && <Loader2 className="w-4 h-4 animate-spin" />}{!saving && (isEditing ? 'Update' : 'Assign')}</button>
+              {isEditing && hasExpiration && (
+                <button type="button" onClick={() => setShowRenew(true)} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:opacity-90">Renew</button>
+              )}
+              <button type="button" onClick={onClose} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm">Cancel</button>
+            </div>
+          </form>
+        )}
+
+        {/* Document Upload */}
+        {isEditing && existingCert?.id && !showRenew && (
           <div className="mt-4">
             <DocumentUpload entityType="certification" entityId={existingCert.id} folderId={certFolderId} />
+          </div>
+        )}
+
+        {/* Renewal History */}
+        {isEditing && history.length > 0 && !showRenew && (
+          <div className="mt-4 border-t border-border pt-3">
+            <h3 className="text-sm font-medium text-muted-foreground mb-2">Renewal History</h3>
+            <div className="space-y-1">
+              {history.map(h => (
+                <div key={h.id} className="flex items-center gap-3 text-xs text-muted-foreground bg-secondary/50 rounded-lg px-3 py-2">
+                  <span className="font-mono">{h.issue_date || '—'}</span>
+                  <span>to</span>
+                  <span className="font-mono">{h.expiration_date || '—'}</span>
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${CERT_STATUS_COLORS[h.status] || 'bg-muted text-muted-foreground'}`}>{h.status}</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -298,6 +399,14 @@ export default function CertificationsPage() {
       } else {
         await api.post('/pilot-certifications', data)
       }
+      setModal(null); setEditCert(null); load()
+    } catch (err) { toast.error(err.message) }
+  }
+
+  const handleRenewCert = async (certId, renewData) => {
+    try {
+      await api.post(`/pilot-certifications/${certId}/renew`, renewData)
+      toast.success('Certification renewed successfully')
       setModal(null); setEditCert(null); load()
     } catch (err) { toast.error(err.message) }
   }
@@ -525,7 +634,7 @@ export default function CertificationsPage() {
       {/* Modals */}
       {modal === 'addType' && <CertTypeModal onSave={handleSaveCertType} onClose={() => setModal(null)} />}
       {modal === 'assign' && <AssignCertModal pilots={pilots} certTypes={certTypes} onSave={handleAssignCert} onClose={() => { setModal(null); setEditCert(null) }} certFolderId={certFolderId} />}
-      {modal === 'editCert' && editCert && <AssignCertModal pilots={pilots} certTypes={certTypes} existingCert={editCert} onSave={handleAssignCert} onClose={() => { setModal(null); setEditCert(null) }} certFolderId={certFolderId} />}
+      {modal === 'editCert' && editCert && <AssignCertModal pilots={pilots} certTypes={certTypes} existingCert={editCert} onSave={handleAssignCert} onRenew={handleRenewCert} onClose={() => { setModal(null); setEditCert(null) }} certFolderId={certFolderId} />}
       {modal && typeof modal === 'object' && modal.name && <CertTypeModal certType={modal} onSave={handleSaveCertType} onClose={() => setModal(null)} />}
       <ConfirmDialog {...confirmProps} />
     </div>

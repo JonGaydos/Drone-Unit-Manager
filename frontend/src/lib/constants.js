@@ -44,6 +44,7 @@ export const CERT_STATUS_COLORS = {
   complete: 'bg-emerald-500/15 text-emerald-400',
   active: 'bg-emerald-500/15 text-emerald-400',
   expired: 'bg-red-500/15 text-red-400',
+  renewed: 'bg-indigo-500/15 text-indigo-400',
 }
 
 /** @type {Record<string, string>} Color map for flight/mission outcome statuses. */

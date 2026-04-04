@@ -72,12 +72,20 @@ class PilotCertificationOut(BaseModel):
     certificate_number: Optional[str] = None
     nist_level: Optional[int] = None
     notes: Optional[str] = None
+    renewed_from_id: Optional[int] = None
     created_at: datetime
     updated_at: datetime
     pilot_name: Optional[str] = None
     cert_type_name: Optional[str] = None
 
     model_config = {"from_attributes": True}
+
+
+class CertRenewRequest(BaseModel):
+    issue_date: date
+    expiration_date: Optional[date] = None
+    certificate_number: Optional[str] = None
+    notes: Optional[str] = None
 
 
 # --- PilotEquipmentQual schemas ---

@@ -39,6 +39,7 @@ class PilotCertification(Base):
     certificate_number: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     nist_level: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # 1-5 for NIST certs
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    renewed_from_id: Mapped[Optional[int]] = mapped_column(ForeignKey("pilot_certifications.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
