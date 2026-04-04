@@ -198,7 +198,7 @@ const TAB_CONFIGS = {
       { key: 'manufacturer', label: 'Manufacturer' },
       { key: 'model', label: 'Model' },
       { key: 'serial_number', label: 'Serial Number' },
-      { key: 'faa_registration', label: 'FAA Reg' },
+      { key: 'faa_registration', label: 'FAA Reg', render: v => v._reg_number || v.faa_registration || '—' },
       { key: 'next_due', label: 'Next Due', sortable: true, render: v => {
         if (!v._reg_expiry) return <span className="text-muted-foreground">--</span>
         const today = new Date()
@@ -226,7 +226,6 @@ const TAB_CONFIGS = {
       { key: 'manufacturer', label: 'Manufacturer' },
       { key: 'model', label: 'Model' },
       { key: 'nickname', label: 'Nickname' },
-      { key: 'faa_registration', label: 'FAA Registration' },
       { key: 'acquired_date', label: 'Acquired Date', type: 'date' },
       { key: 'status', label: 'Status', type: 'select', options: [
         { value: 'active', label: 'Active' }, { value: 'maintenance', label: 'Maintenance' }, { value: 'retired', label: 'Retired' }
@@ -415,8 +414,8 @@ export default function FleetPage() {
           try {
             const regs = await api.get(`/vehicles/${v.id}/registrations`)
             const current = [...regs].sort((a, b) => (b.registration_date || '').localeCompare(a.registration_date || ''))[0]
-            return { ...v, _reg_expiry: current?.expiry_date || null, next_due: current?.expiry_date || '' }
-          } catch { return { ...v, _reg_expiry: null, next_due: '' } }
+            return { ...v, _reg_expiry: current?.expiry_date || null, _reg_number: current?.registration_number || null, next_due: current?.expiry_date || '' }
+          } catch { return { ...v, _reg_expiry: null, _reg_number: null, next_due: '' } }
         }))
         setItems(enriched)
       } else {

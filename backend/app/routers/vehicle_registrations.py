@@ -44,10 +44,10 @@ def create_registration(
     if not vehicle:
         raise HTTPException(404, "Vehicle not found")
 
-    # Auto-calculate expiry if not provided: registration_date + 730 days (2 years)
+    # Auto-calculate expiry if not provided: registration_date + 3 years (FAA Part 107)
     expiry = data.expiry_date
     if not expiry and data.registration_date:
-        expiry = data.registration_date + timedelta(days=730)
+        expiry = data.registration_date + timedelta(days=1095)
 
     db.query(VehicleRegistration).filter(
         VehicleRegistration.vehicle_id == vehicle_id,

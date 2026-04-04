@@ -194,7 +194,12 @@ def generate_report_pdf(config: ReportConfig, db: DBSession, user: PilotUser):
 
     if logo_path:
         try:
-            logo_img = RLImage(logo_path, width=0.6 * inch, height=0.6 * inch)
+            from PIL import Image as PILImage
+            with PILImage.open(logo_path) as pil_img:
+                img_w, img_h = pil_img.size
+            aspect = img_h / img_w if img_w else 1
+            logo_w = 0.6 * inch
+            logo_img = RLImage(logo_path, width=logo_w, height=logo_w * aspect)
             logo_img.hAlign = "LEFT"
             elements.append(logo_img)
         except Exception:

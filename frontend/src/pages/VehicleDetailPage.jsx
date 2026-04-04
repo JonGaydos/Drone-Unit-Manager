@@ -564,11 +564,11 @@ export default function VehicleDetailPage() {
                   className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
               </div>
               <div>
-                <label htmlFor="expiry-auto-2-years" className="block text-xs font-medium text-foreground mb-1">Expiry (auto: +2 years)</label>
-                <input id="expiry-auto-2-years" type="text" readOnly
+                <label htmlFor="expiry-auto-3-years" className="block text-xs font-medium text-foreground mb-1">Expiry (auto: +3 years)</label>
+                <input id="expiry-auto-3-years" type="text" readOnly
                   value={regForm.registration_date ? (() => {
                     const d = new Date(regForm.registration_date)
-                    d.setDate(d.getDate() + 730)
+                    d.setDate(d.getDate() + 1095)
                     return d.toISOString().split('T')[0]
                   })() : '--'}
                   className="w-full px-3 py-1.5 bg-muted border border-border rounded-lg text-muted-foreground text-sm cursor-not-allowed" />
