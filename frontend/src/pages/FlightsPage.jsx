@@ -422,52 +422,8 @@ export default function FlightsPage() {
           </thead>
           <tbody>
             {filtered.map(f => editingId === f.id ? (
-              <tr key={f.id} className="border-b border-border/50 bg-accent/20">
-                <td className="px-4 py-2 text-foreground text-xs font-mono" title={f.external_id || ''}>{f.external_id ? f.external_id.slice(0, 8) : '—'}</td>
-                <td className="px-4 py-2">
-                  <input type="date" value={editForm.date} onChange={e => setEditForm({...editForm, date: e.target.value})}
-                    onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) setEditForm(prev => ({...prev, date: n})) }}
-                    className="w-full px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm" />
-                </td>
-                <td className="px-4 py-2">
-                  <select value={editForm.pilot_id} onChange={e => setEditForm({...editForm, pilot_id: e.target.value})}
-                    className="w-full px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm">
-                    <option value="">Unassigned</option>
-                    {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
-                  </select>
-                </td>
-                <td className="px-4 py-2 hidden md:table-cell text-foreground">{f.vehicle_name || '—'}</td>
-                <td className="px-4 py-2 hidden md:table-cell">
-                  <select value={editForm.purpose} onChange={e => setEditForm({...editForm, purpose: e.target.value})}
-                    className="w-full px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm">
-                    <option value="">None</option>
-                    {sortByName(purposes, 'name').map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
-                  </select>
-                </td>
-                <td className="px-4 py-2 text-right">
-                  <input type="number" value={editForm.duration_seconds} onChange={e => setEditForm({...editForm, duration_seconds: e.target.value})}
-                    className="w-20 px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm text-right" placeholder="sec" />
-                </td>
-                <td className="px-4 py-2 hidden lg:table-cell text-foreground">{f.takeoff_address || '—'}</td>
-                <td className="px-4 py-2">
-                  <button onClick={() => setEditForm({...editForm, review_status: editForm.review_status === 'reviewed' ? 'needs_review' : 'reviewed'})}
-                    className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium cursor-pointer ${
-                      editForm.review_status === 'needs_review' ? 'bg-amber-500/15 text-amber-400' : 'bg-emerald-500/15 text-emerald-400'
-                    }`}>
-                    {editForm.review_status === 'needs_review' ? 'Needs Review' : 'Reviewed'}
-                  </button>
-                </td>
-                <td className="px-4 py-2 text-right">
-                  <div className="flex items-center justify-end gap-1">
-                    <button onClick={saveEditing} title="Save" className="p-1.5 text-emerald-400 hover:bg-emerald-500/15 rounded">
-                      <Check className="w-4 h-4" />
-                    </button>
-                    <button onClick={cancelEditing} title="Cancel" className="p-1.5 text-muted-foreground hover:bg-accent/30 rounded">
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
+              <FlightEditRow key={f.id} f={f} editForm={editForm} setEditForm={setEditForm}
+                pilots={pilots} purposes={purposes} onSave={saveEditing} onCancel={cancelEditing} />
             ) : (
               <tr key={f.id} className="border-b border-border/50 hover:bg-accent/30 transition-colors">
                 <td className="px-4 py-3 text-xs font-mono" title={f.external_id || ''}>
@@ -539,5 +495,56 @@ export default function FlightsPage() {
         confirmVariant="primary"
       />
     </div>
+  )
+}
+
+function FlightEditRow({ f, editForm, setEditForm, pilots, purposes, onSave, onCancel }) {
+  return (
+    <tr className="border-b border-border/50 bg-accent/20">
+      <td className="px-4 py-2 text-foreground text-xs font-mono" title={f.external_id || ''}>{f.external_id ? f.external_id.slice(0, 8) : '—'}</td>
+      <td className="px-4 py-2">
+        <input type="date" value={editForm.date} onChange={e => setEditForm({...editForm, date: e.target.value})}
+          onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) setEditForm(prev => ({...prev, date: n})) }}
+          className="w-full px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm" />
+      </td>
+      <td className="px-4 py-2">
+        <select value={editForm.pilot_id} onChange={e => setEditForm({...editForm, pilot_id: e.target.value})}
+          className="w-full px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm">
+          <option value="">Unassigned</option>
+          {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+        </select>
+      </td>
+      <td className="px-4 py-2 hidden md:table-cell text-foreground">{f.vehicle_name || '—'}</td>
+      <td className="px-4 py-2 hidden md:table-cell">
+        <select value={editForm.purpose} onChange={e => setEditForm({...editForm, purpose: e.target.value})}
+          className="w-full px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm">
+          <option value="">None</option>
+          {sortByName(purposes, 'name').map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+        </select>
+      </td>
+      <td className="px-4 py-2 text-right">
+        <input type="number" value={editForm.duration_seconds} onChange={e => setEditForm({...editForm, duration_seconds: e.target.value})}
+          className="w-20 px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm text-right" placeholder="sec" />
+      </td>
+      <td className="px-4 py-2 hidden lg:table-cell text-foreground">{f.takeoff_address || '—'}</td>
+      <td className="px-4 py-2">
+        <button onClick={() => setEditForm({...editForm, review_status: editForm.review_status === 'reviewed' ? 'needs_review' : 'reviewed'})}
+          className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium cursor-pointer ${
+            editForm.review_status === 'needs_review' ? 'bg-amber-500/15 text-amber-400' : 'bg-emerald-500/15 text-emerald-400'
+          }`}>
+          {editForm.review_status === 'needs_review' ? 'Needs Review' : 'Reviewed'}
+        </button>
+      </td>
+      <td className="px-4 py-2 text-right">
+        <div className="flex items-center justify-end gap-1">
+          <button onClick={onSave} title="Save" className="p-1.5 text-emerald-400 hover:bg-emerald-500/15 rounded">
+            <Check className="w-4 h-4" />
+          </button>
+          <button onClick={onCancel} title="Cancel" className="p-1.5 text-muted-foreground hover:bg-accent/30 rounded">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      </td>
+    </tr>
   )
 }

@@ -16,6 +16,213 @@ const tooltipStyle = {
   contentStyle: { background: 'var(--card)', border: '1px solid var(--border-color)', borderRadius: '8px', color: 'var(--fg)' },
 }
 
+function EditFormSection({ editForm, setEditForm, pilots, vehicles, purposes, batteries, sensors, attachments, onSave, onCancel }) {
+  return (
+    <div className="space-y-3 border-t border-border pt-4">
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label htmlFor="pilot" className="block text-sm font-medium text-foreground mb-1">Pilot</label>
+          <select id="pilot" value={editForm.pilot_id} onChange={e => setEditForm({...editForm, pilot_id: e.target.value})}
+            className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
+            <option value="">Unassigned</option>
+            {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label htmlFor="vehicle" className="block text-sm font-medium text-foreground mb-1">Vehicle</label>
+          <select id="vehicle" value={editForm.vehicle_id} onChange={e => setEditForm({...editForm, vehicle_id: e.target.value})}
+            className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
+            <option value="">Unassigned</option>
+            {sortVehicles(vehicles).map(v => <option key={v.id} value={v.id}>{vehicleDisplayName(v)}</option>)}
+          </select>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label htmlFor="purpose" className="block text-sm font-medium text-foreground mb-1">Purpose</label>
+          <select id="purpose" value={editForm.purpose} onChange={e => setEditForm({...editForm, purpose: e.target.value})}
+            className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
+            <option value="">None</option>
+            {sortByName(purposes, 'name').map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label htmlFor="date" className="block text-sm font-medium text-foreground mb-1">Date</label>
+          <input id="date" type="date" value={editForm.date} onChange={e => setEditForm({...editForm, date: e.target.value})}
+            onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) setEditForm(prev => ({...prev, date: n})) }}
+            className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label htmlFor="takeoff-time" className="block text-sm font-medium text-foreground mb-1">Takeoff Time</label>
+          <input id="takeoff-time" type="datetime-local" value={editForm.takeoff_time} onChange={e => setEditForm({...editForm, takeoff_time: e.target.value})}
+            className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+        </div>
+        <div>
+          <label htmlFor="landing-time" className="block text-sm font-medium text-foreground mb-1">Landing Time</label>
+          <input id="landing-time" type="datetime-local" value={editForm.landing_time} onChange={e => setEditForm({...editForm, landing_time: e.target.value})}
+            className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label htmlFor="duration-seconds" className="block text-sm font-medium text-foreground mb-1">Duration (seconds)</label>
+          <input id="duration-seconds" type="number" value={editForm.duration_seconds} onChange={e => setEditForm({...editForm, duration_seconds: e.target.value})}
+            className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+        </div>
+        <div>
+          <label htmlFor="status" className="block text-sm font-medium text-foreground mb-1">Status</label>
+          <select id="status" value={editForm.review_status} onChange={e => setEditForm({...editForm, review_status: e.target.value})}
+            className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
+            <option value="needs_review">Needs Review</option>
+            <option value="reviewed">Reviewed</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label htmlFor="takeoff-address-location" className="block text-sm font-medium text-foreground mb-1">Takeoff Address / Location</label>
+        <input id="takeoff-address-location" type="text" value={editForm.takeoff_address} onChange={e => setEditForm({...editForm, takeoff_address: e.target.value})}
+          className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+      </div>
+      <div>
+        <label htmlFor="case-number" className="block text-sm font-medium text-foreground mb-1">Case Number</label>
+        <input id="case-number" type="text" value={editForm.case_number} onChange={e => setEditForm({...editForm, case_number: e.target.value})}
+          className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label htmlFor="battery-serial" className="block text-sm font-medium text-foreground mb-1">Battery Serial</label>
+          <input id="battery-serial" list="detail-battery-list" value={editForm.battery_serial} onChange={e => setEditForm({...editForm, battery_serial: e.target.value})}
+            onFocus={e => { e.target.showPicker?.() }}
+            placeholder="Select or type..." className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+          <datalist id="detail-battery-list">
+            {batteries.map(b => <option key={b.id} value={b.serial_number}>{b.nickname || b.serial_number}</option>)}
+          </datalist>
+        </div>
+        <div>
+          <label htmlFor="sensor-package" className="block text-sm font-medium text-foreground mb-1">Sensor Package</label>
+          <input id="sensor-package" list="detail-sensor-list" value={editForm.sensor_package} onChange={e => setEditForm({...editForm, sensor_package: e.target.value})}
+            onFocus={e => { e.target.showPicker?.() }}
+            placeholder="Select or type..." className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+          <datalist id="detail-sensor-list">
+            {sensors.map(s => <option key={s.id} value={s.serial_number}>{s.name || s.serial_number}</option>)}
+          </datalist>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label htmlFor="attachment-top" className="block text-sm font-medium text-foreground mb-1">Attachment (TOP)</label>
+          <input id="attachment-top" list="detail-attach-list" value={editForm.attachment_top} onChange={e => setEditForm({...editForm, attachment_top: e.target.value})}
+            onFocus={e => { e.target.showPicker?.() }}
+            placeholder="Select or type..." className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+          <datalist id="detail-attach-list">
+            {attachments.map(a => <option key={a.id} value={a.serial_number}>{a.name || a.serial_number}</option>)}
+          </datalist>
+        </div>
+        <div>
+          <label htmlFor="attachment-bottom" className="block text-sm font-medium text-foreground mb-1">Attachment (BOTTOM)</label>
+          <input id="attachment-bottom" list="detail-attach-list" value={editForm.attachment_bottom} onChange={e => setEditForm({...editForm, attachment_bottom: e.target.value})}
+            onFocus={e => { e.target.showPicker?.() }}
+            placeholder="Select or type..." className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label htmlFor="attachment-left" className="block text-sm font-medium text-foreground mb-1">Attachment (LEFT)</label>
+          <input id="attachment-left" list="detail-attach-list" value={editForm.attachment_left} onChange={e => setEditForm({...editForm, attachment_left: e.target.value})}
+            onFocus={e => { e.target.showPicker?.() }}
+            placeholder="Select or type..." className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+        </div>
+        <div>
+          <label htmlFor="attachment-right" className="block text-sm font-medium text-foreground mb-1">Attachment (RIGHT)</label>
+          <input id="attachment-right" list="detail-attach-list" value={editForm.attachment_right} onChange={e => setEditForm({...editForm, attachment_right: e.target.value})}
+            onFocus={e => { e.target.showPicker?.() }}
+            placeholder="Select or type..." className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+        </div>
+      </div>
+      <div>
+        <label htmlFor="carriers" className="block text-sm font-medium text-foreground mb-1">Carrier(s)</label>
+        <input id="carriers" type="text" value={editForm.carrier} onChange={e => setEditForm({...editForm, carrier: e.target.value})}
+          className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+      </div>
+      <div>
+        <label htmlFor="notes" className="block text-sm font-medium text-foreground mb-1">Notes</label>
+        <textarea id="notes" value={editForm.notes} onChange={e => setEditForm({...editForm, notes: e.target.value})}
+          className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm h-20 resize-none" />
+      </div>
+      <div className="flex gap-2">
+        <button onClick={onSave} className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
+          <Save className="w-4 h-4" /> Save
+        </button>
+        <button onClick={onCancel} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm">Cancel</button>
+      </div>
+    </div>
+  )
+}
+
+function TelemetryCharts({ telemetry, flight }) {
+  const chartData = telemetry.map(t => ({
+    ...t,
+    altitude_ft: t.altitude_m == null ? null : Math.round(t.altitude_m * 3.28084),
+    speed_mph: t.speed_mps == null ? null : Math.round(t.speed_mps * 2.23694 * 10) / 10,
+  }))
+  return (
+    <div className="space-y-4">
+      {(flight.takeoff_lat || chartData.some(p => p.lat)) && (
+        <div className="bg-card border border-border rounded-xl p-4">
+          <h3 className="text-sm font-semibold text-foreground mb-3">Flight Path</h3>
+          <FlightPathMap
+            telemetry={chartData}
+            takeoffLat={flight.takeoff_lat}
+            takeoffLon={flight.takeoff_lon}
+            landingLat={flight.landing_lat}
+            landingLon={flight.landing_lon}
+          />
+        </div>
+      )}
+      <div className="bg-card border border-border rounded-xl p-5">
+        <h3 className="text-sm font-semibold text-foreground mb-4">Altitude (ft)</h3>
+        <ResponsiveContainer width="100%" height={250}>
+          <LineChart data={chartData}>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
+            <XAxis dataKey="elapsed_s" stroke="var(--muted-fg)" fontSize={11} label={{ value: 'seconds', position: 'bottom', fill: 'var(--muted-fg)', fontSize: 11 }} />
+            <YAxis stroke="var(--muted-fg)" fontSize={11} />
+            <Tooltip {...tooltipStyle} />
+            <Line type="monotone" dataKey="altitude_ft" stroke="#6366f1" strokeWidth={2} dot={false} connectNulls={true} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="bg-card border border-border rounded-xl p-5">
+          <h3 className="text-sm font-semibold text-foreground mb-4">Speed (mph)</h3>
+          <ResponsiveContainer width="100%" height={250}>
+            <LineChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
+              <XAxis dataKey="elapsed_s" stroke="var(--muted-fg)" fontSize={11} />
+              <YAxis stroke="var(--muted-fg)" fontSize={11} />
+              <Tooltip {...tooltipStyle} />
+              <Line type="monotone" dataKey="speed_mph" stroke="#3b82f6" strokeWidth={2} dot={false} connectNulls={true} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-5">
+          <h3 className="text-sm font-semibold text-foreground mb-4">Battery (%)</h3>
+          <ResponsiveContainer width="100%" height={250}>
+            <LineChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
+              <XAxis dataKey="elapsed_s" stroke="var(--muted-fg)" fontSize={11} />
+              <YAxis stroke="var(--muted-fg)" fontSize={11} domain={[0, 100]} />
+              <Tooltip {...tooltipStyle} />
+              <Line type="monotone" dataKey="battery_pct" stroke="#10b981" strokeWidth={2} dot={false} connectNulls={true} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function FlightDetailPage() {
   const { id } = useParams()
   const toast = useToast()
@@ -229,146 +436,18 @@ export default function FlightDetailPage() {
         </div>
 
         {editing ? (
-          <div className="space-y-3 border-t border-border pt-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="pilot" className="block text-sm font-medium text-foreground mb-1">Pilot</label>
-                <select id="pilot" value={editForm.pilot_id} onChange={e => setEditForm({...editForm, pilot_id: e.target.value})}
-                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
-                  <option value="">Unassigned</option>
-                  {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label htmlFor="vehicle" className="block text-sm font-medium text-foreground mb-1">Vehicle</label>
-                <select id="vehicle" value={editForm.vehicle_id} onChange={e => setEditForm({...editForm, vehicle_id: e.target.value})}
-                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
-                  <option value="">Unassigned</option>
-                  {sortVehicles(vehicles).map(v => <option key={v.id} value={v.id}>{vehicleDisplayName(v)}</option>)}
-                </select>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="purpose" className="block text-sm font-medium text-foreground mb-1">Purpose</label>
-                <select id="purpose" value={editForm.purpose} onChange={e => setEditForm({...editForm, purpose: e.target.value})}
-                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
-                  <option value="">None</option>
-                  {sortByName(purposes, 'name').map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label htmlFor="date" className="block text-sm font-medium text-foreground mb-1">Date</label>
-                <input id="date" type="date" value={editForm.date} onChange={e => setEditForm({...editForm, date: e.target.value})}
-                  onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) setEditForm(prev => ({...prev, date: n})) }}
-                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="takeoff-time" className="block text-sm font-medium text-foreground mb-1">Takeoff Time</label>
-                <input id="takeoff-time" type="datetime-local" value={editForm.takeoff_time} onChange={e => setEditForm({...editForm, takeoff_time: e.target.value})}
-                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
-              </div>
-              <div>
-                <label htmlFor="landing-time" className="block text-sm font-medium text-foreground mb-1">Landing Time</label>
-                <input id="landing-time" type="datetime-local" value={editForm.landing_time} onChange={e => setEditForm({...editForm, landing_time: e.target.value})}
-                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="duration-seconds" className="block text-sm font-medium text-foreground mb-1">Duration (seconds)</label>
-                <input id="duration-seconds" type="number" value={editForm.duration_seconds} onChange={e => setEditForm({...editForm, duration_seconds: e.target.value})}
-                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
-              </div>
-              <div>
-                <label htmlFor="status" className="block text-sm font-medium text-foreground mb-1">Status</label>
-                <select id="status" value={editForm.review_status} onChange={e => setEditForm({...editForm, review_status: e.target.value})}
-                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
-                  <option value="needs_review">Needs Review</option>
-                  <option value="reviewed">Reviewed</option>
-                </select>
-              </div>
-            </div>
-            <div>
-              <label htmlFor="takeoff-address-location" className="block text-sm font-medium text-foreground mb-1">Takeoff Address / Location</label>
-              <input id="takeoff-address-location" type="text" value={editForm.takeoff_address} onChange={e => setEditForm({...editForm, takeoff_address: e.target.value})}
-                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
-            </div>
-            <div>
-              <label htmlFor="case-number" className="block text-sm font-medium text-foreground mb-1">Case Number</label>
-              <input id="case-number" type="text" value={editForm.case_number} onChange={e => setEditForm({...editForm, case_number: e.target.value})}
-                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="battery-serial" className="block text-sm font-medium text-foreground mb-1">Battery Serial</label>
-                <input id="battery-serial" list="detail-battery-list" value={editForm.battery_serial} onChange={e => setEditForm({...editForm, battery_serial: e.target.value})}
-                  onFocus={e => { e.target.showPicker?.() }}
-                  placeholder="Select or type..." className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
-                <datalist id="detail-battery-list">
-                  {batteries.map(b => <option key={b.id} value={b.serial_number}>{b.nickname || b.serial_number}</option>)}
-                </datalist>
-              </div>
-              <div>
-                <label htmlFor="sensor-package" className="block text-sm font-medium text-foreground mb-1">Sensor Package</label>
-                <input id="sensor-package" list="detail-sensor-list" value={editForm.sensor_package} onChange={e => setEditForm({...editForm, sensor_package: e.target.value})}
-                  onFocus={e => { e.target.showPicker?.() }}
-                  placeholder="Select or type..." className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
-                <datalist id="detail-sensor-list">
-                  {sensors.map(s => <option key={s.id} value={s.serial_number}>{s.name || s.serial_number}</option>)}
-                </datalist>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="attachment-top" className="block text-sm font-medium text-foreground mb-1">Attachment (TOP)</label>
-                <input id="attachment-top" list="detail-attach-list" value={editForm.attachment_top} onChange={e => setEditForm({...editForm, attachment_top: e.target.value})}
-                  onFocus={e => { e.target.showPicker?.() }}
-                  placeholder="Select or type..." className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
-                <datalist id="detail-attach-list">
-                  {attachments.map(a => <option key={a.id} value={a.serial_number}>{a.name || a.serial_number}</option>)}
-                </datalist>
-              </div>
-              <div>
-                <label htmlFor="attachment-bottom" className="block text-sm font-medium text-foreground mb-1">Attachment (BOTTOM)</label>
-                <input id="attachment-bottom" list="detail-attach-list" value={editForm.attachment_bottom} onChange={e => setEditForm({...editForm, attachment_bottom: e.target.value})}
-                  onFocus={e => { e.target.showPicker?.() }}
-                  placeholder="Select or type..." className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="attachment-left" className="block text-sm font-medium text-foreground mb-1">Attachment (LEFT)</label>
-                <input id="attachment-left" list="detail-attach-list" value={editForm.attachment_left} onChange={e => setEditForm({...editForm, attachment_left: e.target.value})}
-                  onFocus={e => { e.target.showPicker?.() }}
-                  placeholder="Select or type..." className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
-              </div>
-              <div>
-                <label htmlFor="attachment-right" className="block text-sm font-medium text-foreground mb-1">Attachment (RIGHT)</label>
-                <input id="attachment-right" list="detail-attach-list" value={editForm.attachment_right} onChange={e => setEditForm({...editForm, attachment_right: e.target.value})}
-                  onFocus={e => { e.target.showPicker?.() }}
-                  placeholder="Select or type..." className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
-              </div>
-            </div>
-            <div>
-              <label htmlFor="carriers" className="block text-sm font-medium text-foreground mb-1">Carrier(s)</label>
-              <input id="carriers" type="text" value={editForm.carrier} onChange={e => setEditForm({...editForm, carrier: e.target.value})}
-                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
-            </div>
-            <div>
-              <label htmlFor="notes" className="block text-sm font-medium text-foreground mb-1">Notes</label>
-              <textarea id="notes" value={editForm.notes} onChange={e => setEditForm({...editForm, notes: e.target.value})}
-                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm h-20 resize-none" />
-            </div>
-            <div className="flex gap-2">
-              <button onClick={handleSave} className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
-                <Save className="w-4 h-4" /> Save
-              </button>
-              <button onClick={() => { setEditing(false); initEditForm(flight) }} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm">Cancel</button>
-            </div>
-          </div>
+          <EditFormSection
+            editForm={editForm}
+            setEditForm={setEditForm}
+            pilots={pilots}
+            vehicles={vehicles}
+            purposes={purposes}
+            batteries={batteries}
+            sensors={sensors}
+            attachments={attachments}
+            onSave={handleSave}
+            onCancel={() => { setEditing(false); initEditForm(flight) }}
+          />
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 border-t border-border pt-4">
             <div><p className="text-xs text-muted-foreground">Pilot</p><p className="text-sm text-foreground">{flight.pilot_id ? <Link to={`/pilots/${flight.pilot_id}`} className="text-primary hover:underline">{flight.pilot_name || 'Unassigned'}</Link> : (flight.pilot_name || 'Unassigned')}</p></div>
@@ -410,67 +489,9 @@ export default function FlightDetailPage() {
       </div>
 
       {/* Telemetry Charts */}
-      {telemetry.length > 0 && (() => {
-        const chartData = telemetry.map(t => ({
-          ...t,
-          altitude_ft: t.altitude_m == null ? null : Math.round(t.altitude_m * 3.28084),
-          speed_mph: t.speed_mps == null ? null : Math.round(t.speed_mps * 2.23694 * 10) / 10,
-        }))
-        return (
-        <div className="space-y-4">
-          {(flight.takeoff_lat || chartData.some(p => p.lat)) && (
-            <div className="bg-card border border-border rounded-xl p-4">
-              <h3 className="text-sm font-semibold text-foreground mb-3">Flight Path</h3>
-              <FlightPathMap
-                telemetry={chartData}
-                takeoffLat={flight.takeoff_lat}
-                takeoffLon={flight.takeoff_lon}
-                landingLat={flight.landing_lat}
-                landingLon={flight.landing_lon}
-              />
-            </div>
-          )}
-          <div className="bg-card border border-border rounded-xl p-5">
-            <h3 className="text-sm font-semibold text-foreground mb-4">Altitude (ft)</h3>
-            <ResponsiveContainer width="100%" height={250}>
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-                <XAxis dataKey="elapsed_s" stroke="var(--muted-fg)" fontSize={11} label={{ value: 'seconds', position: 'bottom', fill: 'var(--muted-fg)', fontSize: 11 }} />
-                <YAxis stroke="var(--muted-fg)" fontSize={11} />
-                <Tooltip {...tooltipStyle} />
-                <Line type="monotone" dataKey="altitude_ft" stroke="#6366f1" strokeWidth={2} dot={false} connectNulls={true} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="bg-card border border-border rounded-xl p-5">
-              <h3 className="text-sm font-semibold text-foreground mb-4">Speed (mph)</h3>
-              <ResponsiveContainer width="100%" height={250}>
-                <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-                  <XAxis dataKey="elapsed_s" stroke="var(--muted-fg)" fontSize={11} />
-                  <YAxis stroke="var(--muted-fg)" fontSize={11} />
-                  <Tooltip {...tooltipStyle} />
-                  <Line type="monotone" dataKey="speed_mph" stroke="#3b82f6" strokeWidth={2} dot={false} connectNulls={true} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="bg-card border border-border rounded-xl p-5">
-              <h3 className="text-sm font-semibold text-foreground mb-4">Battery (%)</h3>
-              <ResponsiveContainer width="100%" height={250}>
-                <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-                  <XAxis dataKey="elapsed_s" stroke="var(--muted-fg)" fontSize={11} />
-                  <YAxis stroke="var(--muted-fg)" fontSize={11} domain={[0, 100]} />
-                  <Tooltip {...tooltipStyle} />
-                  <Line type="monotone" dataKey="battery_pct" stroke="#10b981" strokeWidth={2} dot={false} connectNulls={true} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </div>
-        )
-      })()}
+      {telemetry.length > 0 && (
+        <TelemetryCharts telemetry={telemetry} flight={flight} />
+      )}
 
       {telemetry.length === 0 && (
         <>

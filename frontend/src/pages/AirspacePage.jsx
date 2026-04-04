@@ -118,12 +118,9 @@ export default function AirspacePage() {
   useEffect(() => {
     if (selectedPoint) return
     api.get('/settings').then(settings => {
-      const get = (key) => {
-        const s = settings.find(s => s.key === key)
-        return s ? s.value : null
-      }
-      const wLat = get('adsb_default_lat') || get('weather_location_lat')
-      const wLon = get('adsb_default_lon') || get('weather_location_lon')
+      const findSetting = (key) => settings.find(s => s.key === key)?.value ?? null
+      const wLat = findSetting('adsb_default_lat') || findSetting('weather_location_lat')
+      const wLon = findSetting('adsb_default_lon') || findSetting('weather_location_lon')
       if (wLat && wLon) {
         setMapCenter([Number.parseFloat(wLat), Number.parseFloat(wLon)])
       }

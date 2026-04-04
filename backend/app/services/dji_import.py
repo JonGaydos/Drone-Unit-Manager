@@ -272,14 +272,15 @@ def _collect_extra_columns(row: dict, standard_cols: set, fieldnames) -> dict:
         'isphotograph': 'is_photo',
         'isvideo': 'is_video',
     }
+    # Build a lowercase lookup for fieldnames
+    header_lookup = {h.lower().strip(): h for h in (fieldnames or [])}
     for csv_key, extra_key in airdata_extra_fields.items():
-        for header in (fieldnames or []):
-            if header.lower().strip() == csv_key:
-                val = row.get(header)
-                if val and val.strip():
-                    parsed_val = _parse_float(val)
-                    extra[extra_key] = parsed_val if parsed_val is not None else val.strip()
-                break
+        header = header_lookup.get(csv_key)
+        if header:
+            val = row.get(header)
+            if val and val.strip():
+                parsed_val = _parse_float(val)
+                extra[extra_key] = parsed_val if parsed_val is not None else val.strip()
 
     # Limit extra_data size
     if len(extra) > 30:

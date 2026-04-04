@@ -82,6 +82,22 @@ def _validate_path(file_path: str) -> Path:
     return resolved
 
 
+def _generate_thumbnail(file_path: str, photo_dir: str, stored_name: str) -> str | None:
+    """Generate a JPEG thumbnail for an uploaded image. Returns thumbnail path or None."""
+    try:
+        img = PILImage.open(file_path)
+        img.thumbnail((THUMB_WIDTH, THUMB_WIDTH * 10), PILImage.LANCZOS)
+        thumb_name = f"thumb_{stored_name}"
+        thumb_path = os.path.join(photo_dir, thumb_name)
+        if img.mode in ("RGBA", "P"):
+            img = img.convert("RGB")
+        img.save(thumb_path, "JPEG", quality=85)
+        return thumb_path
+    except (IOError, OSError) as e:
+        logger.warning("Thumbnail generation failed: %s", e)
+        return None
+
+
 @router.post("/upload", responses=responses(400, 413))
 def upload_photo(
 
@@ -168,18 +184,7 @@ def upload_photo(
     photo.file_size = total
 
     # Generate thumbnail
-    try:
-        img = PILImage.open(file_path)
-        img.thumbnail((THUMB_WIDTH, THUMB_WIDTH * 10), PILImage.LANCZOS)
-        thumb_name = f"thumb_{stored_name}"
-        thumb_path = os.path.join(photo_dir, thumb_name)
-        if img.mode in ("RGBA", "P"):
-            img = img.convert("RGB")
-        img.save(thumb_path, "JPEG", quality=85)
-        photo.thumbnail_path = thumb_path
-    except (IOError, OSError) as e:
-        logger.warning("Thumbnail generation failed for photo %s: %s", photo.id, e)
-        photo.thumbnail_path = None
+    photo.thumbnail_path = _generate_thumbnail(file_path, photo_dir, stored_name)
 
     # Create pilot associations
     if pilot_ids:

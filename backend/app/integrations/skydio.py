@@ -34,14 +34,23 @@ def _to_str(val):
     return str(val)
 
 
+def _first_of(d: dict, *keys):
+    """Return the first truthy value from dict for the given keys (matches `or` chain semantics)."""
+    for k in keys:
+        v = d.get(k)
+        if v:
+            return v
+    return None
+
+
 def _map_raw_flight(f: dict) -> dict:
     """Map a raw Skydio API flight dict to our standard flight dict format."""
     takeoff_time = None
     landing_time = None
     flight_date = None
 
-    takeoff_str = f.get("takeoff_time") or f.get("takeoff") or f.get("start_time")
-    landing_str = f.get("landing_time") or f.get("landing") or f.get("end_time")
+    takeoff_str = _first_of(f, "takeoff_time", "takeoff", "start_time")
+    landing_str = _first_of(f, "landing_time", "landing", "end_time")
 
     if takeoff_str:
         try:
@@ -56,34 +65,34 @@ def _map_raw_flight(f: dict) -> dict:
         except (ValueError, AttributeError):
             pass
 
-    duration = f.get("duration_seconds") or f.get("duration")
+    duration = _first_of(f, "duration_seconds", "duration")
     if duration is None and takeoff_time and landing_time:
         duration = int((landing_time - takeoff_time).total_seconds())
 
     return {
-        "external_id": f.get("flight_id") or f.get("uuid") or f.get("id"),
+        "external_id": _first_of(f, "flight_id", "uuid", "id"),
         "api_provider": "skydio",
         "date": flight_date or f.get("date"),
         "takeoff_time": takeoff_time,
         "landing_time": landing_time,
         "duration_seconds": duration,
-        "takeoff_lat": f.get("takeoff_latitude") or f.get("takeoff_lat"),
-        "takeoff_lon": f.get("takeoff_longitude") or f.get("takeoff_lon"),
-        "landing_lat": f.get("landing_latitude") or f.get("landing_lat"),
-        "landing_lon": f.get("landing_longitude") or f.get("landing_lon"),
-        "takeoff_address": f.get("takeoff_address") or f.get("location"),
-        "pilot_name": f.get("pilot_name") or f.get("operator_name"),
-        "vehicle_serial": f.get("vehicle_serial") or f.get("serial_number"),
-        "max_altitude_m": f.get("max_altitude_m") or f.get("max_altitude"),
-        "max_speed_mps": f.get("max_speed_mps") or f.get("max_speed"),
-        "distance_m": f.get("distance_m") or f.get("total_distance"),
-        "battery_serial": _to_str(f.get("battery_serial") or f.get("battery")),
+        "takeoff_lat": _first_of(f, "takeoff_latitude", "takeoff_lat"),
+        "takeoff_lon": _first_of(f, "takeoff_longitude", "takeoff_lon"),
+        "landing_lat": _first_of(f, "landing_latitude", "landing_lat"),
+        "landing_lon": _first_of(f, "landing_longitude", "landing_lon"),
+        "takeoff_address": _first_of(f, "takeoff_address", "location"),
+        "pilot_name": _first_of(f, "pilot_name", "operator_name"),
+        "vehicle_serial": _first_of(f, "vehicle_serial", "serial_number"),
+        "max_altitude_m": _first_of(f, "max_altitude_m", "max_altitude"),
+        "max_speed_mps": _first_of(f, "max_speed_mps", "max_speed"),
+        "distance_m": _first_of(f, "distance_m", "total_distance"),
+        "battery_serial": _to_str(_first_of(f, "battery_serial", "battery")),
         "sensor_package": _to_str(f.get("sensor_package")),
         "attachment_top": _to_str(f.get("attachment_top")),
         "attachment_bottom": _to_str(f.get("attachment_bottom")),
         "attachment_left": _to_str(f.get("attachment_left")),
         "attachment_right": _to_str(f.get("attachment_right")),
-        "carrier": _to_str(f.get("carrier") or f.get("carriers")),
+        "carrier": _to_str(_first_of(f, "carrier", "carriers")),
     }
 
 

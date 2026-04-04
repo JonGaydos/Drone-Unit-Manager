@@ -230,17 +230,24 @@ def _apply_enrichment_detail(flight, detail: dict, db):
     elif flight.takeoff_time and flight.landing_time:
         flight.duration_seconds = int((flight.landing_time - flight.takeoff_time).total_seconds())
 
-    # Location
-    flight.takeoff_lat = flight.takeoff_lat or detail.get("takeoff_latitude") or detail.get("takeoff_lat") or detail.get("latitude")
-    flight.takeoff_lon = flight.takeoff_lon or detail.get("takeoff_longitude") or detail.get("takeoff_lon") or detail.get("longitude")
-    flight.landing_lat = flight.landing_lat or detail.get("landing_latitude") or detail.get("landing_lat")
-    flight.landing_lon = flight.landing_lon or detail.get("landing_longitude") or detail.get("landing_lon")
-    flight.takeoff_address = flight.takeoff_address or detail.get("takeoff_address") or detail.get("location") or detail.get("address")
-
-    # Metrics
-    flight.max_altitude_m = flight.max_altitude_m or detail.get("max_altitude_m") or detail.get("max_altitude") or detail.get("max_height")
-    flight.max_speed_mps = flight.max_speed_mps or detail.get("max_speed_mps") or detail.get("max_speed") or detail.get("max_ground_speed")
-    flight.distance_m = flight.distance_m or detail.get("distance_m") or detail.get("total_distance") or detail.get("distance")
+    # Location + Metrics — apply first truthy API value if flight field is empty
+    _ENRICHMENT_FIELDS = {
+        "takeoff_lat": ("takeoff_latitude", "takeoff_lat", "latitude"),
+        "takeoff_lon": ("takeoff_longitude", "takeoff_lon", "longitude"),
+        "landing_lat": ("landing_latitude", "landing_lat"),
+        "landing_lon": ("landing_longitude", "landing_lon"),
+        "takeoff_address": ("takeoff_address", "location", "address"),
+        "max_altitude_m": ("max_altitude_m", "max_altitude", "max_height"),
+        "max_speed_mps": ("max_speed_mps", "max_speed", "max_ground_speed"),
+        "distance_m": ("distance_m", "total_distance", "distance"),
+    }
+    for field, api_keys in _ENRICHMENT_FIELDS.items():
+        if not getattr(flight, field, None):
+            for key in api_keys:
+                val = detail.get(key)
+                if val:
+                    setattr(flight, field, val)
+                    break
 
     # Pilot
     pilot_name = detail.get("pilot_name") or detail.get("operator_name") or detail.get("user_name")
@@ -257,14 +264,23 @@ def _apply_enrichment_detail(flight, detail: dict, db):
         if vehicle:
             flight.vehicle_id = vehicle.id
 
-    # Equipment
-    flight.battery_serial = flight.battery_serial or detail.get("battery_serial") or detail.get("battery")
-    flight.sensor_package = flight.sensor_package or detail.get("sensor_package")
-    flight.attachment_top = flight.attachment_top or detail.get("attachment_top")
-    flight.attachment_bottom = flight.attachment_bottom or detail.get("attachment_bottom")
-    flight.attachment_left = flight.attachment_left or detail.get("attachment_left")
-    flight.attachment_right = flight.attachment_right or detail.get("attachment_right")
-    flight.carrier = flight.carrier or detail.get("carrier") or detail.get("carriers")
+    # Equipment — same pattern
+    _EQUIPMENT_FIELDS = {
+        "battery_serial": ("battery_serial", "battery"),
+        "sensor_package": ("sensor_package",),
+        "attachment_top": ("attachment_top",),
+        "attachment_bottom": ("attachment_bottom",),
+        "attachment_left": ("attachment_left",),
+        "attachment_right": ("attachment_right",),
+        "carrier": ("carrier", "carriers"),
+    }
+    for field, api_keys in _EQUIPMENT_FIELDS.items():
+        if not getattr(flight, field, None):
+            for key in api_keys:
+                val = detail.get(key)
+                if val:
+                    setattr(flight, field, val)
+                    break
 
 
 @router.post("/enrich", response_model=SyncResultResponse)

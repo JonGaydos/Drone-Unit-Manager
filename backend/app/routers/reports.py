@@ -298,49 +298,65 @@ def _generate_chart(report_type: str, data: dict) -> io.BytesIO | None:
 
     chart_colors = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16"]
 
+    def _chart_flight_summary():
+        return _chart_bar_by_key(ax, rows, "purpose", None, "Flights by Purpose", "Flights", chart_colors, plt)
+
+    def _chart_pilot_hours():
+        _chart_barh(ax, rows, "pilot", "hours", "Hours by Pilot", "Hours", chart_colors, plt)
+        return True
+
+    def _chart_equipment():
+        _chart_barh(ax, rows, "vehicle", "hours", "Hours by Vehicle", "Hours", chart_colors, plt, truncate=20)
+        return True
+
+    def _chart_battery_status():
+        status_counts = {}
+        for r in rows:
+            s = r.get("status", "unknown")
+            status_counts[s] = status_counts.get(s, 0) + 1
+        if status_counts:
+            ax.pie(list(status_counts.values()), labels=list(status_counts.keys()),
+                   colors=chart_colors[:len(status_counts)],
+                   autopct="%1.0f%%", startangle=90, textprops={"fontsize": 9})
+            ax.set_title("Battery Status Distribution", fontsize=11, fontweight="bold", color="#334155")
+        return True
+
+    def _chart_maintenance():
+        return _chart_bar_by_key(ax, rows, "type", None, "Records by Type", "Records", chart_colors, plt)
+
+    def _chart_pilot_certs():
+        summary = data.get("summary", {})
+        cats = ["Active", "Expired", "Pending"]
+        vals = [summary.get("total_active", 0), summary.get("total_expired", 0), summary.get("total_pending", 0)]
+        ax.bar(cats, vals, color=["#10b981", "#ef4444", "#f59e0b"], edgecolor="white", linewidth=0.5)
+        ax.set_ylabel("Count", fontsize=9)
+        ax.set_title("Certification Status", fontsize=11, fontweight="bold", color="#334155")
+        return True
+
+    def _chart_pilot_activity():
+        _chart_grouped_bars(ax, rows, "pilot", ["flight_hours", "mission_hours", "training_hours"],
+                            "Hours by Pilot (Flight / Mission / Training)", plt)
+        return True
+
+    def _chart_annual():
+        _chart_grouped_bars(ax, rows, "year", ["flight_hours", "mission_hours", "training_hours"],
+                            "Year-over-Year Activity Hours", plt, limit=15)
+        return True
+
+    chart_dispatch = {
+        "flight_summary": _chart_flight_summary,
+        "pilot_hours": _chart_pilot_hours,
+        "equipment_utilization": _chart_equipment,
+        "battery_status": _chart_battery_status,
+        "maintenance_history": _chart_maintenance,
+        "pilot_certifications": _chart_pilot_certs,
+        "pilot_activity_summary": _chart_pilot_activity,
+        "annual_unit_report": _chart_annual,
+    }
+
     try:
-        if report_type == "flight_summary":
-            if not _chart_bar_by_key(ax, rows, "purpose", None, "Flights by Purpose", "Flights", chart_colors, plt):
-                plt.close(fig)
-                return None
-
-        elif report_type == "pilot_hours":
-            _chart_barh(ax, rows, "pilot", "hours", "Hours by Pilot", "Hours", chart_colors, plt)
-
-        elif report_type == "equipment_utilization":
-            _chart_barh(ax, rows, "vehicle", "hours", "Hours by Vehicle", "Hours", chart_colors, plt, truncate=20)
-
-        elif report_type == "battery_status":
-            status_counts = {}
-            for r in rows:
-                s = r.get("status", "unknown")
-                status_counts[s] = status_counts.get(s, 0) + 1
-            if status_counts:
-                ax.pie(list(status_counts.values()), labels=list(status_counts.keys()),
-                       colors=chart_colors[:len(status_counts)],
-                       autopct="%1.0f%%", startangle=90, textprops={"fontsize": 9})
-                ax.set_title("Battery Status Distribution", fontsize=11, fontweight="bold", color="#334155")
-
-        elif report_type == "maintenance_history":
-            _chart_bar_by_key(ax, rows, "type", None, "Records by Type", "Records", chart_colors, plt)
-
-        elif report_type == "pilot_certifications":
-            summary = data.get("summary", {})
-            cats = ["Active", "Expired", "Pending"]
-            vals = [summary.get("total_active", 0), summary.get("total_expired", 0), summary.get("total_pending", 0)]
-            ax.bar(cats, vals, color=["#10b981", "#ef4444", "#f59e0b"], edgecolor="white", linewidth=0.5)
-            ax.set_ylabel("Count", fontsize=9)
-            ax.set_title("Certification Status", fontsize=11, fontweight="bold", color="#334155")
-
-        elif report_type == "pilot_activity_summary":
-            _chart_grouped_bars(ax, rows, "pilot", ["flight_hours", "mission_hours", "training_hours"],
-                                "Hours by Pilot (Flight / Mission / Training)", plt)
-
-        elif report_type == "annual_unit_report":
-            _chart_grouped_bars(ax, rows, "year", ["flight_hours", "mission_hours", "training_hours"],
-                                "Year-over-Year Activity Hours", plt, limit=15)
-
-        else:
+        handler = chart_dispatch.get(report_type)
+        if not handler or not handler():
             plt.close(fig)
             return None
 

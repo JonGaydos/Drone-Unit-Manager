@@ -382,6 +382,34 @@ function FlightLogImport() {
     }
   }
 
+  const toastImportResult = (res) => {
+    if (res.error) {
+      toast.error(res.error)
+    } else if (res.total !== undefined) {
+      toast.success(`Bulk import: ${res.imported} imported, ${res.skipped} skipped out of ${res.total} files`)
+    } else if (res.skipped) {
+      toast.info('Flight already exists (skipped)')
+    } else if (res.flight_id) {
+      toast.success(`Imported flight #${res.flight_id} with ${res.points_imported} telemetry points`)
+    } else {
+      toast.success(`Imported ${res.points_imported || res.imported || res.flights_imported || 0} flights successfully`)
+    }
+  }
+
+  const processBatchResult = (batch, res, fileName) => {
+    if (res.total !== undefined) {
+      batch.imported += res.imported || 0
+      batch.skipped += res.skipped || 0
+      if (res.errors?.length) batch.errors.push(...res.errors)
+    } else if (res.skipped) {
+      batch.skipped++
+    } else if (res.error) {
+      batch.errors.push(`${fileName}: ${res.error}`)
+    } else {
+      batch.imported++
+    }
+  }
+
   const handleImport = async () => {
     if (files.length === 0) return
     setImporting(true)
@@ -390,39 +418,16 @@ function FlightLogImport() {
 
     try {
       if (files.length === 1) {
-        // Single file import
         const res = await importSingleFile(files[0])
         setResult(res)
-        if (res.error) {
-          toast.error(res.error)
-        } else if (res.total !== undefined) {
-          toast.success(`Bulk import: ${res.imported} imported, ${res.skipped} skipped out of ${res.total} files`)
-        } else if (res.skipped) {
-          toast.info(`Flight already exists (skipped)`)
-        } else if (res.flight_id) {
-          toast.success(`Imported flight #${res.flight_id} with ${res.points_imported} telemetry points`)
-        } else {
-          toast.success(`Imported ${res.points_imported || res.imported || res.flights_imported || 0} flights successfully`)
-        }
+        toastImportResult(res)
       } else {
-        // Multi-file batch import (process sequentially)
         const batch = { total: files.length, imported: 0, skipped: 0, errors: [] }
         for (let i = 0; i < files.length; i++) {
           setProgress(`Processing ${i + 1} of ${files.length}: ${files[i].name}`)
           try {
             const res = await importSingleFile(files[i])
-            if (res.total !== undefined) {
-              // ZIP result (nested batch)
-              batch.imported += res.imported || 0
-              batch.skipped += res.skipped || 0
-              if (res.errors?.length) batch.errors.push(...res.errors)
-            } else if (res.skipped) {
-              batch.skipped++
-            } else if (res.error) {
-              batch.errors.push(`${files[i].name}: ${res.error}`)
-            } else {
-              batch.imported++
-            }
+            processBatchResult(batch, res, files[i].name)
           } catch (err) {
             batch.errors.push(`${files[i].name}: ${err.message}`)
           }

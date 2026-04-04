@@ -63,6 +63,41 @@ function StatCard({ icon: Icon, label, value, color, onClick }) {
   )
 }
 
+function buildAttentionItems(data) {
+  const items = []
+  if (data.expired_certifications > 0) {
+    items.push({ type: 'Expired Certifications', count: data.expired_certifications, severity: 'critical', link: '/certifications' })
+  }
+  if (data.expiring_certifications?.length > 0) {
+    for (const c of data.expiring_certifications) {
+      items.push({
+        type: 'Expiring Certification',
+        detail: `Pilot #${c.pilot_id} - ${c.days_remaining} days remaining`,
+        severity: c.days_remaining <= 30 ? 'high' : 'medium',
+        link: '/certifications',
+      })
+    }
+  }
+  if (data.expired_registrations > 0) {
+    items.push({ type: 'Expired FAA Registrations', count: data.expired_registrations, severity: 'critical', link: '/fleet' })
+  }
+  if (data.overdue_maintenance > 0) {
+    items.push({ type: 'Overdue Maintenance', count: data.overdue_maintenance, severity: 'high', link: '/maintenance' })
+  }
+  if (data.open_incidents > 0) {
+    items.push({ type: 'Open Incidents', count: data.open_incidents, severity: 'high', link: '/incidents' })
+  }
+  if (data.unreviewed_flights > 0) {
+    items.push({ type: 'Unreviewed Flights', count: data.unreviewed_flights, severity: 'medium', link: '/flights' })
+  }
+  if (data.pending_flight_plans > 0) {
+    items.push({ type: 'Pending Flight Plans', count: data.pending_flight_plans, severity: 'low', link: '/flight-plans' })
+  }
+  const severityOrder = { critical: 0, high: 1, medium: 2, low: 3 }
+  items.sort((a, b) => (severityOrder[a.severity] ?? 9) - (severityOrder[b.severity] ?? 9))
+  return items
+}
+
 export default function CompliancePage() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -99,70 +134,7 @@ export default function CompliancePage() {
     )
   }
 
-  // Build attention items list
-  const attentionItems = []
-  if (data.expired_certifications > 0) {
-    attentionItems.push({
-      type: 'Expired Certifications',
-      count: data.expired_certifications,
-      severity: 'critical',
-      link: '/certifications',
-    })
-  }
-  if (data.expiring_certifications?.length > 0) {
-    for (const c of data.expiring_certifications) {
-      attentionItems.push({
-        type: 'Expiring Certification',
-        detail: `Pilot #${c.pilot_id} - ${c.days_remaining} days remaining`,
-        severity: c.days_remaining <= 30 ? 'high' : 'medium',
-        link: '/certifications',
-      })
-    }
-  }
-  if (data.expired_registrations > 0) {
-    attentionItems.push({
-      type: 'Expired FAA Registrations',
-      count: data.expired_registrations,
-      severity: 'critical',
-      link: '/fleet',
-    })
-  }
-  if (data.overdue_maintenance > 0) {
-    attentionItems.push({
-      type: 'Overdue Maintenance',
-      count: data.overdue_maintenance,
-      severity: 'high',
-      link: '/maintenance',
-    })
-  }
-  if (data.open_incidents > 0) {
-    attentionItems.push({
-      type: 'Open Incidents',
-      count: data.open_incidents,
-      severity: 'high',
-      link: '/incidents',
-    })
-  }
-  if (data.unreviewed_flights > 0) {
-    attentionItems.push({
-      type: 'Unreviewed Flights',
-      count: data.unreviewed_flights,
-      severity: 'medium',
-      link: '/flights',
-    })
-  }
-  if (data.pending_flight_plans > 0) {
-    attentionItems.push({
-      type: 'Pending Flight Plans',
-      count: data.pending_flight_plans,
-      severity: 'low',
-      link: '/flight-plans',
-    })
-  }
-
-  // Sort by severity
-  const severityOrder = { critical: 0, high: 1, medium: 2, low: 3 }
-  attentionItems.sort((a, b) => (severityOrder[a.severity] ?? 9) - (severityOrder[b.severity] ?? 9))
+  const attentionItems = buildAttentionItems(data)
 
   const severityBadge = {
     critical: 'bg-red-500/15 text-red-400 border-red-500/30',

@@ -35,6 +35,7 @@ COL_TAKEOFF_LAT = "Takeoff Lat"
 COL_TAKEOFF_LON = "Takeoff Lon"
 COL_MAX_ALTITUDE_M = "Max Altitude (m)"
 COL_MAX_SPEED_MPS = "Max Speed (m/s)"
+EXCEL_EXTENSIONS = ('.xlsx', '.xls')
 
 
 @router.get("/flights/csv")
@@ -453,6 +454,34 @@ def export_equipment_checkouts_csv(
     )
 
 
+def _parse_csv_flight_row(row: dict, db) -> Flight:
+    """Parse a single CSV row into a Flight object with pilot lookup."""
+    flight = Flight(
+        date=row.get("Date") or None,
+        purpose=row.get("Purpose") or None,
+        duration_seconds=int(row[COL_DURATION_S]) if row.get(COL_DURATION_S) else None,
+        takeoff_address=row.get("Takeoff Address") or None,
+        takeoff_lat=float(row[COL_TAKEOFF_LAT]) if row.get(COL_TAKEOFF_LAT) else None,
+        takeoff_lon=float(row[COL_TAKEOFF_LON]) if row.get(COL_TAKEOFF_LON) else None,
+        max_altitude_m=float(row[COL_MAX_ALTITUDE_M]) if row.get(COL_MAX_ALTITUDE_M) else None,
+        max_speed_mps=float(row[COL_MAX_SPEED_MPS]) if row.get(COL_MAX_SPEED_MPS) else None,
+        case_number=row.get(COL_CASE_NUMBER) or None,
+        notes=row.get("Notes") or None,
+        review_status="reviewed",
+        pilot_confirmed=True,
+    )
+    pilot_name = row.get("Pilot", "").strip()
+    if pilot_name:
+        parts = pilot_name.split(" ", 1)
+        if len(parts) == 2:
+            pilot = db.query(Pilot).filter(
+                Pilot.first_name == parts[0], Pilot.last_name == parts[1]
+            ).first()
+            if pilot:
+                flight.pilot_id = pilot.id
+    return flight
+
+
 @router.post("/flights/import", responses=responses(400, 413))
 async def import_flights_csv(
     db: DBSession,
@@ -472,30 +501,7 @@ async def import_flights_csv(
     errors = []
     for i, row in enumerate(reader):
         try:
-            flight = Flight(
-                date=row.get("Date") or None,
-                purpose=row.get("Purpose") or None,
-                duration_seconds=int(row[COL_DURATION_S]) if row.get(COL_DURATION_S) else None,
-                takeoff_address=row.get("Takeoff Address") or None,
-                takeoff_lat=float(row[COL_TAKEOFF_LAT]) if row.get(COL_TAKEOFF_LAT) else None,
-                takeoff_lon=float(row[COL_TAKEOFF_LON]) if row.get(COL_TAKEOFF_LON) else None,
-                max_altitude_m=float(row[COL_MAX_ALTITUDE_M]) if row.get(COL_MAX_ALTITUDE_M) else None,
-                max_speed_mps=float(row[COL_MAX_SPEED_MPS]) if row.get(COL_MAX_SPEED_MPS) else None,
-                case_number=row.get(COL_CASE_NUMBER) or None,
-                notes=row.get("Notes") or None,
-                review_status="reviewed",
-                pilot_confirmed=True,
-            )
-            pilot_name = row.get("Pilot", "").strip()
-            if pilot_name:
-                parts = pilot_name.split(" ", 1)
-                if len(parts) == 2:
-                    pilot = db.query(Pilot).filter(
-                        Pilot.first_name == parts[0], Pilot.last_name == parts[1]
-                    ).first()
-                    if pilot:
-                        flight.pilot_id = pilot.id
-
+            flight = _parse_csv_flight_row(row, db)
             db.add(flight)
             imported += 1
         except Exception as e:
@@ -511,7 +517,7 @@ async def import_excel_file(
     admin: AdminUser,
     file: Annotated[UploadFile, File()],
 ):
-    if not file.filename.endswith(('.xlsx', '.xls')):
+    if not file.filename.endswith(EXCEL_EXTENSIONS):
         raise HTTPException(400, "Only Excel files (.xlsx) are supported")
     content = await file.read()
     if len(content) > settings.MAX_UPLOAD_SIZE:
@@ -565,7 +571,7 @@ async def import_flight_log(
     Returns:
         Import result with flight_id, points_imported, and format_detected.
     """
-    if not file.filename.endswith(('.txt', '.csv', '.json', '.zip', '.xlsx', '.xls')):
+    if not file.filename.endswith(('.txt', '.csv', '.json', '.zip') + EXCEL_EXTENSIONS):
         raise HTTPException(400, "Only .txt, .csv, .json, .zip, and .xlsx files are supported")
 
     content = await file.read()
@@ -573,7 +579,7 @@ async def import_flight_log(
         raise HTTPException(413, f"File too large. Maximum size is {settings.MAX_UPLOAD_SIZE // (1024*1024)}MB")
 
     # Handle Excel files — route to Excel import
-    if file.filename.endswith(('.xlsx', '.xls')):
+    if file.filename.endswith(EXCEL_EXTENSIONS):
         from app.services.excel_import import import_excel
         result = import_excel(db, content)
         result["format_detected"] = "excel"

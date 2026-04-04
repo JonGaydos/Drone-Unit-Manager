@@ -120,6 +120,21 @@ export default function SettingsPage() {
     { to: '/audit-log', label: 'Audit Log' },
   ]
 
+  const loadDefaultPurposes = () => {
+    api.get('/flights/purposes/list').then(purposes => {
+      if (Array.isArray(purposes) && purposes.length > 0) {
+        setMissionPurposes(purposes.map(p => p.name))
+      }
+    }).catch(() => {})
+  }
+
+  const handlePurposeKeyDown = (e) => {
+    if (e.key === 'Enter' && newPurpose.trim()) {
+      setMissionPurposes(prev => [...prev, newPurpose.trim()])
+      setNewPurpose('')
+    }
+  }
+
   useEffect(() => {
     api.get('/settings').then(data => {
       const map = {}
@@ -162,12 +177,7 @@ export default function SettingsPage() {
       if (map.mission_purposes) {
         try { setMissionPurposes(JSON.parse(map.mission_purposes)) } catch { /* invalid JSON */ }
       } else {
-        // Load default purposes from the database
-        api.get('/flights/purposes/list').then(purposes => {
-          if (Array.isArray(purposes) && purposes.length > 0) {
-            setMissionPurposes(purposes.map(p => p.name))
-          }
-        }).catch(() => {})
+        loadDefaultPurposes()
       }
     }).catch(console.error)
     if (isAdmin) {
@@ -700,12 +710,7 @@ export default function SettingsPage() {
               type="text"
               value={newPurpose}
               onChange={e => setNewPurpose(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter' && newPurpose.trim()) {
-                  setMissionPurposes(prev => [...prev, newPurpose.trim()])
-                  setNewPurpose('')
-                }
-              }}
+              onKeyDown={handlePurposeKeyDown}
               placeholder="Add a purpose..."
               className="flex-1 px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
