@@ -454,6 +454,17 @@ def export_equipment_checkouts_csv(
     )
 
 
+def _lookup_pilot_by_name(db, full_name: str) -> int | None:
+    """Look up a pilot ID by 'First Last' name string."""
+    parts = full_name.split(" ", 1)
+    if len(parts) != 2:
+        return None
+    pilot = db.query(Pilot).filter(
+        Pilot.first_name == parts[0], Pilot.last_name == parts[1]
+    ).first()
+    return pilot.id if pilot else None
+
+
 def _parse_csv_flight_row(row: dict, db) -> Flight:
     """Parse a single CSV row into a Flight object with pilot lookup."""
     flight = Flight(
@@ -472,13 +483,7 @@ def _parse_csv_flight_row(row: dict, db) -> Flight:
     )
     pilot_name = row.get("Pilot", "").strip()
     if pilot_name:
-        parts = pilot_name.split(" ", 1)
-        if len(parts) == 2:
-            pilot = db.query(Pilot).filter(
-                Pilot.first_name == parts[0], Pilot.last_name == parts[1]
-            ).first()
-            if pilot:
-                flight.pilot_id = pilot.id
+        flight.pilot_id = _lookup_pilot_by_name(db, pilot_name)
     return flight
 
 

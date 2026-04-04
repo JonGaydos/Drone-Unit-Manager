@@ -115,16 +115,16 @@ export default function AirspacePage() {
   }, [selectedPoint, radius, refreshInterval])
 
   // Load default location from app settings on mount (only if no saved point)
+  const applyDefaultLocation = useCallback((settings) => {
+    const find = (key) => settings.find(s => s.key === key)?.value ?? null
+    const lat = find('adsb_default_lat') || find('weather_location_lat')
+    const lon = find('adsb_default_lon') || find('weather_location_lon')
+    if (lat && lon) setMapCenter([Number.parseFloat(lat), Number.parseFloat(lon)])
+  }, [])
+
   useEffect(() => {
     if (selectedPoint) return
-    api.get('/settings').then(settings => {
-      const findSetting = (key) => settings.find(s => s.key === key)?.value ?? null
-      const wLat = findSetting('adsb_default_lat') || findSetting('weather_location_lat')
-      const wLon = findSetting('adsb_default_lon') || findSetting('weather_location_lon')
-      if (wLat && wLon) {
-        setMapCenter([Number.parseFloat(wLat), Number.parseFloat(wLon)])
-      }
-    }).catch(() => {})
+    api.get('/settings').then(applyDefaultLocation).catch(() => {})
   }, [])
 
   const fetchAircraft = useCallback(async (point, manual = false) => {
