@@ -576,6 +576,7 @@ async def import_flight_log(
     if file.filename.endswith(('.xlsx', '.xls')):
         from app.services.excel_import import import_excel
         result = import_excel(db, content)
+        result["format_detected"] = "excel"
         return result
 
     from app.services.dji_import import import_flight_log as do_import

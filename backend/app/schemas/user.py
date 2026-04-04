@@ -50,6 +50,7 @@ class SetupRequest(BaseModel):
     password: str
     display_name: str = ""
     org_name: str = ""
+    email: str = ""
 
 
 class LoginRequest(BaseModel):

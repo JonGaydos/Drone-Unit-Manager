@@ -402,7 +402,7 @@ function FlightLogImport() {
         } else if (res.flight_id) {
           toast.success(`Imported flight #${res.flight_id} with ${res.points_imported} telemetry points`)
         } else {
-          toast.success(`Imported ${res.points_imported || res.imported || 0} flights successfully`)
+          toast.success(`Imported ${res.points_imported || res.imported || res.flights_imported || 0} flights successfully`)
         }
       } else {
         // Multi-file batch import (process sequentially)

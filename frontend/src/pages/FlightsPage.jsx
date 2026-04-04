@@ -358,6 +358,7 @@ export default function FlightsPage() {
           <label htmlFor="purpose-1" className="block text-xs text-muted-foreground mb-1">Purpose</label>
           <select id="purpose-1" value={filterPurpose} onChange={e => setFilterPurpose(e.target.value)} className={selectCls}>
             <option value="">All Purposes</option>
+            <option value="__none__">No Purpose</option>
             {sortByName(purposes, 'name').map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
           </select>
         </div>

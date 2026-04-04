@@ -46,7 +46,9 @@ def list_flights(
         filters.append(Flight.pilot_id == pilot_id)
     if vehicle_id:
         filters.append(Flight.vehicle_id == vehicle_id)
-    if purpose:
+    if purpose == "__none__":
+        filters.append((Flight.purpose.is_(None)) | (Flight.purpose == ""))
+    elif purpose:
         filters.append(Flight.purpose == purpose)
     if date_from:
         filters.append(Flight.date >= date_from)

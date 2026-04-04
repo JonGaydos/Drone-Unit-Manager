@@ -193,13 +193,33 @@ def initial_setup(data: SetupRequest, db: DBSession):
     from app.models.setting import Setting
     from app.models.folder import Folder
     from app.models.flight import FlightPurpose
+    from app.models.pilot import Pilot
 
-    # Create admin user
+    email = data.email.strip() if data.email else ""
+
+    # Split display name into first/last for pilot record
+    name_parts = (display_name or username).split(None, 1)
+    first_name = name_parts[0]
+    last_name = name_parts[1] if len(name_parts) > 1 else ""
+
+    # Create pilot record for the admin user
+    pilot = Pilot(
+        first_name=first_name,
+        last_name=last_name,
+        email=email or None,
+        status="active",
+    )
+    db.add(pilot)
+    db.flush()
+
+    # Create admin user linked to the pilot
     admin = User(
         username=username,
         password_hash=hash_password(password),
         display_name=display_name or username,
         role="admin",
+        email=email or None,
+        pilot_id=pilot.id,
     )
     db.add(admin)
 

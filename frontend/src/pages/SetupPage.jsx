@@ -8,6 +8,7 @@ export default function SetupPage() {
   const [form, setForm] = useState({
     display_name: '',
     org_name: '',
+    email: '',
     username: '',
     password: '',
     password_confirm: '',
@@ -83,6 +84,17 @@ export default function SetupPage() {
                   placeholder="e.g., John Doe"
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground"
                 />
+              </div>
+              <div>
+                <label htmlFor="email" className="block text-sm font-medium mb-1">Email Address</label>
+                <input id="email"
+                  type="email"
+                  value={form.email}
+                  onChange={e => setForm({...form, email: e.target.value})}
+                  placeholder="e.g., jdoe@agency.gov"
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground"
+                />
+                <p className="text-xs text-muted-foreground mt-1">Used for email digests and pilot profile matching</p>
               </div>
               <button
                 onClick={() => setStep(2)}
