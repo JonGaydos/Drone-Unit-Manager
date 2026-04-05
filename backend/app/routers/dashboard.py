@@ -26,11 +26,14 @@ def get_stats(db: DBSession, user: CurrentUser):
     fleet_size = db.query(func.count(Vehicle.id)).filter(Vehicle.status == "active").scalar()
     needs_review = db.query(func.count(Flight.id)).filter(Flight.review_status == "needs_review").scalar()
 
-    soon = date.today() + timedelta(days=90)
+    today_date = date.today()
+    soon = today_date + timedelta(days=90)
+    active_pids = db.query(Pilot.id).filter(Pilot.status == "active").subquery()
     expiring = db.query(func.count(PilotCertification.id)).filter(
         PilotCertification.expiration_date.isnot(None),
-        PilotCertification.expiration_date <= soon,
-        PilotCertification.status.in_(["active", "complete"]),
+        PilotCertification.expiration_date.between(today_date, soon),
+        PilotCertification.status.notin_(["not_issued", "renewed"]),
+        PilotCertification.pilot_id.in_(active_pids),
     ).scalar()
 
     return DashboardStats(
