@@ -312,16 +312,21 @@ def compliance_dashboard(db: DBSession, user: CurrentUser):
     # Certification compliance
     total_pilots = db.query(func.count(Pilot.id)).filter(Pilot.status == "active").scalar()
 
-    # Count pilots with expired certs
+    # IDs of active pilots only
+    active_pilot_ids = db.query(Pilot.id).filter(Pilot.status == "active").subquery()
+
+    # Count pilots with expired certs (exclude renewed and inactive pilots)
     expired_certs = db.query(func.count(func.distinct(PilotCertification.pilot_id))).filter(
         PilotCertification.expiration_date < today,
-        PilotCertification.status != "not_issued",
+        PilotCertification.status.notin_(["not_issued", "renewed"]),
+        PilotCertification.pilot_id.in_(active_pilot_ids),
     ).scalar()
 
-    # Count certs expiring within 90 days
+    # Count certs expiring within 90 days (exclude renewed and inactive pilots)
     expiring_soon = db.query(PilotCertification).filter(
         PilotCertification.expiration_date.between(today, soon),
-        PilotCertification.status != "not_issued",
+        PilotCertification.status.notin_(["not_issued", "renewed"]),
+        PilotCertification.pilot_id.in_(active_pilot_ids),
     ).all()
 
     # FAA registration compliance
