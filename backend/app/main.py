@@ -32,7 +32,7 @@ from app.routers import (
     weather, currency, equipment_checkouts, checklists,
     components, geofences, adsb, notifications,
 )
-from app.routers import vehicle_registrations
+from app.routers import vehicle_registrations, backup
 from app.services.scheduler import start_scheduler, stop_scheduler
 from app.models.user import User
 from app.models.flight import FlightPurpose
@@ -146,6 +146,7 @@ app.include_router(components.router)
 app.include_router(geofences.router)
 app.include_router(adsb.router)
 app.include_router(notifications.router)
+app.include_router(backup.router)
 
 
 @app.get("/api/health")

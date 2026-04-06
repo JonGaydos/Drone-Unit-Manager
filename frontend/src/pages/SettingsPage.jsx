@@ -5,7 +5,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { useConfirm } from '@/hooks/useConfirm'
 import { sortPilotsActiveFirst } from '@/lib/formatters'
-import { Save, Loader2, Upload, UserPlus, Key, Trash2, Shield, Image as ImageIcon, ChevronUp, ChevronDown, ExternalLink, X, Edit2 } from 'lucide-react'
+import { Save, Loader2, Upload, Download, UserPlus, Key, Trash2, Shield, Image as ImageIcon, ChevronUp, ChevronDown, ExternalLink, X, Edit2 } from 'lucide-react'
 
 const IntegrationsContent = React.lazy(() => import('@/pages/IntegrationsPage'))
 
@@ -13,6 +13,8 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('general')
   const [settings, setSettings] = useState({})
   const [saving, setSaving] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const [includeTelemetry, setIncludeTelemetry] = useState(false)
   const [testResult, setTestResult] = useState(null)
   const { isAdmin, user: currentUser } = useAuth()
   const toast = useToast()
@@ -740,6 +742,36 @@ export default function SettingsPage() {
           >
             {savingPurposes ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             Save Purposes
+          </button>
+        </div>
+      )}
+
+      {/* Backup Export - Admin Only */}
+      {isAdmin && (
+        <div className="bg-card border border-border rounded-xl p-6">
+          <h3 className="text-lg font-semibold text-foreground mb-1">Backup & Restore</h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            Download a complete backup of your database, settings, and uploaded files as a ZIP archive. To restore, use the Setup page on a fresh install.
+          </p>
+          <label className="flex items-center gap-2 mb-4 cursor-pointer">
+            <input type="checkbox" checked={includeTelemetry} onChange={e => setIncludeTelemetry(e.target.checked)} className="rounded border-border" />
+            <span className="text-sm text-foreground">Include telemetry data</span>
+            <span className="text-xs text-muted-foreground">(flight GPS/altitude/speed — can be very large)</span>
+          </label>
+          <button
+            onClick={async () => {
+              setExporting(true)
+              try {
+                await api.download(`/backup/export?include_telemetry=${includeTelemetry}`)
+                toast.success('Backup exported successfully')
+              } catch (err) { toast.error(err.message) }
+              finally { setExporting(false) }
+            }}
+            disabled={exporting}
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50"
+          >
+            {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+            {exporting ? 'Exporting...' : 'Export Backup'}
           </button>
         </div>
       )}

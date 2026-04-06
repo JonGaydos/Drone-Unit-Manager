@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { api } from '@/api/client'
-import { Shield, ArrowRight } from 'lucide-react'
+import { Shield, ArrowRight, Upload, Loader2 } from 'lucide-react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 
 export default function SetupPage() {
@@ -15,6 +15,11 @@ export default function SetupPage() {
   })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showRestore, setShowRestore] = useState(false)
+  const [restoring, setRestoring] = useState(false)
+  const [restoreFile, setRestoreFile] = useState(null)
+  const [restoreResult, setRestoreResult] = useState(null)
+  const fileRef = useRef(null)
 
   const handleSubmit = async () => {
     setError('')
@@ -155,6 +160,69 @@ export default function SetupPage() {
                 </button>
               </div>
             </>
+          )}
+        </div>
+
+        {/* Restore from Backup */}
+        <div className="mt-4">
+          <button
+            onClick={() => setShowRestore(!showRestore)}
+            className="w-full text-center text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {showRestore ? 'Hide restore option' : 'Restore from a backup instead?'}
+          </button>
+          {showRestore && (
+            <div className="bg-card border border-border rounded-xl p-6 mt-3 space-y-4">
+              <h3 className="text-base font-semibold text-foreground">Restore from Backup</h3>
+              <p className="text-sm text-muted-foreground">
+                Upload a backup ZIP file exported from another Drone Unit Manager instance. This will restore all data, settings, and uploaded files.
+              </p>
+              <div
+                className="border-2 border-dashed border-border rounded-xl p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                onClick={() => fileRef.current?.click()}
+              >
+                <Upload className="w-8 h-8 mx-auto text-muted-foreground/50 mb-2" />
+                <p className="text-sm text-muted-foreground">
+                  {restoreFile ? restoreFile.name : 'Click to select backup ZIP file'}
+                </p>
+                <input ref={fileRef} type="file" accept=".zip" className="hidden" onChange={e => setRestoreFile(e.target.files[0])} />
+              </div>
+              {restoreFile && !restoreResult && (
+                <button
+                  onClick={async () => {
+                    setRestoring(true)
+                    setError('')
+                    try {
+                      const fd = new FormData()
+                      fd.append('file', restoreFile)
+                      const result = await api.upload('/backup/import', fd)
+                      setRestoreResult(result)
+                      setTimeout(() => { globalThis.location.href = '/login' }, 3000)
+                    } catch (err) {
+                      setError(err.message || 'Restore failed')
+                    } finally {
+                      setRestoring(false)
+                    }
+                  }}
+                  disabled={restoring}
+                  className="w-full py-2.5 bg-emerald-600 text-white rounded-lg font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {restoring ? <><Loader2 className="w-4 h-4 animate-spin" /> Restoring...</> : 'Restore Backup'}
+                </button>
+              )}
+              {restoreResult && (
+                <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-lg p-4 text-sm space-y-1">
+                  <p className="font-medium">Restore complete!</p>
+                  <p>Restored {restoreResult.rows_imported} rows across {restoreResult.tables_imported} tables.</p>
+                  {restoreResult.files_restored > 0 && <p>{restoreResult.files_restored} files restored.</p>}
+                  {restoreResult.telemetry_imported && <p>Telemetry data restored.</p>}
+                  <p className="text-emerald-300 mt-2">Redirecting to login...</p>
+                </div>
+              )}
+              {error && !restoreResult && (
+                <div className="bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg p-3 text-sm">{error}</div>
+              )}
+            </div>
           )}
         </div>
 
