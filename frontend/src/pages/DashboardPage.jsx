@@ -73,16 +73,19 @@ export default function DashboardPage() {
       api.get('/pilot-certifications').catch(() => []),
       api.get('/maintenance?upcoming=true').catch(() => []),
       api.get('/dashboard/analytics/fleet-health').catch(() => null),
+      api.get('/pilots').catch(() => []),
     ])
-      .then(([statsData, flightsData, certsData, maintenanceData, fleetHealthData]) => {
+      .then(([statsData, flightsData, certsData, maintenanceData, fleetHealthData, pilotsData]) => {
         setStats(statsData)
 
         // Handle flights - could be paginated or plain array
         const flights = Array.isArray(flightsData) ? flightsData : (flightsData?.items || flightsData?.flights || [])
         setRecentFlights(flights.slice(0, 10))
 
-        // Filter certifications expiring within 90 days
+        // Filter certifications expiring within 90 days (exclude renewed certs and inactive pilots)
         const certs = Array.isArray(certsData) ? certsData : (certsData?.items || certsData?.certifications || [])
+        const pilots = Array.isArray(pilotsData) ? pilotsData : []
+        const activePilotIds = new Set(pilots.filter(p => p.status === 'active').map(p => p.id))
         const today = new Date()
         const ninetyDaysOut = new Date(today)
         ninetyDaysOut.setDate(ninetyDaysOut.getDate() + 90)
@@ -90,6 +93,8 @@ export default function DashboardPage() {
         const expiringSoon = certs
           .filter(cert => {
             if (!cert.expiration_date) return false
+            if (cert.status === 'renewed') return false
+            if (!activePilotIds.has(cert.pilot_id)) return false
             const expDate = new Date(cert.expiration_date)
             return expDate <= ninetyDaysOut && expDate >= today
           })
