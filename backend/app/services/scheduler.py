@@ -221,12 +221,34 @@ def start_scheduler():
     _scheduler.start()
 
     if interval_minutes:
+        # Calculate how long since last sync to determine first run time
+        from datetime import datetime, timezone, timedelta
+        next_run = None
+        try:
+            db = SessionLocal()
+            last_ts = db.query(Setting).filter(Setting.key == "last_sync_timestamp").first()
+            if last_ts and last_ts.value:
+                last_sync = datetime.fromisoformat(last_ts.value)
+                due_at = last_sync + timedelta(minutes=interval_minutes)
+                now = datetime.now(timezone.utc)
+                if due_at <= now:
+                    # Overdue — run in 2 minutes to let the app finish starting
+                    next_run = now + timedelta(minutes=2)
+                    logger.info("Sync is overdue (last: %s), scheduling first run in 2 minutes", last_ts.value)
+                else:
+                    next_run = due_at
+                    logger.info("Next sync due at %s (%d minutes from now)", due_at.isoformat(), (due_at - now).total_seconds() / 60)
+            db.close()
+        except Exception:
+            pass
+
         _scheduler.add_job(
             _run_scheduled_sync,
             trigger=IntervalTrigger(minutes=interval_minutes),
             id=SYNC_JOB_ID,
             replace_existing=True,
             max_instances=1,
+            next_run_time=next_run,
         )
         logger.info("Sync scheduler started with %d minute interval", interval_minutes)
     else:

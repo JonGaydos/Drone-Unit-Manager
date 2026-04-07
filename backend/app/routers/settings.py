@@ -152,6 +152,19 @@ def set_settings_bulk(data: list[SettingValue], db: DBSession, admin: AdminUser)
             setting = Setting(key=item.key, value=item.value)
             db.add(setting)
     db.commit()
+
+    # Reschedule sync job if interval was changed
+    if any(item.key == "sync_interval" for item in data):
+        from app.services.scheduler import reschedule_sync
+        interval_minutes = None
+        for item in data:
+            if item.key == "sync_interval" and item.value:
+                try:
+                    interval_minutes = int(item.value)
+                except ValueError:
+                    pass
+        reschedule_sync(interval_minutes)
+
     return {"ok": True}
 
 
