@@ -147,8 +147,13 @@ def upload_photo(
 
     stored_name = f"{uuid.uuid4().hex}{ext}"
 
+    # Organize by date: photos/2026-04-07/uuid.jpg
+    from datetime import date as date_type
+    date_folder = (parsed_date.strftime("%Y-%m-%d") if parsed_date else date_type.today().isoformat())
+    relative_path = f"{date_folder}/{stored_name}"
+
     photo = Photo(
-        filename=stored_name,
+        filename=relative_path,
         original_filename=file.filename or "photo.jpg",
         title=title,
         description=description,
@@ -160,9 +165,9 @@ def upload_photo(
     db.flush()
 
     # Save file
-    photo_dir = os.path.join(UPLOAD_DIR, str(photo.id))
+    photo_dir = os.path.join(UPLOAD_DIR, date_folder)
     _ensure_dir(photo_dir)
-    file_path = os.path.join(photo_dir, stored_name)
+    file_path = os.path.join(UPLOAD_DIR, relative_path)
 
     # Validate path before writing
     _validate_path(file_path)
@@ -251,15 +256,29 @@ def list_photos(db: DBSession, _user: CurrentUser):
     return result
 
 
+def _resolve_photo_path(photo) -> Path:
+    """Resolve photo file path, supporting both new (date/) and old (id/) layouts."""
+    # New layout: filename contains relative path like "2026-04-07/uuid.jpg"
+    new_path = os.path.join(UPLOAD_DIR, photo.filename)
+    resolved = _validate_path(new_path)
+    if resolved.exists():
+        return resolved
+    # Old layout fallback: photos/{photo_id}/{filename}
+    old_path = os.path.join(UPLOAD_DIR, str(photo.id), photo.filename)
+    resolved = _validate_path(old_path)
+    if resolved.exists():
+        return resolved
+    return None
+
+
 @router.get("/{photo_id}/view", responses=responses(401, 404))
 def view_photo(photo_id: int, db: DBSession, _user: ImageUser):
     """Serve the full-resolution photo file."""
     photo = db.query(Photo).filter(Photo.id == photo_id).first()
     if not photo:
         raise HTTPException(404, PHOTO_NOT_FOUND)
-    file_path = os.path.join(UPLOAD_DIR, str(photo.id), photo.filename)
-    resolved = _validate_path(file_path)
-    if not resolved.exists():
+    resolved = _resolve_photo_path(photo)
+    if not resolved:
         raise HTTPException(404, "File not found on disk")
     response = FileResponse(str(resolved), media_type=photo.mime_type or MIME_JPEG)
     response.headers["Referrer-Policy"] = "no-referrer"
@@ -281,9 +300,8 @@ def view_thumbnail(photo_id: int, db: DBSession, _user: ImageUser):
             response.headers["X-Content-Type-Options"] = "nosniff"
             return response
     # Fall back to full image
-    file_path = os.path.join(UPLOAD_DIR, str(photo.id), photo.filename)
-    resolved = _validate_path(file_path)
-    if not resolved.exists():
+    resolved = _resolve_photo_path(photo)
+    if not resolved:
         raise HTTPException(404, "File not found on disk")
     response = FileResponse(str(resolved), media_type=photo.mime_type or MIME_JPEG)
     response.headers["Referrer-Policy"] = "no-referrer"
@@ -357,10 +375,18 @@ def delete_photo(photo_id: int, db: DBSession, user: PilotUser):
     # Delete pilot associations
     db.query(PhotoPilot).filter(PhotoPilot.photo_id == photo_id).delete()
 
-    # Delete files from disk
-    photo_dir = os.path.join(UPLOAD_DIR, str(photo.id))
-    if os.path.exists(photo_dir):
-        shutil.rmtree(photo_dir)
+    # Delete files from disk (new date-based layout: individual files; old layout: entire directory)
+    photo_path = _resolve_photo_path(photo)
+    if photo_path and photo_path.exists():
+        photo_path.unlink()
+    if photo.thumbnail_path:
+        thumb = Path(photo.thumbnail_path)
+        if thumb.exists():
+            thumb.unlink()
+    # Clean up old-style photo_id directory if it exists
+    old_dir = os.path.join(UPLOAD_DIR, str(photo.id))
+    if os.path.exists(old_dir):
+        shutil.rmtree(old_dir)
 
     log_action(db, user.id, user.display_name, "delete", "photo", photo_id, photo.original_filename)
     db.delete(photo)
