@@ -257,15 +257,9 @@ def list_photos(db: DBSession, _user: CurrentUser):
 
 
 def _resolve_photo_path(photo) -> Path:
-    """Resolve photo file path, supporting both new (date/) and old (id/) layouts."""
-    # New layout: filename contains relative path like "2026-04-07/uuid.jpg"
-    new_path = os.path.join(UPLOAD_DIR, photo.filename)
-    resolved = _validate_path(new_path)
-    if resolved.exists():
-        return resolved
-    # Old layout fallback: photos/{photo_id}/{filename}
-    old_path = os.path.join(UPLOAD_DIR, str(photo.id), photo.filename)
-    resolved = _validate_path(old_path)
+    """Resolve photo file path from date-based layout."""
+    file_path = os.path.join(UPLOAD_DIR, photo.filename)
+    resolved = _validate_path(file_path)
     if resolved.exists():
         return resolved
     return None
@@ -375,7 +369,7 @@ def delete_photo(photo_id: int, db: DBSession, user: PilotUser):
     # Delete pilot associations
     db.query(PhotoPilot).filter(PhotoPilot.photo_id == photo_id).delete()
 
-    # Delete files from disk (new date-based layout: individual files; old layout: entire directory)
+    # Delete files from disk
     photo_path = _resolve_photo_path(photo)
     if photo_path and photo_path.exists():
         photo_path.unlink()
@@ -383,10 +377,6 @@ def delete_photo(photo_id: int, db: DBSession, user: PilotUser):
         thumb = Path(photo.thumbnail_path)
         if thumb.exists():
             thumb.unlink()
-    # Clean up old-style photo_id directory if it exists
-    old_dir = os.path.join(UPLOAD_DIR, str(photo.id))
-    if os.path.exists(old_dir):
-        shutil.rmtree(old_dir)
 
     log_action(db, user.id, user.display_name, "delete", "photo", photo_id, photo.original_filename)
     db.delete(photo)
