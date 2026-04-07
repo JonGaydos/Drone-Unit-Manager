@@ -6,15 +6,17 @@ Test from a completely clean database. Check each item as you go.
 
 ## 1. First-Run Setup
 - [ ] App loads at http://192.168.0.100:3014 — shows setup wizard (not login)
-- [ ] Create admin account (username, password, display name, org name)
+- [ ] Create admin account (username, password, display name, org name, email)
 - [ ] Password policy enforced (12+ chars, uppercase, number)
 - [ ] Auto-logged in after setup — redirected to dashboard
 - [ ] Setup page blocked if visited again (already has users)
+- [ ] Admin user auto-created as a pilot (linked pilot record)
 
 ## 2. Dashboard
 - [ ] Dashboard loads with empty state (no flights, no alerts)
 - [ ] Stats cards show zeros (flights, hours, vehicles, pilots)
 - [ ] No errors in browser console
+- [ ] Cert Expirations sidebar excludes inactive pilots
 
 ## 3. Settings — General
 - [ ] Organization name displays correctly
@@ -51,7 +53,10 @@ Test from a completely clean database. Check each item as you go.
 - [ ] Vehicles tab shows synced vehicles (or add manually)
 - [ ] Click vehicle — detail page loads
 - [ ] Vehicle stats display (hours, flights, registrations)
-- [ ] Edit vehicle details
+- [ ] Edit vehicle details (FAA Registration field removed — use detail page instead)
+- [ ] FAA Registration section on detail page — add registration with auto +3 year expiry
+- [ ] "Next Due" column shows days remaining from VehicleRegistration records
+- [ ] FAA Reg column shows registration number from VehicleRegistration records
 
 ## 8. Fleet — Batteries
 - [ ] Batteries tab shows synced batteries (or add manually)
@@ -80,12 +85,14 @@ Test from a completely clean database. Check each item as you go.
 - [ ] Edit flight details (purpose, case number, notes)
 - [ ] Review status toggle works (needs_review -> reviewed)
 - [ ] Cross-reference links work (pilot, vehicle, battery names are clickable)
+- [ ] "No Purpose" filter option shows flights missing purpose codes
 
 ## 12. Flight Import — CSV
 - [ ] Export flights to CSV
 - [ ] Re-import the CSV — deduplication works (no double entries)
 
-## 13. Flight Import — Airdata
+## 13. Flight Import — Excel / Airdata
+- [ ] Import Excel spreadsheet with auto-detect — toast shows correct count (not 0)
 - [ ] Import Airdata JSON file
 - [ ] Import Airdata CSV file
 - [ ] Import Airdata ZIP (multiple files)
@@ -105,11 +112,15 @@ Test from a completely clean database. Check each item as you go.
 - [ ] View completed checklist history
 
 ## 16. Certifications
-- [ ] Add a certification type
+- [ ] Add a certification type (set renewal_period_months for expiring certs)
 - [ ] Assign certification to a pilot
 - [ ] Set expiration date
 - [ ] Expiring cert shows warning
-- [ ] Certification matrix displays correctly
+- [ ] Certification matrix displays correctly (renewed certs hidden)
+- [ ] Renew a certification — click Renew button, enter new dates
+- [ ] Renewal auto-calculates expiry from cert type renewal_period_months
+- [ ] Renewal history shows in Edit modal
+- [ ] Old cert status changes to "renewed" (indigo badge)
 
 ## 17. Maintenance
 - [ ] Add a maintenance record
@@ -157,7 +168,8 @@ Test from a completely clean database. Check each item as you go.
 
 ## 24. Compliance Dashboard
 - [ ] Compliance score calculates
-- [ ] Expired items flagged
+- [ ] Expired items flagged (excludes renewed certs)
+- [ ] Expiring items exclude inactive pilots
 - [ ] Attention items listed (no [object Object] or key warnings)
 
 ## 25. Reports
@@ -165,7 +177,7 @@ Test from a completely clean database. Check each item as you go.
 - [ ] Generate Pilot Hours report
 - [ ] Generate Equipment Utilization report
 - [ ] PDF download works
-- [ ] Organization logo appears on PDF
+- [ ] Organization logo appears on PDF (not squished)
 - [ ] CSV export works on each page
 
 ## 26. Documents
@@ -222,9 +234,18 @@ Test from a completely clean database. Check each item as you go.
 - [ ] Rate limiting: 5 wrong passwords = lockout message
 - [ ] Login after lockout period works
 
-## 34. Validation Errors (v2.2.0)
+## 34. Validation Errors
 - [ ] Submit maintenance form with empty description — shows readable error (not [object Object])
 - [ ] Submit any form with missing required field — error message is human-readable
+
+## 35. Backup & Restore
+- [ ] Settings > General > "Backup & Restore" section visible (admin only)
+- [ ] Export Backup downloads a ZIP file
+- [ ] Export with telemetry checkbox — ZIP includes telemetry.json
+- [ ] Fresh install Setup page shows "Restore from a backup instead?" option
+- [ ] Upload backup ZIP — restore completes with stats
+- [ ] After restore, login with original credentials works
+- [ ] All data present after restore (flights, pilots, certs, photos, documents)
 
 ---
 
@@ -244,7 +265,7 @@ Test from a completely clean database. Check each item as you go.
 | 10. Equipment Merge | | |
 | 11. Flights | | |
 | 12. Flight Import — CSV | | |
-| 13. Flight Import — Airdata | | |
+| 13. Flight Import — Excel/Airdata | | |
 | 14. Flight Plans | | |
 | 15. Checklists | | |
 | 16. Certifications | | |
@@ -266,3 +287,4 @@ Test from a completely clean database. Check each item as you go.
 | 32. Responsive | | |
 | 33. Security | | |
 | 34. Validation Errors | | |
+| 35. Backup & Restore | | |
