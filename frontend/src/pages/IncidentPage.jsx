@@ -1,0 +1,605 @@
+import React, { useState, useEffect } from 'react'
+import { api } from '@/api/client'
+import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/contexts/ToastContext'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { Modal } from '@/components/ui/Modal'
+import { useConfirm } from '@/hooks/useConfirm'
+import { sortVehicles, sortPilotsActiveFirst, vehicleDisplayName } from '@/lib/formatters'
+import { Link } from 'react-router-dom'
+import LinkedPhotos from '@/components/LinkedPhotos'
+import {
+  AlertTriangle, Plus, Filter, ChevronDown, ChevronUp,
+  X, Loader2, CheckCircle, Shield, Download,
+} from 'lucide-react'
+
+const SEVERITY_COLORS = {
+  minor: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
+  moderate: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+  major: 'bg-orange-500/15 text-orange-400 border-orange-500/30',
+  critical: 'bg-red-500/15 text-red-400 border-red-500/30',
+}
+
+const STATUS_COLORS = {
+  open: 'bg-red-500/15 text-red-400 border-red-500/30',
+  investigating: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+  resolved: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+  closed: 'bg-zinc-500/15 text-zinc-400 border-zinc-500/30',
+}
+
+const CATEGORIES = [
+  { value: 'crash', label: 'Crash' },
+  { value: 'near_miss', label: 'Near Miss' },
+  { value: 'equipment_failure', label: 'Equipment Failure' },
+  { value: 'injury', label: 'Injury' },
+  { value: 'airspace_violation', label: 'Airspace Violation' },
+  { value: 'other', label: 'Other' },
+]
+
+const SUCCESS_CATEGORIES = [
+  { value: 'missing_person_found', label: 'Missing Person Found' },
+  { value: 'suspect_located', label: 'Suspect Located' },
+  { value: 'evidence_collected', label: 'Evidence Collected' },
+  { value: 'community_event', label: 'Community Event' },
+  { value: 'training_success', label: 'Training Success' },
+  { value: 'other_success', label: 'Other Success' },
+]
+
+const IMPACT_LEVELS = [
+  { value: 'lives_saved', label: 'Lives Saved' },
+  { value: 'arrest', label: 'Arrest Made' },
+  { value: 'evidence', label: 'Evidence Secured' },
+  { value: 'community', label: 'Community Impact' },
+]
+
+const SEVERITIES = ['minor', 'moderate', 'major', 'critical']
+const STATUSES = ['open', 'investigating', 'resolved', 'closed']
+
+function formatCategory(cat) {
+  return cat ? cat.replaceAll('_', ' ').replaceAll(/\b\w/g, l => l.toUpperCase()) : ''
+}
+
+function IncidentModal({ pilots, vehicles, flights, onSave, onClose }) {
+  const [form, setForm] = useState({
+    date: new Date().toISOString().slice(0, 10),
+    title: '', severity: 'minor', category: 'other', description: '',
+    location: '', lat: '', lon: '', flight_id: '', pilot_id: '', vehicle_id: '',
+    equipment_grounded: false, damage_description: '', estimated_cost: '', notes: '',
+    report_type: 'incident', impact_level: '', outcome_description: '',
+  })
+  const [saving, setSaving] = useState(false)
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!form.title || !form.description) return
+    const data = { ...form }
+    if (data.pilot_id) data.pilot_id = Number.parseInt(data.pilot_id, 10); else delete data.pilot_id
+    if (data.vehicle_id) data.vehicle_id = Number.parseInt(data.vehicle_id, 10); else delete data.vehicle_id
+    if (data.flight_id) data.flight_id = Number.parseInt(data.flight_id, 10); else delete data.flight_id
+    if (data.lat) data.lat = Number.parseFloat(data.lat); else delete data.lat
+    if (data.lon) data.lon = Number.parseFloat(data.lon); else delete data.lon
+    if (data.estimated_cost) data.estimated_cost = Number.parseFloat(data.estimated_cost); else delete data.estimated_cost
+    Object.keys(data).forEach(k => { if (data[k] === '') delete data[k] })
+    setSaving(true)
+    try { await onSave(data) } finally { setSaving(false) }
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={form.report_type === 'success' ? 'Report Success' : 'Report Incident'}
+      className="max-w-2xl max-h-[90vh] overflow-y-auto"
+    >
+        <form onSubmit={handleSubmit} className="space-y-3">
+          {/* Report Type Toggle */}
+          <div className="flex items-center bg-secondary rounded-lg border border-border w-fit">
+            <button type="button" onClick={() => setForm({ ...form, report_type: 'incident', category: 'other', severity: 'minor' })}
+              className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${form.report_type === 'incident' ? 'bg-red-500/20 text-red-400 font-medium' : 'text-muted-foreground hover:text-foreground'}`}>
+              Incident
+            </button>
+            <button type="button" onClick={() => setForm({ ...form, report_type: 'success', category: 'other_success', severity: 'minor' })}
+              className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${form.report_type === 'success' ? 'bg-emerald-500/20 text-emerald-400 font-medium' : 'text-muted-foreground hover:text-foreground'}`}>
+              Success
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="date" className="block text-sm font-medium text-foreground mb-1">Date *</label>
+              <input id="date" type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })}
+                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" required />
+            </div>
+            {form.report_type === 'incident' ? (
+              <div>
+                <label htmlFor="severity" className="block text-sm font-medium text-foreground mb-1">Severity *</label>
+                <select id="severity" value={form.severity} onChange={e => setForm({ ...form, severity: e.target.value })}
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
+                  {SEVERITIES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+                </select>
+              </div>
+            ) : (
+              <div>
+                <label htmlFor="impact-level" className="block text-sm font-medium text-foreground mb-1">Impact Level</label>
+                <select id="impact-level" value={form.impact_level} onChange={e => setForm({ ...form, impact_level: e.target.value })}
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
+                  <option value="">Select...</option>
+                  {IMPACT_LEVELS.map(il => <option key={il.value} value={il.value}>{il.label}</option>)}
+                </select>
+              </div>
+            )}
+          </div>
+          <div>
+            <label htmlFor="title" className="block text-sm font-medium text-foreground mb-1">Title *</label>
+            <input id="title" type="text" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })}
+              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" required />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="category" className="block text-sm font-medium text-foreground mb-1">Category *</label>
+              <select id="category" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}
+                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
+                {(form.report_type === 'success' ? SUCCESS_CATEGORIES : CATEGORIES).map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="location" className="block text-sm font-medium text-foreground mb-1">Location</label>
+              <input id="location" type="text" value={form.location} onChange={e => setForm({ ...form, location: e.target.value })}
+                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+            </div>
+          </div>
+          <div>
+            <label htmlFor="description" className="block text-sm font-medium text-foreground mb-1">Description *</label>
+            <textarea id="description" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
+              rows={3} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm resize-none" required />
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label htmlFor="pilot" className="block text-sm font-medium text-foreground mb-1">Pilot</label>
+              <select id="pilot" value={form.pilot_id} onChange={e => setForm({ ...form, pilot_id: e.target.value })}
+                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
+                <option value="">Select...</option>
+                {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="vehicle" className="block text-sm font-medium text-foreground mb-1">Vehicle</label>
+              <select id="vehicle" value={form.vehicle_id} onChange={e => setForm({ ...form, vehicle_id: e.target.value })}
+                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
+                <option value="">Select...</option>
+                {sortVehicles(vehicles).map(v => <option key={v.id} value={v.id}>{vehicleDisplayName(v)}</option>)}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="linked-flight" className="block text-sm font-medium text-foreground mb-1">Linked Flight</label>
+              <select id="linked-flight" value={form.flight_id} onChange={e => setForm({ ...form, flight_id: e.target.value })}
+                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
+                <option value="">None</option>
+                {flights.map(f => <option key={f.id} value={f.id}>#{f.id} — {f.date || 'No date'}</option>)}
+              </select>
+            </div>
+          </div>
+          {form.report_type !== 'success' && (
+          <>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="damage-description" className="block text-sm font-medium text-foreground mb-1">Damage Description</label>
+              <textarea id="damage-description" value={form.damage_description} onChange={e => setForm({ ...form, damage_description: e.target.value })}
+                rows={2} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm resize-none" />
+            </div>
+            <div>
+              <label htmlFor="estimated-cost" className="block text-sm font-medium text-foreground mb-1">Estimated Cost ($)</label>
+              <input id="estimated-cost" type="number" step="0.01" value={form.estimated_cost} onChange={e => setForm({ ...form, estimated_cost: e.target.value })}
+                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <input type="checkbox" id="equip_grounded" checked={form.equipment_grounded}
+              onChange={e => setForm({ ...form, equipment_grounded: e.target.checked })}
+              className="rounded border-border" />
+            <label htmlFor="equip_grounded" className="text-sm text-foreground">Equipment Grounded</label>
+          </div>
+          </>
+          )}
+          {form.report_type === 'success' && (
+            <div>
+              <label htmlFor="outcome-description" className="block text-sm font-medium text-foreground mb-1">Outcome Description</label>
+              <textarea id="outcome-description" value={form.outcome_description} onChange={e => setForm({ ...form, outcome_description: e.target.value })}
+                rows={3} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm resize-none"
+                placeholder="Describe the positive outcome..." />
+            </div>
+          )}
+          <div>
+            <label htmlFor="notes" className="block text-sm font-medium text-foreground mb-1">Notes</label>
+            <textarea id="notes" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })}
+              rows={2} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm resize-none" />
+          </div>
+          <div className="flex gap-2 pt-2">
+            <button type="submit" disabled={saving}
+              className={`flex-1 py-2 rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2 ${form.report_type === 'success' ? 'bg-emerald-600 text-white' : 'bg-primary text-primary-foreground'}`}>
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+              {!saving && (form.report_type === 'success' ? 'Report Success' : 'Report Incident')}
+            </button>
+            <button type="button" onClick={onClose}
+              className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm">Cancel</button>
+          </div>
+        </form>
+    </Modal>
+  )
+}
+
+function ResolveModal({ incident, onSave, onClose }) {
+  const [form, setForm] = useState({
+    status: 'resolved',
+    resolution: incident.resolution || '',
+    resolution_date: new Date().toISOString().slice(0, 10),
+    corrective_actions: incident.corrective_actions || '',
+  })
+  const [saving, setSaving] = useState(false)
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setSaving(true)
+    try { await onSave(incident.id, form) } finally { setSaving(false) }
+  }
+
+  return (
+    <Modal open onClose={onClose} title="Resolve Incident">
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div>
+            <label htmlFor="status" className="block text-sm font-medium text-foreground mb-1">Status</label>
+            <select id="status" value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}
+              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
+              <option value="investigating">Investigating</option>
+              <option value="resolved">Resolved</option>
+              <option value="closed">Closed</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="resolution" className="block text-sm font-medium text-foreground mb-1">Resolution</label>
+            <textarea id="resolution" value={form.resolution} onChange={e => setForm({ ...form, resolution: e.target.value })}
+              rows={3} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm resize-none" />
+          </div>
+          <div>
+            <label htmlFor="corrective-actions" className="block text-sm font-medium text-foreground mb-1">Corrective Actions</label>
+            <textarea id="corrective-actions" value={form.corrective_actions} onChange={e => setForm({ ...form, corrective_actions: e.target.value })}
+              rows={3} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm resize-none" />
+          </div>
+          <div>
+            <label htmlFor="resolution-date" className="block text-sm font-medium text-foreground mb-1">Resolution Date</label>
+            <input id="resolution-date" type="date" value={form.resolution_date} onChange={e => setForm({ ...form, resolution_date: e.target.value })}
+              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+          </div>
+          <div className="flex gap-2 pt-2">
+            <button type="submit" disabled={saving}
+              className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Update'}
+            </button>
+            <button type="button" onClick={onClose}
+              className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm">Cancel</button>
+          </div>
+        </form>
+    </Modal>
+  )
+}
+
+export default function IncidentPage() {
+  const [incidents, setIncidents] = useState([])
+  const [stats, setStats] = useState(null)
+  const [pilots, setPilots] = useState([])
+  const [vehicles, setVehicles] = useState([])
+  const [flights, setFlights] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showAdd, setShowAdd] = useState(false)
+  const [resolveTarget, setResolveTarget] = useState(null)
+  const [expandedId, setExpandedId] = useState(null)
+  const [filters, setFilters] = useState({ status: '', severity: '', category: '', date_from: '', date_to: '', report_type: '' })
+  const { isPilot, isSupervisor } = useAuth()
+  const toast = useToast()
+  const [confirmProps, requestConfirm] = useConfirm()
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const params = new URLSearchParams()
+      if (filters.status) params.set('status', filters.status)
+      if (filters.severity) params.set('severity', filters.severity)
+      if (filters.category) params.set('category', filters.category)
+      if (filters.date_from) params.set('date_from', filters.date_from)
+      if (filters.date_to) params.set('date_to', filters.date_to)
+      if (filters.report_type) params.set('report_type', filters.report_type)
+      const qs = params.toString() ? `?${params}` : ''
+      const [inc, st, p, v, f] = await Promise.all([
+        api.get(`/incidents${qs}`),
+        api.get('/incidents/stats'),
+        api.get('/pilots'),
+        api.get('/vehicles'),
+        api.get('/flights?limit=100'),
+      ])
+      setIncidents(Array.isArray(inc) ? inc : inc.incidents || [])
+      setStats(st)
+      setPilots(Array.isArray(p) ? p : p.pilots || [])
+      setVehicles(Array.isArray(v) ? v : v.vehicles || [])
+      setFlights(Array.isArray(f) ? f : f.flights || [])
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [filters.status, filters.severity, filters.category, filters.report_type])
+
+  const handleCreate = async (data) => {
+    try {
+      await api.post('/incidents', data)
+      toast.success('Incident reported')
+      setShowAdd(false)
+      load()
+    } catch (err) {
+      toast.error(err.message)
+    }
+  }
+
+  const handleResolve = async (id, data) => {
+    try {
+      await api.patch(`/incidents/${id}`, data)
+      toast.success('Incident updated')
+      setResolveTarget(null)
+      load()
+    } catch (err) {
+      toast.error(err.message)
+    }
+  }
+
+  const handleDelete = (id) => {
+    requestConfirm({
+      title: 'Delete Incident',
+      message: 'Delete this incident report?',
+      onConfirm: async () => {
+        try {
+          await api.delete(`/incidents/${id}`)
+          toast.success('Incident deleted')
+          load()
+        } catch (err) {
+          toast.error(err.message)
+        }
+      }
+    })
+  }
+
+  if (loading && incidents.length === 0) {
+    return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>
+  }
+
+  const openCount = stats?.by_status?.open || 0
+  const investigatingCount = stats?.by_status?.investigating || 0
+  const resolvedCount = stats?.by_status?.resolved || 0
+  const totalCount = stats?.total || 0
+
+  return (
+    <div className="space-y-4">
+      {/* Stats Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="bg-card border border-border rounded-xl p-4">
+          <p className="text-xs text-muted-foreground uppercase tracking-wider">Open</p>
+          <p className="text-2xl font-bold text-red-400 mt-1">{openCount}</p>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-4">
+          <p className="text-xs text-muted-foreground uppercase tracking-wider">Investigating</p>
+          <p className="text-2xl font-bold text-amber-400 mt-1">{investigatingCount}</p>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-4">
+          <p className="text-xs text-muted-foreground uppercase tracking-wider">Resolved</p>
+          <p className="text-2xl font-bold text-emerald-400 mt-1">{resolvedCount}</p>
+        </div>
+        <div className="bg-card border border-border rounded-xl p-4">
+          <p className="text-xs text-muted-foreground uppercase tracking-wider">Total</p>
+          <p className="text-2xl font-bold text-foreground mt-1">{totalCount}</p>
+        </div>
+      </div>
+
+      {/* Report Type Toggle */}
+      <div className="flex items-center gap-3">
+        <div className="flex items-center bg-secondary rounded-lg border border-border">
+          <button onClick={() => setFilters({ ...filters, report_type: '' })}
+            className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${filters.report_type ? 'text-muted-foreground hover:text-foreground' : 'bg-primary text-primary-foreground font-medium'}`}>
+            All
+          </button>
+          <button onClick={() => setFilters({ ...filters, report_type: 'incident' })}
+            className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${filters.report_type === 'incident' ? 'bg-red-500/20 text-red-400 font-medium' : 'text-muted-foreground hover:text-foreground'}`}>
+            Incidents
+          </button>
+          <button onClick={() => setFilters({ ...filters, report_type: 'success' })}
+            className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${filters.report_type === 'success' ? 'bg-emerald-500/20 text-emerald-400 font-medium' : 'text-muted-foreground hover:text-foreground'}`}>
+            Successes
+          </button>
+        </div>
+      </div>
+
+      {/* Header + Filters */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Filter className="w-4 h-4 text-muted-foreground" />
+            <select value={filters.status} onChange={e => setFilters({ ...filters, status: e.target.value })}
+              className="px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
+              <option value="">All Statuses</option>
+              {STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+            </select>
+          </div>
+          <select value={filters.severity} onChange={e => setFilters({ ...filters, severity: e.target.value })}
+            className="px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
+            <option value="">All Severities</option>
+            {SEVERITIES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+          </select>
+          <select value={filters.category} onChange={e => setFilters({ ...filters, category: e.target.value })}
+            className="px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
+            <option value="">All Categories</option>
+            {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+          </select>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={() => api.download('/export/incidents/csv')}
+            className="flex items-center gap-2 px-3 py-2 bg-secondary border border-border text-secondary-foreground rounded-lg text-sm hover:bg-secondary/80">
+            <Download className="w-4 h-4" /> Export CSV
+          </button>
+          {isPilot && (
+            <button onClick={() => setShowAdd(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
+              <Plus className="w-4 h-4" /> New Report
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Incidents Table */}
+      <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-secondary/50">
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Date</th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Title</th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Severity</th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Category</th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Pilot</th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Vehicle</th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
+                <th className="text-right px-4 py-3 font-medium text-muted-foreground">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {incidents.map(inc => (
+                <React.Fragment key={inc.id}>
+                  <tr className="border-b border-border hover:bg-secondary/30 cursor-pointer"
+                    onClick={() => setExpandedId(expandedId === inc.id ? null : inc.id)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpandedId(expandedId === inc.id ? null : inc.id) } }}
+                    tabIndex={0}>
+                    <td className="px-4 py-3 text-foreground whitespace-nowrap">{inc.date}</td>
+                    <td className="px-4 py-3 text-foreground font-medium">{inc.title}</td>
+                    <td className="px-4 py-3">
+                      {inc.report_type === 'success' ? (
+                        <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium border bg-emerald-500/15 text-emerald-400 border-emerald-500/30">
+                          success
+                        </span>
+                      ) : (
+                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium border ${SEVERITY_COLORS[inc.severity] || ''}`}>
+                          {inc.severity}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-foreground">{formatCategory(inc.category)}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{inc.pilot_id ? <Link to={`/pilots/${inc.pilot_id}`} className="text-primary hover:underline">{inc.pilot_name}</Link> : (inc.pilot_name || '—')}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{inc.vehicle_id ? <Link to={`/fleet/vehicles/${inc.vehicle_id}`} className="text-primary hover:underline">{inc.vehicle_name}</Link> : (inc.vehicle_name || '—')}</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium border ${STATUS_COLORS[inc.status] || ''}`}>
+                        {inc.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-1">
+                        <button onClick={() => setExpandedId(expandedId === inc.id ? null : inc.id)}
+                          className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent" title="Details">
+                          {expandedId === inc.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        </button>
+                        {isSupervisor && inc.status !== 'closed' && (
+                          <button onClick={() => setResolveTarget(inc)}
+                            className="p-1.5 text-muted-foreground hover:text-emerald-400 rounded-lg hover:bg-emerald-500/10" title="Resolve">
+                            <CheckCircle className="w-4 h-4" />
+                          </button>
+                        )}
+                        {isSupervisor && (
+                          <button onClick={() => handleDelete(inc.id)}
+                            className="p-1.5 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10" title="Delete">
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                  {expandedId === inc.id && (
+                    <tr key={`${inc.id}-detail`} className="border-b border-border">
+                      <td colSpan={8} className="px-4 py-4 bg-secondary/20">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <h4 className="font-medium text-foreground mb-2">Description</h4>
+                            <p className="text-muted-foreground whitespace-pre-wrap">{inc.description}</p>
+                            {inc.location && (
+                              <p className="text-muted-foreground mt-2"><span className="text-foreground font-medium">Location:</span> {inc.location}</p>
+                            )}
+                            {inc.damage_description && (
+                              <div className="mt-3">
+                                <h4 className="font-medium text-foreground mb-1">Damage</h4>
+                                <p className="text-muted-foreground whitespace-pre-wrap">{inc.damage_description}</p>
+                              </div>
+                            )}
+                            {inc.estimated_cost != null && inc.estimated_cost > 0 && (
+                              <p className="text-muted-foreground mt-2"><span className="text-foreground font-medium">Est. Cost:</span> ${inc.estimated_cost.toLocaleString()}</p>
+                            )}
+                            {inc.equipment_grounded && (
+                              <p className="text-orange-400 mt-2 font-medium flex items-center gap-1">
+                                <Shield className="w-4 h-4" /> Equipment Grounded
+                              </p>
+                            )}
+                          </div>
+                          <div>
+                            {inc.resolution && (
+                              <div className="mb-3">
+                                <h4 className="font-medium text-foreground mb-1">Resolution</h4>
+                                <p className="text-muted-foreground whitespace-pre-wrap">{inc.resolution}</p>
+                                {inc.resolution_date && <p className="text-xs text-muted-foreground mt-1">Resolved: {inc.resolution_date}</p>}
+                              </div>
+                            )}
+                            {inc.corrective_actions && (
+                              <div className="mb-3">
+                                <h4 className="font-medium text-foreground mb-1">Corrective Actions</h4>
+                                <p className="text-muted-foreground whitespace-pre-wrap">{inc.corrective_actions}</p>
+                              </div>
+                            )}
+                            {inc.notes && (
+                              <div>
+                                <h4 className="font-medium text-foreground mb-1">Notes</h4>
+                                <p className="text-muted-foreground whitespace-pre-wrap">{inc.notes}</p>
+                              </div>
+                            )}
+                            {inc.reported_by_name && (
+                              <p className="text-xs text-muted-foreground mt-3">Reported by: {inc.reported_by_name}</p>
+                            )}
+                            {inc.flight_id && (
+                              <p className="text-xs text-muted-foreground mt-1">Linked Flight: <Link to={`/flights/${inc.flight_id}`} className="text-primary hover:underline">#{inc.flight_id}</Link></p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="mt-4">
+                          <LinkedPhotos entityType="incident" entityId={inc.id} />
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              ))}
+              {incidents.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="px-4 py-12 text-center">
+                    <AlertTriangle className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+                    <p className="text-muted-foreground">No incidents found</p>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {showAdd && (
+        <IncidentModal pilots={pilots} vehicles={vehicles} flights={flights}
+          onSave={handleCreate} onClose={() => setShowAdd(false)} />
+      )}
+      {resolveTarget && (
+        <ResolveModal incident={resolveTarget}
+          onSave={handleResolve} onClose={() => setResolveTarget(null)} />
+      )}
+      <ConfirmDialog {...confirmProps} />
+    </div>
+  )
+}

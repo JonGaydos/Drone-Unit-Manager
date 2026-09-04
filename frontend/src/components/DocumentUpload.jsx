@@ -1,0 +1,214 @@
+/**
+ * Document upload and management panel for attaching files to any entity.
+ * Supports upload, inline editing of title/type, viewing, and deletion.
+ */
+import { useState, useEffect, useCallback } from 'react'
+import { api } from '@/api/client'
+import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/contexts/ToastContext'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { useConfirm } from '@/hooks/useConfirm'
+import DocumentUploadForm from '@/components/DocumentUploadForm'
+import { DOC_TYPES } from '@/lib/constants'
+import { FileText, Upload, Trash2, ExternalLink, Edit, Save, X } from 'lucide-react'
+
+/**
+ * Renders a document list with upload, edit, view, and delete capabilities.
+ * Mutating actions are gated to pilot-role users and up (matching the API).
+ * @param {Object} props
+ * @param {string} props.entityType - Parent entity type (e.g. "pilot", "vehicle").
+ * @param {number|string} props.entityId - Parent entity ID.
+ * @param {number|string} [props.folderId] - Optional folder ID for organization.
+ */
+export default function DocumentUpload({ entityType, entityId, folderId }) {
+  const toast = useToast()
+  const [documents, setDocuments] = useState([])
+  const [showUpload, setShowUpload] = useState(false)
+  const [editingDoc, setEditingDoc] = useState(null)
+  const [editForm, setEditForm] = useState({ title: '', document_type: '' })
+  const [editSaving, setEditSaving] = useState(false)
+  const { isPilot } = useAuth()
+  const [confirmProps, requestConfirm] = useConfirm()
+
+  const fetchDocs = useCallback(() => {
+    api.get(`/documents?entity_type=${entityType}&entity_id=${entityId}`)
+      .then(setDocuments)
+      .catch(() => {})
+  }, [entityType, entityId])
+
+  useEffect(() => {
+    fetchDocs()
+  }, [fetchDocs])
+
+  const handleDelete = (docId) => {
+    requestConfirm({
+      title: 'Delete Document',
+      message: 'Delete this document?',
+      onConfirm: async () => {
+        try {
+          await api.delete(`/documents/${docId}`)
+          fetchDocs()
+        } catch (err) {
+          toast.error(err.message)
+        }
+      }
+    })
+  }
+
+  const startEditDoc = (doc) => {
+    setEditingDoc(doc.id)
+    setEditForm({ title: doc.title || '', document_type: doc.document_type || 'general' })
+  }
+
+  const cancelEditDoc = () => {
+    setEditingDoc(null)
+    setEditForm({ title: '', document_type: '' })
+  }
+
+  const saveEditDoc = async (docId) => {
+    setEditSaving(true)
+    try {
+      const body = {}
+      if (editForm.title) body.title = editForm.title
+      if (editForm.document_type) body.document_type = editForm.document_type
+      await api.patch(`/documents/${docId}`, body)
+      setEditingDoc(null)
+      setEditForm({ title: '', document_type: '' })
+      fetchDocs()
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setEditSaving(false)
+    }
+  }
+
+  return (
+    <div className="bg-card border border-border rounded-xl overflow-hidden">
+      <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <FileText className="w-4 h-4 text-primary" />
+          <h3 className="font-semibold text-foreground">Documents</h3>
+          <span className="text-xs text-muted-foreground">({documents.length})</span>
+        </div>
+        {isPilot && (
+          <button
+            onClick={() => setShowUpload(!showUpload)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:opacity-90"
+          >
+            <Upload className="w-3.5 h-3.5" /> Upload
+          </button>
+        )}
+      </div>
+
+      {showUpload && isPilot && (
+        <div className="px-4 py-3 border-b border-border bg-muted/20">
+          <DocumentUploadForm
+            entityType={entityType}
+            entityId={entityId}
+            folderId={folderId}
+            onUploaded={() => { setShowUpload(false); fetchDocs() }}
+          />
+        </div>
+      )}
+
+      <div className="divide-y divide-border/50">
+        {documents.map(doc => (
+          <div
+            key={doc.id}
+            className="flex items-center gap-3 px-4 py-3 hover:bg-accent/30 transition-colors"
+          >
+            <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
+            {editingDoc === doc.id ? (
+              <div className="flex-1 min-w-0 space-y-1.5">
+                <input
+                  type="text"
+                  value={editForm.title}
+                  onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                  className="w-full px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                <select
+                  value={editForm.document_type}
+                  onChange={(e) => setEditForm({ ...editForm, document_type: e.target.value })}
+                  className="w-full px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm"
+                >
+                  {DOC_TYPES.map(dt => (
+                    <option key={dt.value} value={dt.value}>{dt.label}</option>
+                  ))}
+                </select>
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={() => saveEditDoc(doc.id)}
+                    disabled={editSaving}
+                    className="flex items-center gap-1 px-2.5 py-1 bg-primary text-primary-foreground rounded text-xs font-medium hover:opacity-90 disabled:opacity-50"
+                  >
+                    <Save className="w-3 h-3" /> {editSaving ? 'Saving...' : 'Save'}
+                  </button>
+                  <button
+                    onClick={cancelEditDoc}
+                    className="flex items-center gap-1 px-2.5 py-1 bg-secondary text-secondary-foreground rounded text-xs hover:opacity-90"
+                  >
+                    <X className="w-3 h-3" /> Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-foreground truncate">{doc.title || doc.filename}</p>
+                <p className="text-xs text-muted-foreground">
+                  {doc.document_type === 'general' ? '' : doc.document_type.replaceAll('_', ' ') + ' | '}
+                  {doc.mime_type}
+                </p>
+              </div>
+            )}
+            {editingDoc !== doc.id && (
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={async () => {
+                    try {
+                      const res = await fetch(doc.view_url, {
+                        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                      })
+                      if (!res.ok) throw new Error('Failed to fetch document')
+                      const blob = await res.blob()
+                      const url = URL.createObjectURL(blob)
+                      globalThis.open(url, '_blank')
+                      setTimeout(() => URL.revokeObjectURL(url), 60000)
+                    } catch (err) {
+                      toast.error(err.message || 'Could not open document')
+                    }
+                  }}
+                  className="p-1.5 text-muted-foreground hover:text-foreground rounded hover:bg-accent/30"
+                  title="View"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </button>
+                {isPilot && (
+                  <>
+                    <button
+                      onClick={() => startEditDoc(doc)}
+                      className="p-1.5 text-muted-foreground hover:text-foreground rounded hover:bg-accent/30"
+                      title="Edit"
+                    >
+                      <Edit className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(doc.id)}
+                      className="p-1.5 text-muted-foreground hover:text-destructive rounded hover:bg-destructive/10"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+        {documents.length === 0 && (
+          <div className="px-4 py-8 text-center text-muted-foreground text-sm">No documents uploaded</div>
+        )}
+      </div>
+      <ConfirmDialog {...confirmProps} />
+    </div>
+  )
+}

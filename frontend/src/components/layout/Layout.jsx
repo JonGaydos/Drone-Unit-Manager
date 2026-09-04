@@ -1,0 +1,87 @@
+/**
+ * Application shell layout with responsive sidebar, top bar, and page content area.
+ */
+import { Outlet, useLocation } from 'react-router-dom'
+import { Sidebar } from './Sidebar'
+import { TopBar } from './TopBar'
+import { useState, useEffect } from 'react'
+import { Menu } from 'lucide-react'
+import { PageErrorBoundary } from '@/components/ui/PageErrorBoundary'
+import { CommandPalette } from '@/components/CommandPalette'
+import { useViewTransition } from '@/hooks/useViewTransition'
+
+/** @type {Record<string, string>} Maps route paths to page header titles. */
+const pageTitles = {
+  '/': 'Dashboard',
+  '/analytics': 'Analytics',
+  '/flights': 'Flights',
+  '/flights/review': 'Flight Review Queue',
+  '/pilots': 'Pilots',
+  '/fleet': 'Fleet Management',
+  '/certifications': 'Certifications',
+  '/maintenance': 'Maintenance',
+  '/media': 'Media',
+  '/reports': 'Reports',
+  '/alerts': 'Alerts',
+  '/settings': 'Settings',
+  '/airspace': 'Nearby Aircraft',
+  '/audit-log': 'Audit Log',
+  '/manual': 'User Manual',
+}
+
+/**
+ * Main layout component that wraps all authenticated pages.
+ * Includes a collapsible sidebar, mobile hamburger menu, top bar with page title,
+ * and an error boundary around the routed page content.
+ * @returns {JSX.Element}
+ */
+export function Layout() {
+  const location = useLocation()
+  const title = pageTitles[location.pathname] || 'Drone Unit Manager'
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('sidebar-collapsed') === 'true')
+  const [mobileOpen, setMobileOpen] = useState(false)
+  useViewTransition()
+
+  useEffect(() => {
+    const handler = (e) => setSidebarCollapsed(e.detail.collapsed)
+    globalThis.addEventListener('sidebar-toggle', handler)
+    return () => globalThis.removeEventListener('sidebar-toggle', handler)
+  }, [])
+
+  // Close mobile sidebar on route change
+  useEffect(() => {
+    setMobileOpen(false)
+  }, [location.pathname])
+
+  return (
+    <div className="min-h-screen bg-background">
+      <CommandPalette />
+      {/* Mobile top bar */}
+      <div className="md:hidden fixed top-0 left-0 right-0 h-14 bg-card border-b border-border flex items-center px-4 z-40">
+        <button onClick={() => setMobileOpen(!mobileOpen)} aria-label="Open menu" className="p-1">
+          <Menu className="w-5 h-5 text-foreground" />
+        </button>
+        <span className="ml-3 font-semibold text-foreground">Drone Unit Manager</span>
+      </div>
+
+      {/* Mobile overlay backdrop */}
+      {mobileOpen && (
+        <button className="md:hidden fixed inset-0 bg-black/50 z-40 cursor-default" onClick={() => setMobileOpen(false)} aria-label="Close menu" />
+      )}
+
+      <Sidebar mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} />
+      <div className={`transition-all duration-300 ${sidebarCollapsed ? 'md:pl-16' : 'md:pl-60'}`}>
+        <div className="hidden md:block">
+          <TopBar title={title} />
+        </div>
+        <main className="p-4 md:p-6 pt-18 md:pt-6">
+          <PageErrorBoundary key={location.pathname}>
+            <div className="page-enter">
+              <Outlet />
+            </div>
+          </PageErrorBoundary>
+        </main>
+      </div>
+    </div>
+  )
+}

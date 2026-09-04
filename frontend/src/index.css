@@ -1,0 +1,683 @@
+@import "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-background: var(--bg);
+  --color-foreground: var(--fg);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-fg);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-fg);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-fg);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-fg);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-fg);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-fg);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-fg);
+  --color-border: var(--border-color);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-fg);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-success: var(--success);
+  --color-success-bg: var(--success-bg);
+  --color-warning: var(--warning);
+  --color-warning-bg: var(--warning-bg);
+  --color-info: var(--info);
+  --color-info-bg: var(--info-bg);
+  --color-danger: var(--danger);
+  --color-danger-bg: var(--danger-bg);
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+}
+
+/* Dark theme (default) */
+:root, [data-theme="dark"] {
+  --bg: #17171c;
+  --fg: #fafafa;
+  --card: #202027;
+  --card-fg: #fafafa;
+  --popover: #202027;
+  --popover-fg: #fafafa;
+  --primary: #7c3aed;
+  --primary-fg: #fafafa;
+  --secondary: #18181b;
+  --secondary-fg: #a1a1aa;
+  --muted: #18181b;
+  --muted-fg: #71717a;
+  --accent: #1e1e22;
+  --accent-fg: #fafafa;
+  --destructive: #dc2626;
+  --destructive-fg: #fafafa;
+  --border-color: #27272a;
+  --input: #27272a;
+  --ring: #7c3aed;
+  --sidebar: #09090b;
+  --sidebar-fg: #fafafa;
+  --sidebar-accent: #18181b;
+  /* Semantic status colors (badges, chips). Themes may override so
+     statuses mesh with their palette; these defaults match the classic
+     emerald/amber/blue/red badge colors. */
+  --success: #34d399;
+  --success-bg: rgba(16, 185, 129, 0.15);
+  --warning: #fbbf24;
+  --warning-bg: rgba(245, 158, 11, 0.15);
+  --info: #60a5fa;
+  --info-bg: rgba(59, 130, 246, 0.15);
+  --danger: #f87171;
+  --danger-bg: rgba(239, 68, 68, 0.15);
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  --bg: #f6f7f9;
+  --fg: #09090b;
+  --card: #ffffff;
+  --card-fg: #09090b;
+  --popover: #ffffff;
+  --popover-fg: #09090b;
+  --primary: #4f46e5;
+  --primary-fg: #ffffff;
+  --secondary: #f4f4f5;
+  --secondary-fg: #09090b;
+  --muted: #f4f4f5;
+  --muted-fg: #71717a;
+  --accent: #f4f4f5;
+  --accent-fg: #09090b;
+  --destructive: #ef4444;
+  --destructive-fg: #ffffff;
+  --border-color: #e4e4e7;
+  --input: #e4e4e7;
+  --ring: #4f46e5;
+  --sidebar: #e9ecef;
+  --sidebar-fg: #09090b;
+  --sidebar-accent: #f4f4f5;
+  color-scheme: light;
+}
+
+[data-theme="blue"] {
+  --bg: #131c38;
+  --fg: #d1d5db;
+  --card: #19254a;
+  --card-fg: #d1d5db;
+  --popover: #19254a;
+  --popover-fg: #d1d5db;
+  --primary: #3b82f6;
+  --primary-fg: #ffffff;
+  --secondary: #1e293b;
+  --secondary-fg: #d1d5db;
+  --muted: #1e293b;
+  --muted-fg: #9ca3af;
+  --accent: #1e293b;
+  --accent-fg: #d1d5db;
+  --destructive: #ef4444;
+  --destructive-fg: #ffffff;
+  --border-color: #1e293b;
+  --input: #1e293b;
+  --ring: #3b82f6;
+  --sidebar: #0a0f1e;
+  --sidebar-fg: #d1d5db;
+  --sidebar-accent: #1e293b;
+  color-scheme: dark;
+}
+
+/* Glassmorphism theme */
+[data-theme="glass"] {
+  --bg: #0f0f1a;
+  --fg: #e2e8f0;
+  --card: rgba(255, 255, 255, 0.05);
+  --card-fg: #e2e8f0;
+  --popover: rgba(30, 30, 50, 0.9);
+  --popover-fg: #e2e8f0;
+  --primary: #818cf8;
+  --primary-fg: #ffffff;
+  --secondary: rgba(255, 255, 255, 0.06);
+  --secondary-fg: #e2e8f0;
+  --muted: rgba(255, 255, 255, 0.04);
+  --muted-fg: #94a3b8;
+  --accent: rgba(255, 255, 255, 0.08);
+  --accent-fg: #e2e8f0;
+  --destructive: #f87171;
+  --destructive-fg: #ffffff;
+  --border-color: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.06);
+  --ring: #818cf8;
+  --sidebar: rgba(10, 10, 25, 0.8);
+  --sidebar-fg: #e2e8f0;
+  --sidebar-accent: rgba(255, 255, 255, 0.06);
+  color-scheme: dark;
+}
+
+[data-theme="glass"] .bg-card {
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+[data-theme="glass"] .bg-sidebar {
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+
+[data-theme="glass"] body {
+  background: linear-gradient(135deg, #0f0f1a 0%, #1a1040 50%, #0f1a2e 100%);
+  background-attachment: fixed;
+}
+
+/* Grafana / Ops Center theme */
+[data-theme="grafana"] {
+  --bg: #1a1c22;
+  --fg: #d8d9da;
+  --card: #22252d;
+  --card-fg: #d8d9da;
+  --popover: #22252d;
+  --popover-fg: #d8d9da;
+  --primary: #ff6600;
+  --primary-fg: #ffffff;
+  --secondary: #1f2228;
+  --secondary-fg: #d8d9da;
+  --muted: #1f2228;
+  --muted-fg: #8e8e8e;
+  --accent: #1f2228;
+  --accent-fg: #d8d9da;
+  --destructive: #e02f44;
+  --destructive-fg: #ffffff;
+  --border-color: #2c3034;
+  --input: #2c3034;
+  --ring: #ff6600;
+  --sidebar: #0e0f12;
+  --sidebar-fg: #d8d9da;
+  --sidebar-accent: #1f2228;
+  color-scheme: dark;
+}
+
+[data-theme="grafana"] .bg-card {
+  border: 1px solid #2c3034;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="grafana"] body {
+  background: #111217;
+}
+
+[data-theme="high-contrast"] {
+  --bg: #000000;
+  --fg: #ffffff;
+  --card: #0a0a0a;
+  --card-fg: #ffffff;
+  --popover: #0a0a0a;
+  --popover-fg: #ffffff;
+  --primary: #fbbf24;
+  --primary-fg: #000000;
+  --secondary: #1a1a1a;
+  --secondary-fg: #ffffff;
+  --muted: #1a1a1a;
+  --muted-fg: #d4d4d4;
+  --accent: #1a1a1a;
+  --accent-fg: #ffffff;
+  --destructive: #ff0000;
+  --destructive-fg: #ffffff;
+  --border-color: #404040;
+  --input: #404040;
+  --ring: #fbbf24;
+  --sidebar: #050505;
+  --sidebar-fg: #ffffff;
+  --sidebar-accent: #1a1a1a;
+  color-scheme: dark;
+}
+
+/* Cool slate neutrals with a sky-blue primary */
+[data-theme="midnight-slate"] {
+  --bg: #131b2b;
+  --fg: #f1f5f9;
+  --card: #19243a;
+  --card-fg: #f1f5f9;
+  --popover: #19243a;
+  --popover-fg: #f1f5f9;
+  --primary: #0ea5e9;
+  --primary-fg: #f8fafc;
+  --secondary: #16202e;
+  --secondary-fg: #cbd5e1;
+  --muted: #16202e;
+  --muted-fg: #94a3b8;
+  --accent: #1b2636;
+  --accent-fg: #f1f5f9;
+  --destructive: #ef4444;
+  --destructive-fg: #f8fafc;
+  --border-color: #1e293b;
+  --input: #1e293b;
+  --ring: #0ea5e9;
+  --sidebar: #0a0e16;
+  --sidebar-fg: #f1f5f9;
+  --sidebar-accent: #16202e;
+  --success: #34d399;
+  --success-bg: rgba(52, 211, 153, 0.14);
+  --warning: #fbbf24;
+  --warning-bg: rgba(251, 191, 36, 0.14);
+  --info: #38bdf8;
+  --info-bg: rgba(56, 189, 248, 0.14);
+  --danger: #f87171;
+  --danger-bg: rgba(248, 113, 113, 0.14);
+  color-scheme: dark;
+}
+
+/* Warm graphite with a forest-green primary */
+[data-theme="ranger-green"] {
+  --bg: #151d15;
+  --fg: #ecf2ec;
+  --card: #1c271c;
+  --card-fg: #ecf2ec;
+  --popover: #1c271c;
+  --popover-fg: #ecf2ec;
+  --primary: #3f9142;
+  --primary-fg: #f2f7f2;
+  --secondary: #1a211a;
+  --secondary-fg: #c5cfc5;
+  --muted: #1a211a;
+  --muted-fg: #94a394;
+  --accent: #202920;
+  --accent-fg: #ecf2ec;
+  --destructive: #d95f54;
+  --destructive-fg: #f7f0ef;
+  --border-color: #232b23;
+  --input: #232b23;
+  --ring: #3f9142;
+  --sidebar: #0b0f0b;
+  --sidebar-fg: #ecf2ec;
+  --sidebar-accent: #1a211a;
+  --success: #86c978;
+  --success-bg: rgba(134, 201, 120, 0.14);
+  --warning: #e0b458;
+  --warning-bg: rgba(224, 180, 88, 0.14);
+  --info: #7fb5c9;
+  --info-bg: rgba(127, 181, 201, 0.14);
+  --danger: #e07a6f;
+  --danger-bg: rgba(224, 122, 111, 0.16);
+  color-scheme: dark;
+}
+
+/* Deep navy with a brass primary; teal/orange statuses stay clear of the brass */
+[data-theme="navy-brass"] {
+  --bg: #0f1d3b;
+  --fg: #e8edf5;
+  --card: #14264e;
+  --card-fg: #e8edf5;
+  --popover: #14264e;
+  --popover-fg: #e8edf5;
+  --primary: #c9a227;
+  --primary-fg: #101724;
+  --secondary: #152439;
+  --secondary-fg: #c3cfe0;
+  --muted: #152439;
+  --muted-fg: #8fa1bd;
+  --accent: #1a2b44;
+  --accent-fg: #e8edf5;
+  --destructive: #e11d48;
+  --destructive-fg: #fdf2f5;
+  --border-color: #1c2a42;
+  --input: #1c2a42;
+  --ring: #c9a227;
+  --sidebar: #081020;
+  --sidebar-fg: #e8edf5;
+  --sidebar-accent: #152439;
+  --success: #2dd4bf;
+  --success-bg: rgba(45, 212, 191, 0.13);
+  --warning: #fb923c;
+  --warning-bg: rgba(251, 146, 60, 0.14);
+  --info: #7ea6e0;
+  --info-bg: rgba(126, 166, 224, 0.14);
+  --danger: #fb7185;
+  --danger-bg: rgba(251, 113, 133, 0.14);
+  color-scheme: dark;
+}
+
+/* Light theme with a teal primary and dark badge text on soft tints */
+[data-theme="arctic"] {
+  --bg: #f6f8fa;
+  --fg: #0f172a;
+  --card: #ffffff;
+  --card-fg: #0f172a;
+  --popover: #ffffff;
+  --popover-fg: #0f172a;
+  --primary: #0f766e;
+  --primary-fg: #f0fdfa;
+  --secondary: #edf1f5;
+  --secondary-fg: #0f172a;
+  --muted: #edf1f5;
+  --muted-fg: #64748b;
+  --accent: #e4eaf0;
+  --accent-fg: #0f172a;
+  --destructive: #dc2626;
+  --destructive-fg: #fef2f2;
+  --border-color: #d8dee6;
+  --input: #d8dee6;
+  --ring: #0f766e;
+  --sidebar: #e5eaf0;
+  --sidebar-fg: #0f172a;
+  --sidebar-accent: #d5dde6;
+  --success: #046648;
+  --success-bg: #d3f1e4;
+  --warning: #8a5a09;
+  --warning-bg: #fdeacd;
+  --info: #1d4ed8;
+  --info-bg: #dbe7fd;
+  --danger: #9c2121;
+  --danger-bg: #fbdcdc;
+  color-scheme: light;
+}
+
+/* True-neutral graphite with an amber primary; maintenance shifts to blue
+   so amber stays the accent */
+[data-theme="carbon-amber"] {
+  --bg: #1d1d1d;
+  --fg: #ededed;
+  --card: #262626;
+  --card-fg: #ededed;
+  --popover: #262626;
+  --popover-fg: #ededed;
+  --primary: #d97706;
+  --primary-fg: #171008;
+  --secondary: #202020;
+  --secondary-fg: #c9c9c9;
+  --muted: #202020;
+  --muted-fg: #8f8f8f;
+  --accent: #262626;
+  --accent-fg: #ededed;
+  --destructive: #ef4444;
+  --destructive-fg: #fef2f2;
+  --border-color: #2a2a2a;
+  --input: #2a2a2a;
+  --ring: #d97706;
+  --sidebar: #101010;
+  --sidebar-fg: #ededed;
+  --sidebar-accent: #202020;
+  --success: #4ade80;
+  --success-bg: rgba(74, 222, 128, 0.13);
+  --warning: #60a5fa;
+  --warning-bg: rgba(96, 165, 250, 0.14);
+  --info: #22d3ee;
+  --info-bg: rgba(34, 211, 238, 0.14);
+  --danger: #f87171;
+  --danger-bg: rgba(248, 113, 113, 0.14);
+  color-scheme: dark;
+}
+
+/* Monochrome red for night deployments; statuses encode by intensity */
+[data-theme="night-vision"] {
+  --bg: #130f0f;
+  --fg: #f5b8b8;
+  --card: #1e1818;
+  --card-fg: #f5b8b8;
+  --popover: #1e1818;
+  --popover-fg: #f5b8b8;
+  --primary: #7f1d1d;
+  --primary-fg: #fecaca;
+  --secondary: #1e0c0c;
+  --secondary-fg: #d99a9a;
+  --muted: #1e0c0c;
+  --muted-fg: #a86e6e;
+  --accent: #241010;
+  --accent-fg: #f5b8b8;
+  --destructive: #b91c1c;
+  --destructive-fg: #fecaca;
+  --border-color: #3d1414;
+  --input: #3d1414;
+  --ring: #b91c1c;
+  --sidebar: #070303;
+  --sidebar-fg: #f5b8b8;
+  --sidebar-accent: #1e0c0c;
+  --success: #e28c8c;
+  --success-bg: rgba(248, 113, 113, 0.10);
+  --warning: #f5a3a3;
+  --warning-bg: rgba(248, 113, 113, 0.16);
+  --info: #d98080;
+  --info-bg: rgba(248, 113, 113, 0.12);
+  --danger: #fecaca;
+  --danger-bg: rgba(248, 113, 113, 0.24);
+  color-scheme: dark;
+}
+
+/* Interactive feel */
+* {
+  border-color: var(--border-color);
+  transition-property: color, background-color, border-color, box-shadow, opacity, transform;
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Better focus rings */
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 0.375rem;
+}
+
+/* Card hover lift */
+.card-hover:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Table row hover */
+tr {
+  transition: background-color 150ms ease;
+}
+
+/* Button press effect */
+button:active:not(:disabled), [role="button"]:active {
+  transform: scale(0.98);
+}
+
+/* Link underline animation */
+a {
+  text-decoration: none;
+  transition: color 150ms ease;
+}
+
+/* Skeleton loading animation */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, var(--muted) 25%, var(--accent) 50%, var(--muted) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 0.5rem;
+}
+
+/* Page enter animation */
+@keyframes fadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page-enter {
+  animation: fadeSlideIn 200ms ease-out;
+}
+
+/* Badge pulse for alerts */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.pulse {
+  animation: pulse-dot 2s infinite;
+}
+
+/* Modal animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(16px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Sticky table header */
+thead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--card);
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg);
+  color: var(--fg);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* Cross-fade on route navigation via the View Transitions API.
+   Chromium 111+ / Safari 18+ animate; Firefox renders instantly. */
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 180ms;
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  ::view-transition-old(root) {
+    animation-name: dum-fade-out;
+  }
+  ::view-transition-new(root) {
+    animation-name: dum-fade-in;
+  }
+  @keyframes dum-fade-out {
+    to { opacity: 0; }
+  }
+  @keyframes dum-fade-in {
+    from { opacity: 0; }
+  }
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--muted);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-fg);
+}
+
+/* Mobile touch targets */
+@media (max-width: 767px) {
+  button, a, [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  table th, table td {
+    padding: 8px 12px;
+    font-size: 0.8125rem;
+  }
+}
+
+/* Sandstone — warm light. Chrome recedes into sand, the working area sits
+   lighter, and cards sit lighter still: three distinct tiers rather than one
+   flat surface. Deliberately off-white throughout; pure #fff is glaring under
+   the fluorescent lighting these get used in. */
+[data-theme="sandstone"] {
+  --bg: #f0e9dc;
+  --fg: #2e2a23;
+  --card: #faf6ee;
+  --card-fg: #2e2a23;
+  --popover: #faf6ee;
+  --popover-fg: #2e2a23;
+  --primary: #a2662f;
+  --primary-fg: #ffffff;
+  --secondary: #e4dac6;
+  --secondary-fg: #4a4438;
+  --muted: #e4dac6;
+  --muted-fg: #6d6455;
+  --accent: #dccfb6;
+  --accent-fg: #2e2a23;
+  --destructive: #b4432c;
+  --destructive-fg: #ffffff;
+  --border-color: #d3c6ad;
+  --input: #d3c6ad;
+  --ring: #a2662f;
+  --sidebar: #ddd0b8;
+  --sidebar-fg: #2e2a23;
+  --sidebar-accent: #cdbc9d;
+  --success: #3f7d4e;
+  --success-bg: rgba(63, 125, 78, 0.16);
+  --warning: #9a6a1c;
+  --warning-bg: rgba(154, 106, 28, 0.16);
+  --info: #2f6d8f;
+  --info-bg: rgba(47, 109, 143, 0.16);
+  --danger: #b4432c;
+  --danger-bg: rgba(180, 67, 44, 0.16);
+  color-scheme: light;
+}
+
+/* Field Sage — light green. Same three-tier structure as Sandstone, cooler and
+   a touch brighter, without tipping into a saturated green that fights the
+   status badges. */
+[data-theme="field-sage"] {
+  --bg: #e8eee3;
+  --fg: #22291f;
+  --card: #f5f8f2;
+  --card-fg: #22291f;
+  --popover: #f5f8f2;
+  --popover-fg: #22291f;
+  --primary: #3f7d43;
+  --primary-fg: #ffffff;
+  --secondary: #d9e3d2;
+  --secondary-fg: #3a4535;
+  --muted: #d9e3d2;
+  --muted-fg: #5f6c59;
+  --accent: #cbd9c2;
+  --accent-fg: #22291f;
+  --destructive: #b03a2e;
+  --destructive-fg: #ffffff;
+  --border-color: #c3d1ba;
+  --input: #c3d1ba;
+  --ring: #3f7d43;
+  --sidebar: #d2ddc9;
+  --sidebar-fg: #22291f;
+  --sidebar-accent: #bccdb1;
+  --success: #35703f;
+  --success-bg: rgba(53, 112, 63, 0.16);
+  --warning: #8a6410;
+  --warning-bg: rgba(138, 100, 16, 0.16);
+  --info: #2b6484;
+  --info-bg: rgba(43, 100, 132, 0.16);
+  --danger: #b03a2e;
+  --danger-bg: rgba(176, 58, 46, 0.16);
+  color-scheme: light;
+}

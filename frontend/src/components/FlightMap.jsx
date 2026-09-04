@@ -1,0 +1,219 @@
+/**
+ * Leaflet map components for flight path visualization, location picking, and flight location overview.
+ * Uses OpenStreetMap tiles and react-leaflet for rendering.
+ */
+import { MapContainer, TileLayer, Polyline, Marker, Popup, Circle, Polygon, useMap } from 'react-leaflet'
+import { Link } from 'react-router-dom'
+import L from 'leaflet'
+import { useEffect } from 'react'
+// Bundle the marker images with the app (via Vite) instead of loading them
+// from unpkg.com, so pins still render offline or behind a firewall.
+import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
+import markerIcon from 'leaflet/dist/images/marker-icon.png'
+import markerShadow from 'leaflet/dist/images/marker-shadow.png'
+
+// Fix default marker icon paths for bundled Leaflet builds
+delete L.Icon.Default.prototype._getIconUrl
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: markerIcon2x,
+  iconUrl: markerIcon,
+  shadowUrl: markerShadow,
+})
+
+/**
+ * Helper component that adjusts the map viewport to fit the given bounds.
+ * @param {Object} props
+ * @param {Array<[number, number]>} props.bounds - Array of [lat, lng] coordinates to fit.
+ */
+function FitBounds({ bounds }) {
+  const map = useMap()
+  useEffect(() => {
+    if (bounds?.length > 1) {
+      map.fitBounds(bounds, { padding: [30, 30] })
+    } else if (bounds?.length === 1) {
+      map.setView(bounds[0], 15)
+    }
+  }, [map, bounds])
+  return null
+}
+
+/**
+ * Invisible component that registers a click handler on the map for location selection.
+ * @param {Object} props
+ * @param {Function} props.onSelect - Callback invoked with (lat, lng) on map click.
+ */
+function ClickHandler({ onSelect }) {
+  const map = useMap()
+  useEffect(() => {
+    if (!onSelect) return
+    const handler = (e) => onSelect(e.latlng.lat, e.latlng.lng)
+    map.on('click', handler)
+    return () => map.off('click', handler)
+  }, [map, onSelect])
+  return null
+}
+
+/**
+ * Recenters the map when the lat/lon props change. MapContainer's `center` is
+ * only read at mount, so coordinates loaded/changed afterward (e.g. an org
+ * default fetched from settings) need an explicit setView to move the view.
+ * @param {Object} props
+ * @param {number} [props.lat]
+ * @param {number} [props.lon]
+ */
+function RecenterOnChange({ lat, lon }) {
+  const map = useMap()
+  useEffect(() => {
+    if (lat != null && lon != null) {
+      map.setView([lat, lon], map.getZoom())
+    }
+  }, [map, lat, lon])
+  return null
+}
+
+/** @type {[number, number]} Default map center coordinates (lat, lng). */
+const DEFAULT_CENTER = [30.32, -86.14]
+
+/** @type {Record<string, string>} Geofence zone type to color mapping. */
+const ZONE_COLORS = {
+  no_fly: '#ef4444',
+  restricted: '#f59e0b',
+  caution: '#eab308',
+  authorized: '#22c55e',
+}
+
+/**
+ * Displays a flight path polyline with takeoff and landing markers.
+ * Auto-fits the map to the telemetry bounds.
+ * @param {Object} props
+ * @param {Array<{lat: number, lon: number}>} [props.telemetry=[]] - Telemetry data points.
+ * @param {number} [props.takeoffLat] - Takeoff latitude.
+ * @param {number} [props.takeoffLon] - Takeoff longitude.
+ * @param {number} [props.landingLat] - Landing latitude.
+ * @param {number} [props.landingLon] - Landing longitude.
+ * @param {string} [props.height='400px'] - Map container height.
+ */
+export function FlightPathMap({ telemetry = [], takeoffLat, takeoffLon, landingLat, landingLon, height = '400px' }) {
+  const path = telemetry.filter(p => p.lat != null && p.lon != null).map(p => [p.lat, p.lon])
+  const center = (() => {
+    if (takeoffLat != null && takeoffLon != null) return [takeoffLat, takeoffLon]
+    if (path.length > 0) return path[0]
+    return DEFAULT_CENTER
+  })()
+  const bounds = (() => {
+    if (path.length > 1) return path
+    if (takeoffLat != null) return [[takeoffLat, takeoffLon]]
+    return null
+  })()
+
+  return (
+    <div style={{ height }} className="rounded-xl overflow-hidden border border-border relative z-0">
+      <MapContainer center={center} zoom={15} style={{ height: '100%', width: '100%' }} scrollWheelZoom={true}>
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        {path.length > 1 && (
+          <Polyline positions={path} pathOptions={{ color: '#818cf8', weight: 3, opacity: 0.8 }} />
+        )}
+        {takeoffLat != null && takeoffLon != null && (
+          <Marker position={[takeoffLat, takeoffLon]}>
+            <Popup>Takeoff</Popup>
+          </Marker>
+        )}
+        {landingLat != null && landingLon != null && (
+          <Marker position={[landingLat, landingLon]}>
+            <Popup>Landing</Popup>
+          </Marker>
+        )}
+        {bounds && <FitBounds bounds={bounds} />}
+      </MapContainer>
+    </div>
+  )
+}
+
+/**
+ * Interactive map for selecting a geographic location by clicking.
+ * Renders geofence zones as circles or polygons with color-coded overlays.
+ * @param {Object} props
+ * @param {number} [props.lat] - Currently selected latitude.
+ * @param {number} [props.lon] - Currently selected longitude.
+ * @param {Function} [props.onSelect] - Callback invoked with (lat, lng) on map click.
+ * @param {Array<Object>} [props.geofences=[]] - Geofence zone objects to display.
+ * @param {string} [props.height='400px'] - Map container height.
+ */
+export function LocationPickerMap({ lat, lon, onSelect, geofences = [], height = '400px' }) {
+  const center = lat != null && lon != null ? [lat, lon] : DEFAULT_CENTER
+
+  return (
+    <div style={{ height }} className="rounded-xl overflow-hidden border border-border relative z-0">
+      <MapContainer center={center} zoom={12} style={{ height: '100%', width: '100%' }} scrollWheelZoom={true}>
+        <TileLayer
+          attribution='&copy; OpenStreetMap'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        {lat != null && lon != null && (
+          <Marker position={[lat, lon]}>
+            <Popup>Selected: {lat.toFixed(5)}, {lon.toFixed(5)}</Popup>
+          </Marker>
+        )}
+        {geofences.map(g => {
+          const color = ZONE_COLORS[g.zone_type] || '#6b7280'
+          if (g.geometry_type === 'circle' && g.center_lat && g.center_lon) {
+            return (
+              <Circle key={g.id} center={[g.center_lat, g.center_lon]} radius={g.radius_m || 100}
+                pathOptions={{ color, fillOpacity: 0.15, weight: 2 }}>
+                <Popup>{g.name} ({g.zone_type})</Popup>
+              </Circle>
+            )
+          }
+          if (g.geometry_type === 'polygon' && g.polygon_points?.length > 2) {
+            return (
+              <Polygon key={g.id} positions={g.polygon_points}
+                pathOptions={{ color, fillOpacity: 0.15, weight: 2 }}>
+                <Popup>{g.name} ({g.zone_type})</Popup>
+              </Polygon>
+            )
+          }
+          return null
+        })}
+        <ClickHandler onSelect={onSelect} />
+        <RecenterOnChange lat={lat} lon={lon} />
+      </MapContainer>
+    </div>
+  )
+}
+
+/**
+ * Overview map showing takeoff locations for multiple flights as markers.
+ * Each marker popup links to the flight detail page.
+ * @param {Object} props
+ * @param {Array<Object>} [props.flights=[]] - Flight objects with takeoff_lat/takeoff_lon.
+ * @param {string} [props.height='400px'] - Map container height.
+ */
+export function FlightLocationsMap({ flights = [], height = '400px' }) {
+  const markers = flights.filter(f => f.takeoff_lat != null && f.takeoff_lon != null)
+  const center = markers.length > 0 ? [markers[0].takeoff_lat, markers[0].takeoff_lon] : DEFAULT_CENTER
+  const bounds = markers.length > 1 ? markers.map(m => [m.takeoff_lat, m.takeoff_lon]) : null
+
+  return (
+    <div style={{ height }} className="rounded-xl overflow-hidden border border-border relative z-0">
+      <MapContainer center={center} zoom={10} style={{ height: '100%', width: '100%' }} scrollWheelZoom={true}>
+        <TileLayer
+          attribution='&copy; OpenStreetMap'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        {markers.map(f => (
+          <Marker key={f.id} position={[f.takeoff_lat, f.takeoff_lon]}>
+            <Popup>
+              <Link to={`/flights/${f.id}`} style={{ color: '#818cf8' }}>{f.date || 'No date'}</Link>
+              <br />{f.pilot_name || 'Unknown pilot'}
+              <br />Purpose: {f.purpose || 'None'}
+            </Popup>
+          </Marker>
+        ))}
+        {bounds && <FitBounds bounds={bounds} />}
+      </MapContainer>
+    </div>
+  )
+}

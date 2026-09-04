@@ -1,0 +1,58 @@
+from datetime import datetime, date
+from typing import Optional
+
+from pydantic import BaseModel
+
+
+class VehicleCreate(BaseModel):
+    serial_number: str
+    manufacturer: str
+    model: str
+    nickname: Optional[str] = None
+    provider_serial: Optional[str] = None
+    faa_registration: Optional[str] = None
+    status: str = "active"
+    acquired_date: Optional[date] = None
+    decommissioned_date: Optional[date] = None
+    notes: Optional[str] = None
+
+
+class VehicleUpdate(BaseModel):
+    serial_number: Optional[str] = None
+    manufacturer: Optional[str] = None
+    model: Optional[str] = None
+    nickname: Optional[str] = None
+    provider_serial: Optional[str] = None
+    faa_registration: Optional[str] = None
+    status: Optional[str] = None
+    acquired_date: Optional[date] = None
+    decommissioned_date: Optional[date] = None
+    photo_url: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class VehicleOut(BaseModel):
+    id: int
+    serial_number: str
+    manufacturer: str
+    model: str
+    nickname: Optional[str] = None
+    faa_registration: Optional[str] = None
+    status: str
+    total_flight_hours: float
+    total_flights: int
+    provider_serial: Optional[str] = None
+    api_provider: Optional[str] = None
+    acquired_date: Optional[date] = None
+    decommissioned_date: Optional[date] = None
+    photo_url: Optional[str] = None
+    notes: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class VehicleLocationUpdate(BaseModel):
+    pilot_id: int | None = None
+    place: str | None = None
