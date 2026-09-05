@@ -538,7 +538,9 @@ export default function DashboardPage() {
         emptyLabel="No maintenance due"
         link="/maintenance"
         renderItem={(m) => {
-          const days = daysUntil(m.next_due)
+          // next_due_date, not next_due: the API has never sent the latter,
+          // so this tile rendered a dash for every item that has a due date.
+          const days = daysUntil(m.next_due_date)
           const overdue = days != null && days < 0
           return (
             <li key={m.id}>
