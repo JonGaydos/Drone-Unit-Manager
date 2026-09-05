@@ -128,9 +128,10 @@ export default function CheckoutsPage() {
   }
 
   const handleDelete = (row) => {
+    const label = row.entity_name || `${row.entity_type} #${row.entity_id}`
     requestConfirm({
       title: 'Delete checkout record',
-      message: `Permanently delete this checkout record for ${row.entity_name || `${row.entity_type} #${row.entity_id}`}?`,
+      message: `Permanently delete this checkout record for ${label}?`,
       onConfirm: async () => {
         try { await api.delete(`/equipment-checkouts/${row.id}`); load() }
         catch (err) { toast.error(err.message) }
@@ -213,21 +214,21 @@ export default function CheckoutsPage() {
       <Modal open={coOpen} onClose={() => setCoOpen(false)} title="Check Out Equipment">
         <form onSubmit={submitCheckout} className="space-y-3">
           <div>
-            <label className="text-sm font-medium text-foreground">Type</label>
-            <select className="flex h-10 w-full rounded-lg border border-border bg-secondary px-3 text-sm text-foreground" value={coType} onChange={e => onTypeChange(e.target.value)}>
+            <label htmlFor="checkout-type" className="text-sm font-medium text-foreground">Type</label>
+            <select id="checkout-type" className="flex h-10 w-full rounded-lg border border-border bg-secondary px-3 text-sm text-foreground" value={coType} onChange={e => onTypeChange(e.target.value)}>
               {TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
           </div>
           <div>
-            <label className="text-sm font-medium text-foreground">Item</label>
-            <select className="flex h-10 w-full rounded-lg border border-border bg-secondary px-3 text-sm text-foreground" value={coForm.entity_id} onChange={e => setCoForm({ ...coForm, entity_id: e.target.value })} required>
+            <label htmlFor="checkout-item" className="text-sm font-medium text-foreground">Item</label>
+            <select id="checkout-item" className="flex h-10 w-full rounded-lg border border-border bg-secondary px-3 text-sm text-foreground" value={coForm.entity_id} onChange={e => setCoForm({ ...coForm, entity_id: e.target.value })} required>
               <option value="">Select…</option>
               {coItems.map(it => <option key={it.id} value={it.id}>{itemLabel(coType, it)}</option>)}
             </select>
           </div>
           <div>
-            <label className="text-sm font-medium text-foreground">Pilot</label>
-            <select className="flex h-10 w-full rounded-lg border border-border bg-secondary px-3 text-sm text-foreground" value={coForm.checked_out_by_id} onChange={e => setCoForm({ ...coForm, checked_out_by_id: e.target.value })} required>
+            <label htmlFor="checkout-pilot" className="text-sm font-medium text-foreground">Pilot</label>
+            <select id="checkout-pilot" className="flex h-10 w-full rounded-lg border border-border bg-secondary px-3 text-sm text-foreground" value={coForm.checked_out_by_id} onChange={e => setCoForm({ ...coForm, checked_out_by_id: e.target.value })} required>
               <option value="">Select…</option>
               {pilotOptions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
@@ -245,8 +246,8 @@ export default function CheckoutsPage() {
         <form onSubmit={submitCheckin} className="space-y-3">
           <p className="text-sm text-muted-foreground">{ciTarget?.entity_name || `${ciTarget?.entity_type} #${ciTarget?.entity_id}`}</p>
           <div>
-            <label className="text-sm font-medium text-foreground">Returned by</label>
-            <select className="flex h-10 w-full rounded-lg border border-border bg-secondary px-3 text-sm text-foreground" value={ciForm.checked_in_by_id} onChange={e => setCiForm({ ...ciForm, checked_in_by_id: e.target.value })} required>
+            <label htmlFor="checkin-returned-by" className="text-sm font-medium text-foreground">Returned by</label>
+            <select id="checkin-returned-by" className="flex h-10 w-full rounded-lg border border-border bg-secondary px-3 text-sm text-foreground" value={ciForm.checked_in_by_id} onChange={e => setCiForm({ ...ciForm, checked_in_by_id: e.target.value })} required>
               <option value="">Select…</option>
               {pilotOptions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>

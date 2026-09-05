@@ -13,13 +13,14 @@ import httpx
 from fastapi import APIRouter, HTTPException, Query
 
 from app.deps import CurrentUser
+from app.responses import responses
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/geocode", tags=["geocode"])
 
 
-@router.get("")
+@router.get("", responses=responses(404, 502))
 def geocode(q: Annotated[str, Query(min_length=2, max_length=200)], user: CurrentUser):
     """Forward-geocode an address via Nominatim and return the best match.
 

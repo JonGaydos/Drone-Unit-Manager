@@ -150,8 +150,8 @@ export default function CalendarPage() {
         <form onSubmit={handleSave} className="space-y-3">
           <Input label="Title" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} required />
           <div>
-            <label className="text-sm font-medium text-foreground">Category</label>
-            <select className="flex h-10 w-full rounded-lg border border-border bg-secondary px-3 text-sm text-foreground"
+            <label htmlFor="event-category" className="text-sm font-medium text-foreground">Category</label>
+            <select id="event-category" className="flex h-10 w-full rounded-lg border border-border bg-secondary px-3 text-sm text-foreground"
               value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>
               <option value="event">Event</option>
               <option value="leave">Leave</option>

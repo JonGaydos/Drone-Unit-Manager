@@ -1,7 +1,7 @@
 import { chromium, request as playwrightRequest } from '@playwright/test'
 import { mkdirSync } from 'node:fs'
 import {
-  apiLogin, api, createUser, createVehicle, createPilotRecord,
+  apiLogin, createUser, createVehicle, createPilotRecord,
   createFlight, createCertType, createPilotCertification,
 } from './helpers/seed.js'
 

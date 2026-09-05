@@ -370,8 +370,8 @@ export default function PilotDetailPage() {
                 <p className="flex items-center gap-2 text-sm text-emerald-400"><CheckCircle className="w-4 h-4" /> All clear. No lapsed currency or expiring certifications.</p>
               ) : (
                 <ul className="space-y-1.5">
-                  {items.map((a, i) => (
-                    <li key={i} className={`flex items-center gap-2 text-sm ${a.level === 'red' ? 'text-red-400' : 'text-amber-400'}`}>
+                  {items.map(a => (
+                    <li key={a.text} className={`flex items-center gap-2 text-sm ${a.level === 'red' ? 'text-red-400' : 'text-amber-400'}`}>
                       {a.level === 'red' ? <XCircle className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
                       {a.text}
                     </li>

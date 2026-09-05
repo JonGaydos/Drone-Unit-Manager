@@ -12,6 +12,7 @@ import os
 import secrets
 import tempfile
 import zipfile
+from typing import Annotated
 from datetime import date, datetime
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Request
@@ -495,7 +496,7 @@ def backup_status(db: DBSession, admin: AdminUser):
 @router.post("/import", responses=responses(400, 401, 403, 413))
 async def import_backup(
     request: Request,
-    file: UploadFile = File(...),
+    file: Annotated[UploadFile, File()],
 ):
     """Import a full backup from a ZIP file.
 

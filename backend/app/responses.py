@@ -8,6 +8,7 @@ DESCRIPTIONS = {
     409: "Conflict",
     413: "Payload too large",
     429: "Too many requests",
+    502: "Upstream service unavailable",
 }
 
 

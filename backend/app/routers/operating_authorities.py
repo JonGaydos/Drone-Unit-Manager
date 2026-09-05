@@ -73,7 +73,7 @@ def _document_counts(db, authority_ids: list[int]) -> dict[int, int]:
         .group_by(Document.entity_id)
         .all()
     )
-    return {entity_id: count for entity_id, count in rows}
+    return dict(rows)
 
 
 def _serialize(a: OperatingAuthority, today: date, document_count: int = 0) -> dict:

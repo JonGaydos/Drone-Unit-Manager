@@ -363,8 +363,8 @@ export default function SettingsPage() {
 
   const handleSaveRule = async () => {
     if (!ruleForm.name?.trim()) { toast.error('Name is required'); return }
-    const hrs = parseFloat(ruleForm.required_hours)
-    const days = parseInt(ruleForm.period_days, 10)
+    const hrs = Number.parseFloat(ruleForm.required_hours)
+    const days = Number.parseInt(ruleForm.period_days, 10)
     if (!hrs || hrs <= 0) { toast.error('Required hours must be > 0'); return }
     if (!days || days <= 0) { toast.error('Period days must be > 0'); return }
     setSavingRule(true)
@@ -375,7 +375,7 @@ export default function SettingsPage() {
         vehicle_model: ruleForm.vehicle_model?.trim() || null,
         required_hours: hrs,
         period_days: days,
-        required_flights: ruleForm.required_flights === '' || ruleForm.required_flights == null ? null : parseInt(ruleForm.required_flights, 10),
+        required_flights: ruleForm.required_flights === '' || ruleForm.required_flights == null ? null : Number.parseInt(ruleForm.required_flights, 10),
         is_active: ruleForm.is_active,
       }
       if (editingRule?.id) {

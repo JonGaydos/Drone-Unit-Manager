@@ -13,6 +13,18 @@ import { sortPilotsActiveFirst } from '@/lib/formatters'
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
+/** Thumbnail URL for a photo, falling back to the by-id endpoint. */
+function thumbSrc(photo) {
+  const path = photo.thumbnail_url || `/photos/${photo.id}/thumbnail`
+  return `${API_BASE}${path}`
+}
+
+/** Full-size URL for a photo, falling back to the by-id endpoint. */
+function viewSrc(photo, base) {
+  const path = photo.view_url || `/photos/${photo.id}/view`
+  return `${base}${path}`
+}
+
 export default function MediaPage() {
   const [photos, setPhotos] = useState([])
   const [pilots, setPilots] = useState([])
@@ -163,7 +175,7 @@ export default function MediaPage() {
                         onClick={() => setLightbox(idx)}
                       >
                         <img
-                          src={`${API_BASE}${photo.thumbnail_url || `/photos/${photo.id}/thumbnail`}`}
+                          src={thumbSrc(photo)}
                           alt={photo.title || photo.filename}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                           loading="lazy"
@@ -297,7 +309,7 @@ function LightboxModal({ photos, index, onClose, onPrev, onNext, formatDate, for
       {/* Image */}
       <div className="relative max-w-[90vw] max-h-[85vh] flex items-center justify-center">
         <img
-          src={`${API}${photo.view_url || `/photos/${photo.id}/view`}`}
+          src={viewSrc(photo, API)}
           alt={photo.title || photo.filename}
           className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl"
         />

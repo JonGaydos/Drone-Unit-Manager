@@ -53,7 +53,7 @@ function CertTypeModal({ certType, onSave, onClose }) {
           <div className="flex items-center gap-3">
             <label className="flex items-center gap-2 text-sm text-foreground">
               <input type="checkbox" checked={form.has_expiration} onChange={e => setForm({...form, has_expiration: e.target.checked})}
-                className="rounded border-border" />
+                className="rounded border-border" />{' '}
               Has Expiration Date
             </label>
           </div>
@@ -579,7 +579,7 @@ export default function CertificationsPage() {
                   checked={hideEmpty}
                   onChange={e => setHideEmpty(e.target.checked)}
                   className="rounded border-border"
-                />
+                />{' '}
                 Hide empty
               </label>
 

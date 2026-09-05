@@ -338,7 +338,7 @@ export default function OperatingAuthorityPage() {
                 onChange={e => setForm({ ...form, grounds_unit: e.target.checked })}
               />
               <span>
-                Expiry grounds the unit
+                Expiry grounds the unit{' '}
                 <span className="block text-xs text-muted-foreground">
                   On for an authority the unit flies under. Off for one whose lapse
                   restricts a kind of operation, such as a night waiver.

@@ -136,7 +136,7 @@ function TemplateModal({ template, vehicles, onSave, onClose }) {
                       checked={item.required}
                       onChange={e => updateItem(idx, 'required', e.target.checked)}
                       className="rounded border-border"
-                    />
+                    />{' '}
                     Required
                   </label>
                   <button type="button" onClick={() => removeItem(idx)} className="text-muted-foreground hover:text-red-400 p-1">
