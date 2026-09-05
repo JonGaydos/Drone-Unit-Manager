@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { Fragment, useState, useEffect } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Filter, ScrollText, Download } from 'lucide-react'
@@ -13,6 +13,10 @@ const ACTIONS = [
   '', 'create', 'update', 'delete', 'deactivate', 'retire', 'login', 'login_failed',
   'password_change', 'sync', 'bulk_approve', 'bulk_update',
 ]
+
+// Roughly what the 200px details column fits at this font size. Only used to
+// decide whether a row is worth expanding, never to cut text.
+const DETAILS_VISIBLE_CHARS = 30
 
 const ACTION_COLORS = {
   create: 'bg-emerald-500/15 text-emerald-400',
@@ -195,8 +199,17 @@ export default function AuditLogPage() {
                   const hasChanges = log.changes && Object.keys(log.changes).length > 0
                   const isExpanded = expandedId === log.id
 
+                  const entries = hasChanges ? Object.entries(log.changes) : []
+                  // The details column is fixed width and truncates. Nothing in
+                  // the DOM can say whether it actually clipped without
+                  // measuring, so this is roughly what the column fits, rounded
+                  // down: a row that expands to the text it already showed is
+                  // harmless, a truncated row with no way to read it is not.
+                  const detailsClipped = (log.details || '').length > DETAILS_VISIBLE_CHARS
+
                   return (
-                    <tr key={log.id} className="border-b border-border/50 hover:bg-muted/20">
+                    <Fragment key={log.id}>
+                    <tr className="border-b border-border/50 hover:bg-muted/20">
                       <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap text-xs">
                         {formatTimestamp(log.created_at)}
                       </td>
@@ -223,43 +236,42 @@ export default function AuditLogPage() {
                           <span className="text-foreground">{log.entity_name || (log.entity_id ? `#${log.entity_id}` : '-')}</span>
                         )}
                       </td>
-                      <td className="px-4 py-2.5 text-muted-foreground max-w-[200px] truncate">
+                      <td className="px-4 py-2.5 text-muted-foreground max-w-[200px] truncate" title={log.details || undefined}>
                         {log.details || '-'}
                       </td>
                       <td className="px-2 py-2.5">
-                        {hasChanges && (
+                        {(hasChanges || detailsClipped) && (
                           <button
                             onClick={() => setExpandedId(isExpanded ? null : log.id)}
                             className="p-1 text-muted-foreground hover:text-foreground rounded"
-                            title="View changes"
+                            title={hasChanges ? 'View changes' : 'View full details'}
                           >
                             {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                           </button>
                         )}
                       </td>
                     </tr>
-                  )
-                })}
-                {/* Expanded changes rows */}
-                {logs.map(log => {
-                  if (expandedId !== log.id || !log.changes) return null
-                  const entries = Object.entries(log.changes)
-                  return (
-                    <tr key={`${log.id}-changes`} className="bg-muted/10">
-                      <td colSpan={7} className="px-4 py-3">
-                        <div className="text-xs space-y-1.5">
-                          <p className="font-medium text-muted-foreground mb-2">Changes:</p>
-                          {entries.map(([field, vals]) => (
-                            <div key={field} className="flex items-start gap-2">
-                              <span className="font-medium text-foreground min-w-[120px]">{field}:</span>
-                              <span className="text-red-400 line-through">{vals.old || '(empty)'}</span>
-                              <span className="text-muted-foreground">-&gt;</span>
-                              <span className="text-emerald-400">{vals.new || '(empty)'}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </td>
-                    </tr>
+                    {isExpanded && (hasChanges || detailsClipped) && (
+                      <tr className="bg-muted/10">
+                        <td colSpan={7} className="px-4 py-3">
+                          <div className="text-xs space-y-1.5">
+                            {detailsClipped && (
+                              <p className="text-foreground whitespace-pre-wrap break-words mb-2">{log.details}</p>
+                            )}
+                            {hasChanges && <p className="font-medium text-muted-foreground mb-2">Changes:</p>}
+                            {entries.map(([field, vals]) => (
+                              <div key={field} className="flex items-start gap-2">
+                                <span className="font-medium text-foreground min-w-[120px]">{field}:</span>
+                                <span className="text-red-400 line-through">{vals.old || '(empty)'}</span>
+                                <span className="text-muted-foreground">-&gt;</span>
+                                <span className="text-emerald-400">{vals.new || '(empty)'}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   )
                 })}
               </tbody>
