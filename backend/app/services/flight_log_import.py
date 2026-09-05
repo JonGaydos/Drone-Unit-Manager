@@ -60,7 +60,10 @@ def detect_format(content: str) -> str:
 
     first_lines = content[:2000].lower()
 
-    if "datetime(utc)" in first_lines and "osd.latitude" in first_lines:
+    # OSD.* columns appear in no other format. The rule used to also require
+    # DateTime(utc), which DJI Go 4 exports do not always carry, so those logs
+    # fell through to the CSV path and imported nothing.
+    if "osd.lati" in first_lines:
         return "dji"
     if "latitude" in first_lines and "litchi" in first_lines:
         return "litchi"
@@ -117,17 +120,30 @@ def _parse_timestamp(val) -> Optional[datetime]:
     return None
 
 
+def _cell(cols, index):
+    """The value at `index`, or None when the row stops short of it.
+
+    Rows in these logs are ragged: a log cut off mid-write, or a firmware that
+    omits trailing columns, produces rows long enough for latitude and longitude
+    but not for the columns after them. Indexing those directly raised
+    IndexError and failed the whole import.
+    """
+    if index is None or index >= len(cols):
+        return None
+    return cols[index]
+
+
 def _extract_dji_extra(cols, gimbal_pitch_col, gimbal_roll_col, gimbal_yaw_col, flight_mode_col) -> dict:
     """Extract DJI provider-specific extra data from a row."""
     extra = {}
     if gimbal_pitch_col is not None:
-        extra["gimbal_pitch"] = _parse_float(cols[gimbal_pitch_col])
+        extra["gimbal_pitch"] = _parse_float(_cell(cols, gimbal_pitch_col))
     if gimbal_roll_col is not None:
-        extra["gimbal_roll"] = _parse_float(cols[gimbal_roll_col])
+        extra["gimbal_roll"] = _parse_float(_cell(cols, gimbal_roll_col))
     if gimbal_yaw_col is not None:
-        extra["gimbal_yaw"] = _parse_float(cols[gimbal_yaw_col])
+        extra["gimbal_yaw"] = _parse_float(_cell(cols, gimbal_yaw_col))
     if flight_mode_col is not None:
-        extra["flight_mode"] = cols[flight_mode_col] if flight_mode_col < len(cols) else None
+        extra["flight_mode"] = _cell(cols, flight_mode_col)
     return {k: v for k, v in extra.items() if v is not None}
 
 
@@ -197,20 +213,17 @@ def parse_dji_txt(content: str) -> dict:
         if len(cols) < max(lat_col, lon_col) + 1:
             continue
 
-        lat = _parse_float(cols[lat_col])
-        lon = _parse_float(cols[lon_col])
+        lat = _parse_float(_cell(cols, lat_col))
+        lon = _parse_float(_cell(cols, lon_col))
         if lat is None or lon is None or (lat == 0 and lon == 0):
             continue
 
-        alt = _parse_float(cols[alt_col]) if alt_col is not None else None
-        speed = _parse_float(cols[speed_col]) if speed_col is not None else None
-        battery = _parse_float(cols[bat_col]) if bat_col is not None else None
-        heading = _parse_float(cols[heading_col]) if heading_col is not None else None
-        sats = _parse_int(cols[sat_col]) if sat_col is not None else None
-
-        ts = None
-        if ts_col is not None:
-            ts = _parse_timestamp(cols[ts_col])
+        alt = _parse_float(_cell(cols, alt_col))
+        speed = _parse_float(_cell(cols, speed_col))
+        battery = _parse_float(_cell(cols, bat_col))
+        heading = _parse_float(_cell(cols, heading_col))
+        sats = _parse_int(_cell(cols, sat_col))
+        ts = _parse_timestamp(_cell(cols, ts_col))
 
         if first_ts is None and ts:
             first_ts = ts
@@ -354,7 +367,9 @@ def parse_csv_log(content: str, _format_type: str) -> dict:
     lat_col = find(["latitude", "lat"])
     lon_col = find(["longitude", "lon", "lng"])
     alt_col = find(["altitude(m)", "altitude [m]", "altitude_m", "height_above_takeoff", "height"])
-    speed_col = find(["speed(m/s)", "speed_mph", "groundspeed"])
+    # Airdata names the column "speed(mph)"; "speed_mph" never matched it, so
+    # every Airdata CSV imported with no speed and no max_speed_mps.
+    speed_col = find(["speed(m/s)", "speed(mph)", "speed_mph", "groundspeed"])
     bat_col = find(["battery(%)", "batterylevel", "battery_percent", "battery_level"])
     heading_col = find(["heading", "compass_heading", "yaw"])
     ts_col = find(["datetime", "timestamp", "time", "date_time"])
