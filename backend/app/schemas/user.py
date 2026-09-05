@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 
 # Conservative email shape check. EmailStr is intentionally NOT used here
 # because the email-validator package is not installed.
-_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s.]+(?:\.[^@\s.]+)+\Z")
 
 
 def _validate_optional_email(value: Optional[str]) -> Optional[str]:

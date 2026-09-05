@@ -1,6 +1,6 @@
 """Admin management of long-lived API tokens for external integrations."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
@@ -93,7 +93,7 @@ def revoke_api_token(token_id: int, db: DBSession, admin: AdminUser):
     if not t:
         raise HTTPException(404, TOKEN_NOT_FOUND)
     if t.revoked_at is None:
-        t.revoked_at = datetime.utcnow()
+        t.revoked_at = datetime.now(timezone.utc).replace(tzinfo=None)
         log_action(db, admin.id, admin.display_name, "delete", "api_token", t.id, t.name, details="revoked")
         db.commit()
     return {"ok": True}

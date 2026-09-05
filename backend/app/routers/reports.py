@@ -787,7 +787,7 @@ def _pilot_certifications(config: ReportConfig, db: Session):
 
     pilot_ids_seen = {pc.pilot_id for pc in records}
 
-    cert_columns = ["Pilot", "Cert Name", "Status", "Issue Date", "Expiration Date", "Days Until Expiry"]
+    cert_columns = ["Pilot", "Cert Name", "Status", "Issue Date", COL_EXPIRATION_DATE, "Days Until Expiry"]
 
     return {
         "report_type": "pilot_certifications",
@@ -1000,7 +1000,7 @@ def _pilot_activity_summary(config: ReportConfig, db: Session):
         "report_type": "pilot_activity_summary",
         "title": "Pilot Activity Summary",
         "summary": summary,
-        "columns": ["Pilot", "Flight Hours", "Mission Hours", "Training Hours", "Total Hours"],
+        "columns": ["Pilot", COL_FLIGHT_HOURS, COL_MISSION_HOURS, COL_TRAINING_HOURS, "Total Hours"],
         "rows": rows,
     }
 
@@ -1147,6 +1147,12 @@ def _pilot_log_totals(db: Session, pilot_id: int, log_model, link_model, link_fk
     count = _scoped(func.count(func.distinct(link_fk)))
     return float(hours or 0), int(count or 0)
 
+
+# Report column headings that appear in more than one report.
+COL_EXPIRATION_DATE = "Expiration Date"
+COL_FLIGHT_HOURS = "Flight Hours"
+COL_MISSION_HOURS = "Mission Hours"
+COL_TRAINING_HOURS = "Training Hours"
 
 EXPIRED = "Expired"
 EXPIRING_SOON = "Expiring Soon"
@@ -1506,7 +1512,7 @@ def _annual_unit_report(config: ReportConfig, db: Session):
             "inactive_roster": inactive_pilots,
             "pilots_who_flew": unique_pilots_flown,
         },
-        "columns": ["Pilot", "Flight Hours", "Mission Hours", "Training Hours", "Total Hours"],
+        "columns": ["Pilot", COL_FLIGHT_HOURS, COL_MISSION_HOURS, COL_TRAINING_HOURS, "Total Hours"],
         "rows": personnel_rows[:25],
     })
 

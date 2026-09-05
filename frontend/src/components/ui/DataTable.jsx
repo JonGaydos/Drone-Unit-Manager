@@ -35,6 +35,14 @@ function SortIcon({ columnKey, sortKey, sortDir }) {
  * @param {Function} [props.onPageChange] - Callback when page navigation buttons are clicked.
  * @param {string} [props.className] - Additional CSS classes for the table container.
  */
+/** The aria-sort value for a column header: undefined when the column is
+ *  not sortable, 'none' when it is sortable but not the active sort. */
+function ariaSortFor(col, sortKey, sortDir) {
+  if (!col.sortable) return undefined
+  if (sortKey !== col.key) return 'none'
+  return sortDir === 'asc' ? 'ascending' : 'descending'
+}
+
 function DataTable({
   columns = [],
   data = [],
@@ -47,6 +55,45 @@ function DataTable({
   onPageChange,
   className,
 }) {
+  /** Skeleton rows while loading, an empty-state row, or the data itself. */
+  const renderRows = () => {
+    if (loading) {
+      return Array.from({ length: 5 }).map((_, i) => (
+        <tr key={`sk-${i}`}>
+          {columns.map((col) => (
+            <td key={col.key} className="px-4 py-3">
+              <div className="skeleton h-4 w-3/4" />
+            </td>
+          ))}
+        </tr>
+      ))
+    }
+    if (data.length === 0) {
+      return (
+        <tr>
+          <td
+            colSpan={columns.length}
+            className="px-4 py-8 text-center text-muted-foreground"
+          >
+            No data available
+          </td>
+        </tr>
+      )
+    }
+    return data.map((row, idx) => (
+      <tr
+        key={row.id || `row-${idx}`}
+        className="hover:bg-muted/50 transition-colors"
+      >
+        {columns.map((col) => (
+          <td key={col.key} className="px-4 py-3 text-foreground">
+            {col.render ? col.render(row[col.key], row) : row[col.key]}
+          </td>
+        ))}
+      </tr>
+    ))
+  }
+
   return (
     <div className={cn('rounded-xl border border-border bg-card overflow-hidden', className)}>
       <div className="overflow-x-auto">
@@ -54,14 +101,7 @@ function DataTable({
           <thead>
             <tr className="border-b border-border bg-secondary/50">
               {columns.map((col) => {
-                const isSorted = col.sortable && sortKey === col.key
-                const ariaSort = col.sortable
-                  ? isSorted
-                    ? sortDir === 'asc'
-                      ? 'ascending'
-                      : 'descending'
-                    : 'none'
-                  : undefined
+                const ariaSort = ariaSortFor(col, sortKey, sortDir)
                 return (
                   <th
                     key={col.key}
@@ -89,39 +129,7 @@ function DataTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {loading ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <tr key={`sk-${i}`}>
-                  {columns.map((col) => (
-                    <td key={col.key} className="px-4 py-3">
-                      <div className="skeleton h-4 w-3/4" />
-                    </td>
-                  ))}
-                </tr>
-              ))
-            ) : data.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={columns.length}
-                  className="px-4 py-8 text-center text-muted-foreground"
-                >
-                  No data available
-                </td>
-              </tr>
-            ) : (
-              data.map((row, idx) => (
-                <tr
-                  key={row.id || `row-${idx}`}
-                  className="hover:bg-muted/50 transition-colors"
-                >
-                  {columns.map((col) => (
-                    <td key={col.key} className="px-4 py-3 text-foreground">
-                      {col.render ? col.render(row[col.key], row) : row[col.key]}
-                    </td>
-                  ))}
-                </tr>
-              ))
-            )}
+            {renderRows()}
           </tbody>
         </table>
       </div>

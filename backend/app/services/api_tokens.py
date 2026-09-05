@@ -10,7 +10,7 @@ sync, audit, the token API itself) is denied to all tokens.
 import hashlib
 import json
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -94,7 +94,7 @@ def authenticate_api_token(db: Session, raw: str, method: str, path: str) -> Use
     user = db.query(User).filter(User.id == token.user_id, User.is_active.is_(True)).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token owner is inactive")
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     if token.last_used_at is None or now - token.last_used_at > _LAST_USED_MIN_INTERVAL:
         token.last_used_at = now
         db.commit()
