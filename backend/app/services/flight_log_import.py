@@ -10,7 +10,7 @@ import io
 import json
 import logging
 import math
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -28,18 +28,37 @@ STANDARD_FIELDS = {"lat", "lon", "altitude_m", "speed_mps", "battery_pct", "head
 
 
 def _detect_airdata_json(content: str) -> bool:
-    """Check if content is Airdata JSON format (starts with { and has flight_telemetry)."""
-    if not content.strip().startswith('{'):
+    """Is this an Airdata JSON export?
+
+    This used to parse only the first 5000 characters, to avoid decoding a
+    whole export just to look at one key. Truncating JSON does not give you a
+    smaller document, it gives you an invalid one: every real export is
+    hundreds of kilobytes, so the parse raised, the exception was swallowed,
+    and detection said no. The file then fell through to the CSV heuristics,
+    matched on the word "latitude", and was parsed as a Litchi CSV, which
+    found nothing in it.
+
+    The marker is cheap to look for as text, and only a file that carries it
+    is worth decoding. Anything that gets past this is parsed in full moments
+    later anyway.
+    """
+    if not content.lstrip().startswith("{"):
+        return False
+    # Either marker is enough to be worth decoding: an export with telemetry
+    # carries the channels, one without still carries the flight's id.
+    if '"flight_telemetry"' not in content and '"flight_id"' not in content:
         return False
     try:
-        import json as _json
-        peek = _json.loads(content[:5000] if len(content) > 5000 else content)
-        if isinstance(peek, dict) and "data" in peek:
-            inner = peek["data"]
-            return isinstance(inner, dict) and "flight_telemetry" in inner
-    except (ValueError, KeyError):
-        pass
-    return False
+        data = json.loads(content)
+    except ValueError:
+        return False
+    inner = data.get("data")
+    if not isinstance(inner, dict):
+        return False
+    # An export can carry the flight without its telemetry. That is still this
+    # format, and recognising it is what turns "could not detect file format"
+    # into the accurate "no telemetry points found in file".
+    return "flight_telemetry" in inner or isinstance(inner.get("flight"), dict)
 
 
 def detect_format(content: str) -> str:
@@ -103,9 +122,28 @@ def _parse_int(val) -> Optional[int]:
 
 
 def _parse_timestamp(val) -> Optional[datetime]:
-    """Parse various timestamp formats into a datetime object."""
+    """Parse various timestamp formats into a naive UTC datetime.
+
+    ISO 8601 first. Airdata sends "2025-01-29T12:04:52.315549+00:00", with
+    microseconds and an offset, which none of the fixed formats below match --
+    so every flight in a real export arrived with no date, no duration, and no
+    timestamp on any telemetry point.
+
+    An offset-aware value is converted to UTC rather than having its offset
+    dropped, or a log written at +00:00 and one written at -05:00 disagree by
+    five hours while looking equally valid.
+    """
     if not val:
         return None
+    text = str(val).strip()
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        parsed = None
+    if parsed is not None:
+        if parsed.tzinfo is not None:
+            parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+        return parsed
     for fmt in (
         "%Y-%m-%d %H:%M:%S",
         "%Y-%m-%dT%H:%M:%S",
@@ -115,7 +153,7 @@ def _parse_timestamp(val) -> Optional[datetime]:
         "%m/%d/%Y %I:%M:%S %p",
     ):
         try:
-            return datetime.strptime(str(val).strip(), fmt)
+            return datetime.strptime(text, fmt)
         except ValueError:
             continue
     return None
