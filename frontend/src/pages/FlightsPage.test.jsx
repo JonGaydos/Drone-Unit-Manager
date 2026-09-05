@@ -158,11 +158,119 @@ describe('FlightsPage', () => {
     expect(await screen.findByText('2 selected')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Mark reviewed' }))
+    // Every bulk edit is confirmed first.
+    await screen.findByText(/Set the review status to "reviewed" on 2 selected/)
+    await user.click(screen.getByRole('button', { name: 'Mark Reviewed' }))
 
     await screen.findByRole('link', { name: 'Jane Doe' })  // reloaded
     expect(bulkBody.flight_ids.sort()).toEqual([1, 2])
     expect(bulkBody.review_status).toBe('reviewed')
     expect(bulkBody.pilot_confirmed).toBe(true)
+  })
+
+  // A bulk edit overwrites one field on every selected row in a single click.
+  // On 2026-09-03 that silently replaced the purpose on 97 flights. The
+  // confirmation has to name what is about to be replaced, not just the count.
+  it('bulk purpose: the confirmation names what is being overwritten and how many rows change', async () => {
+    let posted = false
+    mockMount()
+    server.use(http.post('/api/flights/bulk-update', () => { posted = true; return HttpResponse.json({ updated: 2 }) }))
+    const { user } = renderWithProviders(<FlightsPage />, { role: 'supervisor' })
+
+    await screen.findByRole('link', { name: 'Jane Doe' })
+    await user.click(screen.getByLabelText('Select all flights on this page'))
+    await screen.findByText('2 selected')
+
+    await user.selectOptions(screen.getByLabelText('Set purpose for selected flights'), 'Search')
+
+    // Flight 2 is already "Search", so only one row actually changes.
+    await screen.findByText(/Set the purpose to "Search" on 2 selected flight\(s\)\. 1 will change, replacing: Patrol \(1\)\./)
+    expect(posted).toBe(false)
+  })
+
+  it('bulk purpose: nothing is sent when the confirmation is cancelled', async () => {
+    let posted = false
+    mockMount()
+    server.use(http.post('/api/flights/bulk-update', () => { posted = true; return HttpResponse.json({ updated: 2 }) }))
+    const { user } = renderWithProviders(<FlightsPage />, { role: 'supervisor' })
+
+    await screen.findByRole('link', { name: 'Jane Doe' })
+    await user.click(screen.getByLabelText('Select all flights on this page'))
+    await screen.findByText('2 selected')
+    await user.selectOptions(screen.getByLabelText('Set purpose for selected flights'), 'Search')
+    await screen.findByText(/Set the purpose to "Search"/)
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(posted).toBe(false)
+    expect(screen.queryByText(/Set the purpose to/)).toBeNull()
+  })
+
+  it('bulk purpose: confirming POSTs the selected ids and the new purpose', async () => {
+    let bulkBody = null
+    mockMount()
+    server.use(http.post('/api/flights/bulk-update', async ({ request }) => {
+      bulkBody = await request.json()
+      return HttpResponse.json({ updated: bulkBody.flight_ids.length })
+    }))
+    const { user } = renderWithProviders(<FlightsPage />, { role: 'supervisor' })
+
+    await screen.findByRole('link', { name: 'Jane Doe' })
+    await user.click(screen.getByLabelText('Select all flights on this page'))
+    await screen.findByText('2 selected')
+    await user.selectOptions(screen.getByLabelText('Set purpose for selected flights'), 'Search')
+    await screen.findByText(/Set the purpose to "Search"/)
+
+    await user.click(screen.getByRole('button', { name: 'Set Purpose' }))
+
+    await screen.findByRole('link', { name: 'Jane Doe' })  // reloaded
+    expect(bulkBody.flight_ids.sort()).toEqual([1, 2])
+    expect(bulkBody.purpose).toBe('Search')
+  })
+
+  it('bulk pilot: the confirmation names the pilot and the ones being replaced', async () => {
+    mockMount()
+    const { user } = renderWithProviders(<FlightsPage />, { role: 'supervisor' })
+
+    await screen.findByRole('link', { name: 'Jane Doe' })
+    await user.click(screen.getByLabelText('Select all flights on this page'))
+    await screen.findByText('2 selected')
+
+    await user.selectOptions(screen.getByLabelText('Reassign pilot for selected flights'), '5')
+
+    // Flight 1 is already Jane Doe's, so only Bob Roy's row changes.
+    await screen.findByText(/Set the pilot to "Jane Doe" on 2 selected flight\(s\)\. 1 will change, replacing: Bob Roy \(1\)\./)
+  })
+
+  it('says nothing will change when every selected row already holds the value', async () => {
+    mockMount({ flights: () => HttpResponse.json({
+      flights: FLIGHTS.map(f => ({ ...f, purpose: 'Search' })), total: 2, total_pages: 1 }) })
+    const { user } = renderWithProviders(<FlightsPage />, { role: 'supervisor' })
+
+    await screen.findByRole('link', { name: 'Jane Doe' })
+    await user.click(screen.getByLabelText('Select all flights on this page'))
+    await screen.findByText('2 selected')
+
+    await user.selectOptions(screen.getByLabelText('Set purpose for selected flights'), 'Search')
+
+    await screen.findByText(/All 2 selected flight\(s\) already have the purpose "Search"\. Nothing will change\./)
+  })
+
+  it('caps the list of values being replaced', async () => {
+    const many = Array.from({ length: 10 }, (_, i) => ({
+      ...FLIGHTS[0], id: 10 + i, external_id: `id${i}`, purpose: `P${i}` }))
+    mockMount({ flights: () => HttpResponse.json({ flights: many, total: 10, total_pages: 1 }) })
+    const { user } = renderWithProviders(<FlightsPage />, { role: 'supervisor' })
+
+    await screen.findByLabelText('Select all flights on this page')
+    await user.click(screen.getByLabelText('Select all flights on this page'))
+    await screen.findByText('10 selected')
+
+    await user.selectOptions(screen.getByLabelText('Set purpose for selected flights'), 'Search')
+
+    // Six named, the remaining four counted, so one dialog cannot become a wall
+    // of text on a page of a hundred distinct purposes.
+    await screen.findByText(/10 will change, replacing: P0 \(1\), P1 \(1\), P2 \(1\), P3 \(1\), P4 \(1\), P5 \(1\), and 4 more\./)
   })
 
   it('renders the flight id cell as a link to the detail route', async () => {

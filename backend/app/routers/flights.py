@@ -1,3 +1,4 @@
+from collections import Counter
 from datetime import date
 from math import ceil
 
@@ -526,23 +527,74 @@ def update_flight(flight_id: int, data: FlightUpdate, db: DBSession, admin: Pilo
     return _flight_to_out(flight)
 
 
+# The fields one bulk edit may set. Anything else on the payload is neither
+# applied nor audited.
+BULK_FIELDS = ("pilot_id", "purpose", "review_status", "pilot_confirmed",
+               "counts_toward_totals")
+
+# Enough of the id list to identify what an edit touched without turning the
+# audit table into a wall of digits.
+MAX_ID_DETAIL_CHARS = 300
+
+# Flight purposes are free text on import, so the distinct prior values an edit
+# replaces are not bounded by the configured purpose list. Cap them.
+MAX_DISTINCT_PRIOR_VALUES = 10
+
+
+def _id_ranges(ids) -> str:
+    """``[1, 2, 3, 7, 8]`` -> ``"1-3, 7-8"``."""
+    ranges: list[list[int]] = []
+    for i in sorted(set(ids)):
+        if ranges and i == ranges[-1][1] + 1:
+            ranges[-1][1] = i
+        else:
+            ranges.append([i, i])
+    return ", ".join(str(a) if a == b else f"{a}-{b}" for a, b in ranges)
+
+
+def _overwritten(flights, field, new_value) -> str:
+    """The values this edit replaces, most common first: ``"Map Scan (62), Training (20)"``.
+
+    A bulk edit sets one field on every selected row at once, so the audit entry
+    is the only record of what was there before it. Without it, undoing an
+    accidental edit means diffing a backup.
+    """
+    counts = Counter(
+        "(none)" if (old := getattr(flight, field)) is None else str(old)
+        for flight in flights if getattr(flight, field) != new_value)
+    summary = ", ".join(f"{value} ({n})"
+                        for value, n in counts.most_common(MAX_DISTINCT_PRIOR_VALUES))
+    if len(counts) > MAX_DISTINCT_PRIOR_VALUES:
+        summary += f", and {len(counts) - MAX_DISTINCT_PRIOR_VALUES} more"
+    return summary
+
+
 @router.post("/bulk-update", responses=responses(401))
 def bulk_update_flights(data: FlightBulkUpdate, db: DBSession, admin: SupervisorUser):
-    from app.services.audit import log_action
     flights = db.query(Flight).filter(Flight.id.in_(data.flight_ids)).all()
+    updates = {field: value for field in BULK_FIELDS
+               if (value := getattr(data, field)) is not None}
+
+    # Read the old values before writing over them.
+    changes = {field: {"old": _overwritten(flights, field, value) or "(no change)",
+                       "new": str(value)}
+               for field, value in updates.items()}
+
     for flight in flights:
-        if data.pilot_id is not None:
-            flight.pilot_id = data.pilot_id
-        if data.purpose is not None:
-            flight.purpose = data.purpose
-        if data.review_status is not None:
-            flight.review_status = data.review_status
-        if data.pilot_confirmed is not None:
-            flight.pilot_confirmed = data.pilot_confirmed
-        if data.counts_toward_totals is not None:
-            flight.counts_toward_totals = data.counts_toward_totals
+        for field, value in updates.items():
+            setattr(flight, field, value)
+
+    details = f"Updated {len(flights)} flights"
+    if flights:
+        touched = _id_ranges(f.id for f in flights)
+        if len(touched) > MAX_ID_DETAIL_CHARS:
+            # Trim back to a whole range so the tail is never a half id.
+            touched = touched[:MAX_ID_DETAIL_CHARS].rsplit(", ", 1)[0] + ", ..."
+        details += f" (ids {touched})"
+
     action = "bulk_approve" if data.review_status == "reviewed" else "bulk_update"
-    log_action(db, admin.id, admin.display_name, action, "flight", details=f"Updated {len(flights)} flights")
+    log_action(db, admin.id, admin.display_name, action, "flight",
+               changes=changes or None, details=details)
     db.commit()
     return {"ok": True, "updated": len(flights)}
 
