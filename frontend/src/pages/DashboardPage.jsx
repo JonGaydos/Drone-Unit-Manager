@@ -12,7 +12,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { formatHours } from '@/lib/utils'
 import { resolveOrgLocation } from '@/lib/location'
 import {
-  Clock, Users, Box, AlertTriangle, ClipboardCheck, ArrowRight, Wrench, ShieldCheck,
+  Clock, Users, Box, AlertTriangle, ClipboardCheck, ArrowRight, Wrench,
   CloudSun, TrendingUp, TrendingDown, Minus, Target, GraduationCap, ChevronRight,
 } from 'lucide-react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'

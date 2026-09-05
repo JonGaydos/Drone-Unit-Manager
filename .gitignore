@@ -38,3 +38,9 @@ uploads/
 
 # Docker
 docker-compose.override.yml
+
+# Coverage output
+.coverage
+coverage.json
+coverage-run.log
+htmlcov/

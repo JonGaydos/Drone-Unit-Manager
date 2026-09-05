@@ -69,8 +69,8 @@ function ProviderCard({ provider, settings, onSave, onTest, onSync }) {
       const t = settings.find(s => s.key === provider.tokenKey)
       const tid = settings.find(s => s.key === provider.tokenIdKey)
       const interval = settings.find(s => s.key === 'sync_interval')
-      setTokenConfigured(!!(t && t.value))      // never seed the secret into the input
-      setTokenIdConfigured(!!(tid && tid.value))
+      setTokenConfigured(!!t?.value)      // never seed the secret into the input
+      setTokenIdConfigured(!!tid?.value)
       if (interval) setSyncInterval(interval.value || '')
       const tInterval = settings.find(s => s.key === 'telemetry_sync_interval')
       if (tInterval) setTelemetrySyncInterval(tInterval.value || '')

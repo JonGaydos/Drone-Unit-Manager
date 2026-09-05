@@ -589,7 +589,7 @@ export default function ReportsPage() {
                             </table>
                           </div>
                         )}
-                        {sec.rows && sec.rows.length === 0 && !sec.narrative && (
+                        {sec.rows?.length === 0 && !sec.narrative && (
                           <p className="text-xs text-muted-foreground italic">No data for this section.</p>
                         )}
                       </div>

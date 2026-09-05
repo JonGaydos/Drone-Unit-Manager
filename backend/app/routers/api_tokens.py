@@ -50,7 +50,7 @@ def list_api_tokens(db: DBSession, admin: AdminUser):
 @router.get("/scopes", responses=responses(401))
 def list_available_scopes(admin: AdminUser):
     """Selectable areas and the route prefixes each one covers."""
-    return {area: prefixes for area, prefixes in SCOPE_PREFIXES.items()}
+    return dict(SCOPE_PREFIXES)
 
 
 @router.post("", responses=responses(400, 401))

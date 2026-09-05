@@ -151,7 +151,7 @@ def get_schedule(
     }
 
 
-@router.post("")
+@router.post("", responses=responses(400, 404))
 def create_schedule(
     data: ScheduleCreate,
     db: DBSession,
@@ -176,7 +176,7 @@ def create_schedule(
     return {"ok": True, "id": schedule.id}
 
 
-@router.patch("/{schedule_id}", responses=responses(404))
+@router.patch("/{schedule_id}", responses=responses(400, 404))
 def update_schedule(
     schedule_id: int,
     data: ScheduleUpdate,

@@ -6,6 +6,12 @@ import { Image as ImageIcon, Plus, X, Loader2 } from 'lucide-react'
 
 const API_BASE = '/api'
 
+/** Thumbnail URL for a photo, falling back to the by-id endpoint. */
+function thumbSrc(photo) {
+  const path = photo.thumbnail_url || `/photos/${photo.id}/thumbnail`
+  return `${API_BASE}${path}`
+}
+
 /**
  * Linked-photos section for a flight or incident. Shows attached photo
  * thumbnails and, for supervisors and above, lets you attach existing photos
@@ -57,7 +63,7 @@ export default function LinkedPhotos({ entityType, entityId }) {
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
             {linked.map(photo => (
               <div key={photo.id} className="relative group">
-                <img src={`${API_BASE}${photo.thumbnail_url || `/photos/${photo.id}/thumbnail`}`}
+                <img src={thumbSrc(photo)}
                   alt={photo.title || photo.filename}
                   className="w-full h-28 object-cover rounded-lg border border-border" />
                 {isSupervisor && (
@@ -137,7 +143,7 @@ function PhotoPicker({ entityType, entityId, linkedIds, onClose, onAttached }) {
                 return (
                   <button key={photo.id} type="button" onClick={() => toggle(photo.id)}
                     className={`relative rounded-lg overflow-hidden border-2 ${isSel ? 'border-primary' : 'border-border'}`}>
-                    <img src={`${API_BASE}${photo.thumbnail_url || `/photos/${photo.id}/thumbnail`}`}
+                    <img src={thumbSrc(photo)}
                       alt={photo.title || photo.filename} className="w-full h-24 object-cover" />
                     {isSel && <span className="absolute top-1 right-1 w-4 h-4 bg-primary rounded-full border-2 border-white" />}
                   </button>

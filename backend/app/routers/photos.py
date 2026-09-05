@@ -335,8 +335,8 @@ def view_photo(
     photo_id: int,
     db: DBSession,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_security)] = None,
-    sig: str | None = Query(None),
-    exp: int | None = Query(None),
+    sig: Annotated[str | None, Query()] = None,
+    exp: Annotated[int | None, Query()] = None,
 ):
     """Serve the full-resolution photo file.
 
@@ -360,8 +360,8 @@ def view_thumbnail(
     photo_id: int,
     db: DBSession,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_security)] = None,
-    sig: str | None = Query(None),
-    exp: int | None = Query(None),
+    sig: Annotated[str | None, Query()] = None,
+    exp: Annotated[int | None, Query()] = None,
 ):
     """Serve the photo thumbnail. Same auth options as view_photo."""
     _authenticate_image_request(photo_id, "thumbnail", credentials, sig, exp, db)
