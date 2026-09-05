@@ -10,6 +10,8 @@ from app.models.pilot import Pilot
 from app.services.flight_scope import counted_flight_clause
 from app.models.vehicle import Vehicle
 from app.models.certification import PilotCertification, CertificationType
+from app.models.maintenance import MaintenanceRecord
+from app.models.maintenance_schedule import MaintenanceSchedule
 from app.models.operating_authority import AUTHORITY_SCORE_CAP
 from app.schemas.dashboard import (
     DashboardStats, FlightsByPurpose, FlightsByYear,
@@ -18,6 +20,76 @@ from app.schemas.dashboard import (
 )
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
+
+
+# What the dashboard tile shows at once. Five is enough to cover everything
+# overdue on a unit this size without the tile becoming the page.
+MAINTENANCE_DUE_LIMIT = 5
+
+
+def _due_items(db):
+    """Everything with a due date, from both places maintenance is tracked.
+
+    Schedules are the recurring plan; records are the log of work performed,
+    each carrying its own next-due date. Both matter: a schedule nobody has
+    completed yet has no record behind it (which is how an overdue task went
+    missing from this tile), and an ad-hoc record with a due date has no
+    schedule.
+
+    Completing a schedule auto-creates a record carrying the schedule's new due
+    date, so every recurring task that has been done once appears in both. There
+    is no foreign key between the tables, so they are matched on the equipment
+    and the date, and the schedule wins: it is the thing that recurs, and it
+    carries the name a person recognises.
+    """
+    items = []
+    seen = set()
+    schedules = db.query(MaintenanceSchedule).filter(
+        MaintenanceSchedule.is_active.is_(True),
+        MaintenanceSchedule.next_due.isnot(None)).all()
+    for s in schedules:
+        seen.add((s.entity_type, s.entity_id, s.next_due))
+        items.append({
+            "source": "schedule",
+            "id": s.id,
+            "name": s.name,
+            "entity_type": s.entity_type,
+            "entity_id": s.entity_id,
+            "due_date": s.next_due,
+        })
+
+    records = db.query(MaintenanceRecord).filter(
+        MaintenanceRecord.next_due_date.isnot(None)).all()
+    for r in records:
+        if (r.entity_type, r.entity_id, r.next_due_date) in seen:
+            continue
+        items.append({
+            "source": "record",
+            "id": r.id,
+            "name": r.description or r.maintenance_type,
+            "entity_type": r.entity_type,
+            "entity_id": r.entity_id,
+            "due_date": r.next_due_date,
+        })
+    return items
+
+
+@router.get("/maintenance-due", responses=responses(401))
+def maintenance_due(db: DBSession, user: CurrentUser, limit: int = MAINTENANCE_DUE_LIMIT):
+    """Maintenance needing attention, most overdue first.
+
+    Sorted by days remaining ascending, so a negative number (overdue) sorts
+    above anything still in the future. The tile that shows this used to list
+    records only, which meant a schedule nobody had completed yet -- the case
+    most likely to be overdue -- never appeared on it.
+    """
+    today = date.today()
+    items = _due_items(db)
+    for item in items:
+        item["days_remaining"] = (item["due_date"] - today).days
+        item["due_date"] = item["due_date"].isoformat()
+    items.sort(key=lambda i: (i["days_remaining"], i["name"] or ""))
+    return items[:max(limit, 0)]
 
 
 @router.get("/stats", response_model=DashboardStats, responses=responses(401))
