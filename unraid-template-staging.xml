@@ -1,0 +1,49 @@
+<?xml version="1.0"?>
+<!--
+  Staging instance of Drone Unit Manager.
+
+  Tracks the :main channel, so every merge to main lands here on the next pull,
+  while the production container tracks a cut release (:latest or :X.Y.Z) and
+  only moves when someone decides to ship.
+
+  Runs alongside production on a different port and a different appdata path, so
+  the two share nothing.
+
+  IMPORTANT, if this instance's appdata was seeded from a copy of production:
+  that copy carries production's settings, which include the SMTP credentials
+  and the Skydio API token. Left alone, this instance will run its own nightly
+  backup, sync Skydio again on the same schedule, and send the email digest to
+  real recipients. The digest is the one that reaches other people.
+
+  Clear them before the first start, not after. See docs/staging.md in the
+  repository for the exact command.
+-->
+<Container version="2">
+  <Name>DroneUnitManager-Staging</Name>
+  <Repository>ghcr.io/jongaydos/drone-unit-manager:main</Repository>
+  <Registry>https://github.com/JonGaydos/Drone-Unit-Manager/pkgs/container/drone-unit-manager</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/JonGaydos/Drone-Unit-Manager/issues</Support>
+  <Project>https://github.com/JonGaydos/Drone-Unit-Manager</Project>
+  <Overview>
+    Staging instance of Drone Unit Manager, tracking the :main channel. Every merge to main lands here, so changes can be exercised against a copy of real data before a release is cut and production moves. Runs on its own port and its own appdata directory; it shares nothing with the production container. If its appdata was seeded from production, clear the SMTP credentials and the Skydio token before first start, or this instance will email real recipients and sync the real Skydio account on a schedule. See docs/staging.md in the repository.
+  </Overview>
+  <Category>Tools: Productivity:</Category>
+  <WebUI>http://[IP]:[PORT:3015]/</WebUI>
+  <TemplateURL/>
+  <Icon>https://raw.githubusercontent.com/JonGaydos/Drone-Unit-Manager/main/frontend/public/icon.png</Icon>
+  <ExtraParams>--restart unless-stopped</ExtraParams>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires/>
+  <Config Name="Web UI Port" Target="8000" Default="3015" Mode="tcp" Description="Port for the staging web interface. Must differ from the production container's." Type="Port" Display="always" Required="true" Mask="false">3015</Config>
+  <Config Name="App Data" Target="/app/data" Default="/mnt/user/appdata/drone-unit-manager-staging" Mode="rw" Description="Staging data directory. Must be a different path from the production container's, or the two will fight over the same database." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/drone-unit-manager-staging</Config>
+  <Config Name="Timezone" Target="TZ" Default="America/Chicago" Mode="" Description="Timezone for the application (e.g., America/New_York, America/Los_Angeles)" Type="Variable" Display="always" Required="false" Mask="false">America/Chicago</Config>
+  <Config Name="Secret Key" Target="SECRET_KEY" Default="" Mode="" Description="JWT signing secret. Leave blank to auto-generate, so staging sessions are independent of production's." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+</Container>
