@@ -678,7 +678,8 @@ def _match_vehicle(db: Session, serial: str):
     ).first()
 
 
-def _flight_from_metadata(meta: dict, data_source: str, user_id, db: Session) -> Flight:
+def _flight_from_metadata(meta: dict, data_source: str, user_id, db: Session,
+                          has_telemetry: bool = True) -> Flight:
     """The Flight row a parsed log describes, not yet added to the session."""
     flight = Flight(
         date=meta.get("date"),
@@ -692,8 +693,8 @@ def _flight_from_metadata(meta: dict, data_source: str, user_id, db: Session) ->
         landing_lat=meta.get("landing_lat"),
         landing_lon=meta.get("landing_lon"),
         data_source=data_source,
-        has_telemetry=True,
-        telemetry_synced=True,
+        has_telemetry=has_telemetry,
+        telemetry_synced=has_telemetry,
         review_status="needs_review",
         pilot_confirmed=False,
         created_by_id=user_id,
@@ -759,7 +760,16 @@ def import_flight_log(
 
     meta = result["metadata"]
     telemetry = result["telemetry"]
-    if not telemetry:
+    # A provider can hold a flight it has no track for: Airdata exports one with
+    # has_telemetry empty and no channels. It is still a flight that happened,
+    # and the date, duration and aircraft are worth keeping, so it is imported
+    # without a track rather than refused.
+    #
+    # A parse that found nothing at all is different, and still an error. The
+    # date is the test: only a format carrying flight-level metadata separately
+    # can have one without any points, because the CSV and DJI parsers derive
+    # their metadata from the points they found.
+    if not telemetry and not meta.get("date"):
         return _import_failure("No telemetry points found in file")
 
     existing = _check_duplicate_by_external_id(meta, db)
@@ -768,7 +778,8 @@ def import_flight_log(
             meta, data_source, fmt, flight_id=existing.id, points_imported=0,
             skipped=True, message="Flight already exists (duplicate external_id)")
 
-    flight = _flight_from_metadata(meta, data_source, user_id, db)
+    flight = _flight_from_metadata(meta, data_source, user_id, db,
+                                   has_telemetry=bool(telemetry))
     db.add(flight)
     db.flush()
 
@@ -779,16 +790,21 @@ def import_flight_log(
 
     # Insert telemetry FIRST. If it fails, roll the flight back so we do not
     # leave a phantom row with has_telemetry=True but zero points.
-    try:
-        points_created = _create_telemetry_points(telemetry, flight.id, meta, fmt, telemetry_db)
-    except Exception:
-        db.rollback()
-        raise
+    points_created = 0
+    if telemetry:
+        try:
+            points_created = _create_telemetry_points(telemetry, flight.id, meta, fmt, telemetry_db)
+        except Exception:
+            db.rollback()
+            raise
 
     db.commit()
     db.refresh(flight)
     logger.info("Imported flight %d with %d telemetry points from %s",
                 flight.id, points_created, for_log(data_source))
 
-    return _import_summary(meta, data_source, fmt,
-                           flight_id=flight.id, points_imported=points_created)
+    summary = _import_summary(meta, data_source, fmt,
+                              flight_id=flight.id, points_imported=points_created)
+    if not telemetry:
+        summary["message"] = "Imported without telemetry; the export carries none for this flight"
+    return summary

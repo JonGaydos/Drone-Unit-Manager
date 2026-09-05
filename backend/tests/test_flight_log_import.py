@@ -8,7 +8,7 @@ unit, a duplicate imported twice, a flight row left behind with
 """
 
 import json
-from datetime import datetime
+from datetime import date, datetime
 
 import pytest
 
@@ -494,13 +494,49 @@ def test_an_unmatched_serial_still_imports_the_flight(db, telemetry_db):
     assert flight.vehicle_id is None
 
 
-def test_a_file_with_no_telemetry_creates_nothing(db, telemetry_db):
-    content = _airdata_json(gps={"data": [], "timestamps": []}).encode()
+def test_a_flight_the_export_has_no_track_for_is_still_imported(db, telemetry_db):
+    """A provider can hold a flight it has no telemetry for: Airdata exports one
+    with has_telemetry empty and no channels. It is still a flight that
+    happened, and the date, duration and aircraft are worth keeping."""
+    content = json.dumps({"data": {"flight": {
+        "flight_id": "AD-NOTRACK", "vehicle_serial": "SN-9",
+        "takeoff": "2026-05-01T10:00:00+00:00",
+        "landing": "2026-05-01T10:05:00+00:00"}}}).encode()
+
+    result = import_flight_log(content, db, telemetry_db)
+
+    assert result["error"] is None
+    assert result["points_imported"] == 0
+    assert "without telemetry" in result["message"].lower()
+
+    flight = db.query(Flight).one()
+    assert flight.date == date(2026, 5, 1)
+    assert flight.duration_seconds == 300
+    assert flight.has_telemetry is False, "nothing should promise a track that is not there"
+    assert flight.telemetry_synced is False
+
+
+def test_a_parse_that_found_nothing_at_all_is_still_an_error(db, telemetry_db):
+    """The date is what separates the two: a format carrying flight-level
+    metadata can have one with no points, while the CSV and DJI parsers derive
+    their metadata from the points, so no points means no date either."""
+    content = _airdata_json(gps={"data": [], "timestamps": []}).replace(
+        '"takeoff": "2026-05-01 10:00:00"', '"takeoff": ""').encode()
 
     result = import_flight_log(content, db, telemetry_db)
 
     assert result["error"]
     assert result["flight_id"] is None
+    assert db.query(Flight).count() == 0
+
+
+def test_a_csv_that_parsed_no_rows_is_still_an_error(db, telemetry_db):
+    """The guard must not turn an unusable file into an empty flight record."""
+    content = b"latitude,longitude,altitude(m)" + bytes([10]) + b"not,a,number"
+
+    result = import_flight_log(content, db, telemetry_db)
+
+    assert result["error"]
     assert db.query(Flight).count() == 0
 
 
