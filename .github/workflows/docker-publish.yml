@@ -46,6 +46,10 @@ jobs:
           # latest deliberately does NOT follow main. It used to, which meant
           # any merge reached a production container on its next pull, with no
           # step in between where a human decided to ship.
+          # metadata-action defaults to flavor: latest=auto, which adds latest
+          # on the default branch on its own, ignoring the rule below. Without
+          # this the explicit rule is dead letter and latest keeps following main.
+          flavor: latest=false
           tags: |
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
             type=ref,event=branch
