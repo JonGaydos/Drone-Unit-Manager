@@ -35,7 +35,7 @@
   <WebUI>http://[IP]:[PORT:3015]/</WebUI>
   <TemplateURL/>
   <Icon>https://raw.githubusercontent.com/JonGaydos/Drone-Unit-Manager/main/frontend/public/icon.png</Icon>
-  <ExtraParams>--restart unless-stopped</ExtraParams>
+  <ExtraParams>--restart unless-stopped --user 99:100</ExtraParams>
   <PostArgs/>
   <CPUset/>
   <DateInstalled/>
