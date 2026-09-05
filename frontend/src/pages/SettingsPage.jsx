@@ -1097,7 +1097,11 @@ export default function SettingsPage() {
             onClick={async () => {
               setExporting(true)
               try {
-                await api.download(`/backup/export?include_telemetry=${includeTelemetry}`)
+                // No timeout: build_backup_archive assembles the entire zip,
+                // every table plus every uploaded file, before the first byte
+                // is sent, so the 30s default aborted any sizeable backup.
+                // The restore path in SetupPage does the same for the same reason.
+                await api.download(`/backup/export?include_telemetry=${includeTelemetry}`, { timeout: 0 })
                 toast.success('Backup exported successfully')
               } catch (err) { toast.error(err.message) }
               finally { setExporting(false) }

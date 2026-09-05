@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
@@ -277,5 +277,32 @@ describe('SettingsPage', () => {
     await user.click(screen.getByRole('button', { name: 'Add' }))
 
     expect(posted).toEqual({ name: 'Night Ops' })
+  })
+
+  // The manual backup failed with a timeout while the 3am scheduled one worked,
+  // because the scheduled job calls the archive builder in-process and never
+  // crosses HTTP. build_backup_archive assembles every table and every uploaded
+  // file before the first byte is sent, so the client's 30s default aborted it.
+  //
+  // Spied rather than driven through MSW: the default timeout is 30 seconds, so
+  // no test can wait long enough to observe the abort. What matters is that the
+  // call site opts out, and that is only visible in the arguments.
+  it('takes a backup without the default request timeout', async () => {
+    const { api } = await import('@/api/client')
+    const spy = vi.spyOn(api, 'download').mockResolvedValue(undefined)
+    try {
+      mockMount()
+      const { user } = renderWithProviders(<SettingsPage />, { role: 'admin' })
+      await screen.findByText('Settings')
+
+      await user.click(await screen.findByRole('button', { name: /Download Backup|Export Backup/i }))
+
+      expect(spy).toHaveBeenCalledTimes(1)
+      const [path, options] = spy.mock.calls[0]
+      expect(path).toMatch(/^\/backup\/export/)
+      expect(options).toMatchObject({ timeout: 0 })
+    } finally {
+      spy.mockRestore()
+    }
   })
 })
