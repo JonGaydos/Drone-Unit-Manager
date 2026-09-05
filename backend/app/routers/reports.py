@@ -787,7 +787,7 @@ def _pilot_certifications(config: ReportConfig, db: Session):
 
     pilot_ids_seen = {pc.pilot_id for pc in records}
 
-    cert_columns = ["Pilot", "Cert Name", "Status", "Issue Date", "Expiration Date", "Days Until Expiry"]
+    cert_columns = ["Pilot", "Cert Name", "Status", "Issue Date", COL_EXPIRATION_DATE, "Days Until Expiry"]
 
     return {
         "report_type": "pilot_certifications",
@@ -1000,7 +1000,7 @@ def _pilot_activity_summary(config: ReportConfig, db: Session):
         "report_type": "pilot_activity_summary",
         "title": "Pilot Activity Summary",
         "summary": summary,
-        "columns": ["Pilot", "Flight Hours", "Mission Hours", "Training Hours", "Total Hours"],
+        "columns": ["Pilot", COL_FLIGHT_HOURS, COL_MISSION_HOURS, COL_TRAINING_HOURS, "Total Hours"],
         "rows": rows,
     }
 
@@ -1148,6 +1148,12 @@ def _pilot_log_totals(db: Session, pilot_id: int, log_model, link_model, link_fk
     return float(hours or 0), int(count or 0)
 
 
+# Report column headings that appear in more than one report.
+COL_EXPIRATION_DATE = "Expiration Date"
+COL_FLIGHT_HOURS = "Flight Hours"
+COL_MISSION_HOURS = "Mission Hours"
+COL_TRAINING_HOURS = "Training Hours"
+
 EXPIRED = "Expired"
 EXPIRING_SOON = "Expiring Soon"
 
@@ -1227,7 +1233,7 @@ def _pilot_section(db: Session, pilot: Pilot, period_start: date, period_end: da
             "career_flights": career_flights,
             "career_flight_hours": career_hours,
         },
-        "columns": ["Certification", "Status", "Issue Date", "Expiration Date"],
+        "columns": ["Certification", "Status", "Issue Date", COL_EXPIRATION_DATE],
         "rows": cert_rows,
     }
 
@@ -1273,7 +1279,7 @@ def _per_pilot_annual_review(config: ReportConfig, db: Session):
                 "first_flight": monthly_rows[0]["month"] if monthly_rows else "—",
                 "latest_activity": monthly_rows[-1]["month"] if monthly_rows else "—",
             },
-            "columns": ["Month", "Flights", "Flight Hours", "Missions", "Mission Hours", "Training Hours"],
+            "columns": ["Month", "Flights", COL_FLIGHT_HOURS, "Missions", COL_MISSION_HOURS, COL_TRAINING_HOURS],
             "rows": monthly_rows,
         })
 
@@ -1407,7 +1413,7 @@ def _annual_compliance_section(db: Session, pilots_by_id: dict) -> dict:
             "expired_certifications": len(expired),
             "expiring_within_90_days": len(expiring),
         },
-        "columns": ["Pilot", "Certification", "Expiration Date", "Status"],
+        "columns": ["Pilot", "Certification", COL_EXPIRATION_DATE, "Status"],
         "rows": rows,
     }
 
@@ -1478,7 +1484,7 @@ def _annual_unit_report(config: ReportConfig, db: Session):
     sections.append({
         "title": "Operational Tempo",
         "type": "table",
-        "columns": ["Month", "Flights", "Flight Hours", "Missions", "Mission Hours", "Training Hours"],
+        "columns": ["Month", "Flights", COL_FLIGHT_HOURS, "Missions", COL_MISSION_HOURS, COL_TRAINING_HOURS],
         "rows": _annual_monthly_tempo(flights, missions, trainings),
     })
 
@@ -1506,7 +1512,7 @@ def _annual_unit_report(config: ReportConfig, db: Session):
             "inactive_roster": inactive_pilots,
             "pilots_who_flew": unique_pilots_flown,
         },
-        "columns": ["Pilot", "Flight Hours", "Mission Hours", "Training Hours", "Total Hours"],
+        "columns": ["Pilot", COL_FLIGHT_HOURS, COL_MISSION_HOURS, COL_TRAINING_HOURS, "Total Hours"],
         "rows": personnel_rows[:25],
     })
 
@@ -1637,7 +1643,7 @@ def _annual_unit_report(config: ReportConfig, db: Session):
     sections.append({
         "title": "Year-over-Year Comparison",
         "type": "table",
-        "columns": ["Year", "Flights", "Flight Hours", "Mission Hours", "Training Hours", "Unique Pilots", "Unique Vehicles"],
+        "columns": ["Year", "Flights", COL_FLIGHT_HOURS, COL_MISSION_HOURS, COL_TRAINING_HOURS, "Unique Pilots", "Unique Vehicles"],
         "rows": yoy_rows,
     })
 
@@ -1656,6 +1662,6 @@ def _annual_unit_report(config: ReportConfig, db: Session):
         },
         "sections": sections,
         # Year-over-year also exposed at top level for legacy PDF chart + table
-        "columns": ["Year", "Flights", "Flight Hours", "Mission Hours", "Training Hours", "Unique Pilots", "Unique Vehicles"],
+        "columns": ["Year", "Flights", COL_FLIGHT_HOURS, COL_MISSION_HOURS, COL_TRAINING_HOURS, "Unique Pilots", "Unique Vehicles"],
         "rows": yoy_rows,
     }

@@ -17,6 +17,8 @@ from sqlalchemy.orm import Session
 from app.models.flight import Flight
 from app.models.telemetry import TelemetryPoint
 
+from app.logsafe import for_log
+
 logger = logging.getLogger(__name__)
 
 # Standard telemetry fields mapped to our fixed columns
@@ -671,7 +673,8 @@ def import_flight_log(
     db.commit()
     db.refresh(flight)
 
-    logger.info("Imported flight %d with %d telemetry points from %s", flight.id, points_created, data_source)
+    logger.info("Imported flight %d with %d telemetry points from %s",
+                flight.id, points_created, for_log(data_source))
 
     return {
         "flight_id": flight.id,

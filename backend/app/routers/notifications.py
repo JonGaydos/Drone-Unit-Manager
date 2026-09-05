@@ -28,7 +28,7 @@ DEFAULT_CATEGORIES = [
 # Single-line address with no whitespace/control chars (header-injection guard).
 # Not RFC-complete; just rejects newlines/control chars and obvious non-emails.
 _CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f]")
-EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s.]+(?:\.[^@\s.]+)+\Z")
 
 
 class NotificationPrefUpdate(BaseModel):

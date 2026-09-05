@@ -1,10 +1,14 @@
 # Stage 1: Build frontend
-# Base pinned to digest for reproducible builds. To bump: re-resolve with
-# `curl -s https://hub.docker.com/v2/repositories/library/node/tags/20-alpine | jq -r .digest`.
-FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS frontend-build
+# node:20-alpine, pinned by digest alone. The digest is what is resolved, so
+# carrying the tag as well only invites the two to disagree. To bump: re-resolve
+# with `curl -s https://hub.docker.com/v2/repositories/library/node/tags/20-alpine | jq -r .digest`.
+FROM node@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS frontend-build
 WORKDIR /app/frontend
 COPY frontend/package*.json ./
-RUN npm ci --production=false
+# --ignore-scripts: nothing in the tree needs a lifecycle script. Only
+# fsevents (macOS-only) and msw declare one, and msw is used through
+# msw/node, which needs no generated service worker.
+RUN npm ci --production=false --ignore-scripts
 COPY frontend/ ./
 RUN npm run build
 
@@ -21,13 +25,21 @@ WORKDIR /app
 
 # Install system dependencies for WeasyPrint (PDF generation)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf-2.0-0 \
-    libffi-dev libcairo2 libglib2.0-0 curl \
+    curl \
+    libcairo2 \
+    libffi-dev \
+    libgdk-pixbuf-2.0-0 \
+    libglib2.0-0 \
+    libpango-1.0-0 \
+    libpangocairo-1.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
-COPY backend/requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+COPY backend/requirements.txt backend/requirements.lock.txt ./
+# --require-hashes refuses any package whose contents do not match the
+# lock, and --only-binary refuses source distributions, so nothing runs a
+# setup.py at build time. Every requirement resolves to a wheel.
+RUN pip install --no-cache-dir --only-binary :all: --require-hashes -r requirements.lock.txt
 
 # Copy backend code
 COPY backend/app ./app
@@ -39,10 +51,8 @@ COPY --from=frontend-build /app/frontend/dist ./static
 
 # Copy entrypoint
 COPY entrypoint.sh ./
-RUN chmod +x entrypoint.sh
-
-# Create data directories
-RUN mkdir -p /app/data/uploads/documents /app/data/media_cache
+RUN chmod +x entrypoint.sh \
+    && mkdir -p /app/data/uploads/documents /app/data/media_cache
 
 ENV DATA_DIR=/app/data
 ENV DATABASE_URL=sqlite:////app/data/drone_unit_manager.db

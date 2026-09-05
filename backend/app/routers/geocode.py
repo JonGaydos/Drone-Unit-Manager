@@ -13,6 +13,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Query
 
 from app.deps import CurrentUser
+from app.logsafe import for_log
 from app.responses import responses
 
 logger = logging.getLogger(__name__)
@@ -37,7 +38,7 @@ def geocode(q: Annotated[str, Query(min_length=2, max_length=200)], user: Curren
         resp.raise_for_status()
         results = resp.json()
     except Exception as e:
-        logger.warning("Geocode lookup failed for %r: %s", q, e)
+        logger.warning("Geocode lookup failed for %s: %s", for_log(q), e)
         raise HTTPException(status_code=502, detail="Geocoding service unavailable")
     if not results:
         raise HTTPException(status_code=404, detail="No match for that address")

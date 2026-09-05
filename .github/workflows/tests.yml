@@ -20,8 +20,37 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39  # v8.2.0
 
+      # Compares package pins and hashes only. The 'via' comments record the
+      # input path as it was typed, so they differ between a run from the repo
+      # root and one from backend/, which says nothing about the resolution.
+      - name: Check the dependency lock is current
+        working-directory: backend
+        run: |
+          uv pip compile requirements.txt --generate-hashes \
+            --python-platform linux --python-version 3.12 -o /tmp/expected.lock --quiet
+          if ! diff <(grep -v '^[[:space:]]*#' requirements.lock.txt) \
+                    <(grep -v '^[[:space:]]*#' /tmp/expected.lock) > /dev/null; then
+            echo '::error::requirements.lock.txt does not match requirements.txt.'
+            echo 'Regenerate it with:'
+            echo '  cd backend && uv pip compile requirements.txt --generate-hashes \'
+            echo '      --python-platform linux --python-version 3.12 -o requirements.lock.txt'
+            exit 1
+          fi
+          uv pip compile requirements-dev.txt --generate-hashes \
+            --python-platform linux --python-version 3.12 -o /tmp/expected-dev.lock --quiet
+          if ! diff <(grep -v '^[[:space:]]*#' requirements-dev.lock.txt) \
+                    <(grep -v '^[[:space:]]*#' /tmp/expected-dev.lock) > /dev/null; then
+            echo '::error::requirements-dev.lock.txt does not match requirements-dev.txt.'
+            exit 1
+          fi
+          echo 'Both locks are current.'
+
       - name: Install dependencies
-        run: uv pip install --system -r backend/requirements.txt pytest httpx
+        run: "uv pip install --system --only-binary :all: --require-hashes -r backend/requirements.lock.txt"
+      # pytest only; httpx is a runtime dependency and comes from the lock
+      # above. Hash-pinned the same way, so no unpinned install happens here.
+      - name: Install test-only tools
+        run: "uv pip install --system --only-binary :all: --require-hashes -r backend/requirements-dev.lock.txt"
 
       - name: Run backend test suite
         working-directory: backend
@@ -45,7 +74,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: frontend
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Run frontend tests
         working-directory: frontend
@@ -67,7 +96,7 @@ jobs:
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39  # v8.2.0
 
       - name: Install backend deps
-        run: uv pip install --system -r backend/requirements.txt
+        run: "uv pip install --system --only-binary :all: --require-hashes -r backend/requirements.lock.txt"
 
       - name: Set up Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
@@ -78,11 +107,11 @@ jobs:
 
       - name: Install frontend deps
         working-directory: frontend
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Install Playwright Chromium
         working-directory: frontend
-        run: npx playwright install --with-deps chromium
+        run: npx --no-install playwright install --with-deps chromium
 
       - name: Run E2E
         working-directory: frontend
