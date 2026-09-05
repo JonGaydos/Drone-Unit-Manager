@@ -293,7 +293,7 @@ function ProviderCard({ provider, settings, onSave, onTest, onSync }) {
             <div className="mt-2">
               <SyncStatusBlock
                 syncedLabel="Last synced"
-                live={syncType === 'full' ? 'full' : syncType === 'sync' ? 'incremental' : null}
+                live={LIVE_SYNC_LABEL[syncType] || null}
                 lastTime={syncStatus?.last_sync}
                 intervalMin={Number(syncStatus?.sync_interval) || 0}
                 runSummary={metaRun.summary}
@@ -346,6 +346,9 @@ function ProviderCard({ provider, settings, onSave, onTest, onSync }) {
     </div>
   )
 }
+
+// Which sync is on the wire right now. Anything else means none is.
+const LIVE_SYNC_LABEL = { full: 'full', sync: 'incremental' }
 
 /** "in N min" until the next scheduled sync, or null if not schedulable. */
 function nextSyncLabel(lastSync, intervalMin) {
@@ -774,22 +777,7 @@ function FlightLogImport() {
       )}
       {result && !result.error && result.total === undefined && (
         <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-lg p-3 text-sm">
-          {result.skipped
-            ? `Flight #${result.flight_id} already exists (skipped)`
-            : result.flight_id
-              ? <>Flight #{result.flight_id} imported successfully — {result.points_imported} telemetry points, format: {result.format_detected}
-                {result.date && ` — ${result.date}`}</>
-              : <>
-                  Imported {result.points_imported || result.flights_imported || 0} flight{(result.points_imported || result.flights_imported || 0) === 1 ? '' : 's'} ({result.format_detected})
-                  {(result.pilots_created || result.vehicles_created || result.flights_skipped) ? (
-                    <div className="text-xs mt-1 text-emerald-400/80">
-                      {result.pilots_created || 0} pilot(s) and {result.vehicles_created || 0} vehicle(s) created
-                      {result.flights_skipped ? `, ${result.flights_skipped} duplicate(s) skipped` : ''}
-                    </div>
-                  ) : null}
-                  <ImportNotices result={result} />
-                </>
-          }
+          <ImportSuccess result={result} />
         </div>
       )}
       {result?.error && (
@@ -798,6 +786,34 @@ function FlightLogImport() {
         </div>
       )}
     </div>
+  )
+}
+
+// One upload lands in one of three shapes: a duplicate that was skipped, a
+// single flight, or a batch. Each reports different numbers.
+function ImportSuccess({ result }) {
+  if (result.skipped) {
+    return `Flight #${result.flight_id} already exists (skipped)`
+  }
+  if (result.flight_id) {
+    return (
+      <>Flight #{result.flight_id} imported successfully — {result.points_imported} telemetry points, format: {result.format_detected}
+        {result.date && ` — ${result.date}`}</>
+    )
+  }
+  const imported = result.points_imported || result.flights_imported || 0
+  const created = result.pilots_created || result.vehicles_created || result.flights_skipped
+  return (
+    <>
+      Imported {imported} flight{imported === 1 ? '' : 's'} ({result.format_detected})
+      {created ? (
+        <div className="text-xs mt-1 text-emerald-400/80">
+          {result.pilots_created || 0} pilot(s) and {result.vehicles_created || 0} vehicle(s) created
+          {result.flights_skipped ? `, ${result.flights_skipped} duplicate(s) skipped` : ''}
+        </div>
+      ) : null}
+      <ImportNotices result={result} />
+    </>
   )
 }
 

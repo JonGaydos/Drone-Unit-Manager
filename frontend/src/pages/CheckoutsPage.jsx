@@ -30,6 +30,44 @@ function itemLabel(type, it) {
 
 const fmtDate = (s) => (s ? new Date(s).toLocaleDateString() : '—')
 
+// Whoever took the item out is the likeliest person returning it; failing that,
+// whoever is signed in. Empty when neither is known, which leaves the field for
+// the user to pick.
+function defaultReturner(row, user) {
+  return String(row.checked_out_by_id || user?.pilot_id || '')
+}
+
+// Loading, then nothing out, then the table of what is out.
+function activeBody({ loading, active, openCheckin }) {
+  if (loading) return <div className="p-4 text-sm text-muted-foreground">Loading…</div>
+  if (active.length === 0) {
+    return <div className="p-4 text-sm text-muted-foreground text-center">Nothing checked out.</div>
+  }
+  return (
+    <table className="w-full text-sm">
+      <thead><tr className="text-left text-muted-foreground border-b border-border">
+        <th className="px-4 py-2 font-medium">Equipment</th><th className="px-4 py-2 font-medium">Type</th>
+        <th className="px-4 py-2 font-medium">Held by</th><th className="px-4 py-2 font-medium">Out</th>
+        <th className="px-4 py-2 font-medium">Expected back</th><th className="px-4 py-2"></th>
+      </tr></thead>
+      <tbody className="divide-y divide-border">
+        {active.map(r => (
+          <tr key={r.id}>
+            <td className="px-4 py-2 text-foreground">{r.entity_name || `${r.entity_type} #${r.entity_id}`}</td>
+            <td className="px-4 py-2 text-muted-foreground capitalize">{r.entity_type}</td>
+            <td className="px-4 py-2 text-foreground">{r.checked_out_by_name || '—'}</td>
+            <td className="px-4 py-2 text-muted-foreground">{fmtDate(r.checked_out_at)}</td>
+            <td className="px-4 py-2 text-muted-foreground">{fmtDate(r.expected_return)}</td>
+            <td className="px-4 py-2 text-right">
+              <Button variant="secondary" size="sm" onClick={() => openCheckin(r)}><LogOut className="w-3.5 h-3.5 mr-1" /> Check In</Button>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
 export default function CheckoutsPage() {
   const { user, isSupervisor } = useAuth()
   const toast = useToast()
@@ -108,7 +146,7 @@ export default function CheckoutsPage() {
 
   const openCheckin = (row) => {
     setCiTarget(row)
-    setCiForm({ checked_in_by_id: row.checked_out_by_id ? String(row.checked_out_by_id) : (user?.pilot_id ? String(user.pilot_id) : ''), condition_in: 'good', notes_in: '' })
+    setCiForm({ checked_in_by_id: defaultReturner(row, user), condition_in: 'good', notes_in: '' })
     setCiOpen(true)
   }
 
@@ -150,33 +188,7 @@ export default function CheckoutsPage() {
 
       <section className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-border text-sm font-semibold text-foreground">Currently Out ({active.length})</div>
-        {loading ? (
-          <div className="p-4 text-sm text-muted-foreground">Loading…</div>
-        ) : active.length === 0 ? (
-          <div className="p-4 text-sm text-muted-foreground text-center">Nothing checked out.</div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead><tr className="text-left text-muted-foreground border-b border-border">
-              <th className="px-4 py-2 font-medium">Equipment</th><th className="px-4 py-2 font-medium">Type</th>
-              <th className="px-4 py-2 font-medium">Held by</th><th className="px-4 py-2 font-medium">Out</th>
-              <th className="px-4 py-2 font-medium">Expected back</th><th className="px-4 py-2"></th>
-            </tr></thead>
-            <tbody className="divide-y divide-border">
-              {active.map(r => (
-                <tr key={r.id}>
-                  <td className="px-4 py-2 text-foreground">{r.entity_name || `${r.entity_type} #${r.entity_id}`}</td>
-                  <td className="px-4 py-2 text-muted-foreground capitalize">{r.entity_type}</td>
-                  <td className="px-4 py-2 text-foreground">{r.checked_out_by_name || '—'}</td>
-                  <td className="px-4 py-2 text-muted-foreground">{fmtDate(r.checked_out_at)}</td>
-                  <td className="px-4 py-2 text-muted-foreground">{fmtDate(r.expected_return)}</td>
-                  <td className="px-4 py-2 text-right">
-                    <Button variant="secondary" size="sm" onClick={() => openCheckin(r)}><LogOut className="w-3.5 h-3.5 mr-1" /> Check In</Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+        {activeBody({ loading, active, openCheckin })}
       </section>
 
       <section className="bg-card border border-border rounded-xl overflow-hidden">

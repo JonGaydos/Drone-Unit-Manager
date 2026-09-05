@@ -58,4 +58,27 @@ describe('LinkedPhotos', () => {
     expect(screen.queryByRole('button', { name: 'Attach photos' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Unlink photo' })).not.toBeInTheDocument()
   })
+
+  // The button counts what is about to be attached, so a mis-click is visible
+  // before it commits rather than after.
+  it('counts the selection on the attach button', async () => {
+    // The picker offers photos NOT already linked, so seed the linked set empty
+    // and let the picker's own fetch return both.
+    let call = 0
+    server.use(http.get('/api/photos', ({ request }) => {
+      call += 1
+      // First call is the entity-filtered one; the picker's is unfiltered.
+      return HttpResponse.json(new URL(request.url).searchParams.size > 0 && call === 1 ? [] : PHOTOS)
+    }))
+    const { user } = renderWithProviders(<LinkedPhotos entityType="flight" entityId={5} />, { role: 'admin' })
+
+    await user.click(await screen.findByRole('button', { name: /Attach photos/ }))
+    const attach = await screen.findByRole('button', { name: 'Attach' })
+
+    await user.click(await screen.findByAltText('North field'))
+    expect(attach).toHaveTextContent('Attach 1')
+
+    await user.click(screen.getByAltText('South field'))
+    expect(attach).toHaveTextContent('Attach 2')
+  })
 })

@@ -343,7 +343,39 @@ def test_a_flight_with_no_gps_channel_is_an_error():
     assert parse_airdata_json(content)["error"] == "No GPS data in telemetry"
 
 
-# 8. The import itself ------------------------------------------------------
+# 7b. Timestamps on the stored points ---------------------------------------
+
+def test_a_point_keeps_its_own_timestamp():
+    from datetime import datetime as dt
+    from app.services.flight_log_import import _point_timestamp_ms
+
+    own = dt(2026, 5, 1, 10, 0, 0)
+    base = dt(2020, 1, 1)
+
+    assert _point_timestamp_ms(own, base, 7) == int(own.timestamp() * 1000)
+
+
+def test_a_point_without_a_timestamp_is_spaced_a_second_after_takeoff():
+    """A log with no per-row time still has to plot in order, so the points are
+    laid out one second apart rather than piled on the same instant."""
+    from datetime import datetime as dt
+    from app.services.flight_log_import import _point_timestamp_ms
+
+    base = dt(2026, 5, 1, 10, 0, 0)
+    start = int(base.timestamp() * 1000)
+
+    assert _point_timestamp_ms(None, base, 0) == start
+    assert _point_timestamp_ms(None, base, 3) == start + 3000
+
+
+def test_a_point_with_no_time_at_all_falls_back_to_its_index():
+    from app.services.flight_log_import import _point_timestamp_ms
+
+    assert _point_timestamp_ms(None, None, 0) == 0
+    assert _point_timestamp_ms(None, None, 5) == 5000
+
+
+# 8. The import itself ------------------------------------------------------
 
 def test_an_import_creates_the_flight_and_its_telemetry(db, telemetry_db):
     result = import_flight_log(DJI_LOG.encode(), db, telemetry_db, user_id=None)

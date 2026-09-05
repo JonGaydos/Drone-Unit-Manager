@@ -64,6 +64,7 @@ function MaintenanceModal({ record, onSave, onClose, entityLists, pilots }) {
   }, [form.entity_type, entityLists, record])
 
   const [submitting, setSubmitting] = useState(false)
+  const submitLabel = record ? 'Update' : 'Add Maintenance'
   const [submitError, setSubmitError] = useState(null)
 
   const handleSubmit = async (e) => {
@@ -189,7 +190,7 @@ function MaintenanceModal({ record, onSave, onClose, entityLists, pilots }) {
           {submitError && <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg p-2">{submitError}</div>}
           <div className="flex gap-2 pt-2">
             <button type="submit" disabled={submitting} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50">
-              {submitting ? 'Saving...' : (record ? 'Update' : 'Add Maintenance')}
+              {submitting ? 'Saving...' : submitLabel}
             </button>
             <button type="button" onClick={onClose} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90">
               Cancel
@@ -229,6 +230,7 @@ function ScheduleModal({ schedule, onSave, onClose }) {
   }, [form.entity_type, schedule])
 
   const [submitting, setSubmitting] = useState(false)
+  const submitLabel = schedule ? 'Update' : 'Add Schedule'
   const [submitError, setSubmitError] = useState(null)
 
   const handleSubmit = async (e) => {
@@ -363,7 +365,7 @@ function ScheduleModal({ schedule, onSave, onClose }) {
           {submitError && <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg p-2">{submitError}</div>}
           <div className="flex gap-2 pt-2">
             <button type="submit" disabled={submitting} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50">
-              {submitting ? 'Saving...' : (schedule ? 'Update' : 'Add Schedule')}
+              {submitting ? 'Saving...' : submitLabel}
             </button>
             <button type="button" onClick={onClose} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90">
               Cancel
