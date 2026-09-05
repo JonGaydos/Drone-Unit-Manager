@@ -9,25 +9,14 @@
   Runs alongside production on a different port and a different appdata path, so
   the two share nothing.
 
-  BEFORE FIRST START, if you seeded the appdata from a copy of production:
-  that copy carries production's settings, which includes the SMTP credentials
+  IMPORTANT, if this instance's appdata was seeded from a copy of production:
+  that copy carries production's settings, which include the SMTP credentials
   and the Skydio API token. Left alone, this instance will run its own nightly
   backup, sync Skydio again on the same schedule, and send the email digest to
-  real recipients. Either clear those in Settings the moment it comes up, or
-  neuter them in the copied database first:
+  real recipients. The digest is the one that reaches other people.
 
-    docker run --rm \
-      -v /mnt/user/appdata/drone-unit-manager-staging:/app/data \
-      --entrypoint python \
-      ghcr.io/jongaydos/drone-unit-manager:main \
-      -c "import sqlite3; c=sqlite3.connect('/app/data/drone_unit_manager.db'); \
-          c.execute(\"DELETE FROM settings WHERE key IN ('smtp_host','smtp_username','smtp_password','skydio_api_token','skydio_token_id')\"); \
-          c.execute(\"UPDATE settings SET value='false' WHERE key='backup_enabled'\"); \
-          c.execute(\"UPDATE settings SET value='0' WHERE key IN ('sync_interval','telemetry_sync_interval')\"); \
-          c.commit(); print('cleared', c.total_changes, 'rows')"
-
-  The email digest is the one that reaches other people. Do this before you
-  start the container, not after.
+  Clear them before the first start, not after. See docs/staging.md in the
+  repository for the exact command.
 -->
 <Container version="2">
   <Name>DroneUnitManager-Staging</Name>
@@ -40,7 +29,7 @@
   <Support>https://github.com/JonGaydos/Drone-Unit-Manager/issues</Support>
   <Project>https://github.com/JonGaydos/Drone-Unit-Manager</Project>
   <Overview>
-    Staging instance of Drone Unit Manager, tracking the :main channel. Every merge to main lands here, so changes can be exercised against a copy of real data before a release is cut and production moves. Runs on its own port and its own appdata directory; it shares nothing with the production container. If its appdata was seeded from production, clear the SMTP credentials and Skydio token before first start, or it will email real recipients and sync the real Skydio account on a schedule.
+    Staging instance of Drone Unit Manager, tracking the :main channel. Every merge to main lands here, so changes can be exercised against a copy of real data before a release is cut and production moves. Runs on its own port and its own appdata directory; it shares nothing with the production container. If its appdata was seeded from production, clear the SMTP credentials and the Skydio token before first start, or this instance will email real recipients and sync the real Skydio account on a schedule. See docs/staging.md in the repository.
   </Overview>
   <Category>Tools: Productivity:</Category>
   <WebUI>http://[IP]:[PORT:3015]/</WebUI>
