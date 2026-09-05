@@ -13,6 +13,16 @@ import { Save, Loader2, Upload, Download, UserPlus, Key, Trash2, Shield, Image a
 const IntegrationsContent = React.lazy(() => import('@/pages/IntegrationsPage'))
 const ApiTokensSection = React.lazy(() => import('@/components/ApiTokensSection'))
 
+const DEFAULT_PLACES = ['North', 'Central', 'South']
+
+// Rows are edited in place and removed from the middle, so each needs an
+// identity of its own. Keyed by index, React reuses the input that held a
+// deleted row's text for whichever row shifts up into its position, and the
+// wrong name appears in the wrong box. The id never leaves the component: the
+// setting is stored as a plain array of strings.
+let placeIdCounter = 0
+const asPlace = (value) => ({ id: ++placeIdCounter, value })
+
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('general')
   const [settings, setSettings] = useState({})
@@ -70,7 +80,7 @@ export default function SettingsPage() {
   const [savingPurposes, setSavingPurposes] = useState(false)
 
   // Drone location places state
-  const [dronePlaces, setDronePlaces] = useState(['North', 'Central', 'South'])
+  const [dronePlaces, setDronePlaces] = useState(() => DEFAULT_PLACES.map(asPlace))
 
   // Default location (org) state
   const [addressQuery, setAddressQuery] = useState('')
@@ -334,7 +344,7 @@ export default function SettingsPage() {
       loadPurposes()
       // Load drone location places
       if (map.drone_location_places) {
-        try { const j = JSON.parse(map.drone_location_places); if (Array.isArray(j)) setDronePlaces(j) } catch { /* keep default */ }
+        try { const j = JSON.parse(map.drone_location_places); if (Array.isArray(j)) setDronePlaces(j.map(asPlace)) } catch { /* keep default */ }
       }
     }).catch(console.error)
     if (isAdmin) {
@@ -999,26 +1009,27 @@ export default function SettingsPage() {
           <p className="text-xs text-muted-foreground mb-3">Named places shown in the dashboard location dropdown (pilots are always available too).</p>
           <div className="space-y-2 mb-3">
             {dronePlaces.map((pl, i) => (
-              <div key={i} className="flex gap-2">
+              <div key={pl.id} className="flex gap-2">
                 <input
+                  aria-label={`Location ${i + 1}`}
                   className="flex-1 px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
-                  value={pl}
-                  onChange={(e) => setDronePlaces(dronePlaces.map((x, xi) => xi === i ? e.target.value : x))}
+                  value={pl.value}
+                  onChange={(e) => setDronePlaces(dronePlaces.map(x => x.id === pl.id ? { ...x, value: e.target.value } : x))}
                 />
                 <button type="button" className="px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 rounded-lg"
-                  onClick={() => setDronePlaces(dronePlaces.filter((_, xi) => xi !== i))}>Remove</button>
+                  onClick={() => setDronePlaces(dronePlaces.filter(x => x.id !== pl.id))}>Remove</button>
               </div>
             ))}
           </div>
           <div className="flex gap-2">
             <button type="button" className="px-3 py-2 text-sm bg-secondary border border-border rounded-lg text-foreground"
-              onClick={() => setDronePlaces([...dronePlaces, ''])}>Add place</button>
+              onClick={() => setDronePlaces([...dronePlaces, asPlace('')])}>Add place</button>
             <button type="button" className="px-3 py-2 text-sm bg-primary text-primary-foreground rounded-lg"
               onClick={async () => {
-                const cleaned = dronePlaces.map(s => s.trim()).filter(Boolean)
+                const cleaned = dronePlaces.map(p => p.value.trim()).filter(Boolean)
                 try {
                   await api.put('/settings/bulk', [{ key: 'drone_location_places', value: JSON.stringify(cleaned) }])
-                  setDronePlaces(cleaned)
+                  setDronePlaces(cleaned.map(asPlace))
                   toast.success('Locations saved')
                 } catch (err) { toast.error(err.message) }
               }}>Save locations</button>

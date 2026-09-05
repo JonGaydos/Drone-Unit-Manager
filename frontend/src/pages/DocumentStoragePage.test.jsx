@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { renderWithProviders } from '@/test/render'
@@ -128,5 +128,64 @@ describe('DocumentStoragePage', () => {
     renderWithProviders(<DocumentStoragePage />, { role: 'viewer' })
     await screen.findByText('Certifications')
     expect(screen.queryByRole('button', { name: /Upload/ })).toBeNull()
+  })
+
+  // The folder list is a tree: nodes are selectable, they expand, and each one
+  // carries its own rename and delete controls. It was marked up as a button,
+  // which describes none of that and put real buttons inside a button.
+  describe('the folder list is exposed as a tree', () => {
+    it('names the tree and its items', async () => {
+      mockMount()
+      renderWithProviders(<DocumentStoragePage />, { role: 'admin' })
+
+      await screen.findByText('Certifications')
+      const tree = screen.getByRole('tree', { name: 'Document folders' })
+      // Two folders plus Unfiled.
+      expect(within(tree).getAllByRole('treeitem')).toHaveLength(3)
+    })
+
+    it('marks the selected folder as selected', async () => {
+      mockMount()
+      const { user } = renderWithProviders(<DocumentStoragePage />, { role: 'admin' })
+
+      await user.click(await screen.findByText('Certifications'))
+
+      const selected = screen.getAllByRole('treeitem').filter(n => n.getAttribute('aria-selected') === 'true')
+      expect(selected).toHaveLength(1)
+      expect(selected[0]).toHaveTextContent('Certifications')
+    })
+
+    it('does not claim a childless folder is collapsed', async () => {
+      // aria-expanded on a leaf tells a screen reader there is something to
+      // open. Only a node with children carries it, and none of these have any.
+      mockMount()
+      renderWithProviders(<DocumentStoragePage />, { role: 'admin' })
+
+      await screen.findByText('Certifications')
+      for (const node of screen.getAllByRole('treeitem')) {
+        expect(node).not.toHaveAttribute('aria-expanded')
+      }
+    })
+
+    it('marks a folder with children as expandable, and tracks its state', async () => {
+      // Folders load expanded, so the attribute starts true and the click
+      // collapses rather than opens.
+      mockMount({ folders: () => HttpResponse.json([
+        ...FOLDERS,
+        { id: 3, name: 'Part 107', parent_id: 1, document_count: 1, is_system: false },
+      ]) })
+      const { user } = renderWithProviders(<DocumentStoragePage />, { role: 'admin' })
+
+      await screen.findAllByText('Certifications')
+      const parent = screen.getAllByRole('treeitem')
+        .find(n => n.textContent.includes('Certifications'))
+      expect(parent).toHaveAttribute('aria-expanded', 'true')
+      expect(within(screen.getByRole('group')).getByRole('treeitem')).toHaveTextContent('Part 107')
+
+      await user.click(parent)
+
+      expect(parent).toHaveAttribute('aria-expanded', 'false')
+      expect(screen.queryByRole('group')).toBeNull()
+    })
   })
 })

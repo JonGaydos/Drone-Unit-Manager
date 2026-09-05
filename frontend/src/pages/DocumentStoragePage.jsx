@@ -246,9 +246,11 @@ export default function DocumentStoragePage() {
     const isSelected = selectedFolder === folder.id
 
     return (
-      <div key={folder.id}>
+      <div key={folder.id} role="none">
         <div
-          role="button"
+          role="treeitem"
+          aria-selected={isSelected}
+          aria-expanded={hasChildren ? isExpanded : undefined}
           className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer group transition-colors ${
             isSelected ? 'bg-primary/15 text-primary' : 'text-foreground hover:bg-muted/50'
           }`}
@@ -294,7 +296,11 @@ export default function DocumentStoragePage() {
             </div>
           )}
         </div>
-        {isExpanded && children.map(child => renderFolderNode(child, depth + 1))}
+        {hasChildren && isExpanded && (
+          <div role="group">
+            {children.map(child => renderFolderNode(child, depth + 1))}
+          </div>
+        )}
       </div>
     )
   }
@@ -317,12 +323,13 @@ export default function DocumentStoragePage() {
             </button>
           )}
         </div>
-        <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
+        <div className="flex-1 overflow-y-auto p-2 space-y-0.5" role="tree" aria-label="Document folders">
           {buildTree(null).map(f => renderFolderNode(f))}
 
           {/* Unfiled section */}
           <div
-            role="button"
+            role="treeitem"
+            aria-selected={selectedFolder === 'unfiled'}
             className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg cursor-pointer mt-2 border-t border-border pt-3 transition-colors ${
               selectedFolder === 'unfiled' ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:bg-muted/50'
             }`}
