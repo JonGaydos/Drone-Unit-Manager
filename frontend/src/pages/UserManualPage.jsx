@@ -541,7 +541,9 @@ export default function UserManualPage() {
     return text.split('\n').map((line, i) => {
       const lineKey = `line-${i}-${line.slice(0, 20)}`
       if (line.startsWith('• **')) {
-        const match = line.match(/^• \*\*(.+?)\*\*(.*)$/)
+        // No trailing $: with it, the lazy group and the greedy tail both
+        // backtrack, which is quadratic on a line that never closes its **.
+        const match = line.match(/^• \*\*(.+?)\*\*(.*)/)
         if (match) {
           return (
             <div key={lineKey} className="flex gap-2 ml-2 mt-1">

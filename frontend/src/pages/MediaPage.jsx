@@ -13,6 +13,12 @@ import { sortPilotsActiveFirst } from '@/lib/formatters'
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
+// The pilot chips in the upload and edit modals both toggle one id in and out
+// of the same list.
+function toggled(ids, id) {
+  return ids.includes(id) ? ids.filter(p => p !== id) : [...ids, id]
+}
+
 /** Thumbnail URL for a photo, falling back to the by-id endpoint. */
 function thumbSrc(photo) {
   const path = photo.thumbnail_url || `/photos/${photo.id}/thumbnail`
@@ -383,11 +389,7 @@ function UploadModal({ pilots, onClose, onSuccess }) {
     }
   }
 
-  const togglePilot = (id) => {
-    setSelectedPilots(prev =>
-      prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
-    )
-  }
+  const togglePilot = (id) => setSelectedPilots(prev => toggled(prev, id))
 
   return (
     <Modal open onClose={onClose} title="Upload Photo" className="max-w-lg max-h-[90vh] overflow-y-auto">
@@ -491,11 +493,7 @@ function EditModal({ photo, pilots, onClose, onSuccess }) {
   const [selectedPilots, setSelectedPilots] = useState(photo.pilot_ids || [])
   const [saving, setSaving] = useState(false)
 
-  const togglePilot = (id) => {
-    setSelectedPilots(prev =>
-      prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
-    )
-  }
+  const togglePilot = (id) => setSelectedPilots(prev => toggled(prev, id))
 
   const handleSave = async () => {
     setSaving(true)
