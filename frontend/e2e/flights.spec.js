@@ -16,7 +16,8 @@ import { getAdminToken, createFlight } from './helpers/seed.js'
 //     lives in takeoff_address (also shown in the Location column + detail page).
 //   - Filter: Pilot dropdown (select#pilot-1, server-side) + the search box.
 //   - Bulk: per-row checkbox aria-label="Select flight <id>", then the
-//     supervisor toolbar "Mark reviewed" button (POST /flights/bulk-update).
+//     supervisor toolbar "Mark reviewed" button, which stages a confirmation
+//     naming what it will overwrite before POSTing /flights/bulk-update.
 //   - Export: "Export CSV" button -> api.download('/export/flights/csv'), which
 //     clicks a synthetic <a download>, firing a real Playwright download event.
 
@@ -82,12 +83,17 @@ test.describe('flights journey', () => {
     // bulk action) and mark it reviewed; assert OUR row flips to "Reviewed".
     await expect(myRow).toContainText('Needs Review')
     await myRow.getByRole('checkbox').check()
-    await expect(page.getByText('1 selected')).toBeVisible()
-    await page.getByRole('button', { name: 'Mark reviewed' }).click()
+    // Exact, because the confirmation below also says "1 selected flight(s)".
+    await expect(page.getByText('1 selected', { exact: true })).toBeVisible()
+    await page.getByRole('button', { name: 'Mark reviewed', exact: true }).click()
+
+    // Bulk edits are confirmed first, naming what they are about to overwrite.
+    await expect(page.getByText(/Set the review status to "reviewed" on 1 selected/)).toBeVisible()
+    await page.getByRole('button', { name: 'Mark Reviewed', exact: true }).click()
 
     // After the bulk update, load() reloads the table and clears the selection
     // (the search text persists), so the same single row remains visible.
-    await expect(page.getByText('1 selected')).toBeHidden({ timeout: 10_000 })
+    await expect(page.getByText('1 selected', { exact: true })).toBeHidden({ timeout: 10_000 })
     const reviewedRow = page.getByRole('row').filter({ hasText: `${tag2} Launch Site` })
     await expect(reviewedRow).toBeVisible({ timeout: 10_000 })
     await expect(reviewedRow).toContainText('Reviewed')
