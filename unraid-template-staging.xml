@@ -2,7 +2,7 @@
 <!--
   Staging instance of Drone Unit Manager.
 
-  Tracks the :main channel, so every merge to main lands here on the next pull,
+  Tracks the :v2 channel, so every merge to v2 lands here on the next pull,
   while the production container tracks a cut release (:latest or :X.Y.Z) and
   only moves when someone decides to ship.
 
@@ -20,7 +20,7 @@
 -->
 <Container version="2">
   <Name>DroneUnitManager-Staging</Name>
-  <Repository>ghcr.io/jongaydos/drone-unit-manager:main</Repository>
+  <Repository>ghcr.io/jongaydos/drone-unit-manager:v2</Repository>
   <Registry>https://github.com/JonGaydos/Drone-Unit-Manager/pkgs/container/drone-unit-manager</Registry>
   <Network>bridge</Network>
   <MyIP/>
@@ -29,7 +29,7 @@
   <Support>https://github.com/JonGaydos/Drone-Unit-Manager/issues</Support>
   <Project>https://github.com/JonGaydos/Drone-Unit-Manager</Project>
   <Overview>
-    Staging instance of Drone Unit Manager, tracking the :main channel. Every merge to main lands here, so changes can be exercised against a copy of real data before a release is cut and production moves. Runs on its own port and its own appdata directory; it shares nothing with the production container. If its appdata was seeded from production, clear the SMTP credentials and the Skydio token before first start, or this instance will email real recipients and sync the real Skydio account on a schedule. See docs/staging.md in the repository.
+    Staging instance of Drone Unit Manager, tracking the :v2 channel. Every merge to v2 lands here, so changes can be exercised against a copy of real data before a release is cut and production moves. Runs on its own port and its own appdata directory; it shares nothing with the production container. If its appdata was seeded from production, clear the SMTP credentials and the Skydio token before first start, or this instance will email real recipients and sync the real Skydio account on a schedule. See docs/staging.md in the repository.
   </Overview>
   <Category>Tools: Productivity:</Category>
   <WebUI>http://[IP]:[PORT:3015]/</WebUI>

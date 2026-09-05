@@ -8,7 +8,7 @@ work can be exercised before a release moves production.
 | Tag | Moves when | Who tracks it |
 | --- | --- | --- |
 | `:latest`, `:X.Y.Z` | a `v*` release tag is pushed | production |
-| `:main` | every merge to `main` | staging |
+| `:v2` | every merge to `v2` | staging |
 | `:<short-sha>` | every build | anyone pinning to an exact commit |
 
 `:latest` deliberately does not follow `main`. It used to, which meant any merge
@@ -21,7 +21,7 @@ Add the container from `unraid-template-staging.xml`. It differs from production
 in exactly three places, and all three must differ or the two instances will
 collide:
 
-- image `:main` rather than a release tag
+- image `:v2` rather than a release tag
 - host port `3015` rather than `3014`
 - appdata `/mnt/user/appdata/drone-unit-manager-staging`
 
@@ -50,7 +50,7 @@ send the digest to real recipients.
     docker run --rm \
       -v /mnt/user/appdata/drone-unit-manager-staging:/app/data \
       --entrypoint python \
-      ghcr.io/jongaydos/drone-unit-manager:main \
+      ghcr.io/jongaydos/drone-unit-manager:v2 \
       -c "import sqlite3; c = sqlite3.connect('/app/data/drone_unit_manager.db'); c.execute(\"DELETE FROM settings WHERE key IN ('smtp_host','smtp_username','smtp_password','skydio_api_token','skydio_token_id')\"); c.execute(\"UPDATE settings SET value='false' WHERE key='backup_enabled'\"); c.execute(\"UPDATE settings SET value='0' WHERE key IN ('sync_interval','telemetry_sync_interval')\"); c.commit(); print('cleared', c.total_changes, 'rows')"
 
 It removes the SMTP and Skydio credentials, disables the nightly backup, and
