@@ -20,8 +20,24 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39  # v8.2.0
 
+      - name: Check the dependency lock is current
+        run: |
+          uv pip compile backend/requirements.txt --generate-hashes \
+            --python-platform linux --python-version 3.12 -o /tmp/expected.lock --quiet
+          if ! diff <(grep -v '^#' backend/requirements.lock.txt) \
+                    <(grep -v '^#' /tmp/expected.lock) > /dev/null; then
+            echo '::error::requirements.lock.txt does not match requirements.txt.'
+            echo 'Regenerate it with:'
+            echo '  cd backend && uv pip compile requirements.txt --generate-hashes \'
+            echo '      --python-platform linux --python-version 3.12 -o requirements.lock.txt'
+            exit 1
+          fi
+          echo 'Lock is current.'
+
       - name: Install dependencies
-        run: "uv pip install --system --only-binary :all: -r backend/requirements.txt pytest httpx"
+        run: "uv pip install --system --only-binary :all: --require-hashes -r backend/requirements.lock.txt"
+      - name: Install test-only tools
+        run: "uv pip install --system pytest httpx"
 
       - name: Run backend test suite
         working-directory: backend
@@ -67,7 +83,7 @@ jobs:
         uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39  # v8.2.0
 
       - name: Install backend deps
-        run: "uv pip install --system --only-binary :all: -r backend/requirements.txt"
+        run: "uv pip install --system --only-binary :all: --require-hashes -r backend/requirements.lock.txt"
 
       - name: Set up Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0

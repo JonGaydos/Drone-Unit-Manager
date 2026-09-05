@@ -35,10 +35,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
-COPY backend/requirements.txt ./
-# --only-binary :all: refuses source distributions, so no setup.py runs at
-# build time. Verified that every pinned requirement resolves to a wheel.
-RUN pip install --no-cache-dir --only-binary :all: -r requirements.txt
+COPY backend/requirements.txt backend/requirements.lock.txt ./
+# --require-hashes refuses any package whose contents do not match the
+# lock, and --only-binary refuses source distributions, so nothing runs a
+# setup.py at build time. Every requirement resolves to a wheel.
+RUN pip install --no-cache-dir --only-binary :all: --require-hashes -r requirements.lock.txt
 
 # Copy backend code
 COPY backend/app ./app
