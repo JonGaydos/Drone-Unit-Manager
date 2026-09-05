@@ -8,7 +8,7 @@ unit, a duplicate imported twice, a flight row left behind with
 """
 
 import json
-from datetime import datetime
+from datetime import date, datetime
 
 import pytest
 
@@ -93,6 +93,38 @@ def test_an_unrecognisable_file_is_unknown():
     assert detect_format("hello, this is not a flight log") == "unknown"
 
 
+def test_a_real_sized_airdata_export_is_detected():
+    """The one the fixtures could not catch.
+
+    Detection used to parse only the first 5000 characters, to avoid decoding a
+    whole export just to read one key. Truncating JSON does not produce a
+    smaller document, it produces an invalid one, so every real export -- they
+    run to hundreds of kilobytes -- failed to parse, the error was swallowed,
+    and the file fell through to the CSV heuristics and was read as Litchi.
+
+    Every fixture in this file was small enough to survive the truncation,
+    which is exactly why they all passed over it.
+    """
+    padding = ["2025-01-29T12:04:%02d.000000+00:00" % (i % 60) for i in range(400)]
+    content = json.dumps({"data": {
+        "flight": {"flight_id": "AD-BIG", "takeoff": "2025-01-29T12:04:52.315549+00:00"},
+        "flight_telemetry": {"gps": {"data": [[28.5, -81.4]], "timestamps": padding}}}})
+
+    assert len(content) > 5000, "the point of this test is a file bigger than the old peek"
+    assert detect_format(content) == "airdata_json"
+
+
+def test_an_export_with_no_telemetry_is_still_recognised():
+    """Airdata exports a flight it has no telemetry for. Recognising it is what
+    turns "could not detect file format" into the accurate "no telemetry points
+    found in file"."""
+    content = json.dumps({"data": {"flight": {
+        "flight_id": "14C99FFB", "vehicle_serial": "SkydioX2-7646",
+        "takeoff": "2024-11-09T13:48:23.192661+00:00", "has_telemetry": ""}}})
+
+    assert detect_format(content) == "airdata_json"
+
+
 # 2. Value parsing ----------------------------------------------------------
 
 @pytest.mark.parametrize("value", [None, "", "N/A", "abc"])
@@ -126,6 +158,24 @@ def test_every_declared_timestamp_format_parses(raw, expected):
 @pytest.mark.parametrize("raw", ["", None, "not a time", "2026-13-45"])
 def test_an_unparseable_timestamp_is_none(raw):
     assert _parse_timestamp(raw) is None
+
+
+def test_iso_8601_with_microseconds_and_an_offset_parses():
+    """What a real Airdata export sends. None of the fixed formats matched it,
+    so every flight arrived with no date, no duration, and no timestamp on any
+    telemetry point."""
+    assert _parse_timestamp("2025-01-29T12:04:52.315549+00:00") ==         datetime(2025, 1, 29, 12, 4, 52, 315549)
+
+
+def test_an_offset_is_converted_to_utc_rather_than_dropped():
+    """The app stores naive UTC. Truncating the offset instead of applying it
+    would put a flight logged at -05:00 five hours out from one logged at
+    +00:00, both looking equally valid."""
+    assert _parse_timestamp("2025-01-29T07:04:52-05:00") == datetime(2025, 1, 29, 12, 4, 52)
+
+
+def test_a_bare_iso_date_is_midnight():
+    assert _parse_timestamp("2025-01-29") == datetime(2025, 1, 29, 0, 0)
 
 
 # 3. Units ------------------------------------------------------------------
@@ -444,13 +494,49 @@ def test_an_unmatched_serial_still_imports_the_flight(db, telemetry_db):
     assert flight.vehicle_id is None
 
 
-def test_a_file_with_no_telemetry_creates_nothing(db, telemetry_db):
-    content = _airdata_json(gps={"data": [], "timestamps": []}).encode()
+def test_a_flight_the_export_has_no_track_for_is_still_imported(db, telemetry_db):
+    """A provider can hold a flight it has no telemetry for: Airdata exports one
+    with has_telemetry empty and no channels. It is still a flight that
+    happened, and the date, duration and aircraft are worth keeping."""
+    content = json.dumps({"data": {"flight": {
+        "flight_id": "AD-NOTRACK", "vehicle_serial": "SN-9",
+        "takeoff": "2026-05-01T10:00:00+00:00",
+        "landing": "2026-05-01T10:05:00+00:00"}}}).encode()
+
+    result = import_flight_log(content, db, telemetry_db)
+
+    assert result["error"] is None
+    assert result["points_imported"] == 0
+    assert "without telemetry" in result["message"].lower()
+
+    flight = db.query(Flight).one()
+    assert flight.date == date(2026, 5, 1)
+    assert flight.duration_seconds == 300
+    assert flight.has_telemetry is False, "nothing should promise a track that is not there"
+    assert flight.telemetry_synced is False
+
+
+def test_a_parse_that_found_nothing_at_all_is_still_an_error(db, telemetry_db):
+    """The date is what separates the two: a format carrying flight-level
+    metadata can have one with no points, while the CSV and DJI parsers derive
+    their metadata from the points, so no points means no date either."""
+    content = _airdata_json(gps={"data": [], "timestamps": []}).replace(
+        '"takeoff": "2026-05-01 10:00:00"', '"takeoff": ""').encode()
 
     result = import_flight_log(content, db, telemetry_db)
 
     assert result["error"]
     assert result["flight_id"] is None
+    assert db.query(Flight).count() == 0
+
+
+def test_a_csv_that_parsed_no_rows_is_still_an_error(db, telemetry_db):
+    """The guard must not turn an unusable file into an empty flight record."""
+    content = b"latitude,longitude,altitude(m)" + bytes([10]) + b"not,a,number"
+
+    result = import_flight_log(content, db, telemetry_db)
+
+    assert result["error"]
     assert db.query(Flight).count() == 0
 
 
