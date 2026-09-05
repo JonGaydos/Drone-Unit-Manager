@@ -227,6 +227,8 @@ export default function FlightsPage() {
   const [selectedIds, setSelectedIds] = useState(() => new Set())
   const [bulkBusy, setBulkBusy] = useState(false)
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
+  // A bulk edit staged for confirmation: {title, message, confirmLabel, body}.
+  const [bulkConfirm, setBulkConfirm] = useState(null)
 
   const toggleSort = (key) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -398,6 +400,55 @@ export default function FlightsPage() {
   const toggleSelectAll = () => setSelectedIds(prev => (
     filtered.length > 0 && filtered.every(f => prev.has(f.id)) ? new Set() : new Set(filtered.map(f => f.id))
   ))
+  // A bulk edit sets one field on every selected row at once. On 2026-09-03 a
+  // purpose picked from the dropdown overwrote 97 flights in a single click,
+  // with nothing shown before or after. Summarising what is about to be
+  // replaced, and how much of it is a real change, puts that in front of the
+  // click instead of in a backup diff.
+  const summariseBulk = (currentLabel, alreadyMatches) => {
+    const selected = flights.filter(f => selectedIds.has(f.id))
+    const changing = selected.filter(f => !alreadyMatches(f))
+    const counts = new Map()
+    for (const f of changing) {
+      const was = currentLabel(f) || '(none)'
+      counts.set(was, (counts.get(was) || 0) + 1)
+    }
+    const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1])
+    const shown = ranked.slice(0, 6).map(([was, n]) => `${was} (${n})`).join(', ')
+    const rest = ranked.length > 6 ? `, and ${ranked.length - 6} more` : ''
+    return { total: selectedIds.size, changing: changing.length, breakdown: shown + rest }
+  }
+
+  const stageBulkUpdate = ({ title, confirmLabel, body, noun, target, currentLabel, alreadyMatches }) => {
+    const { total, changing, breakdown } = summariseBulk(currentLabel, alreadyMatches)
+    const message = changing === 0
+      ? `All ${total} selected flight(s) already have ${noun} "${target}". Nothing will change.`
+      : `Set ${noun} to "${target}" on ${total} selected flight(s). ${changing} will change, replacing: ${breakdown}.`
+    setBulkConfirm({ title, confirmLabel, body, message })
+  }
+
+  const confirmBulkPurpose = (purpose) => stageBulkUpdate({
+    title: 'Set Purpose', confirmLabel: 'Set Purpose', body: { purpose },
+    noun: 'the purpose', target: purpose,
+    currentLabel: f => f.purpose,
+    alreadyMatches: f => (f.purpose || '') === purpose,
+  })
+
+  const confirmBulkPilot = (pilotId) => stageBulkUpdate({
+    title: 'Reassign Pilot', confirmLabel: 'Reassign', body: { pilot_id: pilotId },
+    noun: 'the pilot', target: pilots.find(p => p.id === pilotId)?.full_name || `#${pilotId}`,
+    currentLabel: f => f.pilot_name,
+    alreadyMatches: f => f.pilot_id === pilotId,
+  })
+
+  const confirmBulkReviewed = () => stageBulkUpdate({
+    title: 'Mark Reviewed', confirmLabel: 'Mark Reviewed',
+    body: { review_status: 'reviewed', pilot_confirmed: true },
+    noun: 'the review status', target: 'reviewed',
+    currentLabel: f => f.review_status,
+    alreadyMatches: f => f.review_status === 'reviewed' && f.pilot_confirmed,
+  })
+
   const runBulkUpdate = async (body) => {
     setBulkBusy(true)
     try {
@@ -501,18 +552,18 @@ export default function FlightsPage() {
         <div className="flex items-center gap-3 flex-wrap bg-primary/10 border border-primary/30 rounded-lg px-4 py-2">
           <span className="text-sm font-medium text-foreground">{selectedIds.size} selected</span>
           <select disabled={bulkBusy} value="" aria-label="Reassign pilot for selected flights"
-            onChange={e => { if (e.target.value) runBulkUpdate({ pilot_id: Number.parseInt(e.target.value, 10) }) }}
+            onChange={e => { if (e.target.value) confirmBulkPilot(Number.parseInt(e.target.value, 10)) }}
             className="px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm">
             <option value="">Reassign pilot…</option>
             {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
           </select>
           <select disabled={bulkBusy} value="" aria-label="Set purpose for selected flights"
-            onChange={e => { if (e.target.value) runBulkUpdate({ purpose: e.target.value }) }}
+            onChange={e => { if (e.target.value) confirmBulkPurpose(e.target.value) }}
             className="px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm">
             <option value="">Set purpose…</option>
             {sortByName(purposes, 'name').map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
           </select>
-          <button disabled={bulkBusy} onClick={() => runBulkUpdate({ review_status: 'reviewed', pilot_confirmed: true })}
+          <button disabled={bulkBusy} onClick={confirmBulkReviewed}
             className="px-3 py-1 bg-emerald-600 text-white rounded text-sm font-medium hover:opacity-90 disabled:opacity-50">Mark reviewed</button>
           <button disabled={bulkBusy} onClick={() => setShowBulkDeleteConfirm(true)}
             className="px-3 py-1 bg-destructive text-destructive-foreground rounded text-sm font-medium hover:opacity-90 disabled:opacity-50">Delete</button>
@@ -659,6 +710,16 @@ export default function FlightsPage() {
         title="Approve Page Flights"
         message={`Are you sure you want to approve the ${needsReview.length} flights that need review on this page?`}
         confirmLabel="Approve Page"
+        confirmVariant="primary"
+      />
+
+      <ConfirmDialog
+        open={bulkConfirm !== null}
+        onClose={() => setBulkConfirm(null)}
+        onConfirm={() => runBulkUpdate(bulkConfirm.body)}
+        title={bulkConfirm?.title}
+        message={bulkConfirm?.message || ''}
+        confirmLabel={bulkConfirm?.confirmLabel}
         confirmVariant="primary"
       />
 
