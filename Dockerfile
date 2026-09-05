@@ -13,9 +13,8 @@ COPY frontend/ ./
 RUN npm run build
 
 # Stage 2: Python backend + serve frontend
-# python:3.12-slim, pinned by digest alone. Bump: re-resolve
-# library/python/tags/3.12-slim.
-FROM python@sha256:090ba77e2958f6af52a5341f788b50b032dd4ca28377d2893dcf1ecbdfdfe203
+# Base pinned to digest. Bump: re-resolve library/python/tags/3.12-slim digest.
+FROM python:3.12-slim@sha256:090ba77e2958f6af52a5341f788b50b032dd4ca28377d2893dcf1ecbdfdfe203
 
 LABEL maintainer="JonGaydos"
 LABEL org.opencontainers.image.title="Drone Unit Manager"
