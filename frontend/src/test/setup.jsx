@@ -9,9 +9,16 @@ globalThis.matchMedia ||= (query) => ({
   addListener() {}, removeListener() {},
   addEventListener() {}, removeEventListener() {}, dispatchEvent() { return false },
 })
-class _Observer { observe() {} unobserve() {} disconnect() {} takeRecords() { return [] } }
-globalThis.ResizeObserver ||= _Observer
-globalThis.IntersectionObserver ||= _Observer
+// Deliberately inert: jsdom implements neither observer, and nothing under
+// test asserts on observation, so the methods only need to exist.
+class MockObserver {
+  observe() { /* no-op */ }
+  unobserve() { /* no-op */ }
+  disconnect() { /* no-op */ }
+  takeRecords() { return [] }
+}
+globalThis.ResizeObserver ||= MockObserver
+globalThis.IntersectionObserver ||= MockObserver
 globalThis.URL.createObjectURL ||= () => 'blob:mock'
 globalThis.URL.revokeObjectURL ||= () => {}
 Element.prototype.scrollTo ||= () => {}

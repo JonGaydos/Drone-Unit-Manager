@@ -104,10 +104,13 @@ def test_alembic_head_matches_create_all(tmp_path, monkeypatch):
     create_all_tables = set(create_all_schema)
     only_in_alembic = alembic_tables - create_all_tables
     only_in_create_all = create_all_tables - alembic_tables
-    assert not (only_in_alembic or only_in_create_all), (
-        "Table drift between alembic head and create_all.\n"
-        f"  Only in alembic head: {sorted(only_in_alembic)}\n"
-        f"  Only in create_all:   {sorted(only_in_create_all)}"
+    assert not only_in_alembic, (
+        "Table drift: present in alembic head but not create_all: "
+        f"{sorted(only_in_alembic)}"
+    )
+    assert not only_in_create_all, (
+        "Table drift: present in create_all but not alembic head: "
+        f"{sorted(only_in_create_all)}"
     )
 
     # 2. Same column names + nullability per shared table.

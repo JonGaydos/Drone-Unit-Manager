@@ -32,8 +32,10 @@ def test_batch_records_last_telemetry_status(db, telemetry_db, mock_httpx):
     db.expire_all()
     ts = db.query(Setting).filter(Setting.key == "last_telemetry_sync_timestamp").first()
     res = db.query(Setting).filter(Setting.key == "last_telemetry_sync_result").first()
-    assert ts is not None and ts.value
-    assert res is not None and '"synced": 1' in res.value
+    assert ts is not None
+    assert ts.value
+    assert res is not None
+    assert '"synced": 1' in res.value
 
 
 def test_status_returns_telemetry_fields_and_remaining(client, db, admin_headers):

@@ -35,9 +35,7 @@ describe('showing toasts', () => {
     'renders the message text for a %s toast',
     (method) => {
       renderHarness({ method, message: `${method} message` })
-      act(() => {
-        fireEvent.click(screen.getByText('fire'))
-      })
+      fireEvent.click(screen.getByText('fire'))
       expect(screen.getByText(`${method} message`)).toBeInTheDocument()
     },
   )
@@ -48,9 +46,7 @@ describe('auto-dismiss', () => {
     vi.useFakeTimers()
     renderHarness({ message: 'Auto gone' })
 
-    act(() => {
-      fireEvent.click(screen.getByText('fire'))
-    })
+    fireEvent.click(screen.getByText('fire'))
     expect(screen.getByText('Auto gone')).toBeInTheDocument()
 
     // Just before the timeout it is still present.
@@ -71,14 +67,10 @@ describe('manual dismiss', () => {
   it('removes the toast when its close button is clicked', () => {
     renderHarness({ message: 'Close me' })
 
-    act(() => {
-      fireEvent.click(screen.getByText('fire'))
-    })
+    fireEvent.click(screen.getByText('fire'))
     expect(screen.getByText('Close me')).toBeInTheDocument()
 
-    act(() => {
-      fireEvent.click(screen.getByLabelText('Close'))
-    })
+    fireEvent.click(screen.getByLabelText('Close'))
     expect(screen.queryByText('Close me')).not.toBeInTheDocument()
   })
 })
