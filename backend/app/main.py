@@ -28,7 +28,7 @@ from sqlalchemy import text
 logger = logging.getLogger(__name__)
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.constants import APP_TITLE
+from app.constants import APP_TITLE, APP_VERSION
 from app.config import settings
 from app.responses import responses
 from app.database import SessionLocal
@@ -123,7 +123,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=APP_TITLE,
-    version="2.2.0",
+    version=APP_VERSION,
     lifespan=lifespan,
 )
 
@@ -203,7 +203,7 @@ def health_check():
     db = SessionLocal()
     try:
         db.execute(text("SELECT 1"))
-        return {"status": "ok", "app": APP_TITLE, "version": "2.2.0", "database": "connected"}
+        return {"status": "ok", "app": APP_TITLE, "version": APP_VERSION, "database": "connected"}
     except Exception:
         logger.exception("Health check failed")
         return JSONResponse(
