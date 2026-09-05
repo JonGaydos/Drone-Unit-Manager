@@ -38,6 +38,13 @@ function countdownLabel(days) {
   return days < 0 ? `${Math.abs(days)}d -` : `${days}d`
 }
 
+/** The same countdown, said in full: "31d overdue" rather than "31d -". */
+function dueLabel(days) {
+  if (days == null) return '—'
+  if (days < 0) return `${Math.abs(days)}d overdue`
+  return `${days}d`
+}
+
 /** "1 cert", "2 certs". */
 function pluralise(count, noun) {
   return `${count} ${noun}${count === 1 ? '' : 's'}`
@@ -411,7 +418,7 @@ export default function DashboardPage() {
       api.get('/dashboard/stats').catch(() => null),
       api.get('/dashboard/trends').catch(() => null),
       api.get('/flights?per_page=10').catch(() => []),
-      api.get('/maintenance?upcoming=true').catch(() => []),
+      api.get('/dashboard/maintenance-due').catch(() => []),
       api.get('/dashboard/compliance').catch(() => null),
       api.get('/dashboard/top-pilots-30d').catch(() => []),
       api.get('/dashboard/top-vehicles-30d').catch(() => []),
@@ -534,23 +541,23 @@ export default function DashboardPage() {
       <ListTile
         title="Maintenance Due"
         icon={Wrench}
-        items={upcomingMaintenance.slice(0, 3)}
+        items={upcomingMaintenance}
         emptyLabel="No maintenance due"
         link="/maintenance"
         renderItem={(m) => {
-          // next_due_date, not next_due: the API has never sent the latter,
-          // so this tile rendered a dash for every item that has a due date.
-          const days = daysUntil(m.next_due_date)
-          const overdue = days != null && days < 0
+          // The endpoint returns both schedules and records, already deduped
+          // and sorted most-overdue first, so the tile just renders them.
+          const days = m.days_remaining
+          const overdue = days < 0
           return (
-            <li key={m.id}>
+            <li key={`${m.source}-${m.id}`}>
               <Link to="/maintenance" className="flex items-center gap-2 px-4 py-2 hover:bg-secondary/50 transition-colors">
-                <span className={`inline-flex w-14 justify-center px-1.5 py-0.5 rounded-full text-[10px] font-medium border ${
-                  countdownTone(overdue, days != null && days <= 7)
+                <span className={`inline-flex min-w-14 justify-center px-1.5 py-0.5 rounded-full text-[10px] font-medium border whitespace-nowrap ${
+                  countdownTone(overdue, days <= 7)
                 }`}>
-                  {countdownLabel(days)}
+                  {dueLabel(days)}
                 </span>
-                <span className="text-xs text-foreground truncate flex-1">{m.description || m.maintenance_type || 'Maintenance'}</span>
+                <span className="text-xs text-foreground truncate flex-1">{m.name}</span>
               </Link>
             </li>
           )

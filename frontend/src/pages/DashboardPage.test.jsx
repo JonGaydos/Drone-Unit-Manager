@@ -17,7 +17,7 @@ function mockDashboard({
     http.get('/api/dashboard/stats', () => HttpResponse.json(stats ?? null)),
     http.get('/api/dashboard/trends', () => HttpResponse.json(trends ?? null)),
     http.get('/api/flights', () => HttpResponse.json(flights ?? [])),
-    http.get('/api/maintenance', () => HttpResponse.json(maintenance ?? [])),
+    http.get('/api/dashboard/maintenance-due', () => HttpResponse.json(maintenance ?? [])),
     http.get('/api/dashboard/compliance', () => HttpResponse.json(compliance ?? null)),
     http.get('/api/dashboard/top-pilots-30d', () => HttpResponse.json(topPilots ?? [])),
     http.get('/api/dashboard/top-vehicles-30d', () => HttpResponse.json(topVehicles ?? [])),
@@ -46,7 +46,7 @@ const POPULATED = {
     { id: 102, external_id: null, pilot_name: 'Bob Pilot', vehicle_name: 'Mavic 3', purpose: 'Survey', duration_seconds: 600 },
   ],
   maintenance: [
-    { id: 1, description: 'Prop replacement', next_due_date: '2026-07-01' },
+    { source: 'schedule', id: 1, name: 'Prop replacement', days_remaining: 12, due_date: '2026-07-01' },
   ],
   compliance: {
     compliance_score: 92, pilots_current: 6, total_pilots: 7,
@@ -179,48 +179,47 @@ describe('DashboardPage', () => {
 
     const badgeFor = (label) => screen.getByText(label).className
 
+    const due = (id, name, days) => ({ source: 'schedule', id, name, days_remaining: days })
+
     it('reads a maintenance item as past due, close, or comfortable', async () => {
       mockDashboard({
         ...POPULATED,
-        maintenance: [
-          { id: 1, description: 'Past due', next_due_date: inDays(-3) },
-          { id: 2, description: 'Close', next_due_date: inDays(4) },
-          { id: 3, description: 'Comfortable', next_due_date: inDays(45) },
-        ],
+        maintenance: [due(1, 'Past due', -3), due(2, 'Close', 4), due(3, 'Comfortable', 45)],
       })
       renderWithProviders(<DashboardPage />, { role: 'admin' })
 
-      // Past due counts up, not down, and is not shown as a negative number.
-      expect(await screen.findByText('3d -')).toBeInTheDocument()
-      expect(badgeFor('3d -')).toContain('red')
+      // "3d overdue", not "3d -" and not "-3d": it is read at a glance.
+      expect(await screen.findByText('3d overdue')).toBeInTheDocument()
+      expect(badgeFor('3d overdue')).toContain('red')
       expect(badgeFor('4d')).toContain('amber')
       expect(badgeFor('45d')).toContain('blue')
     })
 
-    // The page used to parse "YYYY-MM-DD" as UTC midnight, which is the
-    // previous day for anyone west of Greenwich, so every countdown read a day
-    // short: something due today showed as already overdue, and a cert 30 days
-    // out fell inside the 30-day warning band a day early.
-    it('counts a due date from the local calendar day, not the UTC one', async () => {
+    it('keeps the order the endpoint sorted them into', async () => {
+      // Most overdue first. The tile must not re-sort; the endpoint has already
+      // merged two sources and knows which is which.
       mockDashboard({
         ...POPULATED,
-        maintenance: [
-          { id: 1, description: 'Due today', next_due_date: inDays(0) },
-          { id: 2, description: 'Due in thirty', next_due_date: inDays(30) },
-        ],
+        maintenance: [due(1, 'Monthly Inspection', -31), due(2, 'Lemur #1', 20), due(3, 'Eglin', 86)],
       })
       renderWithProviders(<DashboardPage />, { role: 'admin' })
 
-      expect(await screen.findByText('0d')).toBeInTheDocument()
-      expect(screen.getByText('30d')).toBeInTheDocument()
+      await screen.findByText('Monthly Inspection')
+      const rows = screen.getByText('Monthly Inspection').closest('ul').querySelectorAll('li')
+      expect([...rows].map(r => r.textContent)).toEqual([
+        '31d overdueMonthly Inspection', '20dLemur #1', '86dEglin'])
     })
 
-    it('shows a dash for a maintenance item with no due date at all', async () => {
-      mockDashboard({ ...POPULATED, maintenance: [{ id: 1, description: 'Undated', next_due_date: null }] })
+    it('shows five rather than three', async () => {
+      // Four items were already more than the old tile could display.
+      mockDashboard({
+        ...POPULATED,
+        maintenance: Array.from({ length: 5 }, (_, i) => due(i + 1, `Task ${i}`, i)),
+      })
       renderWithProviders(<DashboardPage />, { role: 'admin' })
 
-      expect(await screen.findByText('Undated')).toBeInTheDocument()
-      expect(screen.getByText(String.fromCharCode(8212))).toBeInTheDocument()
+      await screen.findByText('Task 0')
+      expect(screen.getByText('Task 4')).toBeInTheDocument()
     })
 
     it('reads a certification as expired, expiring, or comfortable', async () => {
@@ -241,6 +240,27 @@ describe('DashboardPage', () => {
       expect(badgeFor('5d -')).toContain('red')
       expect(badgeFor('20d')).toContain('amber')
       expect(badgeFor('90d')).toContain('blue')
+    })
+
+    // The page used to parse "YYYY-MM-DD" as UTC midnight, which is the
+    // previous day for anyone west of Greenwich, so every countdown read a day
+    // short. Pilot currency is where that arithmetic still happens on the
+    // client: maintenance and certificates are handed a day count by the API.
+    it('counts a currency expiry from the local calendar day, not the UTC one', async () => {
+      mockDashboard({
+        ...POPULATED,
+        compliance: {
+          ...POPULATED.compliance,
+          pilot_currency_status: [
+            { pilot_id: 1, pilot_name: 'Due today', is_current: true, earliest_expires_date: inDays(0) },
+            { pilot_id: 2, pilot_name: 'Due in thirty', is_current: true, earliest_expires_date: inDays(30) },
+          ],
+        },
+      })
+      renderWithProviders(<DashboardPage />, { role: 'admin' })
+
+      expect(await screen.findByText('0d')).toBeInTheDocument()
+      expect(screen.getByText('30d')).toBeInTheDocument()
     })
 
     it('reads a pilot as lapsed, expiring, or current', async () => {
