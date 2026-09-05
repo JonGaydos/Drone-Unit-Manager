@@ -9,6 +9,7 @@ import csv
 import io
 import json
 import logging
+import math
 from datetime import datetime, date
 from typing import Optional
 
@@ -147,105 +148,94 @@ def _extract_dji_extra(cols, gimbal_pitch_col, gimbal_roll_col, gimbal_yaw_col, 
     return {k: v for k, v in extra.items() if v is not None}
 
 
+# DJI writes the same field under several names, depending on which app and
+# firmware produced the log.
+DJI_COLUMNS = {
+    "timestamp": ["custom.date", "datetime(utc)", "time(millisecond)"],
+    "lat": ["osd.latitude", "latitude", "osd.lati"],
+    "lon": ["osd.longitude", "longitude", "osd.longi"],
+    "alt": ["osd.altitude [m]", "osd.altitude(m)", "altitude [m]", "osd.height [m]"],
+    "speed": ["osd.xspeed [m/s]", "osd.hspeed [m/s]", "speed(m/s)"],
+    "battery": ["battery:level[%]", "battery:rsoc[%]", "osd.flyc_state.gps_level"],
+    "heading": ["osd.yaw", "compass_heading(degrees)"],
+    "satellites": ["osd.flyc_state.gps_num", "satellites"],
+    "gimbal_pitch": ["gimbal.pitch", "gimbal_heading(degrees)"],
+    "gimbal_roll": ["gimbal.roll"],
+    "gimbal_yaw": ["gimbal.yaw"],
+    "flight_mode": ["osd.flyc_state", "flycstate"],
+}
+
+
+def _dji_columns(header_line: str) -> dict:
+    """Each field we read mapped to its column index, or None when absent."""
+    header_map = {h.strip().lower(): i
+                  for i, h in enumerate(header_line.strip().split("\t"))}
+    resolved = {}
+    for field, candidates in DJI_COLUMNS.items():
+        resolved[field] = next(
+            (header_map[c] for c in candidates if c in header_map), None)
+    return resolved
+
+
+def _dji_point(cols, col: dict) -> Optional[dict]:
+    """One telemetry point, or None for a row with no usable fix.
+
+    0,0 is how these logs encode "no fix"; kept, it draws the track to the Gulf
+    of Guinea on every map.
+    """
+    lat = _parse_float(_cell(cols, col["lat"]))
+    lon = _parse_float(_cell(cols, col["lon"]))
+    if lat is None or lon is None or (lat == 0 and lon == 0):
+        return None
+
+    extra = _extract_dji_extra(cols, col["gimbal_pitch"], col["gimbal_roll"],
+                               col["gimbal_yaw"], col["flight_mode"])
+    return {
+        "lat": lat,
+        "lon": lon,
+        "altitude_m": _parse_float(_cell(cols, col["alt"])),
+        "speed_mps": _parse_float(_cell(cols, col["speed"])),
+        "battery_pct": _parse_float(_cell(cols, col["battery"])),
+        "heading_deg": _parse_float(_cell(cols, col["heading"])),
+        "satellites": _parse_int(_cell(cols, col["satellites"])),
+        "timestamp": _parse_timestamp(_cell(cols, col["timestamp"])),
+        "extra_data": extra or None,
+    }
+
+
 def parse_dji_txt(content: str) -> dict:
     """Parse a DJI Go 4 .txt flight log.
 
-    DJI logs are tab-separated with columns like:
-    CUSTOM.date, OSD.latitude, OSD.longitude, OSD.altitude [m], etc.
+    DJI logs are tab-separated with columns like CUSTOM.date, OSD.latitude,
+    OSD.longitude, OSD.altitude [m].
 
     Args:
         content: Raw text content of the .txt file.
 
     Returns:
-        Dict with 'metadata' and 'telemetry' keys.
+        Dict with 'metadata', 'telemetry' and 'error' keys.
     """
     lines = content.strip().split("\n")
     if len(lines) < 2:
         return {"metadata": {}, "telemetry": [], "error": "File too short"}
 
-    # Parse header
-    headers = lines[0].strip().split("\t")
-    header_map = {h.strip().lower(): i for i, h in enumerate(headers)}
-
-    # Column name mappings (DJI uses various naming conventions)
-    col_mappings = {
-        "timestamp": ["custom.date", "datetime(utc)", "time(millisecond)"],
-        "lat": ["osd.latitude", "latitude", "osd.lati"],
-        "lon": ["osd.longitude", "longitude", "osd.longi"],
-        "alt": ["osd.altitude [m]", "osd.altitude(m)", "altitude [m]", "osd.height [m]"],
-        "speed": ["osd.xspeed [m/s]", "osd.hspeed [m/s]", "speed(m/s)"],
-        "battery": ["battery:level[%]", "battery:rsoc[%]", "osd.flyc_state.gps_level"],
-        "heading": ["osd.yaw", "compass_heading(degrees)"],
-        "satellites": ["osd.flyc_state.gps_num", "satellites"],
-        "gimbal_pitch": ["gimbal.pitch", "gimbal_heading(degrees)"],
-        "gimbal_roll": ["gimbal.roll"],
-        "gimbal_yaw": ["gimbal.yaw"],
-        "flight_mode": ["osd.flyc_state", "flycstate"],
-    }
-
-    def find_col(field_name):
-        for candidate in col_mappings.get(field_name, []):
-            if candidate in header_map:
-                return header_map[candidate]
-        return None
-
-    ts_col = find_col("timestamp")
-    lat_col = find_col("lat")
-    lon_col = find_col("lon")
-    alt_col = find_col("alt")
-    speed_col = find_col("speed")
-    bat_col = find_col("battery")
-    heading_col = find_col("heading")
-    sat_col = find_col("satellites")
-    gimbal_pitch_col = find_col("gimbal_pitch")
-    gimbal_roll_col = find_col("gimbal_roll")
-    gimbal_yaw_col = find_col("gimbal_yaw")
-    flight_mode_col = find_col("flight_mode")
-
-    if lat_col is None or lon_col is None:
-        return {"metadata": {}, "telemetry": [], "error": "Could not find latitude/longitude columns"}
+    col = _dji_columns(lines[0])
+    if col["lat"] is None or col["lon"] is None:
+        return {"metadata": {}, "telemetry": [],
+                "error": "Could not find latitude/longitude columns"}
 
     telemetry = []
     first_ts = None
-
     for line in lines[1:]:
-        cols = line.strip().split("\t")
-        if len(cols) < max(lat_col, lon_col) + 1:
+        point = _dji_point(line.strip().split("\t"), col)
+        if point is None:
             continue
-
-        lat = _parse_float(_cell(cols, lat_col))
-        lon = _parse_float(_cell(cols, lon_col))
-        if lat is None or lon is None or (lat == 0 and lon == 0):
-            continue
-
-        alt = _parse_float(_cell(cols, alt_col))
-        speed = _parse_float(_cell(cols, speed_col))
-        battery = _parse_float(_cell(cols, bat_col))
-        heading = _parse_float(_cell(cols, heading_col))
-        sats = _parse_int(_cell(cols, sat_col))
-        ts = _parse_timestamp(_cell(cols, ts_col))
-
-        if first_ts is None and ts:
-            first_ts = ts
-
-        # Provider-specific extra data
-        extra = _extract_dji_extra(cols, gimbal_pitch_col, gimbal_roll_col, gimbal_yaw_col, flight_mode_col)
-
-        point = {
-            "lat": lat,
-            "lon": lon,
-            "altitude_m": alt,
-            "speed_mps": speed,
-            "battery_pct": battery,
-            "heading_deg": heading,
-            "satellites": sats,
-            "timestamp": ts,
-            "extra_data": extra if extra else None,
-        }
+        if first_ts is None and point["timestamp"]:
+            first_ts = point["timestamp"]
         telemetry.append(point)
 
-    metadata = _build_telemetry_metadata(telemetry, first_ts)
-    return {"metadata": metadata, "telemetry": telemetry, "error": None}
+    return {"metadata": _build_telemetry_metadata(telemetry, first_ts),
+            "telemetry": telemetry, "error": None}
 
 
 def _convert_alt_units(alt: Optional[float], alt_col: Optional[str]) -> Optional[float]:
@@ -262,49 +252,74 @@ def _convert_speed_units(speed: Optional[float], speed_col: Optional[str]) -> Op
     return speed
 
 
-def _collect_extra_columns(row: dict, standard_cols: set, fieldnames) -> dict:
-    """Collect non-standard columns as extra_data from a CSV row."""
+# Columns already mapped to a fixed field, so they must not also appear in
+# extra_data. The coordinate names are listed by every spelling these exports
+# use, because the fixed mapping only ever picked one of them.
+COORDINATE_HEADERS = {"latitude", "longitude", "lat", "lon", "lng"}
+
+# Airdata columns worth keeping under a stable name rather than their raw header.
+AIRDATA_EXTRA_FIELDS = {
+    "gimbal_heading(degrees)": "gimbal_heading",
+    "gimbal_pitch(degrees)": "gimbal_pitch",
+    "gimbal_roll(degrees)": "gimbal_roll",
+    "rc_elevator(percent)": "rc_elevator_pct",
+    "rc_aileron(percent)": "rc_aileron_pct",
+    "rc_throttle(percent)": "rc_throttle_pct",
+    "rc_rudder(percent)": "rc_rudder_pct",
+    "battery_temperature(f)": "battery_temperature_f",
+    "current(a)": "current_a",
+    "flycstate": "flight_mode",
+    "isphotograph": "is_photo",
+    "isvideo": "is_video",
+}
+
+# A wide export must not put an unbounded blob on every telemetry row.
+MAX_EXTRA_COLUMNS = 30
+
+
+def _extra_value(value):
+    """A number where the cell holds one, the trimmed text where it does not,
+    and None for a cell with nothing in it."""
+    parsed = _parse_float(value)
+    if parsed is not None:
+        return parsed
+    if value and value.strip():
+        return value.strip()
+    return None
+
+
+def _unmapped_columns(row: dict, standard_cols: set) -> dict:
+    """Everything in the row that is not already a fixed field."""
     extra = {}
     for key, value in row.items():
-        k_lower = key.lower().strip()
-        if k_lower in {"latitude", "longitude", "lat", "lon", "lng"}:
+        if key.lower().strip() in COORDINATE_HEADERS or key in standard_cols:
             continue
-        if key in standard_cols:
-            continue
-        parsed = _parse_float(value)
+        parsed = _extra_value(value)
         if parsed is not None:
             extra[key] = parsed
-        elif value and value.strip():
-            extra[key] = value.strip()
+    return extra
 
-    # Airdata-specific extra fields
-    airdata_extra_fields = {
-        'gimbal_heading(degrees)': 'gimbal_heading',
-        'gimbal_pitch(degrees)': 'gimbal_pitch',
-        'gimbal_roll(degrees)': 'gimbal_roll',
-        'rc_elevator(percent)': 'rc_elevator_pct',
-        'rc_aileron(percent)': 'rc_aileron_pct',
-        'rc_throttle(percent)': 'rc_throttle_pct',
-        'rc_rudder(percent)': 'rc_rudder_pct',
-        'battery_temperature(f)': 'battery_temperature_f',
-        'current(a)': 'current_a',
-        'flycstate': 'flight_mode',
-        'isphotograph': 'is_photo',
-        'isvideo': 'is_video',
-    }
-    # Build a lowercase lookup for fieldnames
+
+def _airdata_named_columns(row: dict, fieldnames) -> dict:
+    """The Airdata columns worth carrying under a stable name."""
     header_lookup = {h.lower().strip(): h for h in (fieldnames or [])}
-    for csv_key, extra_key in airdata_extra_fields.items():
+    named = {}
+    for csv_key, extra_key in AIRDATA_EXTRA_FIELDS.items():
         header = header_lookup.get(csv_key)
-        if header:
-            val = row.get(header)
-            if val and val.strip():
-                parsed_val = _parse_float(val)
-                extra[extra_key] = parsed_val if parsed_val is not None else val.strip()
+        if header is None:
+            continue
+        parsed = _extra_value(row.get(header))
+        if parsed is not None:
+            named[extra_key] = parsed
+    return named
 
-    # Limit extra_data size
-    if len(extra) > 30:
-        extra = dict(list(extra.items())[:30])
+
+def _collect_extra_columns(row: dict, standard_cols: set, fieldnames) -> dict:
+    """Collect non-standard columns as extra_data from a CSV row."""
+    extra = _unmapped_columns(row, standard_cols)
+    extra.update(_airdata_named_columns(row, fieldnames))
+    if len(extra) > MAX_EXTRA_COLUMNS:
+        extra = dict(list(extra.items())[:MAX_EXTRA_COLUMNS])
     return extra
 
 
@@ -340,6 +355,57 @@ def _build_telemetry_metadata(telemetry: list, first_ts) -> dict:
     }
 
 
+# Litchi and Airdata both ship "name(unit)" headers but disagree on the names,
+# so each field is matched by the first candidate that appears anywhere in a
+# header. Order matters: the more specific name has to come first.
+CSV_COLUMNS = {
+    "lat": ["latitude", "lat"],
+    "lon": ["longitude", "lon", "lng"],
+    "alt": ["altitude(m)", "altitude [m]", "altitude_m", "height_above_takeoff", "height"],
+    # Airdata names the column "speed(mph)"; "speed_mph" never matched it, so
+    # every Airdata CSV imported with no speed and no max_speed_mps.
+    "speed": ["speed(m/s)", "speed(mph)", "speed_mph", "groundspeed"],
+    "battery": ["battery(%)", "batterylevel", "battery_percent", "battery_level"],
+    "heading": ["heading", "compass_heading", "yaw"],
+    "timestamp": ["datetime", "timestamp", "time", "date_time"],
+}
+
+
+def _csv_columns(fieldnames) -> dict:
+    """Each field we read mapped to its header, or None when absent."""
+    headers = list(fieldnames or [])
+    resolved = {}
+    for field, candidates in CSV_COLUMNS.items():
+        resolved[field] = next(
+            (h for c in candidates for h in headers if c in h.lower()), None)
+    return resolved
+
+
+def _csv_value(row, header):
+    """The parsed float under `header`, or None when the column is absent."""
+    return _parse_float(row.get(header)) if header else None
+
+
+def _csv_point(row, col: dict, fieldnames, standard_cols: set) -> Optional[dict]:
+    """One telemetry point, or None for a row with no usable fix."""
+    lat = _parse_float(row.get(col["lat"]))
+    lon = _parse_float(row.get(col["lon"]))
+    if lat is None or lon is None or (lat == 0 and lon == 0):
+        return None
+
+    extra = _collect_extra_columns(row, standard_cols, fieldnames)
+    return {
+        "lat": lat,
+        "lon": lon,
+        "altitude_m": _convert_alt_units(_csv_value(row, col["alt"]), col["alt"]),
+        "speed_mps": _convert_speed_units(_csv_value(row, col["speed"]), col["speed"]),
+        "battery_pct": _csv_value(row, col["battery"]),
+        "heading_deg": _csv_value(row, col["heading"]),
+        "timestamp": _parse_timestamp(row.get(col["timestamp"])) if col["timestamp"] else None,
+        "extra_data": extra or None,
+    }
+
+
 def parse_csv_log(content: str, _format_type: str) -> dict:
     """Parse a CSV flight log (Litchi or Airdata format).
 
@@ -348,109 +414,116 @@ def parse_csv_log(content: str, _format_type: str) -> dict:
         _format_type: "litchi" or "airdata" (reserved for future format-specific logic).
 
     Returns:
-        Dict with 'metadata' and 'telemetry' keys.
+        Dict with 'metadata', 'telemetry' and 'error' keys.
     """
     reader = csv.DictReader(io.StringIO(content))
-    headers = [h.strip().lower() for h in (reader.fieldnames or [])]
-
-    if not headers:
+    if not reader.fieldnames:
         return {"metadata": {}, "telemetry": [], "error": "No CSV headers found"}
 
-    # Flexible column mapping for both formats
-    def find(candidates):
-        for c in candidates:
-            for h in reader.fieldnames or []:
-                if c in h.lower():
-                    return h
-        return None
+    col = _csv_columns(reader.fieldnames)
+    if col["lat"] is None or col["lon"] is None:
+        return {"metadata": {}, "telemetry": [],
+                "error": "Could not find latitude/longitude columns"}
 
-    lat_col = find(["latitude", "lat"])
-    lon_col = find(["longitude", "lon", "lng"])
-    alt_col = find(["altitude(m)", "altitude [m]", "altitude_m", "height_above_takeoff", "height"])
-    # Airdata names the column "speed(mph)"; "speed_mph" never matched it, so
-    # every Airdata CSV imported with no speed and no max_speed_mps.
-    speed_col = find(["speed(m/s)", "speed(mph)", "speed_mph", "groundspeed"])
-    bat_col = find(["battery(%)", "batterylevel", "battery_percent", "battery_level"])
-    heading_col = find(["heading", "compass_heading", "yaw"])
-    ts_col = find(["datetime", "timestamp", "time", "date_time"])
-
-    if lat_col is None or lon_col is None:
-        return {"metadata": {}, "telemetry": [], "error": "Could not find latitude/longitude columns"}
-
-    standard_cols = {lat_col, lon_col, alt_col, speed_col, bat_col, heading_col, ts_col}
+    standard_cols = set(col.values())
     telemetry = []
     first_ts = None
-
     for row in reader:
-        lat = _parse_float(row.get(lat_col))
-        lon = _parse_float(row.get(lon_col))
-        if lat is None or lon is None or (lat == 0 and lon == 0):
+        point = _csv_point(row, col, reader.fieldnames, standard_cols)
+        if point is None:
             continue
-
-        alt = _convert_alt_units(_parse_float(row.get(alt_col)) if alt_col else None, alt_col)
-        speed = _convert_speed_units(_parse_float(row.get(speed_col)) if speed_col else None, speed_col)
-        battery = _parse_float(row.get(bat_col)) if bat_col else None
-        heading = _parse_float(row.get(heading_col)) if heading_col else None
-
-        ts = _parse_timestamp(row.get(ts_col)) if ts_col else None
-        if first_ts is None and ts:
-            first_ts = ts
-
-        extra = _collect_extra_columns(row, standard_cols, reader.fieldnames)
-
-        point = {
-            "lat": lat,
-            "lon": lon,
-            "altitude_m": alt,
-            "speed_mps": speed,
-            "battery_pct": battery,
-            "heading_deg": heading,
-            "timestamp": ts,
-            "extra_data": extra if extra else None,
-        }
+        if first_ts is None and point["timestamp"]:
+            first_ts = point["timestamp"]
         telemetry.append(point)
 
-    metadata = _build_telemetry_metadata(telemetry, first_ts)
-    return {"metadata": metadata, "telemetry": telemetry, "error": None}
+    return {"metadata": _build_telemetry_metadata(telemetry, first_ts),
+            "telemetry": telemetry, "error": None}
+
+
+def _at(channel, index):
+    """The value a channel holds at `index`, or None when it is shorter.
+
+    Airdata sends each sensor as its own array, and they are not guaranteed to
+    be the same length: a channel that stopped reporting mid-flight is simply
+    shorter than the GPS track.
+    """
+    return channel[index] if index < len(channel) else None
+
+
+def _airdata_battery(raw):
+    """Airdata sends 0.98 for 98% on some exports and 98 on others. Stored raw,
+    the first reads as a dead battery."""
+    if raw is None:
+        return None
+    return round(raw * 100, 1) if raw <= 1.0 else raw
+
+
+def _airdata_speed(velocity):
+    """The magnitude of a velocity vector, or None when the channel has none."""
+    if not isinstance(velocity, list) or len(velocity) < 2:
+        return None
+    return round(math.sqrt(sum(v ** 2 for v in velocity[:3])), 2)
 
 
 def _parse_airdata_telemetry_channels(gps_data, gps_ts, hat_data, bat_data, vel_data, sat_data) -> list:
     """Convert Airdata channel-based telemetry into point-based format."""
-    import math
     telemetry = []
-    for i in range(len(gps_data)):
-        lat, lon = gps_data[i] if i < len(gps_data) else (None, None)
+    for i, fix in enumerate(gps_data):
+        lat, lon = fix
         if lat is None or lon is None:
             continue
 
-        ts = _parse_timestamp(gps_ts[i]) if i < len(gps_ts) else None
-        alt = hat_data[i] if i < len(hat_data) else None
-
-        battery = bat_data[i] if i < len(bat_data) else None
-        if battery is not None and battery <= 1.0:
-            battery = round(battery * 100, 1)
-
-        speed = None
-        if i < len(vel_data) and isinstance(vel_data[i], list) and len(vel_data[i]) >= 2:
-            speed = round(math.sqrt(sum(v**2 for v in vel_data[i][:3])), 2)
-
-        sats = sat_data[i] if i < len(sat_data) else None
-
+        alt = _at(hat_data, i)
         telemetry.append({
             "lat": lat, "lon": lon,
             "altitude_m": round(alt, 2) if alt is not None else None,
-            "speed_mps": speed, "battery_pct": battery,
-            "heading_deg": None, "satellites": sats,
-            "timestamp": ts, "extra_data": None,
+            "speed_mps": _airdata_speed(_at(vel_data, i)),
+            "battery_pct": _airdata_battery(_at(bat_data, i)),
+            "heading_deg": None,
+            "satellites": _at(sat_data, i),
+            "timestamp": _parse_timestamp(_at(gps_ts, i)),
+            "extra_data": None,
         })
     return telemetry
+
+
+def _airdata_metadata(flight: dict) -> dict:
+    """The flight-level fields, independent of the telemetry channels."""
+    takeoff_time = _parse_timestamp(flight.get("takeoff"))
+    landing_time = _parse_timestamp(flight.get("landing"))
+    duration = None
+    if takeoff_time and landing_time:
+        duration = int((landing_time - takeoff_time).total_seconds())
+    return {
+        "external_id": flight.get("flight_id"),
+        "takeoff_time": takeoff_time,
+        "date": takeoff_time.date() if takeoff_time else None,
+        "duration_seconds": duration,
+        "takeoff_lat": flight.get("takeoff_latitude"),
+        "takeoff_lon": flight.get("takeoff_longitude"),
+        "vehicle_serial": flight.get("vehicle_serial"),
+        "battery_serial": flight.get("battery_serial"),
+        "user_email": flight.get("user_email"),
+    }
+
+
+def _maxima(telemetry: list) -> dict:
+    """Highest altitude and speed seen, or None where nothing was recorded."""
+    alts = [p["altitude_m"] for p in telemetry if p["altitude_m"] is not None]
+    speeds = [p["speed_mps"] for p in telemetry if p["speed_mps"] is not None]
+    max_alt = max(alts, default=0)
+    max_speed = max(speeds, default=0)
+    return {
+        "max_altitude_m": max_alt if max_alt > 0 else None,
+        "max_speed_mps": max_speed if max_speed > 0 else None,
+    }
 
 
 def parse_airdata_json(content: str) -> dict:
     """Parse an Airdata.com JSON export file.
 
-    Airdata JSON uses channel-based telemetry with separate arrays for each sensor.
-    Converts to point-based format for storage.
+    Airdata JSON uses channel-based telemetry with separate arrays for each
+    sensor. Converts to point-based format for storage.
 
     Args:
         content: Raw JSON text content.
@@ -464,59 +537,28 @@ def parse_airdata_json(content: str) -> dict:
         return {"metadata": {}, "telemetry": [], "error": f"Invalid JSON: {e}"}
 
     flight = data.get("data", {}).get("flight", {})
-    ft = data.get("data", {}).get("flight_telemetry", {})
-
     if not flight:
         return {"metadata": {}, "telemetry": [], "error": "No flight data found"}
 
-    # Extract flight metadata
-    takeoff_time = _parse_timestamp(flight.get("takeoff"))
-    landing_time = _parse_timestamp(flight.get("landing"))
-    duration = None
-    if takeoff_time and landing_time:
-        duration = int((landing_time - takeoff_time).total_seconds())
-
-    metadata = {
-        "external_id": flight.get("flight_id"),
-        "takeoff_time": takeoff_time,
-        "date": takeoff_time.date() if takeoff_time else None,
-        "duration_seconds": duration,
-        "takeoff_lat": flight.get("takeoff_latitude"),
-        "takeoff_lon": flight.get("takeoff_longitude"),
-        "vehicle_serial": flight.get("vehicle_serial"),
-        "battery_serial": flight.get("battery_serial"),
-        "user_email": flight.get("user_email"),
-    }
-
-    if not ft:
+    metadata = _airdata_metadata(flight)
+    channels = data.get("data", {}).get("flight_telemetry", {})
+    if not channels:
         return {"metadata": metadata, "telemetry": [], "error": None}
 
-    # Extract channel data
-    gps_data = ft.get("gps", {}).get("data", [])
-    gps_ts = ft.get("gps", {}).get("timestamps", [])
-    hat_data = ft.get("height_above_takeoff", {}).get("data", [])
-    bat_data = ft.get("battery_percentage", {}).get("data", [])
-    vel_data = ft.get("velocity", {}).get("data", [])
-    sat_data = ft.get("gps_num_satellites", {}).get("data", [])
+    def channel(name, key="data"):
+        return channels.get(name, {}).get(key, [])
 
-    # Use GPS timestamps as the primary time axis
+    gps_data = channel("gps")
+    gps_ts = channel("gps", "timestamps")
+    # GPS is the time axis; without it the other channels have nothing to hang on.
     if not gps_data or not gps_ts:
         return {"metadata": metadata, "telemetry": [], "error": "No GPS data in telemetry"}
 
-    telemetry = _parse_airdata_telemetry_channels(gps_data, gps_ts, hat_data, bat_data, vel_data, sat_data)
-
-    # Compute max values
-    max_alt = 0
-    max_speed = 0
-    for pt in telemetry:
-        if pt["altitude_m"] is not None and pt["altitude_m"] > max_alt:
-            max_alt = pt["altitude_m"]
-        if pt["speed_mps"] is not None and pt["speed_mps"] > max_speed:
-            max_speed = pt["speed_mps"]
-
-    metadata["max_altitude_m"] = max_alt if max_alt > 0 else None
-    metadata["max_speed_mps"] = max_speed if max_speed > 0 else None
-
+    telemetry = _parse_airdata_telemetry_channels(
+        gps_data, gps_ts, channel("height_above_takeoff"),
+        channel("battery_percentage"), channel("velocity"),
+        channel("gps_num_satellites"))
+    metadata.update(_maxima(telemetry))
     return {"metadata": metadata, "telemetry": telemetry, "error": None}
 
 
@@ -572,6 +614,79 @@ def _create_telemetry_points(telemetry: list, flight_id: int, meta: dict, fmt: s
     return points_created
 
 
+def _parse_for_format(text: str, fmt: str):
+    """Run the parser for `fmt`. Returns (result, data_source), or (None, None)
+    for a format nothing here handles."""
+    if fmt == "dji":
+        return parse_dji_txt(text), "dji_log"
+    if fmt == "airdata_json":
+        return parse_airdata_json(text), "airdata_json"
+    if fmt in ("litchi", "airdata"):
+        return parse_csv_log(text, fmt), f"{fmt}_csv"
+    if fmt == "parrot":
+        from app.services.parrot_import import parse_gutma
+        return parse_gutma(text), "parrot_gutma"
+    if fmt == "unknown":
+        # Nothing matched, so try CSV: it is the shape most exports land in.
+        return parse_csv_log(text, "airdata"), "csv_import"
+    return None, None
+
+
+def _match_vehicle(db: Session, serial: str):
+    """The airframe this serial belongs to, by either serial column."""
+    from app.models.vehicle import Vehicle
+    return db.query(Vehicle).filter(
+        (Vehicle.provider_serial == serial) | (Vehicle.serial_number == serial)
+    ).first()
+
+
+def _flight_from_metadata(meta: dict, data_source: str, user_id, db: Session) -> Flight:
+    """The Flight row a parsed log describes, not yet added to the session."""
+    flight = Flight(
+        date=meta.get("date"),
+        takeoff_time=meta.get("takeoff_time"),
+        landing_time=meta.get("landing_time"),
+        duration_seconds=meta.get("duration_seconds"),
+        max_altitude_m=meta.get("max_altitude_m"),
+        max_speed_mps=meta.get("max_speed_mps"),
+        takeoff_lat=meta.get("takeoff_lat"),
+        takeoff_lon=meta.get("takeoff_lon"),
+        landing_lat=meta.get("landing_lat"),
+        landing_lon=meta.get("landing_lon"),
+        data_source=data_source,
+        has_telemetry=True,
+        telemetry_synced=True,
+        review_status="needs_review",
+        pilot_confirmed=False,
+        created_by_id=user_id,
+    )
+    for field in ("external_id", "battery_serial", "sensor_package"):
+        if meta.get(field):
+            setattr(flight, field, meta[field])
+    if meta.get("vehicle_serial"):
+        vehicle = _match_vehicle(db, meta["vehicle_serial"])
+        if vehicle:
+            flight.vehicle_id = vehicle.id
+    return flight
+
+
+def _import_summary(meta: dict, data_source: str, fmt: str, **extra) -> dict:
+    """The response shape every outcome of an import shares."""
+    summary = {
+        "data_source": data_source,
+        "format_detected": fmt,
+        "date": str(meta.get("date")) if meta.get("date") else None,
+        "duration_seconds": meta.get("duration_seconds"),
+        "error": None,
+    }
+    summary.update(extra)
+    return summary
+
+
+def _import_failure(message: str) -> dict:
+    return {"error": message, "flight_id": None, "points_imported": 0}
+
+
 def import_flight_log(
     content: bytes,
     db: Session,
@@ -591,105 +706,40 @@ def import_flight_log(
     Returns:
         Dict with flight_id, points_imported, data_source, and any errors.
     """
-    try:
-        text = content.decode("utf-8", errors="replace")
-    except Exception:
-        return {"error": "Could not decode file as text", "flight_id": None, "points_imported": 0}
-
-    # Detect format
+    text = content.decode("utf-8", errors="replace")
     fmt = format_hint if format_hint != "auto" else detect_format(text)
 
-    if fmt == "dji":
-        result = parse_dji_txt(text)
-        data_source = "dji_log"
-    elif fmt == "airdata_json":
-        result = parse_airdata_json(text)
-        data_source = "airdata_json"
-    elif fmt in ("litchi", "airdata"):
-        result = parse_csv_log(text, fmt)
-        data_source = f"{fmt}_csv"
-    elif fmt == "parrot":
-        from app.services.parrot_import import parse_gutma
-        result = parse_gutma(text)
-        data_source = "parrot_gutma"
-    elif fmt == "unknown":
-        # Try CSV as fallback
-        result = parse_csv_log(text, "airdata")
-        data_source = "csv_import"
-        if result.get("error"):
-            return {"error": f"Could not detect file format. {result['error']}", "flight_id": None, "points_imported": 0}
-    else:
-        return {"error": f"Unsupported format: {fmt}", "flight_id": None, "points_imported": 0}
-
+    result, data_source = _parse_for_format(text, fmt)
+    if result is None:
+        return _import_failure(f"Unsupported format: {fmt}")
     if result.get("error"):
-        return {"error": result["error"], "flight_id": None, "points_imported": 0}
+        # Detection already failed once, so say so rather than reporting the
+        # fallback parser's complaint as if CSV had been the intent.
+        if fmt == "unknown":
+            return _import_failure(f"Could not detect file format. {result['error']}")
+        return _import_failure(result["error"])
 
     meta = result["metadata"]
     telemetry = result["telemetry"]
-
     if not telemetry:
-        return {"error": "No telemetry points found in file", "flight_id": None, "points_imported": 0}
+        return _import_failure("No telemetry points found in file")
 
-    # Deduplication: check if flight already exists by external_id
     existing = _check_duplicate_by_external_id(meta, db)
     if existing:
-        return {
-            "flight_id": existing.id,
-            "points_imported": 0,
-            "data_source": data_source,
-            "format_detected": fmt,
-            "date": str(meta.get("date")) if meta.get("date") else None,
-            "duration_seconds": meta.get("duration_seconds"),
-            "error": None,
-            "skipped": True,
-            "message": "Flight already exists (duplicate external_id)",
-        }
+        return _import_summary(
+            meta, data_source, fmt, flight_id=existing.id, points_imported=0,
+            skipped=True, message="Flight already exists (duplicate external_id)")
 
-    # Create flight record
-    flight = Flight(
-        date=meta.get("date"),
-        takeoff_time=meta.get("takeoff_time"),
-        landing_time=meta.get("landing_time"),
-        duration_seconds=meta.get("duration_seconds"),
-        max_altitude_m=meta.get("max_altitude_m"),
-        max_speed_mps=meta.get("max_speed_mps"),
-        takeoff_lat=meta.get("takeoff_lat"),
-        takeoff_lon=meta.get("takeoff_lon"),
-        landing_lat=meta.get("landing_lat"),
-        landing_lon=meta.get("landing_lon"),
-        data_source=data_source,
-        has_telemetry=True,
-        telemetry_synced=True,
-        review_status="needs_review",
-        pilot_confirmed=False,
-        created_by_id=user_id,
-    )
-    if meta.get("external_id"):
-        flight.external_id = meta["external_id"]
-    if meta.get("battery_serial"):
-        flight.battery_serial = meta["battery_serial"]
-    if meta.get("sensor_package"):
-        flight.sensor_package = meta["sensor_package"]
-    if meta.get("vehicle_serial"):
-        # Try to match to existing vehicle
-        from app.models.vehicle import Vehicle
-        v = db.query(Vehicle).filter(
-            (Vehicle.provider_serial == meta["vehicle_serial"]) |
-            (Vehicle.serial_number == meta["vehicle_serial"])
-        ).first()
-        if v:
-            flight.vehicle_id = v.id
-
+    flight = _flight_from_metadata(meta, data_source, user_id, db)
     db.add(flight)
     db.flush()
 
-    # Auto-tag the flight
     from app.services.flight_tagger import compute_flight_tags
     tags = compute_flight_tags(flight)
     if tags:
         flight.tags = json.dumps(tags)
 
-    # Insert telemetry FIRST. If it fails, roll the flight back so we don't
+    # Insert telemetry FIRST. If it fails, roll the flight back so we do not
     # leave a phantom row with has_telemetry=True but zero points.
     try:
         points_created = _create_telemetry_points(telemetry, flight.id, meta, fmt, telemetry_db)
@@ -699,16 +749,8 @@ def import_flight_log(
 
     db.commit()
     db.refresh(flight)
-
     logger.info("Imported flight %d with %d telemetry points from %s",
                 flight.id, points_created, for_log(data_source))
 
-    return {
-        "flight_id": flight.id,
-        "points_imported": points_created,
-        "data_source": data_source,
-        "format_detected": fmt,
-        "date": str(meta.get("date")) if meta.get("date") else None,
-        "duration_seconds": meta.get("duration_seconds"),
-        "error": None,
-    }
+    return _import_summary(meta, data_source, fmt,
+                           flight_id=flight.id, points_imported=points_created)

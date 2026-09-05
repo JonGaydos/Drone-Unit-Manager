@@ -147,6 +147,38 @@ def _gutma_telemetry_and_maxes(items, col, start_local):
     return telemetry, max_alt, max_speed
 
 
+def _gutma_column_reader(keys):
+    """A reader for the positional rows: `col(row, "gps_lat")` by name.
+
+    Rows are plain arrays whose meaning comes from flight_logging_keys, and a
+    row can stop short of the last key.
+    """
+    idx = {k: i for i, k in enumerate(keys)}
+
+    def col(row, name):
+        i = idx.get(name)
+        if i is None or i >= len(row):
+            return None
+        return row[i]
+
+    return col
+
+
+def _gutma_identity(fdata: dict) -> dict:
+    """What the log says the flight and the airframe are.
+
+    The vehicle serial is what the importer matches an airframe on, so a
+    dropped one silently orphans the flight.
+    """
+    aircraft = fdata.get("aircraft") or {}
+    payloads = fdata.get("payload") or []
+    return {
+        "external_id": fdata.get("flight_id"),
+        "vehicle_serial": aircraft.get("serial_number"),
+        "sensor_package": payloads[0].get("serial_number") if payloads else None,
+    }
+
+
 def parse_gutma(text: str) -> dict:
     """Parse a Parrot/GUTMA DX JSON flight log.
 
@@ -162,34 +194,19 @@ def parse_gutma(text: str) -> dict:
     if not keys or not items:
         return {"metadata": {}, "telemetry": [], "error": "No telemetry in GUTMA log"}
 
-    idx = {k: i for i, k in enumerate(keys)}
-
-    def col(row, name):
-        i = idx.get(name)
-        if i is None or i >= len(row):
-            return None
-        return row[i]
-
+    col = _gutma_column_reader(keys)
     start_local = _gutma_start_local(flog)
     takeoff_ts, landing_ts, duration = _gutma_times(flog, items, col)
-
     takeoff_time = start_local + timedelta(seconds=takeoff_ts) if start_local else None
     landing_time = start_local + timedelta(seconds=landing_ts) if start_local else None
-    flight_date = takeoff_time.date() if takeoff_time else None
 
     takeoff_lat, takeoff_lon = _first_valid_fix(items, col)
     landing_lat, landing_lon = _first_valid_fix(reversed(items), col)
-
     telemetry, max_alt, max_speed = _gutma_telemetry_and_maxes(items, col, start_local)
 
-    aircraft = fdata.get("aircraft") or {}
-    payloads = fdata.get("payload") or []
-    sensor_serial = payloads[0].get("serial_number") if payloads else None
     metadata = {
-        "external_id": fdata.get("flight_id"),
-        "vehicle_serial": aircraft.get("serial_number"),
-        "sensor_package": sensor_serial,
-        "date": flight_date,
+        **_gutma_identity(fdata),
+        "date": takeoff_time.date() if takeoff_time else None,
         "takeoff_time": takeoff_time,
         "landing_time": landing_time,
         "duration_seconds": duration,
