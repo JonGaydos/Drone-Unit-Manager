@@ -41,7 +41,8 @@ def test_the_value_is_quoted_so_it_reads_as_data():
     """A value that mimics log syntax should still be visibly a value."""
     out = for_log("2026-01-01 [ERROR] something")
 
-    assert out.startswith("'") and out.endswith("'")
+    assert out.startswith("'")
+    assert out.endswith("'")
 
 
 def test_an_oversized_value_is_truncated():
