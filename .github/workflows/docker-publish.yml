@@ -74,6 +74,35 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # The image builds as one user and runs as another, and nothing here ran
+      # it until now: a container that built cleanly and then exited on startup
+      # would only surface on staging. Start it against a real bind mount, the
+      # way every deployment does, and wait for the app to answer.
+      - name: Smoke test the image
+        run: |
+          set -euo pipefail
+          TAG=$(echo '${{ steps.meta.outputs.tags }}' | head -n1)
+          DATA=$(mktemp -d)
+          # Match the uid the container runs as, the way an operator has to.
+          sudo chown -R 1000:1000 "$DATA"
+          docker run -d --name dum-smoke -p 18000:8000 -v "$DATA":/app/data "$TAG"
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:18000/api/health > /tmp/health.json 2>/dev/null; then
+              break
+            fi
+            if ! docker ps --filter name=dum-smoke --filter status=running -q | grep -q .; then
+              echo '::error::container exited during startup'
+              docker logs dum-smoke
+              exit 1
+            fi
+            sleep 2
+          done
+          echo "health: $(cat /tmp/health.json)"
+          grep -q '"status":"ok"' /tmp/health.json
+          grep -q '"database":"connected"' /tmp/health.json
+          # It must not be running as root; that is the point of the USER line.
+          test "$(docker exec dum-smoke id -u)" != '0'
+          docker rm -f dum-smoke
       # Report-only: surfaces HIGH+CRITICAL in the run log but never fails the
       # build (so signing/SBOM always run). Kept for visibility alongside the
       # blocking gate below.
