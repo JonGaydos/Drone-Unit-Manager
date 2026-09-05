@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { renderWithProviders } from '@/test/render'
@@ -304,5 +304,83 @@ describe('SettingsPage', () => {
     } finally {
       spy.mockRestore()
     }
+  })
+
+  // The rows are text inputs edited in place and removed from the middle. Keyed
+  // by index, React reuses the input that held the deleted row's text for the
+  // row that shifts up into its position, so the wrong name ends up in the
+  // wrong box and gets saved that way.
+  it('keeps each drone location with its own row when one is removed', async () => {
+    mockMount({ settings: () => HttpResponse.json([
+      ...SETTINGS,
+      { key: 'drone_location_places', value: JSON.stringify(['North', 'Central', 'South']) },
+    ]) })
+    renderWithProviders(<SettingsPage />, { role: 'admin' })
+
+    await screen.findByText('Drone Locations')
+    expect(screen.getByLabelText('Location 1')).toHaveValue('North')
+    expect(screen.getByLabelText('Location 2')).toHaveValue('Central')
+    expect(screen.getByLabelText('Location 3')).toHaveValue('South')
+
+    // Remove the first row; the two below it shift up and must bring their own
+    // values with them. fireEvent rather than userEvent: userEvent's full
+    // pointer sequence does not reach this button under jsdom, while the click
+    // event React actually listens for does.
+    const firstRow = screen.getByLabelText('Location 1').closest('div')
+    fireEvent.click(within(firstRow).getByRole('button', { name: 'Remove' }))
+
+    await waitFor(() => expect(screen.queryByLabelText('Location 3')).toBeNull())
+    expect(screen.getByLabelText('Location 1')).toHaveValue('Central')
+    expect(screen.getByLabelText('Location 2')).toHaveValue('South')
+  })
+
+  // The observable cost of keying by index. The values follow either way,
+  // because the inputs are controlled and React re-applies value on every
+  // render; what does not follow is the DOM node. Keyed by index, the node the
+  // user is typing in is the one React destroys, and they lose the field
+  // mid-edit.
+  it('leaves the caret in the field being edited when another row is removed', async () => {
+    mockMount({ settings: () => HttpResponse.json([
+      ...SETTINGS,
+      { key: 'drone_location_places', value: JSON.stringify(['North', 'Central', 'South']) },
+    ]) })
+    renderWithProviders(<SettingsPage />, { role: 'admin' })
+
+    await screen.findByText('Drone Locations')
+    const editing = screen.getByLabelText('Location 3')
+    editing.focus()
+    expect(document.activeElement).toBe(editing)
+
+    const firstRow = screen.getByLabelText('Location 1').closest('div')
+    fireEvent.click(within(firstRow).getByRole('button', { name: 'Remove' }))
+
+    await waitFor(() => expect(screen.queryByLabelText('Location 3')).toBeNull())
+    expect(document.activeElement).toBe(editing)
+    expect(editing).toHaveValue('South')
+  })
+
+  it('saves drone locations as a plain array of names', async () => {
+    let saved = null
+    mockMount({ settings: () => HttpResponse.json([
+      ...SETTINGS,
+      { key: 'drone_location_places', value: JSON.stringify(['North']) },
+    ]) })
+    server.use(http.put('/api/settings/bulk', async ({ request }) => {
+      saved = await request.json()
+      return HttpResponse.json({ ok: true })
+    }))
+    const { user } = renderWithProviders(<SettingsPage />, { role: 'admin' })
+
+    await screen.findByText('Drone Locations')
+    await user.click(screen.getByRole('button', { name: 'Add place' }))
+    await user.type(screen.getByLabelText('Location 2'), '  Harbour  ')
+    await user.click(screen.getByRole('button', { name: 'Save locations' }))
+
+    // The row identity is internal; what reaches the API is still names only,
+    // trimmed, with the blank rows dropped.
+    await waitFor(() => expect(saved).not.toBeNull())
+    expect(saved).toEqual([
+      { key: 'drone_location_places', value: JSON.stringify(['North', 'Harbour']) },
+    ])
   })
 })
