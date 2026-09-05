@@ -9,7 +9,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
-import { formatHours } from '@/lib/utils'
+import { daysUntil, formatHours } from '@/lib/utils'
 import { resolveOrgLocation } from '@/lib/location'
 import {
   Clock, Users, Box, AlertTriangle, ClipboardCheck, ArrowRight, Wrench,
@@ -20,11 +20,27 @@ import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip as RTooltip }
 
 /* ───────────────────── helpers ───────────────────── */
 
-function getDaysRemaining(dateStr) {
-  if (!dateStr) return null
-  const today = new Date(); today.setHours(0, 0, 0, 0)
-  const target = new Date(dateStr); target.setHours(0, 0, 0, 0)
-  return Math.ceil((target - today) / (1000 * 60 * 60 * 24))
+// Every countdown badge on this page shares one three-tier palette: red once
+// the deadline has passed, amber as it approaches, blue otherwise.
+const TONE_PAST = 'bg-red-500/15 text-red-400 border-red-500/30'
+const TONE_SOON = 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+const TONE_OK = 'bg-blue-500/15 text-blue-400 border-blue-500/30'
+
+function countdownTone(past, soon) {
+  if (past) return TONE_PAST
+  if (soon) return TONE_SOON
+  return TONE_OK
+}
+
+/** "12d" before the deadline, "3d -" after it, "—" with no date at all. */
+function countdownLabel(days) {
+  if (days == null) return '—'
+  return days < 0 ? `${Math.abs(days)}d -` : `${days}d`
+}
+
+/** "1 cert", "2 certs". */
+function pluralise(count, noun) {
+  return `${count} ${noun}${count === 1 ? '' : 's'}`
 }
 
 function formatDelta(pct) {
@@ -94,7 +110,7 @@ function HeroTile({ user, compliance }) {
               {compliance.currency_rules_active === 0 ? ' (no currency rules)' : ''}
               {' · '}
               {compliance.expired_certifications > 0
-                ? `${compliance.expired_certifications} expired cert${compliance.expired_certifications === 1 ? '' : 's'}`
+                ? pluralise(compliance.expired_certifications, 'expired cert')
                 : 'all certs current'}
               {compliance.overdue_maintenance > 0 ? ` · ${compliance.overdue_maintenance} overdue maint` : ''}
               {compliance.operating_authorities_tracked > 0 && authoritySummary(compliance)}
@@ -112,6 +128,12 @@ function HeroTile({ user, compliance }) {
   )
 }
 
+const ADVISORY_TONE = {
+  'GO': 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+  'NO-GO': 'bg-red-500/15 text-red-400 border-red-500/30',
+  CAUTION: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+}
+
 function WeatherTile({ weather }) {
   if (!weather) {
     return (
@@ -123,10 +145,9 @@ function WeatherTile({ weather }) {
     )
   }
   const advisory = weather.advisory || {}
-  const advClass =
-    advisory.status === 'GO' ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' :
-    advisory.status === 'NO-GO' ? 'bg-red-500/15 text-red-400 border-red-500/30' :
-    'bg-amber-500/15 text-amber-400 border-amber-500/30'
+  // Anything that is neither GO nor NO-GO (CAUTION, or no briefing at all)
+  // reads as caution.
+  const advClass = ADVISORY_TONE[advisory.status] || ADVISORY_TONE.CAUTION
   return (
     <Tile className="lg:col-span-4 p-5 flex flex-col gap-2">
       <div className="flex items-start justify-between">
@@ -215,11 +236,43 @@ function RecentFlightsTile({ flights }) {
   )
 }
 
+// Three states, in order: no rules configured at all, rules that nobody is
+// failing, and the list of who is lapsed or close to it.
+function currencyBody(compliance, lapsedAndSoon) {
+  if (compliance?.currency_rules_active === 0) {
+    return (
+      <div className="p-4 text-center text-xs text-muted-foreground">
+        No rules defined.{' '}
+        <Link to="/settings" className="text-primary hover:underline">Set up rules</Link>
+      </div>
+    )
+  }
+  if (lapsedAndSoon.length === 0) {
+    return <div className="p-4 text-center text-xs text-emerald-400">All pilots current</div>
+  }
+  return (
+    <ul className="divide-y divide-border">
+      {lapsedAndSoon.map(p => (
+        <li key={p.pilot_id}>
+          <Link to={`/pilots/${p.pilot_id}`} className="flex items-center gap-2 px-4 py-2 hover:bg-secondary/50 transition-colors">
+            <span className={`inline-flex w-14 justify-center px-1.5 py-0.5 rounded-full text-[10px] font-medium border ${
+              countdownTone(!p.is_current, p.daysUntilExpiry <= 14)
+            }`}>
+              {!p.is_current ? 'LAPSED' : `${p.daysUntilExpiry}d`}
+            </span>
+            <span className="text-xs text-foreground truncate flex-1">{p.pilot_name}</span>
+          </Link>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 function CurrencyRiskTile({ compliance }) {
   const lapsedAndSoon = useMemo(() => {
     if (!compliance?.pilot_currency_status) return []
     return compliance.pilot_currency_status
-      .map(p => ({ ...p, daysUntilExpiry: getDaysRemaining(p.earliest_expires_date) }))
+      .map(p => ({ ...p, daysUntilExpiry: daysUntil(p.earliest_expires_date) }))
       .filter(p => !p.is_current || (p.daysUntilExpiry != null && p.daysUntilExpiry <= 30))
       .sort((a, b) => {
         if (a.is_current !== b.is_current) return a.is_current ? 1 : -1
@@ -236,31 +289,7 @@ function CurrencyRiskTile({ compliance }) {
           <span className="text-xs text-muted-foreground">{compliance.pilots_lapsed || 0} lapsed</span>
         )}
       </div>
-      {compliance?.currency_rules_active === 0 ? (
-        <div className="p-4 text-center text-xs text-muted-foreground">
-          No rules defined.{' '}
-          <Link to="/settings" className="text-primary hover:underline">Set up rules</Link>
-        </div>
-      ) : lapsedAndSoon.length === 0 ? (
-        <div className="p-4 text-center text-xs text-emerald-400">All pilots current</div>
-      ) : (
-        <ul className="divide-y divide-border">
-          {lapsedAndSoon.map(p => (
-            <li key={p.pilot_id}>
-              <Link to={`/pilots/${p.pilot_id}`} className="flex items-center gap-2 px-4 py-2 hover:bg-secondary/50 transition-colors">
-                <span className={`inline-flex w-14 justify-center px-1.5 py-0.5 rounded-full text-[10px] font-medium border ${
-                  !p.is_current ? 'bg-red-500/15 text-red-400 border-red-500/30' :
-                  p.daysUntilExpiry <= 14 ? 'bg-amber-500/15 text-amber-400 border-amber-500/30' :
-                  'bg-blue-500/15 text-blue-400 border-blue-500/30'
-                }`}>
-                  {!p.is_current ? 'LAPSED' : `${p.daysUntilExpiry}d`}
-                </span>
-                <span className="text-xs text-foreground truncate flex-1">{p.pilot_name}</span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
+      {currencyBody(compliance, lapsedAndSoon)}
     </Tile>
   )
 }
@@ -509,17 +538,15 @@ export default function DashboardPage() {
         emptyLabel="No maintenance due"
         link="/maintenance"
         renderItem={(m) => {
-          const days = getDaysRemaining(m.next_due)
+          const days = daysUntil(m.next_due)
           const overdue = days != null && days < 0
           return (
             <li key={m.id}>
               <Link to="/maintenance" className="flex items-center gap-2 px-4 py-2 hover:bg-secondary/50 transition-colors">
                 <span className={`inline-flex w-14 justify-center px-1.5 py-0.5 rounded-full text-[10px] font-medium border ${
-                  overdue ? 'bg-red-500/15 text-red-400 border-red-500/30' :
-                  (days != null && days <= 7) ? 'bg-amber-500/15 text-amber-400 border-amber-500/30' :
-                  'bg-blue-500/15 text-blue-400 border-blue-500/30'
+                  countdownTone(overdue, days != null && days <= 7)
                 }`}>
-                  {days == null ? '—' : overdue ? `${Math.abs(days)}d -` : `${days}d`}
+                  {countdownLabel(days)}
                 </span>
                 <span className="text-xs text-foreground truncate flex-1">{m.description || m.maintenance_type || 'Maintenance'}</span>
               </Link>
@@ -540,11 +567,9 @@ export default function DashboardPage() {
             <li key={`${c.pilot_id}-${idx}`}>
               <Link to="/certifications" className="flex items-center gap-2 px-4 py-2 hover:bg-secondary/50 transition-colors">
                 <span className={`inline-flex w-14 justify-center px-1.5 py-0.5 rounded-full text-[10px] font-medium border ${
-                  days < 0 ? 'bg-red-500/15 text-red-400 border-red-500/30' :
-                  days <= 30 ? 'bg-amber-500/15 text-amber-400 border-amber-500/30' :
-                  'bg-blue-500/15 text-blue-400 border-blue-500/30'
+                  countdownTone(days < 0, days <= 30)
                 }`}>
-                  {days < 0 ? `${Math.abs(days)}d -` : `${days}d`}
+                  {countdownLabel(days)}
                 </span>
                 <span className="text-xs text-foreground truncate flex-1">Pilot #{c.pilot_id}</span>
               </Link>

@@ -165,4 +165,164 @@ describe('DashboardPage', () => {
     const flightsTile = screen.getByText('Flights (30d)').closest('div')
     expect(within(flightsTile).getByText('0')).toBeInTheDocument()
   })
+
+  // The countdown badges are the page's whole at-a-glance signal: how long is
+  // left, and whether that is fine, close, or already blown. Three tiles share
+  // one palette, so a change to any of them has to keep all three honest.
+  describe('countdown badges', () => {
+    const inDays = (n) => {
+      const d = new Date()
+      d.setHours(12, 0, 0, 0)
+      d.setDate(d.getDate() + n)
+      return d.toISOString().slice(0, 10)
+    }
+
+    const badgeFor = (label) => screen.getByText(label).className
+
+    it('reads a maintenance item as past due, close, or comfortable', async () => {
+      mockDashboard({
+        ...POPULATED,
+        maintenance: [
+          { id: 1, description: 'Past due', next_due: inDays(-3) },
+          { id: 2, description: 'Close', next_due: inDays(4) },
+          { id: 3, description: 'Comfortable', next_due: inDays(45) },
+        ],
+      })
+      renderWithProviders(<DashboardPage />, { role: 'admin' })
+
+      // Past due counts up, not down, and is not shown as a negative number.
+      expect(await screen.findByText('3d -')).toBeInTheDocument()
+      expect(badgeFor('3d -')).toContain('red')
+      expect(badgeFor('4d')).toContain('amber')
+      expect(badgeFor('45d')).toContain('blue')
+    })
+
+    // The page used to parse "YYYY-MM-DD" as UTC midnight, which is the
+    // previous day for anyone west of Greenwich, so every countdown read a day
+    // short: something due today showed as already overdue, and a cert 30 days
+    // out fell inside the 30-day warning band a day early.
+    it('counts a due date from the local calendar day, not the UTC one', async () => {
+      mockDashboard({
+        ...POPULATED,
+        maintenance: [
+          { id: 1, description: 'Due today', next_due: inDays(0) },
+          { id: 2, description: 'Due in thirty', next_due: inDays(30) },
+        ],
+      })
+      renderWithProviders(<DashboardPage />, { role: 'admin' })
+
+      expect(await screen.findByText('0d')).toBeInTheDocument()
+      expect(screen.getByText('30d')).toBeInTheDocument()
+    })
+
+    it('shows a dash for a maintenance item with no due date at all', async () => {
+      mockDashboard({ ...POPULATED, maintenance: [{ id: 1, description: 'Undated', next_due: null }] })
+      renderWithProviders(<DashboardPage />, { role: 'admin' })
+
+      expect(await screen.findByText('Undated')).toBeInTheDocument()
+      expect(screen.getByText(String.fromCharCode(8212))).toBeInTheDocument()
+    })
+
+    it('reads a certification as expired, expiring, or comfortable', async () => {
+      mockDashboard({
+        ...POPULATED,
+        compliance: {
+          ...POPULATED.compliance,
+          expiring_certifications: [
+            { pilot_id: 1, days_remaining: -5 },
+            { pilot_id: 2, days_remaining: 20 },
+            { pilot_id: 3, days_remaining: 90 },
+          ],
+        },
+      })
+      renderWithProviders(<DashboardPage />, { role: 'admin' })
+
+      expect(await screen.findByText('5d -')).toBeInTheDocument()
+      expect(badgeFor('5d -')).toContain('red')
+      expect(badgeFor('20d')).toContain('amber')
+      expect(badgeFor('90d')).toContain('blue')
+    })
+
+    it('reads a pilot as lapsed, expiring, or current', async () => {
+      mockDashboard({
+        ...POPULATED,
+        compliance: {
+          ...POPULATED.compliance,
+          pilot_currency_status: [
+            { pilot_id: 1, pilot_name: 'Lapsed Larry', is_current: false, earliest_expires_date: null },
+            { pilot_id: 2, pilot_name: 'Soon Sam', is_current: true, earliest_expires_date: inDays(9) },
+          ],
+        },
+      })
+      renderWithProviders(<DashboardPage />, { role: 'admin' })
+
+      expect(await screen.findByText('LAPSED')).toBeInTheDocument()
+      expect(badgeFor('LAPSED')).toContain('red')
+      expect(badgeFor('9d')).toContain('amber')
+    })
+  })
+
+  describe('weather advisory', () => {
+    const withAdvisory = (status) => ({
+      ...POPULATED,
+      weather: { ...POPULATED.weather, advisory: { status, reason: 'because' } },
+    })
+
+    it.each([
+      ['GO', 'emerald'],
+      ['NO-GO', 'red'],
+      ['CAUTION', 'amber'],
+    ])('colours a %s advisory', async (status, tone) => {
+      mockDashboard(withAdvisory(status))
+      renderWithProviders(<DashboardPage />, { role: 'admin' })
+
+      expect((await screen.findByText(status)).className).toContain(tone)
+    })
+
+    it('falls back to caution for a status it does not recognise', async () => {
+      mockDashboard(withAdvisory('MARGINAL'))
+      renderWithProviders(<DashboardPage />, { role: 'admin' })
+
+      expect((await screen.findByText('MARGINAL')).className).toContain('amber')
+    })
+  })
+
+  describe('currency risk tile', () => {
+    it('points at settings when no currency rule is configured', async () => {
+      mockDashboard({
+        ...POPULATED,
+        compliance: { ...POPULATED.compliance, currency_rules_active: 0 },
+      })
+      renderWithProviders(<DashboardPage />, { role: 'admin' })
+
+      expect(await screen.findByText(/No rules defined/)).toBeInTheDocument()
+      expect(screen.getByRole('link', { name: 'Set up rules' })).toBeInTheDocument()
+    })
+
+    it('says everyone is current when the rules exist and nobody is failing', async () => {
+      mockDashboard({
+        ...POPULATED,
+        compliance: { ...POPULATED.compliance, pilot_currency_status: [] },
+      })
+      renderWithProviders(<DashboardPage />, { role: 'admin' })
+
+      expect(await screen.findByText('All pilots current')).toBeInTheDocument()
+    })
+  })
+
+  // "1 expired cert", not "1 expired certs". The negative lookahead matters:
+  // "1 expired certs" contains "1 expired cert", so a plain match passes either
+  // way and guards nothing.
+  it.each([
+    [1, /1 expired cert(?!s)/],
+    [2, /2 expired certs/],
+  ])('writes %i expired certificates in the hero summary', async (count, expected) => {
+    mockDashboard({
+      ...POPULATED,
+      compliance: { ...POPULATED.compliance, expired_certifications: count },
+    })
+    renderWithProviders(<DashboardPage />, { role: 'admin' })
+
+    expect(await screen.findByText(expected)).toBeInTheDocument()
+  })
 })
