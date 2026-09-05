@@ -375,7 +375,7 @@ def test_a_point_with_no_time_at_all_falls_back_to_its_index():
     assert _point_timestamp_ms(None, None, 5) == 5000
 
 
-# 8. The import itself ------------------------------------------------------
+# 8. The import itself ------------------------------------------------------
 
 def test_an_import_creates_the_flight_and_its_telemetry(db, telemetry_db):
     result = import_flight_log(DJI_LOG.encode(), db, telemetry_db, user_id=None)
@@ -469,9 +469,10 @@ def test_a_failed_telemetry_insert_leaves_no_phantom_flight(db, telemetry_db, mo
         raise RuntimeError("telemetry db is gone")
 
     monkeypatch.setattr(fli, "_create_telemetry_points", boom)
+    content = DJI_LOG.encode()
 
     with pytest.raises(RuntimeError):
-        import_flight_log(DJI_LOG.encode(), db, telemetry_db)
+        import_flight_log(content, db, telemetry_db)
 
     db.expire_all()
     assert db.query(Flight).count() == 0

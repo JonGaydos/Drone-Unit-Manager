@@ -227,7 +227,7 @@ describe('FlightsPage', () => {
     await user.selectOptions(screen.getByLabelText('Reassign pilot for selected flights'), '5')
 
     // Flight 1 is already Jane Doe's, so only Bob Roy's row changes.
-    await screen.findByText(/Set the pilot to "Jane Doe" on 2 selected flight\(s\)\. 1 will change, replacing: Bob Roy \(1\)\./)
+    expect(await screen.findByText(/Set the pilot to "Jane Doe" on 2 selected flight\(s\)\. 1 will change, replacing: Bob Roy \(1\)\./)).toBeInTheDocument()
   })
 
   it('says nothing will change when every selected row already holds the value', async () => {
@@ -237,7 +237,7 @@ describe('FlightsPage', () => {
 
     await user.selectOptions(screen.getByLabelText('Set purpose for selected flights'), 'Search')
 
-    await screen.findByText(/All 2 selected flight\(s\) already have the purpose "Search"\. Nothing will change\./)
+    expect(await screen.findByText(/All 2 selected flight\(s\) already have the purpose "Search"\. Nothing will change\./)).toBeInTheDocument()
   })
 
   it('caps the list of values being replaced', async () => {
@@ -250,7 +250,7 @@ describe('FlightsPage', () => {
 
     // Six named, the remaining four counted, so one dialog cannot become a wall
     // of text on a page of a hundred distinct purposes.
-    await screen.findByText(/10 will change, replacing: P0 \(1\), P1 \(1\), P2 \(1\), P3 \(1\), P4 \(1\), P5 \(1\), and 4 more\./)
+    expect(await screen.findByText(/10 will change, replacing: P0 \(1\), P1 \(1\), P2 \(1\), P3 \(1\), P4 \(1\), P5 \(1\), and 4 more\./)).toBeInTheDocument()
   })
 
   it('renders the flight id cell as a link to the detail route', async () => {

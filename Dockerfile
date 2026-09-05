@@ -53,9 +53,6 @@ COPY --from=frontend-build /app/frontend/dist ./static
 
 # Copy entrypoint
 COPY entrypoint.sh ./
-RUN chmod +x entrypoint.sh \
-    && mkdir -p /app/data/uploads/documents /app/data/media_cache
-
 # Everything the app writes lives under /app/data, so root buys nothing at
 # runtime and costs a container escape being an escape as root.
 #
@@ -65,7 +62,12 @@ RUN chmod +x entrypoint.sh \
 # appdata is owned by) or chowning the directory to 1000:1000. Either works:
 # --user overrides the USER below, and nothing outside /app/data is written.
 # The entrypoint says so explicitly when the directory is not writable.
-RUN groupadd --gid 1000 app \
+#
+# One layer: the chown has to see the finished tree, so splitting these would
+# only add a copy of /app to the image.
+RUN chmod +x entrypoint.sh \
+    && mkdir -p /app/data/uploads/documents /app/data/media_cache \
+    && groupadd --gid 1000 app \
     && useradd --uid 1000 --gid app --home-dir /app --no-create-home app \
     && chown -R app:app /app
 USER app

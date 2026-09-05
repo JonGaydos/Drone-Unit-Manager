@@ -290,8 +290,9 @@ function CurrencyStatusSection({ data, onSendReminders, sending }) {
 // A dash rather than a percentage when no currency rule exists at all: 100%
 // against no rule reads as a pass the unit has not actually earned.
 function currencyCompliance(data) {
-  if (data.currency_rules_active === 0) return String.fromCharCode(8212)
-  if (!(data.total_pilots > 0)) return '100%'
+  if (data.currency_rules_active === 0) return '—'
+  // Falsy rather than <= 0, so a missing or unparsed count does not divide.
+  if (!data.total_pilots) return '100%'
   return `${Math.round((data.pilots_current / data.total_pilots) * 100)}%`
 }
 
