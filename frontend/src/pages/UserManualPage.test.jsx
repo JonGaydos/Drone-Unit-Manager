@@ -29,4 +29,15 @@ describe('UserManualPage', () => {
     await user.type(screen.getByPlaceholderText('Search manual...'), 'zzzznotathing')
     expect(screen.getByText('No sections match your search.')).toBeInTheDocument()
   })
+
+  // "• **Term** — description" renders the term in bold and the rest as plain
+  // text. The pattern that does it carried a redundant trailing anchor that made
+  // it backtrack quadratically on a line whose ** never closes.
+  it('renders a bolded bullet term separately from the text after it', () => {
+    renderWithProviders(<UserManualPage />, { route: '/manual' })
+
+    const term = screen.getByText('Organization')
+    expect(term.tagName).toBe('STRONG')
+    expect(term.parentElement).toHaveTextContent('Org name, your name, email address.')
+  })
 })

@@ -64,4 +64,24 @@ describe('MediaPage', () => {
     expect(screen.getByText('Tower inspection')).toBeInTheDocument()
     expect(screen.queryByText('Crash site')).toBeNull()
   })
+
+  // The upload and edit modals share one pilot-chip toggle. It is the only
+  // thing standing between "assign this pilot" and "assign this pilot twice",
+  // and a chip that cannot be un-picked leaves the wrong pilot on the photo.
+  it('picks a pilot chip and un-picks it on a second click', async () => {
+    mockMount()
+    const { user } = renderWithProviders(<MediaPage />, { role: 'admin' })
+
+    await screen.findByText('Photo Gallery')
+    await user.click(screen.getByRole('button', { name: 'Upload' }))
+
+    const chip = await screen.findByRole('button', { name: 'Jane Doe' })
+    expect(chip.className).toContain('bg-muted')
+
+    await user.click(chip)
+    expect(chip.className).toContain('bg-primary')
+
+    await user.click(chip)
+    expect(chip.className).toContain('bg-muted')
+  })
 })

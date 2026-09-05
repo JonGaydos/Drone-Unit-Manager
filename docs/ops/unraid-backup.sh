@@ -38,7 +38,7 @@ print('db snapshot ok')
 "
 
 # Uploads (static files) — tar from the host side
-if [ -d "$APPDATA/uploads" ]; then
+if [[ -d "$APPDATA/uploads" ]]; then
   tar -czf "$DEST/uploads-$STAMP.tar.gz" -C "$APPDATA" uploads
 fi
 
