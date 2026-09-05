@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { renderWithProviders } from '@/test/render'
@@ -37,7 +37,7 @@ describe('Sidebar role gating', () => {
 
     await screen.findByRole('link', { name: /Dashboard/ })
     // Confirm auth resolved to pilot (role label rendered in the user block).
-    await waitFor(() => expect(screen.getByText('pilot')).toBeInTheDocument())
+    expect(await screen.findByText('pilot')).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Audit Log/ })).not.toBeInTheDocument()
   })
 
@@ -46,7 +46,7 @@ describe('Sidebar role gating', () => {
     renderWithProviders(<Sidebar mobileOpen={false} onMobileClose={() => {}} />, { role: 'viewer' })
 
     await screen.findByRole('link', { name: /Dashboard/ })
-    await waitFor(() => expect(screen.getByText('viewer')).toBeInTheDocument())
+    expect(await screen.findByText('viewer')).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Audit Log/ })).not.toBeInTheDocument()
   })
 })

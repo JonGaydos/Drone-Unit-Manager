@@ -13,7 +13,8 @@ def test_setup_persists_display_timezone(client, db):
     })
     assert resp.status_code == 200
     row = db.query(Setting).filter(Setting.key == "display_timezone").first()
-    assert row is not None and row.value == "America/New_York"
+    assert row is not None
+    assert row.value == "America/New_York"
 
 
 def test_pilot_can_read_display_timezone(client, db, pilot_headers):

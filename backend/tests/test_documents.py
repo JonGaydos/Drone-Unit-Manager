@@ -23,7 +23,7 @@ from app.models.document import Document
 from app.models.folder import Folder
 
 
-@pytest.fixture()
+@pytest.fixture
 def upload_dir(tmp_path, monkeypatch):
     """Point settings.UPLOAD_DIR at an isolated tmp dir for upload tests."""
     updir = tmp_path / "uploads"

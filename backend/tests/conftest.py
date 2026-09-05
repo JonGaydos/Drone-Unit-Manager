@@ -51,7 +51,7 @@ def _make_engine(path):
     return engine
 
 
-@pytest.fixture()
+@pytest.fixture
 def _engines(tmp_path, monkeypatch):
     """Build temp main + telemetry engines, create schema, and rebind the app.
 
@@ -81,7 +81,7 @@ def _engines(tmp_path, monkeypatch):
     telemetry_engine.dispose()
 
 
-@pytest.fixture()
+@pytest.fixture
 def db(_engines):
     """A Session bound to the temp main engine, for seeding and assertions."""
     TestingSessionLocal, _ = _engines
@@ -92,7 +92,7 @@ def db(_engines):
         session.close()
 
 
-@pytest.fixture()
+@pytest.fixture
 def telemetry_db(_engines):
     """A Session bound to the temp telemetry engine, for seeding and assertions.
 
@@ -107,7 +107,7 @@ def telemetry_db(_engines):
         session.close()
 
 
-@pytest.fixture()
+@pytest.fixture
 def client(_engines):
     """TestClient with get_db / get_telemetry_db overridden to the temp DBs."""
     TestingSessionLocal, TestingTelemetrySessionLocal = _engines
@@ -157,23 +157,23 @@ ADMIN_PASSWORD = "AdminPassw0rd!"
 PILOT_PASSWORD = "PilotPassw0rd!"
 
 
-@pytest.fixture()
+@pytest.fixture
 def admin_user(db):
     return _seed_user(db, username="admin", role="admin", password=ADMIN_PASSWORD)
 
 
-@pytest.fixture()
+@pytest.fixture
 def pilot_user(db):
     return _seed_user(db, username="pilot", role="pilot", password=PILOT_PASSWORD)
 
 
-@pytest.fixture()
+@pytest.fixture
 def admin_headers(admin_user):
     token = create_token(admin_user.id)
     return {"Authorization": f"Bearer {token}"}
 
 
-@pytest.fixture()
+@pytest.fixture
 def pilot_headers(pilot_user):
     token = create_token(pilot_user.id)
     return {"Authorization": f"Bearer {token}"}
@@ -192,10 +192,9 @@ def _reset_login_rate_limiter():
 
     auth._login_attempts.clear()
     auth._last_sweep = 0.0
-    yield
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_httpx(monkeypatch):
     """Intercept outbound httpx calls so app code never hits the network.
 
@@ -243,7 +242,7 @@ def mock_httpx(monkeypatch):
     return install
 
 
-@pytest.fixture()
+@pytest.fixture
 def patch_httpx_get(monkeypatch):
     """Patch module-level ``httpx.get`` only (geocode router, sync_manager).
 
