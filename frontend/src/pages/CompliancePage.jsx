@@ -287,6 +287,14 @@ function CurrencyStatusSection({ data, onSendReminders, sending }) {
   )
 }
 
+// A dash rather than a percentage when no currency rule exists at all: 100%
+// against no rule reads as a pass the unit has not actually earned.
+function currencyCompliance(data) {
+  if (data.currency_rules_active === 0) return String.fromCharCode(8212)
+  if (!(data.total_pilots > 0)) return '100%'
+  return `${Math.round((data.pilots_current / data.total_pilots) * 100)}%`
+}
+
 export default function CompliancePage() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -494,9 +502,7 @@ export default function CompliancePage() {
         <div className="bg-card border border-border rounded-xl p-4 text-center">
           <div className="text-sm text-muted-foreground">Currency Compliance</div>
           <div className="text-2xl font-bold text-foreground mt-1">
-            {data.currency_rules_active === 0
-              ? '—'
-              : `${data.total_pilots > 0 ? Math.round((data.pilots_current / data.total_pilots) * 100) : 100}%`}
+            {currencyCompliance(data)}
           </div>
           {data.currency_rules_active === 0 && (
             <div className="text-[10px] text-muted-foreground mt-0.5">no rules</div>

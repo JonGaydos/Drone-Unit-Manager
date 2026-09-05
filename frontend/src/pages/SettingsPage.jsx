@@ -49,6 +49,7 @@ export default function SettingsPage() {
   const [currencyRules, setCurrencyRules] = useState([])
   const [editingRule, setEditingRule] = useState(null)
   const [savingRule, setSavingRule] = useState(false)
+  const ruleSubmitLabel = editingRule?.id ? 'Save' : 'Create'
   const [ruleForm, setRuleForm] = useState({
     name: '', description: '', vehicle_model: '',
     required_hours: 5, period_days: 90,
@@ -1454,7 +1455,7 @@ export default function SettingsPage() {
                   onClick={handleSaveRule} disabled={savingRule}
                   className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  {savingRule ? <Loader2 className="w-4 h-4 animate-spin" /> : (editingRule.id ? 'Save' : 'Create')}
+                  {savingRule ? <Loader2 className="w-4 h-4 animate-spin" /> : ruleSubmitLabel}
                 </button>
                 <button
                   onClick={() => setEditingRule(null)}

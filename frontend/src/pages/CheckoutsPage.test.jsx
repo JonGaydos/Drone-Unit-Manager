@@ -103,4 +103,30 @@ describe('CheckoutsPage', () => {
     // The delete (Trash) icon button is supervisor-only; absent for a pilot.
     expect(container.querySelector('button.hover\\:text-destructive')).toBeNull()
   })
+
+  // Whoever signed the item out is almost always the one bringing it back, so
+  // that name is pre-selected. Getting it wrong writes the return against the
+  // wrong person, and the field is easy to skim past.
+  describe('who is pre-selected as the returner', () => {
+    const openCheckIn = async (user) => {
+      await screen.findByText('Currently Out (1)')
+      const row = screen.getAllByText('DJI Mavic 3 (Falcon)')[0].closest('tr')
+      await user.click(within(row).getByRole('button', { name: /Check In/ }))
+      return screen.getByLabelText('Returned by')
+    }
+
+    it('pre-selects whoever checked the item out', async () => {
+      mockMount({ checkouts: () => HttpResponse.json([{ ...CHECKOUTS[0], checked_out_by_id: 5 }]) })
+      const { user } = renderWithProviders(<CheckoutsPage />, { role: 'admin' })
+
+      expect(await openCheckIn(user)).toHaveValue('5')
+    })
+
+    it('leaves the field empty when nobody is recorded as holding it', async () => {
+      mockMount({ checkouts: () => HttpResponse.json([{ ...CHECKOUTS[0], checked_out_by_id: null }]) })
+      const { user } = renderWithProviders(<CheckoutsPage />, { role: 'admin' })
+
+      expect(await openCheckIn(user)).toHaveValue('')
+    })
+  })
 })

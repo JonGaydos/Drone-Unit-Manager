@@ -234,6 +234,42 @@ describe('IntegrationsPage', () => {
       expect(screen.getByText('and 4 more')).toBeInTheDocument()
     })
 
+    // One upload lands in one of three shapes, and each reports different
+    // numbers. Reading a skipped duplicate as a success is the one that
+    // matters: it tells the operator a flight was added when nothing was.
+    it('says a duplicate was skipped rather than imported', async () => {
+      await importFile({ skipped: true, flight_id: 42, format_detected: 'dji' })
+
+      expect(await screen.findByText(/Flight #42 already exists \(skipped\)/)).toBeInTheDocument()
+      expect(screen.queryByText(/imported successfully/)).not.toBeInTheDocument()
+    })
+
+    it('reports a single flight with its telemetry count and format', async () => {
+      await importFile({ flight_id: 7, points_imported: 1200, format_detected: 'dji', date: '2026-05-01' })
+
+      // The panel and the toast both carry the line, hence findAllByText.
+      expect(await screen.findAllByText(/Flight #7 imported successfully/)).not.toHaveLength(0)
+      expect(screen.getAllByText(/1200 telemetry points/)).not.toHaveLength(0)
+      expect(screen.getAllByText(/2026-05-01/)).not.toHaveLength(0)
+    })
+
+    it('reports a batch with what it created alongside it', async () => {
+      await importFile({
+        format_detected: 'brinc_csv', flights_imported: 4,
+        pilots_created: 2, vehicles_created: 1, flights_skipped: 3,
+      })
+
+      expect(await screen.findAllByText(/Imported 4 flights/)).not.toHaveLength(0)
+      expect(screen.getByText(/2 pilot\(s\) and 1 vehicle\(s\) created/)).toBeInTheDocument()
+      expect(screen.getByText(/3 duplicate\(s\) skipped/)).toBeInTheDocument()
+    })
+
+    it('writes one imported flight in the singular', async () => {
+      await importFile({ format_detected: 'litchi', flights_imported: 1 })
+
+      expect(await screen.findAllByText(/Imported 1 flight(?!s)/)).not.toHaveLength(0)
+    })
+
     it('adds nothing when an import had no notices', async () => {
       await importFile({ format_detected: 'litchi', flights_imported: 1 })
 

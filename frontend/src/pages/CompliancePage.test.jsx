@@ -144,4 +144,41 @@ describe('CompliancePage', () => {
     expect(await screen.findByText('Operating Authority Expiring')).toBeInTheDocument()
     expect(screen.getByText(/45 days remaining/)).toBeInTheDocument()
   })
+
+  // The tile answers "what fraction of pilots are current", and it has to
+  // refuse the question when nothing defines what current means. 100% against
+  // no rule reads as a pass the unit has not earned.
+  describe('currency compliance tile', () => {
+    // The label sits in its own div inside the tile, so closest('div') would
+    // return that label, not the card holding the number.
+    const tile = () => screen.getByText('Currency Compliance').parentElement
+
+    it('shows a dash and says so when no currency rule is configured', async () => {
+      mockMount({ compliance: () => HttpResponse.json({ ...COMPLIANCE, currency_rules_active: 0 }) })
+      renderWithProviders(<CompliancePage />, { role: 'admin' })
+
+      await screen.findByRole('heading', { name: 'Compliance Dashboard' })
+      expect(within(tile()).getByText(String.fromCharCode(8212))).toBeInTheDocument()
+      expect(within(tile()).getByText('no rules')).toBeInTheDocument()
+    })
+
+    it('shows the percentage of pilots current when rules exist', async () => {
+      mockMount({ compliance: () => HttpResponse.json({
+        ...COMPLIANCE, currency_rules_active: 1, pilots_current: 3, total_pilots: 4 }) })
+      renderWithProviders(<CompliancePage />, { role: 'admin' })
+
+      await screen.findByRole('heading', { name: 'Compliance Dashboard' })
+      expect(within(tile()).getByText('75%')).toBeInTheDocument()
+    })
+
+    it('reads 100% rather than dividing by zero when the unit has no pilots', async () => {
+      mockMount({ compliance: () => HttpResponse.json({
+        ...COMPLIANCE, currency_rules_active: 1, pilots_current: 0, total_pilots: 0,
+        pilot_currency_status: [] }) })
+      renderWithProviders(<CompliancePage />, { role: 'admin' })
+
+      await screen.findByRole('heading', { name: 'Compliance Dashboard' })
+      expect(within(tile()).getByText('100%')).toBeInTheDocument()
+    })
+  })
 })

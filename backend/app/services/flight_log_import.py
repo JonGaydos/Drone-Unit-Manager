@@ -531,14 +531,26 @@ def _check_duplicate_by_external_id(meta: dict, db: Session):
     ).first()
 
 
+def _point_timestamp_ms(point_time, base_ts, index) -> int:
+    """Milliseconds for one telemetry point.
+
+    Its own timestamp when it has one. A log that carries none still has to
+    plot in order, so the points are spaced a second apart from the takeoff
+    time, or from zero when even that is missing.
+    """
+    if point_time:
+        return int(point_time.timestamp() * 1000)
+    if base_ts:
+        return int(base_ts.timestamp() * 1000) + index * 1000
+    return index * 1000
+
+
 def _create_telemetry_points(telemetry: list, flight_id: int, meta: dict, fmt: str, telemetry_db: Session) -> int:
     """Create TelemetryPoint records from parsed telemetry data. Returns count created."""
     base_ts = meta.get("takeoff_time")
     points_created = 0
     for i, pt in enumerate(telemetry):
-        ts_ms = int(pt["timestamp"].timestamp() * 1000) if pt.get("timestamp") else (
-            int(base_ts.timestamp() * 1000) + (i * 1000) if base_ts else i * 1000
-        )
+        ts_ms = _point_timestamp_ms(pt.get("timestamp"), base_ts, i)
         extra_json = json.dumps(pt["extra_data"]) if pt.get("extra_data") else None
         tp = TelemetryPoint(
             flight_id=flight_id,

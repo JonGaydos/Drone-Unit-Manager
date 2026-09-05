@@ -175,9 +175,11 @@ export default function OperatingAuthorityPage() {
       </div>
 
       <section className="bg-card border border-border rounded-xl overflow-hidden">
-        {loading ? (
+        {/* Three states, as sibling guards rather than a ternary chain. */}
+        {loading && (
           <div className="p-4 text-sm text-muted-foreground">Loading…</div>
-        ) : rows.length === 0 ? (
+        )}
+        {!loading && rows.length === 0 && (
           <div className="p-8 text-center">
             <Stamp className="w-10 h-10 mx-auto mb-3 text-muted-foreground/50" />
             <p className="font-medium text-foreground">No operating authorities on file</p>
@@ -185,7 +187,8 @@ export default function OperatingAuthorityPage() {
               Nothing is being tracked, so the compliance score is unaffected.
             </p>
           </div>
-        ) : (
+        )}
+        {!loading && rows.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
