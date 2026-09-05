@@ -161,7 +161,9 @@ def create_checkout(
     checkout = EquipmentCheckout(**data.model_dump())
     db.add(checkout)
     db.flush()
-    on_behalf = " (on behalf of)" if user.pilot_id != pilot.id else ""
+    # Audit lines are read on their own and exported to CSV, so name who
+    # recorded it rather than trailing off after "on behalf of".
+    on_behalf = f" (recorded by {user.display_name})" if user.pilot_id != pilot.id else ""
     log_action(
         db, user.id, user.display_name, "checkout", "equipment", checkout.id,
         f"{data.entity_type} #{data.entity_id}",
@@ -198,7 +200,7 @@ def checkin_equipment(
     checkout.checked_in_by_id = data.checked_in_by_id
     checkout.condition_in = data.condition_in
     checkout.notes_in = data.notes_in
-    on_behalf = " (on behalf of)" if user.pilot_id != in_pilot.id else ""
+    on_behalf = f" (recorded by {user.display_name})" if user.pilot_id != in_pilot.id else ""
     log_action(
         db, user.id, user.display_name, "checkin", "equipment", checkout.id,
         f"{checkout.entity_type} #{checkout.entity_id}",

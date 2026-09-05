@@ -46,7 +46,7 @@ const POPULATED = {
     { id: 102, external_id: null, pilot_name: 'Bob Pilot', vehicle_name: 'Mavic 3', purpose: 'Survey', duration_seconds: 600 },
   ],
   maintenance: [
-    { id: 1, description: 'Prop replacement', next_due: '2026-07-01' },
+    { id: 1, description: 'Prop replacement', next_due_date: '2026-07-01' },
   ],
   compliance: {
     compliance_score: 92, pilots_current: 6, total_pilots: 7,
@@ -183,9 +183,9 @@ describe('DashboardPage', () => {
       mockDashboard({
         ...POPULATED,
         maintenance: [
-          { id: 1, description: 'Past due', next_due: inDays(-3) },
-          { id: 2, description: 'Close', next_due: inDays(4) },
-          { id: 3, description: 'Comfortable', next_due: inDays(45) },
+          { id: 1, description: 'Past due', next_due_date: inDays(-3) },
+          { id: 2, description: 'Close', next_due_date: inDays(4) },
+          { id: 3, description: 'Comfortable', next_due_date: inDays(45) },
         ],
       })
       renderWithProviders(<DashboardPage />, { role: 'admin' })
@@ -205,8 +205,8 @@ describe('DashboardPage', () => {
       mockDashboard({
         ...POPULATED,
         maintenance: [
-          { id: 1, description: 'Due today', next_due: inDays(0) },
-          { id: 2, description: 'Due in thirty', next_due: inDays(30) },
+          { id: 1, description: 'Due today', next_due_date: inDays(0) },
+          { id: 2, description: 'Due in thirty', next_due_date: inDays(30) },
         ],
       })
       renderWithProviders(<DashboardPage />, { role: 'admin' })
@@ -216,7 +216,7 @@ describe('DashboardPage', () => {
     })
 
     it('shows a dash for a maintenance item with no due date at all', async () => {
-      mockDashboard({ ...POPULATED, maintenance: [{ id: 1, description: 'Undated', next_due: null }] })
+      mockDashboard({ ...POPULATED, maintenance: [{ id: 1, description: 'Undated', next_due_date: null }] })
       renderWithProviders(<DashboardPage />, { role: 'admin' })
 
       expect(await screen.findByText('Undated')).toBeInTheDocument()
