@@ -17,12 +17,23 @@ from datetime import date, datetime
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Request
 from fastapi.responses import StreamingResponse
-from sqlalchemy import inspect as sa_inspect, text
+from sqlalchemy import func, inspect as sa_inspect, text
 from sqlalchemy.orm import Session
 from sqlalchemy.types import Date, DateTime
 
 from app.config import settings as app_settings
-from app.database import SessionLocal, TelemetrySessionLocal
+from app import database
+from app.database import SessionLocal
+
+
+def _telemetry_session():
+    """The telemetry sessionmaker, resolved when called.
+
+    Imported by name it binds at import time, which the test suite's
+    per-test engines cannot rebind -- so the telemetry half of a backup
+    could not be exercised by a test at all.
+    """
+    return database.TelemetrySessionLocal()
 from app.deps import DBSession, AdminUser
 from app.models.user import User
 from app.models.pilot import Pilot
@@ -169,16 +180,17 @@ def build_backup_archive(db: Session, include_telemetry: bool = False) -> tuple[
         manifest["tables"][table_name] = len(rows)
         logger.info("  Exported %s: %d rows", table_name, len(rows))
 
-    # Serialize telemetry if requested
-    telemetry_data = None
+    # Telemetry is counted here and streamed into the archive below. It is the
+    # one table big enough that holding it is the difference between a slow
+    # export and an unusable host.
+    telemetry_count = 0
     if include_telemetry:
-        tel_db = TelemetrySessionLocal()
+        tel_db = _telemetry_session()
         try:
-            telemetry_data = _serialize_table(tel_db, TelemetryPoint)
-            manifest["tables"]["telemetry_points"] = len(telemetry_data)
-            logger.info("  Exported telemetry_points: %d rows", len(telemetry_data))
+            telemetry_count = tel_db.query(func.count(TelemetryPoint.id)).scalar() or 0
         finally:
             tel_db.close()
+        manifest["tables"]["telemetry_points"] = telemetry_count
 
     # Create ZIP
     spooled = tempfile.SpooledTemporaryFile(max_size=50 * 1024 * 1024)
@@ -186,8 +198,8 @@ def build_backup_archive(db: Session, include_telemetry: bool = False) -> tuple[
         zf.writestr(MANIFEST_FILE, json.dumps(manifest, cls=_BackupEncoder, indent=2))
         zf.writestr(DATABASE_FILE, json.dumps(database, cls=_BackupEncoder))
 
-        if telemetry_data is not None:
-            zf.writestr(TELEMETRY_FILE, json.dumps(telemetry_data, cls=_BackupEncoder))
+        if include_telemetry:
+            _write_telemetry(zf, telemetry_count)
 
         # Add uploaded files
         upload_dir = str(app_settings.UPLOAD_DIR)
@@ -216,6 +228,49 @@ class _BackupEncoder(json.JSONEncoder):
 def _get_columns(model_class):
     """Get column attribute names for a model."""
     return [c.key for c in sa_inspect(model_class).mapper.column_attrs]
+
+
+# Rows fetched per round trip while streaming. Large enough that the query is
+# not the bottleneck, small enough that a batch is nothing to hold.
+TELEMETRY_BATCH = 5000
+
+
+def _write_telemetry(zf: zipfile.ZipFile, expected: int) -> int:
+    """Write telemetry_points into the archive one row at a time.
+
+    This used to load every row into memory as ORM objects, convert them into a
+    list of dicts, and then build the whole JSON document as one string before
+    handing it to the zip -- three copies of the table at once. On an instance
+    with eight million points that is several gigabytes, and a container with no
+    memory limit takes the host down with it rather than just failing.
+
+    Streaming keeps it to one batch. The JSON array is assembled by hand because
+    json.dump would need the whole list.
+    """
+    columns = _get_columns(TelemetryPoint)
+    written = 0
+    tel_db = _telemetry_session()
+    try:
+        with zf.open(TELEMETRY_FILE, "w") as handle:
+            handle.write(b"[")
+            query = tel_db.query(TelemetryPoint).execution_options(stream_results=True)
+            for row in query.yield_per(TELEMETRY_BATCH):
+                if written:
+                    handle.write(b",")
+                record = {col: getattr(row, col) for col in columns}
+                handle.write(json.dumps(record, cls=_BackupEncoder).encode("utf-8"))
+                written += 1
+                # Without this the session keeps every row it has seen, which is
+                # the leak this function exists to remove.
+                tel_db.expunge(row)
+            handle.write(b"]")
+    finally:
+        tel_db.close()
+    logger.info("  Exported telemetry_points: %d rows", written)
+    if written != expected:
+        logger.warning("telemetry row count changed during export: counted %d, wrote %d",
+                       expected, written)
+    return written
 
 
 def _serialize_table(db: Session, model_class) -> list[dict]:
@@ -567,7 +622,7 @@ async def import_backup(
         # Import telemetry if present
         telemetry_imported = False
         if TELEMETRY_FILE in zf.namelist():
-            tel_db = TelemetrySessionLocal()
+            tel_db = _telemetry_session()
             try:
                 tel_data = json.loads(zf.read(TELEMETRY_FILE))
                 if tel_data:
