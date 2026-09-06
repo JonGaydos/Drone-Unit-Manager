@@ -43,6 +43,11 @@ const RULES = [
   { id: 5, name: 'Quarterly currency', required_hours: 5, period_days: 90, required_flights: null, is_active: true, vehicle_model: null, description: null },
 ]
 
+const PURPOSE_ROWS = [
+  { id: 1, name: 'Patrol', flight_count: 12 },
+  { id: 2, name: 'Search Warrant', flight_count: 3 },
+]
+
 function mockMount(overrides = {}) {
   const base = {
     settings: () => HttpResponse.json(SETTINGS),
@@ -50,6 +55,7 @@ function mockMount(overrides = {}) {
     pilots: () => HttpResponse.json(PILOTS),
     rules: () => HttpResponse.json(RULES),
     backup: () => HttpResponse.json({ enabled: true, retention: 7, hour: 3, count: 4, last_backup_at: null }),
+    purposes: () => HttpResponse.json(PURPOSE_ROWS),
     ...overrides,
   }
   server.use(
@@ -58,6 +64,11 @@ function mockMount(overrides = {}) {
     http.get('/api/pilots', base.pilots),
     http.get('/api/currency/rules', base.rules),
     http.get('/api/backup/status', base.backup),
+    // The page loads the purposes table on mount too. Without this every test
+    // in this file made an unhandled request, and with onUnhandledRequest set
+    // to 'error' that threw asynchronously and re-rendered the page at a
+    // moment nothing controlled.
+    http.get('/api/flights/purposes/usage', base.purposes),
   )
 }
 
@@ -347,6 +358,9 @@ describe('SettingsPage', () => {
     renderWithProviders(<SettingsPage />, { role: 'admin' })
 
     await screen.findByText('Drone Locations')
+    // Wait for the value, not just the heading: the heading renders before the
+    // settings fetch resolves, and focusing mid-load races the re-render.
+    await waitFor(() => expect(screen.getByLabelText('Location 3')).toHaveValue('South'))
     const editing = screen.getByLabelText('Location 3')
     editing.focus()
     expect(document.activeElement).toBe(editing)
