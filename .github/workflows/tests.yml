@@ -26,6 +26,13 @@ jobs:
       - name: Check the dependency lock is current
         working-directory: backend
         run: |
+          # Seed the target with the committed lock. uv treats an existing
+          # output file as preferences, so the resolve reproduces those pins
+          # instead of reaching for whatever is newest. Without it the check
+          # fails whenever any dependency publishes a release, which is drift
+          # in the index rather than in this repository, and a check that goes
+          # red on its own teaches everyone to ignore it.
+          cp requirements.lock.txt /tmp/expected.lock
           uv pip compile requirements.txt --generate-hashes \
             --python-platform linux --python-version 3.12 -o /tmp/expected.lock --quiet
           if ! diff <(grep -v '^[[:space:]]*#' requirements.lock.txt) \
@@ -36,6 +43,7 @@ jobs:
             echo '      --python-platform linux --python-version 3.12 -o requirements.lock.txt'
             exit 1
           fi
+          cp requirements-dev.lock.txt /tmp/expected-dev.lock
           uv pip compile requirements-dev.txt --generate-hashes \
             --python-platform linux --python-version 3.12 -o /tmp/expected-dev.lock --quiet
           if ! diff <(grep -v '^[[:space:]]*#' requirements-dev.lock.txt) \
