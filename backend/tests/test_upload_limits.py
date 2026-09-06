@@ -106,7 +106,40 @@ def test_one_bad_entry_does_not_stop_the_rest(client, admin_headers):
     assert len(body["errors"]) == 1
 
 
-# 3. What the archive path still does ----------------------------------------
+# 3. Where the work runs ------------------------------------------------------
+
+def test_the_archive_import_does_not_run_on_the_event_loop(client, admin_headers, monkeypatch):
+    """Importing a full export is minutes of synchronous parsing and database
+    work. On the event loop it freezes every other request in the app for the
+    duration: nobody can load a page while one person imports.
+
+    Inside a worker thread there is no running loop, so asking for one raises.
+    That is the check.
+    """
+    import asyncio
+    from app.routers import export as export_router
+
+    ran_off_the_loop = {}
+    real = export_router._import_zip_flight_logs
+
+    def spy(*args, **kwargs):
+        try:
+            asyncio.get_running_loop()
+            ran_off_the_loop["value"] = False
+        except RuntimeError:
+            ran_off_the_loop["value"] = True
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(export_router, "_import_zip_flight_logs", spy)
+
+    payload = _zip({"flight_logs/a.json": _airdata("AD-THREAD")})
+    resp = _post(client, admin_headers, "export.zip", payload)
+
+    assert resp.status_code == 200, resp.text
+    assert ran_off_the_loop.get("value") is True, "the import ran on the event loop"
+
+
+# 4. What the archive path still does ----------------------------------------
 
 def test_a_duplicate_inside_an_archive_is_skipped_not_imported(client, admin_headers):
     """Re-importing an export must not double every flight in it."""
@@ -115,8 +148,10 @@ def test_a_duplicate_inside_an_archive_is_skipped_not_imported(client, admin_hea
     first = _post(client, admin_headers, "export.zip", payload).json()
     second = _post(client, admin_headers, "export.zip", payload).json()
 
-    assert first["imported"] == 1 and first["skipped"] == 0
-    assert second["imported"] == 0 and second["skipped"] == 1
+    assert first["imported"] == 1
+    assert first["skipped"] == 0
+    assert second["imported"] == 0
+    assert second["skipped"] == 1
 
 
 def test_an_empty_archive_reports_nothing_rather_than_failing(client, admin_headers):
@@ -126,7 +161,7 @@ def test_an_empty_archive_reports_nothing_rather_than_failing(client, admin_head
     assert body["imported"] == 0
 
 
-# 4. The Skydio workbook endpoint keeps the single-file cap -------------------
+# 5. The Skydio workbook endpoint keeps the single-file cap -------------------
 
 def test_the_skydio_import_still_refuses_an_oversized_file(client, admin_headers, monkeypatch):
     monkeypatch.setattr(settings, "MAX_UPLOAD_SIZE", 1024)

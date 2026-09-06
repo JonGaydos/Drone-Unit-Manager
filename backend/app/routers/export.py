@@ -8,6 +8,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from fastapi.responses import StreamingResponse
+from starlette.concurrency import run_in_threadpool
 from sqlalchemy.orm import joinedload
 
 from app.models.flight import Flight
@@ -751,11 +752,14 @@ async def _spool_upload(file: UploadFile, limit: int):
             total += len(chunk)
             if total > limit:
                 raise HTTPException(413, FILE_TOO_LARGE.format(limit // (1024 * 1024)))
-            spooled.write(chunk)
+            # Once the spool passes SPOOL_TO_DISK_ABOVE these writes hit the
+            # disk, and a synchronous write on the event loop stalls every other
+            # request behind it.
+            await run_in_threadpool(spooled.write, chunk)
     except BaseException:
         spooled.close()
         raise
-    spooled.seek(0)
+    await run_in_threadpool(spooled.seek, 0)
     return spooled
 
 
@@ -826,7 +830,11 @@ async def import_flight_log(
         from app.services.flight_log_import import import_flight_log as do_import
         from app.database import get_telemetry_db
         try:
-            return _import_zip_flight_logs(spooled, db, do_import, get_telemetry_db, admin.id)
+            # Off the event loop: this is minutes of synchronous parsing and
+            # database work for a full export, and on the loop it would freeze
+            # every other request in the app for the duration.
+            return await run_in_threadpool(
+                _import_zip_flight_logs, spooled, db, do_import, get_telemetry_db, admin.id)
         finally:
             spooled.close()
 
