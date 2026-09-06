@@ -624,16 +624,21 @@ function FlightLogImport() {
   const importSingleFile = async (file) => {
     const formData = new FormData()
     formData.append('file', file)
+    // No client timeout. A full provider export is hundreds of megabytes and
+    // over a thousand flights; the one measured took four minutes. The default
+    // thirty seconds aborts in the browser while the server carries on, so the
+    // operator is told it failed while it is still working.
+    const noTimeout = { timeout: 0 }
 
     if (format === 'skydio') {
       // Skydio export (CSV or Excel) -> full importer: fleet, pilots, accessories, flights
-      const res = await api.upload('/export/excel/import', formData)
+      const res = await api.upload('/export/excel/import', formData, {}, noTimeout)
       return { ...res, flight_id: null, points_imported: res.flights_imported ?? res.imported ?? 0, format_detected: 'skydio', error: res.errors?.length ? res.errors.join(', ') : null }
     } else if (format === 'airdata_zip') {
-      return await api.upload('/export/flights/import/log', formData)
+      return await api.upload('/export/flights/import/log', formData, {}, noTimeout)
     } else {
       formData.append('format', format)
-      return await api.upload('/export/flights/import/log', formData)
+      return await api.upload('/export/flights/import/log', formData, {}, noTimeout)
     }
   }
 
