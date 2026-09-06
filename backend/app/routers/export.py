@@ -1,6 +1,7 @@
 import csv
 import io
 import logging
+import tempfile
 import xml.etree.ElementTree as ET
 from datetime import date, datetime, timezone
 from typing import Annotated
@@ -25,7 +26,7 @@ from app.models.sensor import SensorPackage
 from app.models.attachment import Attachment
 from app.models.other_equipment import OtherEquipment
 from app.config import settings
-from app.constants import APP_TITLE
+from app.constants import APP_TITLE, FILE_TOO_LARGE
 from app.deps import DBSession, CurrentUser, AdminUser
 from app.responses import responses
 
@@ -718,23 +719,63 @@ async def import_excel_file(
     """
     if not file.filename.endswith(EXCEL_EXTENSIONS + ('.csv',)):
         raise HTTPException(400, "Only Skydio .xlsx, .xls, or .csv files are supported")
-    content = await file.read()
-    if len(content) > settings.MAX_UPLOAD_SIZE:
-        raise HTTPException(413, f"File too large. Maximum size is {settings.MAX_UPLOAD_SIZE // (1024*1024)}MB")
+    spooled = await _spool_upload(file, settings.MAX_UPLOAD_SIZE)
+    try:
+        content = spooled.read()
+    finally:
+        spooled.close()
     from app.services.excel_import import import_excel, import_skydio_csv
     if file.filename.endswith('.csv'):
         return import_skydio_csv(db, content)
     return import_excel(db, content)
 
 
-def _import_zip_flight_logs(content: bytes, db, do_import, get_telemetry_db, user_id: int) -> dict:
-    """Bulk import flight logs from a ZIP file containing JSON files."""
+# Below this the upload stays in memory; above it, the spool writes to disk.
+SPOOL_TO_DISK_ABOVE = 8 * 1024 * 1024
+
+
+async def _spool_upload(file: UploadFile, limit: int):
+    """Read an upload into a temp file, refusing it as soon as it passes `limit`.
+
+    Reading it all with `await file.read()` and measuring afterwards means a
+    client can make the server hold the whole thing before the check runs,
+    which is the check doing nothing. Counting while reading rejects an
+    oversized upload after one chunk instead of all of it.
+
+    Returns a file object positioned at the start; the caller closes it.
+    """
+    spooled = tempfile.SpooledTemporaryFile(max_size=SPOOL_TO_DISK_ABOVE)
+    total = 0
+    try:
+        while chunk := await file.read(1024 * 1024):
+            total += len(chunk)
+            if total > limit:
+                raise HTTPException(413, FILE_TOO_LARGE.format(limit // (1024 * 1024)))
+            spooled.write(chunk)
+    except BaseException:
+        spooled.close()
+        raise
+    spooled.seek(0)
+    return spooled
+
+
+def _import_zip_flight_logs(archive, db, do_import, get_telemetry_db, user_id: int) -> dict:
+    """Bulk import flight logs from a ZIP file containing JSON files.
+
+    Takes a file object rather than bytes: ZipFile reads entries on demand, so
+    a 200MB export costs the largest single entry rather than the whole archive.
+    """
     import zipfile
-    with zipfile.ZipFile(io.BytesIO(content)) as zf:
+    with zipfile.ZipFile(archive) as zf:
         json_files = [n for n in zf.namelist() if n.endswith('.json') and not n.startswith('__')]
         results = {"total": len(json_files), "imported": 0, "skipped": 0, "errors": []}
         for fname in json_files:
             try:
+                # Refuse an entry on its declared decompressed size, before
+                # reading it: an archive can be small and claim gigabytes.
+                if zf.getinfo(fname).file_size > settings.MAX_ARCHIVE_ENTRY_SIZE:
+                    results["errors"].append(f"{fname}: entry too large")
+                    continue
                 file_content = zf.read(fname)
                 telemetry_db = next(get_telemetry_db())
                 try:
@@ -774,9 +815,25 @@ async def import_flight_log(
     if not file.filename.endswith(('.txt', '.csv', '.json', '.zip') + EXCEL_EXTENSIONS):
         raise HTTPException(400, "Only .txt, .csv, .json, .zip, and .xlsx files are supported")
 
-    content = await file.read()
-    if len(content) > settings.MAX_UPLOAD_SIZE:
-        raise HTTPException(413, f"File too large. Maximum size is {settings.MAX_UPLOAD_SIZE // (1024*1024)}MB")
+    # An archive is a bulk import and gets its own, larger cap: it is streamed
+    # to disk and its entries are read one at a time, so what it costs in memory
+    # is the largest entry rather than the archive.
+    is_archive = file.filename.endswith('.zip')
+    limit = settings.MAX_ARCHIVE_SIZE if is_archive else settings.MAX_UPLOAD_SIZE
+    spooled = await _spool_upload(file, limit)
+
+    if is_archive:
+        from app.services.flight_log_import import import_flight_log as do_import
+        from app.database import get_telemetry_db
+        try:
+            return _import_zip_flight_logs(spooled, db, do_import, get_telemetry_db, admin.id)
+        finally:
+            spooled.close()
+
+    try:
+        content = spooled.read()
+    finally:
+        spooled.close()
 
     # Handle Excel files — route to Excel import
     if file.filename.endswith(EXCEL_EXTENSIONS):
@@ -813,10 +870,6 @@ async def import_flight_log(
 
     from app.services.flight_log_import import import_flight_log as do_import
     from app.database import get_telemetry_db
-
-    # Handle ZIP files (bulk import)
-    if file.filename.endswith('.zip'):
-        return _import_zip_flight_logs(content, db, do_import, get_telemetry_db, admin.id)
 
     telemetry_db = next(get_telemetry_db())
     try:

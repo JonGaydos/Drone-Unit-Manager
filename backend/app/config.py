@@ -23,7 +23,17 @@ class Settings(BaseSettings):
     MEDIA_CACHE_DIR: Path = Path("")  # Cached media (thumbnails, etc.)
     SESSION_EXPIRE_MINUTES: int = 1440  # JWT token lifetime (24 hours)
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
-    MAX_UPLOAD_SIZE: int = 50 * 1024 * 1024  # 50 MB max upload
+    MAX_UPLOAD_SIZE: int = 50 * 1024 * 1024  # 50 MB, one file
+    # A bulk archive is a different thing from a single upload. A full
+    # Airdata export runs to hundreds of megabytes and is the first thing a
+    # new unit imports, so capping it at the single-file limit means it
+    # cannot be imported at all. Safe because the archive is streamed to
+    # disk and its entries are read one at a time, so memory tracks the
+    # largest entry rather than the archive.
+    MAX_ARCHIVE_SIZE: int = 500 * 1024 * 1024  # 500 MB, a bulk archive
+    # One file inside an archive. A flight log is under a megabyte; this is
+    # generous and stops an archive that claims to decompress to gigabytes.
+    MAX_ARCHIVE_ENTRY_SIZE: int = 50 * 1024 * 1024
     TRUST_PROXY_HEADERS: bool = True  # Honor X-Forwarded-For/X-Real-IP (behind a trusted reverse proxy)
 
     model_config = {"env_file": ".env", "extra": "ignore"}

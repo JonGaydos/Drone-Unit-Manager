@@ -3,6 +3,7 @@ import { screen } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { renderWithProviders } from '@/test/render'
+import { api } from '@/api/client'
 import IntegrationsPage from './IntegrationsPage'
 
 // Mount endpoints:
@@ -276,5 +277,28 @@ describe('IntegrationsPage', () => {
       expect(await screen.findAllByText(/Imported 1 flight/)).not.toHaveLength(0)
       expect(screen.queryByText(/Not in the fleet/)).not.toBeInTheDocument()
     })
+  })
+
+  // A full provider export is hundreds of megabytes and over a thousand
+  // flights; the one measured took four minutes end to end. With the default
+  // thirty-second timeout the browser aborts while the server is still
+  // importing, and the operator is told it failed.
+  it('does not time out an import in the browser', async () => {
+    let options = null
+    const realUpload = api.upload
+    api.upload = (path, body, headers, opts) => { options = opts; return Promise.resolve({ imported: 1 }) }
+    try {
+      mockMount()
+      const { user } = renderWithProviders(<IntegrationsPage />, { role: 'admin' })
+      await screen.findByText('Flight Log Import')
+
+      const input = document.querySelector('input[type="file"]')
+      await user.upload(input, new File(['{}'], 'export.zip', { type: 'application/zip' }))
+      await user.click(screen.getByRole('button', { name: 'Import' }))
+
+      expect(options).toMatchObject({ timeout: 0 })
+    } finally {
+      api.upload = realUpload
+    }
   })
 })
