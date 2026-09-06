@@ -57,15 +57,56 @@ read `2026-09-10` as UTC midnight, which is the evening of the 9th here. Every
 countdown was one day short.
 
 - [ ] Dashboard and Compliance now agree on the same pilot's days-to-expiry.
-      They used to differ by one; Compliance was the correct one.
-- [ ] Maintenance due today reads `0d`, not `1d -`
-- [ ] Something 30 days out reads `30d` and is blue, not amber
+      They used to differ by one; Compliance was the correct one. Needs a
+      currency rule configured to have anything to compare.
 - [ ] Badge colours still read: red past due, amber close, blue comfortable
 - [ ] Weather advisory still colours GO green, NO-GO red, anything else amber
 
+### Maintenance Due now lists both schedules and records
+
+The tile listed maintenance records only, so a schedule nobody had completed
+had no record behind it and never appeared. That is the case most likely to be
+overdue: an overdue Monthly Inspection was counted in the compliance header and
+absent from the tile named after it. Separately, the tile read a field the API
+does not send, so every row showed a dash and it had never displayed a
+countdown at all.
+
+- [ ] The most overdue item is at the top, in red, reading `31d overdue`
+      rather than `31d -`
+- [ ] Anything that exists as both a schedule and a record appears **once**
+- [ ] Up to five rows, ordered by how soon they are due
+- [ ] The counts match the Next Due column on the Maintenance page
+
+### The audit log expander
+
+- [ ] Expand a `bulk update` row: the detail appears **directly underneath it**,
+      not at the bottom of the table
+- [ ] It shows the values that were replaced, and the flight ids
+- [ ] An equipment checkout row expands to its full text rather than
+      `checked out sensor #1 to Kristina Carro...`
+- [ ] Hovering a truncated Details cell shows the whole line
+
 ## 3. Flight log import
 
-Three parser defects were fixed. If you have any of these files, import one.
+**Airdata JSON import had never worked, in any version.** Detection read only
+the first 5000 characters of the file and choked on the fragment, so every real
+export fell through and was parsed as a Litchi CSV, finding nothing. Underneath
+that, the timestamps were in a format nothing recognised, so a flight would have
+had no date and no duration anyway.
+
+- [ ] A single `Skydio-*.json` file imports, with telemetry, a date and a
+      duration
+- [ ] Open the flight: the map draws a track. That proves the points reached
+      the telemetry database, not just that the parse worked.
+- [ ] The **whole export zip** imports. Expect around four minutes, `total`
+      matching the file count, and nearly all of them skipped as duplicates if
+      the flights already exist.
+- [ ] While that runs, use the app in another tab. It stays responsive; a long
+      import used to block every other request.
+- [ ] Import the same file twice: the second reports a duplicate and creates
+      nothing
+
+Three other parser defects, if you have the files:
 
 - [ ] A **DJI** `.txt` whose header uses `CUSTOM.date` (no `DateTime(utc)`)
       now imports with telemetry. It previously imported zero points.
@@ -73,8 +114,8 @@ Three parser defects were fixed. If you have any of these files, import one.
       never being read.
 - [ ] A log with a truncated final row imports rather than failing outright
 - [ ] BRINC CSV import still behaves as it did: unmatched drones listed,
-      created pilots named, zero-duration rows reported
-- [ ] Importing the same file twice still reports the second as a duplicate
+      created pilots named, zero-duration rows reported. Nothing in the BRINC
+      path changed this week.
 
 ## 4. Documents
 
@@ -141,6 +182,14 @@ restarting; that image is untouched and still there.
 
 ## Known and deliberate
 
+- **Upload caps.** A single file is held to 50 MB, an archive to 500 MB, and
+  one file inside an archive to 50 MB. The archive is streamed to disk and its
+  entries read one at a time, so a 209 MB export costs about 20 MB of memory.
+  Above 500 MB it refuses with a clear message rather than failing. The real
+  ceiling is time rather than size: 209 MB took four minutes, and the proxy
+  gives up at ten. Making size stop mattering entirely means running the import
+  in the background with progress, which is the next piece of work rather than
+  part of this one.
 - **Sonar shows ~60 open issues.** 36 are cognitive-complexity findings in
   `reports.py`, `export.py`, `skydio.py` and others, sitting at 29% to 69%
   coverage. Refactoring those without tests first is how compliance reporting
