@@ -32,8 +32,8 @@ describe('TopBar', () => {
   it('opens the theme menu and switches the active theme', async () => {
     const { user } = renderWithProviders(<TopBar title="Dashboard" />)
 
-    // Default theme is "Dark"; its name shows on the trigger.
-    const trigger = screen.getByRole('button', { name: /Dark/ })
+    // Default theme is "Sandstone"; its name shows on the trigger.
+    const trigger = screen.getByRole('button', { name: /Sandstone/ })
     await user.click(trigger)
 
     // Theme options appear in the dropdown.

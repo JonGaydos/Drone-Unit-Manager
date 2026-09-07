@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     # generous and stops an archive that claims to decompress to gigabytes.
     MAX_ARCHIVE_ENTRY_SIZE: int = 50 * 1024 * 1024
     TRUST_PROXY_HEADERS: bool = True  # Honor X-Forwarded-For/X-Real-IP (behind a trusted reverse proxy)
+    # The interactive API docs (/docs, /redoc, /openapi.json). Off in
+    # production so the full API surface is not handed out unauthenticated;
+    # set true in development to get them back.
+    EXPOSE_API_DOCS: bool = False
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

@@ -25,6 +25,10 @@ export const THEMES = [
   { id: 'field-sage', name: 'Field Sage' },
 ]
 
+// What a new install shows before anyone picks their own. A per-viewer
+// choice in localStorage overrides it; this is only the starting point.
+export const DEFAULT_THEME = 'sandstone'
+
 /**
  * Provides theme state and setter to the component tree.
  * Applies the theme as a data attribute on the document root element.
@@ -34,7 +38,7 @@ export const THEMES = [
  */
 export function ThemeProvider({ children }) {
   const [currentTheme, setCurrentTheme] = useState(() => {
-    return localStorage.getItem('theme') || 'dark'
+    return localStorage.getItem('theme') || DEFAULT_THEME
   })
 
   useEffect(() => {
