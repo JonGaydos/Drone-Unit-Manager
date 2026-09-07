@@ -245,15 +245,17 @@ def flights_by_purpose(
     user: CurrentUser,
     date_from: date | None = None,
     date_to: date | None = None):
-    q = db.query(
-        func.coalesce(Flight.purpose, "Unknown").label("purpose"),
-        func.count(Flight.id).label("count"),
-    ).filter(counted_flight_clause())
+    # Group by the expression, not by the string "purpose": grouping by the
+    # name resolves to the raw column, so NULL and "" would split into two
+    # rows that both read "Unspecified".
+    purpose = func.coalesce(func.nullif(Flight.purpose, ""), "Unspecified")
+    q = db.query(purpose.label("purpose"), func.count(Flight.id).label("count")
+                 ).filter(counted_flight_clause())
     if date_from:
         q = q.filter(Flight.date >= date_from)
     if date_to:
         q = q.filter(Flight.date <= date_to)
-    rows = q.group_by("purpose").order_by(func.count(Flight.id).desc()).all()
+    rows = q.group_by(purpose).order_by(func.count(Flight.id).desc()).all()
     return [FlightsByPurpose(purpose=r.purpose, count=r.count) for r in rows]
 
 
@@ -271,11 +273,11 @@ def flights_by_year_purpose(
     db: DBSession,
     user: CurrentUser,
 ):
+    purpose = func.coalesce(func.nullif(Flight.purpose, ""), "Unspecified")
+    year = extract("year", Flight.date)
     rows = db.query(
-        extract("year", Flight.date).label("year"),
-        func.coalesce(Flight.purpose, "Unknown").label("purpose"),
-        func.count(Flight.id).label("count"),
-    ).filter(counted_flight_clause(), Flight.date.isnot(None)).group_by("year", "purpose").order_by("year", "purpose").all()
+        year.label("year"), purpose.label("purpose"), func.count(Flight.id).label("count"),
+    ).filter(counted_flight_clause(), Flight.date.isnot(None)).group_by(year, purpose).order_by(year, purpose).all()
     return [FlightsByYearPurpose(year=int(r.year), purpose=r.purpose, count=r.count) for r in rows]
 
 
@@ -405,11 +407,12 @@ def pilot_performance(pilot_id: int, db: DBSession, user: CurrentUser):
         for r in month_rows
     ]
 
-    # Flights by purpose (NULL and "" both fold into "Unassigned")
+    # Flights by purpose (NULL and "" both fold into "Unspecified",
+    # kept distinct from the real, selectable "Unknown" purpose)
+    purpose = func.coalesce(func.nullif(Flight.purpose, ""), "Unspecified")
     purpose_rows = db.query(
-        func.coalesce(func.nullif(Flight.purpose, ""), "Unassigned").label("purpose"),
-        func.count(Flight.id).label("count"),
-    ).filter(counted_flight_clause(), Flight.pilot_id == pilot_id).group_by("purpose").order_by(
+        purpose.label("purpose"), func.count(Flight.id).label("count"),
+    ).filter(counted_flight_clause(), Flight.pilot_id == pilot_id).group_by(purpose).order_by(
         func.count(Flight.id).desc()
     ).all()
     flights_by_purpose = [{"purpose": r.purpose, "count": r.count} for r in purpose_rows]
