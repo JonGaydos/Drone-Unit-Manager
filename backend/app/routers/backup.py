@@ -251,7 +251,12 @@ def _write_telemetry(zf: zipfile.ZipFile, expected: int) -> int:
     written = 0
     tel_db = _telemetry_session()
     try:
-        with zf.open(TELEMETRY_FILE, "w") as handle:
+        # force_zip64: writing to a stream means the size is not known when the
+        # entry header is written, and zipfile refuses anything past 2 GiB
+        # unless told in advance. A real instance passes that: the export this
+        # was found on holds 2.47 GB of telemetry. writestr did not need it
+        # because it had the finished bytes to measure.
+        with zf.open(TELEMETRY_FILE, "w", force_zip64=True) as handle:
             handle.write(b"[")
             query = tel_db.query(TelemetryPoint).execution_options(stream_results=True)
             for row in query.yield_per(TELEMETRY_BATCH):
