@@ -121,10 +121,18 @@ async def lifespan(app: FastAPI):
     stop_scheduler()
 
 
+# The interactive API docs hand an unauthenticated visitor the entire API
+# surface -- every endpoint, parameter and schema -- as a map. Useful in
+# development, free reconnaissance in production. Off unless EXPOSE_API_DOCS is
+# set, in which case the OpenAPI schema and both doc UIs come back.
+_docs_on = settings.EXPOSE_API_DOCS
 app = FastAPI(
     title=APP_TITLE,
     version=APP_VERSION,
     lifespan=lifespan,
+    docs_url="/docs" if _docs_on else None,
+    redoc_url="/redoc" if _docs_on else None,
+    openapi_url="/openapi.json" if _docs_on else None,
 )
 
 # A wildcard origin combined with credentialed requests is rejected by browsers

@@ -25,9 +25,9 @@ describe('useTheme guard', () => {
 })
 
 describe('default theme', () => {
-  it('defaults to "dark" when nothing is stored', () => {
+  it('defaults to "sandstone" when nothing is stored', () => {
     const { result } = renderTheme()
-    expect(result.current.theme).toBe('dark')
+    expect(result.current.theme).toBe('sandstone')
   })
 
   it('initializes from localStorage when a theme is stored', () => {
@@ -38,8 +38,8 @@ describe('default theme', () => {
 
   it('applies the theme to the document root and persists it on mount', () => {
     renderTheme()
-    expect(document.documentElement.dataset.theme).toBe('dark')
-    expect(localStorage.getItem('theme')).toBe('dark')
+    expect(document.documentElement.dataset.theme).toBe('sandstone')
+    expect(localStorage.getItem('theme')).toBe('sandstone')
   })
 })
 
