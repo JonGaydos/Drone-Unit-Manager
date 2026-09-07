@@ -246,7 +246,7 @@ export default function FlightDetailPage() {
               Approve Flight
             </button>
           )}
-          {isAdmin && !editing && flight.external_id && (
+          {isAdmin && !editing && (
             <button
               onClick={async () => {
                 setRefreshing(true)
@@ -268,9 +268,11 @@ export default function FlightDetailPage() {
                   setRefreshing(false)
                 }
               }}
-              disabled={refreshing}
-              className="flex items-center gap-2 px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90 disabled:opacity-50"
-              title="Fetch latest data from Skydio API for this flight"
+              disabled={refreshing || !flight.can_refresh}
+              className="flex items-center gap-2 px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+              title={flight.can_refresh
+                ? "Fetch latest data from the drone's provider API for this flight"
+                : "This drone has no connected API to refresh from"}
             >
               {refreshing ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
               Refresh from API
