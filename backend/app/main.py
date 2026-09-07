@@ -152,13 +152,35 @@ app.add_middleware(
 )
 
 
+# The app is served by uvicorn directly -- there is no nginx in the container --
+# so security headers have to be set here rather than at a proxy. Applied to
+# every response, the API and the SPA files the app also hosts. HSTS is included
+# because production is reached over HTTPS (Cloudflare); it is inert on plain
+# HTTP, so it does no harm to a LAN-only or http deployment.
+SECURITY_HEADERS = {
+    "X-Frame-Options": "SAMEORIGIN",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Strict-Transport-Security": "max-age=15768000",
+    "Content-Security-Policy": (
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob: https:; connect-src 'self'; font-src 'self' data:; "
+        "frame-ancestors 'self'; base-uri 'self'; object-src 'none'"
+    ),
+}
+
+
 @app.middleware("http")
 async def add_request_id(request: Request, call_next):
-    """Add a unique request ID to every request for tracing."""
+    """Tag every response with a request id for tracing, and the security
+    headers. One middleware so both are set on every path, including the static
+    SPA the app serves."""
     request_id = str(uuid4())
     request.state.request_id = request_id
     response = await call_next(request)
     response.headers["X-Request-ID"] = request_id
+    for header, value in SECURITY_HEADERS.items():
+        response.headers.setdefault(header, value)
     return response
 
 
