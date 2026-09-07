@@ -90,6 +90,24 @@ def test_the_manifest_counts_the_rows(db, telemetry_db):
     assert manifest["tables"]["telemetry_points"] == 42
 
 
+def test_an_entry_larger_than_two_gibibytes_can_be_written(db, telemetry_db, monkeypatch):
+    """Streaming means the size is unknown when the entry header is written, and
+    zipfile refuses to go past 2 GiB unless told in advance. writestr never hit
+    this because it had the finished bytes to measure.
+
+    A real instance passes that mark: the export this was found on holds 2.47 GB
+    of telemetry. Rather than write two gigabytes here, the limit is lowered so
+    the same refusal happens over a few hundred kilobytes.
+    """
+    import zipfile
+    monkeypatch.setattr(zipfile, "ZIP64_LIMIT", 4096)
+    _seed(telemetry_db, 2_000)
+
+    spooled, _ = build_backup_archive(db, include_telemetry=True)
+
+    assert len(_telemetry_from(spooled)) == 2_000
+
+
 # 2. And it does not hold the table ------------------------------------------
 
 def test_memory_does_not_scale_with_the_number_of_rows(db, telemetry_db):
