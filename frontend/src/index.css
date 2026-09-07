@@ -1,4 +1,7 @@
-@import "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+/* Bundle Leaflet's stylesheet with the app instead of pulling it from
+   unpkg.com, so the maps render offline or behind a firewall -- and so the
+   app's Content-Security-Policy (style-src 'self') does not block it. */
+@import "leaflet/dist/leaflet.css";
 @import "tailwindcss";
 
 @custom-variant dark (&:where(.dark, .dark *));
