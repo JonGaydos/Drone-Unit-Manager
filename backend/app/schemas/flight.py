@@ -148,6 +148,7 @@ class FlightOut(BaseModel):
     updated_at: datetime | None = None
     pilot_name: str | None = None
     vehicle_name: str | None = None
+    can_refresh: bool = False
 
     model_config = {"from_attributes": True}
 

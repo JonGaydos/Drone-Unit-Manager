@@ -21,6 +21,44 @@ from app.schemas.flight import (
 router = APIRouter(prefix="/api/flights", tags=["flights"])
 
 
+def _refresh_capable_providers() -> set[str]:
+    """Registered providers that can look up a single flight's live detail.
+
+    A provider is refresh-capable only if it implements get_flight_detail; the
+    abstract base does not, so a sync-only provider is excluded automatically.
+    """
+    from app.integrations import registry
+    capable = set()
+    for name in registry.list_providers():
+        if hasattr(registry.get_provider(name), "get_flight_detail"):
+            capable.add(name)
+    return capable
+
+
+def _refresh_provider_name(flight: Flight) -> str | None:
+    """The provider that can refresh this flight, following the drone.
+
+    The drone's own provider wins over the flight's import source, so a Skydio
+    vehicle whose flights arrived through Airdata or Excel still refreshes,
+    while a BRINC flight (no live API) does not. Falls back to the vehicle
+    manufacturer, then the flight's recorded provider.
+    """
+    capable = _refresh_capable_providers()
+    candidates = []
+    if flight.vehicle:
+        if flight.vehicle.api_provider:
+            candidates.append(flight.vehicle.api_provider)
+        if flight.vehicle.manufacturer:
+            candidates.append(flight.vehicle.manufacturer)
+    if flight.api_provider:
+        candidates.append(flight.api_provider)
+    for candidate in candidates:
+        name = candidate.strip().lower()
+        if name in capable:
+            return name
+    return None
+
+
 def _flight_to_out(flight: Flight) -> FlightOut:
     pilot_name = None
     if flight.pilot:
@@ -28,7 +66,13 @@ def _flight_to_out(flight: Flight) -> FlightOut:
     vehicle_name = None
     if flight.vehicle:
         vehicle_name = flight.vehicle.nickname or f"{flight.vehicle.manufacturer} {flight.vehicle.model}"
-    return FlightOut.model_validate({**flight.__dict__, "pilot_name": pilot_name, "vehicle_name": vehicle_name})
+    can_refresh = bool(flight.external_id) and _refresh_provider_name(flight) is not None
+    return FlightOut.model_validate({
+        **flight.__dict__,
+        "pilot_name": pilot_name,
+        "vehicle_name": vehicle_name,
+        "can_refresh": can_refresh,
+    })
 
 
 def _purge_flight_references(db, ids: list[int]) -> None:
@@ -435,28 +479,34 @@ def _refresh_telemetry(flight: Flight, provider, creds, updated_fields: list, lo
 
 @router.post("/{flight_id}/refresh", responses=responses(400, 401, 404, 502))
 def refresh_flight_from_api(flight_id: int, db: DBSession, admin: AdminUser):
-    """Fetch fresh data from Skydio API for a single flight."""
+    """Fetch fresh data from the drone's provider API for a single flight."""
     import logging
-    from app.integrations.skydio import SkydioProvider
+    from app.integrations import registry
     from app.services.sync_manager import _build_creds
 
     logger = logging.getLogger(__name__)
 
-    flight = db.query(Flight).filter(Flight.id == flight_id).first()
+    flight = db.query(Flight).options(
+        joinedload(Flight.vehicle)
+    ).filter(Flight.id == flight_id).first()
     if not flight:
         raise HTTPException(status_code=404, detail=FLIGHT_NOT_FOUND)
     if not flight.external_id:
         raise HTTPException(status_code=400, detail="Flight has no external ID to look up")
 
-    creds = _build_creds(db, "skydio")
-    if not creds.api_token:
-        raise HTTPException(status_code=400, detail="Skydio API not configured")
+    provider_name = _refresh_provider_name(flight)
+    if not provider_name:
+        raise HTTPException(status_code=400, detail="This drone has no connected API to refresh from")
 
-    provider = SkydioProvider()
+    creds = _build_creds(db, provider_name)
+    if not creds.api_token:
+        raise HTTPException(status_code=400, detail=f"{provider_name.title()} API not configured")
+
+    provider = registry.get_provider(provider_name)
     detail = provider.get_flight_detail(creds, flight.external_id)
 
     if not detail:
-        raise HTTPException(status_code=502, detail="Could not fetch flight data from Skydio")
+        raise HTTPException(status_code=502, detail="Could not fetch flight data from the provider")
 
     updated_fields = []
 
