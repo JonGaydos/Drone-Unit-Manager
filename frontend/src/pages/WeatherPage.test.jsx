@@ -35,6 +35,23 @@ function mockMount(overrides = {}) {
   )
 }
 
+// Mount with the org settings and a briefing handler that records the lat,lon
+// it was queried for. Extra handlers (e.g. /api/geocode) are appended. Returns
+// the array the briefing handler pushes "lat,lon" strings into.
+function mockBriefingRecorder(extra = []) {
+  const requested = []
+  server.use(
+    http.get('/api/settings', () => HttpResponse.json(SETTINGS)),
+    http.get('/api/weather/briefing', ({ request }) => {
+      const u = new URL(request.url)
+      requested.push(`${u.searchParams.get('lat')},${u.searchParams.get('lon')}`)
+      return HttpResponse.json(BRIEFING)
+    }),
+    ...extra,
+  )
+  return requested
+}
+
 describe('WeatherPage', () => {
   it('renders without crashing', async () => {
     mockMount()
@@ -63,15 +80,7 @@ describe('WeatherPage', () => {
   })
 
   it('fetches a new briefing for typed coordinates on submit', async () => {
-    const requested = []
-    server.use(
-      http.get('/api/settings', () => HttpResponse.json(SETTINGS)),
-      http.get('/api/weather/briefing', ({ request }) => {
-        const u = new URL(request.url)
-        requested.push(`${u.searchParams.get('lat')},${u.searchParams.get('lon')}`)
-        return HttpResponse.json(BRIEFING)
-      }),
-    )
+    const requested = mockBriefingRecorder()
     const { user } = renderWithProviders(<WeatherPage />, { role: 'admin' })
     await screen.findByText('GO')
 
@@ -85,20 +94,13 @@ describe('WeatherPage', () => {
   })
 
   it('geocodes a typed address, then fetches the briefing for the result', async () => {
-    const requested = []
     let geocodedFor = null
-    server.use(
-      http.get('/api/settings', () => HttpResponse.json(SETTINGS)),
+    const requested = mockBriefingRecorder([
       http.get('/api/geocode', ({ request }) => {
         geocodedFor = new URL(request.url).searchParams.get('q')
         return HttpResponse.json({ lat: 30.371, lon: -86.203, display_name: 'Freeport, FL 32439' })
       }),
-      http.get('/api/weather/briefing', ({ request }) => {
-        const u = new URL(request.url)
-        requested.push(`${u.searchParams.get('lat')},${u.searchParams.get('lon')}`)
-        return HttpResponse.json(BRIEFING)
-      }),
-    )
+    ])
     const { user } = renderWithProviders(<WeatherPage />, { role: 'admin' })
     await screen.findByText('GO')
 
