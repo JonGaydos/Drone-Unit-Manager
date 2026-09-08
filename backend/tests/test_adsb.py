@@ -69,7 +69,8 @@ def test_records_map_to_the_apps_shape(client, admin_headers, mock_httpx):
     assert a["icao"] == "A1B2C3"          # hex upper-cased
     assert a["callsign"] == "N123AB"       # flight trimmed
     assert a["aircraft_type"] == "C172"
-    assert a["lat"] == 30.4 and a["lon"] == -86.1
+    assert a["lat"] == 30.4
+    assert a["lon"] == -86.1
     assert a["alt_baro"] == 3500
     assert a["track"] == 275.0
 
