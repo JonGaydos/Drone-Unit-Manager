@@ -49,3 +49,33 @@ def geocode(q: Annotated[str, Query(min_length=2, max_length=200)], user: Curren
     except (KeyError, TypeError, ValueError):
         raise HTTPException(status_code=404, detail="No usable coordinates for that address")
     return {"lat": lat, "lon": lon, "display_name": r.get("display_name", q)}
+
+
+@router.get("/reverse", responses=responses(404, 502))
+def reverse_geocode(
+    lat: Annotated[float, Query(ge=-90, le=90)],
+    lon: Annotated[float, Query(ge=-180, le=180)],
+    user: CurrentUser,
+):
+    """Reverse-geocode coordinates to a display address via Nominatim.
+
+    Returns ``{lat, lon, display_name}``. Raises 404 when there is no address
+    for the point and 502 on any upstream/network error. Lets the weather
+    location picker fill the address field when the user clicks the map.
+    """
+    try:
+        resp = httpx.get(
+            "https://nominatim.openstreetmap.org/reverse",
+            params={"lat": lat, "lon": lon, "format": "jsonv2", "zoom": 18, "addressdetails": 0},
+            headers={"User-Agent": "DroneUnitManager/1.0"},
+            timeout=8.0,
+        )
+        resp.raise_for_status()
+        result = resp.json()
+    except Exception as e:
+        logger.warning("Reverse geocode failed for %s,%s: %s", lat, lon, e)
+        raise HTTPException(status_code=502, detail="Geocoding service unavailable")
+    name = result.get("display_name") if isinstance(result, dict) else None
+    if not name:
+        raise HTTPException(status_code=404, detail="No address for those coordinates")
+    return {"lat": lat, "lon": lon, "display_name": name}

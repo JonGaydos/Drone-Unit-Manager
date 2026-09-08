@@ -16,6 +16,7 @@ Nominatim is ALWAYS stubbed via the ``mock_httpx`` fixture (an
 import httpx
 
 GEOCODE_URL = "/api/geocode"
+REVERSE_URL = "/api/geocode/reverse"
 
 
 def test_geocode_requires_auth(client):
@@ -74,3 +75,41 @@ def test_geocode_bad_coordinates_returns_404_not_500(client, admin_headers, mock
     mock_httpx(handler)
     resp = client.get(GEOCODE_URL, params={"q": "Boston"}, headers=admin_headers)
     assert resp.status_code == 404
+
+
+# --- reverse geocode (coords -> address) -----------------------------------
+
+def test_reverse_requires_auth(client):
+    resp = client.get(REVERSE_URL, params={"lat": 30.37, "lon": -86.2})
+    assert resp.status_code == 401
+
+
+def test_reverse_returns_the_display_name(client, admin_headers, mock_httpx):
+    def handler(request):
+        assert "nominatim.openstreetmap.org/reverse" in str(request.url)
+        return httpx.Response(200, json={"display_name": "842 E State Hwy 20, Freeport, FL"})
+
+    mock_httpx(handler)
+    resp = client.get(REVERSE_URL, params={"lat": 30.371, "lon": -86.203}, headers=admin_headers)
+
+    assert resp.status_code == 200
+    assert resp.json() == {"lat": 30.371, "lon": -86.203, "display_name": "842 E State Hwy 20, Freeport, FL"}
+
+
+def test_reverse_with_no_address_returns_404(client, admin_headers, mock_httpx):
+    """Nominatim answers an ocean point with an error object, not a name."""
+    mock_httpx(lambda request: httpx.Response(200, json={"error": "Unable to geocode"}))
+    resp = client.get(REVERSE_URL, params={"lat": 0, "lon": 0}, headers=admin_headers)
+    assert resp.status_code == 404
+
+
+def test_reverse_upstream_error_returns_502(client, admin_headers, mock_httpx):
+    mock_httpx(lambda request: httpx.Response(503, text="service unavailable"))
+    resp = client.get(REVERSE_URL, params={"lat": 30.37, "lon": -86.2}, headers=admin_headers)
+    assert resp.status_code == 502
+
+
+def test_reverse_rejects_out_of_range_coordinates(client, admin_headers):
+    """The Query bounds guard bad input before any upstream call (422)."""
+    resp = client.get(REVERSE_URL, params={"lat": 200, "lon": -86.2}, headers=admin_headers)
+    assert resp.status_code == 422

@@ -83,4 +83,34 @@ describe('WeatherPage', () => {
     await screen.findByText('GO')
     expect(requested.some(r => r.startsWith('40.7128,-74.006'))).toBe(true)
   })
+
+  it('geocodes a typed address, then fetches the briefing for the result', async () => {
+    const requested = []
+    let geocodedFor = null
+    server.use(
+      http.get('/api/settings', () => HttpResponse.json(SETTINGS)),
+      http.get('/api/geocode', ({ request }) => {
+        geocodedFor = new URL(request.url).searchParams.get('q')
+        return HttpResponse.json({ lat: 30.371, lon: -86.203, display_name: 'Freeport, FL 32439' })
+      }),
+      http.get('/api/weather/briefing', ({ request }) => {
+        const u = new URL(request.url)
+        requested.push(`${u.searchParams.get('lat')},${u.searchParams.get('lon')}`)
+        return HttpResponse.json(BRIEFING)
+      }),
+    )
+    const { user } = renderWithProviders(<WeatherPage />, { role: 'admin' })
+    await screen.findByText('GO')
+
+    const input = screen.getByLabelText('Coordinates or Address')
+    await user.clear(input)
+    await user.type(input, 'Freeport FL 32439')
+    await user.click(screen.getByRole('button', { name: /Check Weather/ }))
+
+    await screen.findByText('GO')
+    expect(geocodedFor).toBe('Freeport FL 32439')
+    expect(requested.some(r => r.startsWith('30.371,-86.203'))).toBe(true)
+    // the resolved address replaces what was typed
+    expect(screen.getByLabelText('Coordinates or Address')).toHaveValue('Freeport, FL 32439')
+  })
 })
