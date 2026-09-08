@@ -103,9 +103,9 @@ export default function WeatherPage() {
     )
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    // Try to parse address input as coordinates
+    // Try to parse the input as coordinates first.
     const parts = addressInput.trim().split(/[,\s]+/)
     if (parts.length >= 2) {
       const lat = Number.parseFloat(parts[0])
@@ -116,11 +116,26 @@ export default function WeatherPage() {
         return
       }
     }
-    // Fall back to explicit coords
+    // Not coordinates: geocode it as an address.
+    const q = addressInput.trim()
+    if (q.length >= 2) {
+      setLoading(true)
+      try {
+        const r = await api.get('/geocode?q=' + encodeURIComponent(q))
+        setCoords({ lat: r.lat.toString(), lon: r.lon.toString() })
+        setAddressInput(r.display_name || q)
+        await fetchBriefing(r.lat, r.lon)
+      } catch (err) {
+        setLoading(false)
+        toast.error(err.message?.includes('No match') ? 'No match for that address' : 'Address lookup failed')
+      }
+      return
+    }
+    // Nothing usable typed: fall back to the explicit coordinate fields.
     if (coords.lat && coords.lon) {
       fetchBriefing(coords.lat, coords.lon)
     } else {
-      toast.error('Enter coordinates as "lat, lon" (e.g. 40.7128, -74.0060)')
+      toast.error('Enter an address, or coordinates as "lat, lon" (e.g. 40.7128, -74.0060)')
     }
   }
 
@@ -160,7 +175,7 @@ export default function WeatherPage() {
                   type="text"
                   value={addressInput}
                   onChange={e => setAddressInput(e.target.value)}
-                  placeholder="40.7128, -74.0060"
+                  placeholder="Address, or 40.7128, -74.0060"
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
@@ -168,7 +183,14 @@ export default function WeatherPage() {
               <LocationPickerMap
                 lat={coords.lat ? Number.parseFloat(coords.lat) : null}
                 lon={coords.lon ? Number.parseFloat(coords.lon) : null}
-                onSelect={(newLat, newLon) => setCoords({ lat: newLat.toFixed(6), lon: newLon.toFixed(6) })}
+                onSelect={async (newLat, newLon) => {
+                  setCoords({ lat: newLat.toFixed(6), lon: newLon.toFixed(6) })
+                  // Fill the address field from the clicked point (best effort).
+                  try {
+                    const r = await api.get(`/geocode/reverse?lat=${newLat}&lon=${newLon}`)
+                    if (r?.display_name) setAddressInput(r.display_name)
+                  } catch { /* leave the address as-is if reverse lookup fails */ }
+                }}
                 height="250px"
               />
 

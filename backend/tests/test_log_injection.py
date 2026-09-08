@@ -28,7 +28,7 @@ def test_a_geocode_failure_logs_the_query_on_one_line(client, db, admin_headers,
         resp = client.get("/api/geocode", params={"q": FORGED}, headers=admin_headers)
 
     assert resp.status_code == 502
-    records = [r for r in caplog.records if "Geocode lookup failed" in r.getMessage()]
+    records = [r for r in caplog.records if "search failed" in r.getMessage()]
     assert records, "the failure was not logged at all"
     for record in records:
         assert LF not in record.getMessage(), "a newline survived into the log line"

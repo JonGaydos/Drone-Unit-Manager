@@ -1,7 +1,10 @@
 """ADS-B aircraft tracking proxy endpoint.
 
-Proxies requests to the airplanes.live API with server-side caching
-to respect rate limits and avoid CORS issues.
+Proxies requests to the adsb.lol API with server-side caching to respect rate
+limits and avoid CORS issues. adsb.lol is an open, free ADS-B feed with no API
+key; it serves the same readsb ``/v2/point`` schema that airplanes.live did.
+The app moved off airplanes.live because that service began returning 403 to
+server-side requests, directing programmatic users to contact them first.
 """
 
 import logging
@@ -17,10 +20,14 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/adsb", tags=["adsb"])
 
-# In-memory cache to respect airplanes.live 1 req/sec rate limit
+# In-memory cache to keep polling light on the upstream feed
 _cache = {"data": None, "timestamp": 0, "key": ""}
 _cache_lock = threading.Lock()
 _CACHE_TTL = 5  # seconds
+
+# adsb.lol asks callers to send a descriptive User-Agent.
+_ADSB_BASE = "https://api.adsb.lol/v2/point"
+_USER_AGENT = "DroneUnitManager (self-hosted drone fleet manager)"
 
 
 @router.get("/nearby")
@@ -34,9 +41,9 @@ def get_nearby_aircraft(
 
     radius_nm: Annotated[int, Query(ge=5, le=250, description="Search radius in nautical miles")] = 30,
 ):
-    """Fetch nearby aircraft positions from the airplanes.live ADS-B API.
+    """Fetch nearby aircraft positions from the adsb.lol ADS-B API.
 
-    Results are cached for 5 seconds to respect the API's 1 req/sec rate limit.
+    Results are cached for 5 seconds to keep polling light on the upstream feed.
     Aircraft without position data are filtered out.
 
     Args:
@@ -62,10 +69,10 @@ def get_nearby_aircraft(
                 "cache_age_seconds": round(now - _cache["timestamp"], 1),
             }
 
-    # Fetch from airplanes.live API (longer timeout for large radius queries)
-    url = f"https://api.airplanes.live/v2/point/{lat}/{lon}/{radius_nm}"
+    # Fetch from adsb.lol (longer timeout for large radius queries)
+    url = f"{_ADSB_BASE}/{lat}/{lon}/{radius_nm}"
     try:
-        with httpx.Client(timeout=30.0) as client:
+        with httpx.Client(timeout=30.0, headers={"User-Agent": _USER_AGENT}) as client:
             resp = client.get(url)
             resp.raise_for_status()
             data = resp.json()
