@@ -11,11 +11,20 @@ hours. Three behaviors are pinned:
   ``Flight.vehicle_id`` would have caused.
 """
 
-from datetime import date
+from datetime import date, timedelta
 
 from app.models.flight import Flight
 from app.models.pilot import Pilot
 from app.models.vehicle import Vehicle
+from app.models.mission_log import MissionLog
+from app.models.mission_log_pilot import MissionLogPilot
+from app.models.training_log import TrainingLog
+from app.models.training_log_pilot import TrainingLogPilot
+from app.models.certification import CertificationType, PilotCertification
+from app.models.battery import Battery
+from app.models.maintenance import MaintenanceRecord
+from app.models.incident import Incident
+from app.models.operating_authority import OperatingAuthority
 
 GENERATE_URL = "/api/reports/generate"
 
@@ -462,3 +471,340 @@ def test_pdf_renders_end_to_end_without_a_logo():
     body = buf.read()
     assert body.startswith(b"%PDF"), "did not produce a PDF"
     assert len(body) > 1000
+
+
+# ---------------------------------------------------------------------------
+# Coverage for the previously untested report types: flight_summary,
+# pilot_certifications, battery_status, maintenance_history, and the annual
+# unit report. Characterization tests: they pin the CURRENT output so a later
+# refactor of these (complex, compliance-critical) builders cannot change it
+# unnoticed.
+# ---------------------------------------------------------------------------
+
+def _seed_mission(db, when, man_hours, reason="Search", pilots=None):
+    m = MissionLog(date=when, title="Mission", reason=reason, man_hours=man_hours)
+    db.add(m); db.commit(); db.refresh(m)
+    for pid, hrs in (pilots or []):
+        db.add(MissionLogPilot(mission_log_id=m.id, pilot_id=pid, hours=hrs))
+    db.commit()
+    return m
+
+
+def _seed_training(db, when, man_hours, ttype="Recurrent", pilots=None):
+    t = TrainingLog(date=when, title="Training", training_type=ttype, man_hours=man_hours)
+    db.add(t); db.commit(); db.refresh(t)
+    for pid, hrs in (pilots or []):
+        db.add(TrainingLogPilot(training_log_id=t.id, pilot_id=pid, hours=hrs))
+    db.commit()
+    return t
+
+
+def _seed_cert(db, pilot_id, name, status, issue=None, expires=None, sort_order=0):
+    ct = db.query(CertificationType).filter(CertificationType.name == name).first()
+    if not ct:
+        ct = CertificationType(name=name, category="faa", sort_order=sort_order)
+        db.add(ct); db.commit(); db.refresh(ct)
+    pc = PilotCertification(pilot_id=pilot_id, certification_type_id=ct.id, status=status,
+                            issue_date=issue, expiration_date=expires)
+    db.add(pc); db.commit(); db.refresh(pc)
+    return pc
+
+
+def _seed_battery(db, serial, status="active", health=None, cycles=0):
+    b = Battery(serial_number=serial, status=status, health_pct=health, cycle_count=cycles,
+                manufacturer="Skydio", model="X10", vehicle_model="X10")
+    db.add(b); db.commit(); db.refresh(b)
+    return b
+
+
+def _seed_maint(db, when, mtype, cost, entity_type="vehicle", entity_id=1, desc="work"):
+    r = MaintenanceRecord(entity_type=entity_type, entity_id=entity_id, maintenance_type=mtype,
+                          description=desc, performed_date=when, cost=cost, performed_by="Tech")
+    db.add(r); db.commit(); db.refresh(r)
+    return r
+
+
+def _seed_incident(db, when, severity="minor", category="near_miss", status="open"):
+    i = Incident(date=when, title="Inc", severity=severity, category=category,
+                 description="d", status=status, report_type="incident")
+    db.add(i); db.commit(); db.refresh(i)
+    return i
+
+
+def _seed_authority(db, identifier="COA-1", issue=None, expiry=None, record_status="active"):
+    a = OperatingAuthority(authority_type="coa", identifier=identifier, title="Statewide COA",
+                           issue_date=issue, expiry_date=expiry, record_status=record_status)
+    db.add(a); db.commit(); db.refresh(a)
+    return a
+
+
+def _mark_uncounted(db, flight):
+    flight.counts_toward_totals = False
+    db.commit()
+
+
+# --- flight_summary --------------------------------------------------------
+
+def test_flight_summary_counts_only_unit_flights_by_default(client, db, pilot_headers):
+    ana = _seed_pilot(db, "Ana", "Alvarez")
+    one = _seed_vehicle(db, "SN-1", "One")
+    _seed_flight(db, ana.id, one.id, 3600)
+    _mark_uncounted(db, _seed_flight(db, ana.id, one.id, 1800))
+
+    payload = _generate(client, pilot_headers, "flight_summary")
+
+    assert payload["summary"]["total_flights"] == 1
+    assert payload["summary"]["total_hours"] == 1.0
+    assert payload["columns"][0] == "Date"
+    row = payload["rows"][0]
+    assert row["pilot"] == "Ana Alvarez"
+    assert row["vehicle"] == "Skydio X2E"
+    assert row["duration_min"] == 60.0
+
+
+def test_flight_summary_include_non_unit_adds_them_back(client, db, pilot_headers):
+    ana = _seed_pilot(db, "Ana", "Alvarez")
+    one = _seed_vehicle(db, "SN-1", "One")
+    _seed_flight(db, ana.id, one.id, 3600)
+    _mark_uncounted(db, _seed_flight(db, ana.id, one.id, 1800))
+
+    payload = _generate(client, pilot_headers, "flight_summary", include_non_unit=True)
+
+    assert payload["summary"]["total_flights"] == 2
+    assert payload["summary"]["total_hours"] == 1.5
+
+
+def test_flight_summary_date_range_filters(client, db, pilot_headers):
+    ana = _seed_pilot(db, "Ana", "Alvarez")
+    one = _seed_vehicle(db, "SN-1", "One")
+    _seed_flight(db, ana.id, one.id, 3600, flight_date=date(2025, 1, 10))
+    _seed_flight(db, ana.id, one.id, 3600, flight_date=date(2025, 6, 10))
+
+    payload = _generate(client, pilot_headers, "flight_summary",
+                        date_from="2025-06-01", date_to="2025-06-30")
+
+    assert payload["summary"]["total_flights"] == 1
+
+
+# --- pilot_certifications --------------------------------------------------
+
+def test_pilot_certifications_counts_and_appends_authorities(client, db, pilot_headers):
+    ana = _seed_pilot(db, "Ana", "Alvarez")
+    _seed_cert(db, ana.id, "Part 107", "active", expires=date.today() + timedelta(days=200), sort_order=1)
+    _seed_cert(db, ana.id, "Night Waiver", "expired", expires=date.today() - timedelta(days=5), sort_order=2)
+    _seed_cert(db, ana.id, "Recurrent", "pending", sort_order=3)
+    _seed_authority(db)
+
+    payload = _generate(client, pilot_headers, "pilot_certifications")
+
+    s = payload["summary"]
+    assert s["total_pilots"] == 1
+    assert s["total_active"] == 1
+    assert s["total_expired"] == 1
+    assert s["total_pending"] == 1
+    assert [sec["title"] for sec in payload["sections"]] == ["Pilot Certifications", "Operating Authorities"]
+
+
+def test_pilot_certifications_days_until_expiry(client, db, pilot_headers):
+    ana = _seed_pilot(db, "Ana", "Alvarez")
+    _seed_cert(db, ana.id, "Part 107", "active", expires=date.today() + timedelta(days=30))
+
+    payload = _generate(client, pilot_headers, "pilot_certifications")
+
+    assert _rows_by(payload, "cert_name")["Part 107"]["days_until_expiry"] == 30
+
+
+# --- battery_status --------------------------------------------------------
+
+def test_battery_status_averages_exclude_unknown_health(client, db, pilot_headers):
+    _seed_battery(db, "B-1", status="active", health=90.0, cycles=100)
+    _seed_battery(db, "B-2", status="retired", health=70.0, cycles=200)
+    _seed_battery(db, "B-3", status="active", health=None, cycles=0)
+
+    payload = _generate(client, pilot_headers, "battery_status")
+
+    s = payload["summary"]
+    assert s["total_batteries"] == 3
+    assert s["active"] == 2
+    assert s["avg_health_pct"] == 80.0     # (90 + 70) / 2; the None is skipped
+    assert s["avg_cycles"] == 100.0        # (100 + 200 + 0) / 3
+
+
+# --- maintenance_history ---------------------------------------------------
+
+def test_maintenance_history_totals_and_by_type(client, db, pilot_headers):
+    _seed_maint(db, date(2025, 3, 1), "scheduled", 100.0)
+    _seed_maint(db, date(2025, 4, 1), "scheduled", 50.0)
+    _seed_maint(db, date(2025, 5, 1), "inspection", 0)
+
+    payload = _generate(client, pilot_headers, "maintenance_history")
+
+    s = payload["summary"]
+    assert s["total_records"] == 3
+    assert s["total_cost"] == "$150.00"
+    assert "scheduled: 2" in s["records_by_type"]
+    assert "inspection: 1" in s["records_by_type"]
+
+
+def test_maintenance_history_date_filter(client, db, pilot_headers):
+    _seed_maint(db, date(2025, 1, 1), "scheduled", 100.0)
+    _seed_maint(db, date(2025, 6, 1), "scheduled", 50.0)
+
+    payload = _generate(client, pilot_headers, "maintenance_history", date_from="2025-06-01")
+
+    assert payload["summary"]["total_records"] == 1
+
+
+# --- annual_unit_report ----------------------------------------------------
+
+def _seed_annual_year(db, year=2025):
+    ana = _seed_pilot(db, "Ana", "Alvarez")
+    ben = _seed_pilot(db, "Ben", "Boyd")
+    one = _seed_vehicle(db, "SN-1", "One")
+    _seed_flight(db, ana.id, one.id, 3600, flight_date=date(year, 2, 1))
+    _seed_flight(db, ben.id, one.id, 1800, flight_date=date(year, 3, 1))
+    _seed_mission(db, date(year, 2, 15), 5.0, reason="Search", pilots=[(ana.id, 2.5), (ben.id, 2.5)])
+    _seed_training(db, date(year, 4, 1), 4.0, ttype="Recurrent", pilots=[(ana.id, 4.0)])
+    _seed_incident(db, date(year, 5, 1), severity="minor", category="near_miss", status="open")
+    _seed_maint(db, date(year, 6, 1), "scheduled", 200.0)
+    _seed_authority(db, issue=date(year - 1, 1, 1), expiry=date(year + 1, 1, 1))
+    return ana, ben, one
+
+
+def _annual(client, headers, year=2025):
+    return _generate(client, headers, "annual_unit_report",
+                     date_from=f"{year}-01-01", date_to=f"{year}-12-31")
+
+
+def test_annual_report_has_all_sections_in_order(client, db, pilot_headers):
+    _seed_annual_year(db, 2025)
+    payload = _annual(client, pilot_headers, 2025)
+
+    assert [s["title"] for s in payload["sections"]] == [
+        "Executive Summary", "Operational Tempo", "Personnel Activity",
+        "Fleet Utilization", "Mission Activity", "Training Activity",
+        "Operating Authorities", "Compliance & Certifications",
+        "Maintenance Summary", "Incidents & Safety", "Year-over-Year Comparison",
+    ]
+
+
+def test_annual_report_headline_totals(client, db, pilot_headers):
+    _seed_annual_year(db, 2025)
+    s = _annual(client, pilot_headers, 2025)["summary"]
+
+    assert s["total_flights"] == 2
+    assert s["total_flight_hours"] == 1.5        # (3600 + 1800) / 3600
+    assert s["total_missions"] == 1
+    assert s["total_training_hours"] == 4.0
+    assert s["incidents_reported"] == 1
+
+
+def test_annual_report_personnel_activity_uses_per_pilot_hours(client, db, pilot_headers):
+    _seed_annual_year(db, 2025)
+    personnel = _section(_annual(client, pilot_headers, 2025), "Personnel Activity")
+
+    by = {r["pilot"]: r for r in personnel["rows"]}
+    assert by["Ana Alvarez"]["flight_hours"] == 1.0
+    assert by["Ana Alvarez"]["mission_hours"] == 2.5
+    assert by["Ana Alvarez"]["training_hours"] == 4.0
+    assert by["Ana Alvarez"]["total_hours"] == 7.5
+
+
+def test_annual_report_yoy_spans_five_years(client, db, pilot_headers):
+    _seed_annual_year(db, 2025)
+    yoy = _annual(client, pilot_headers, 2025)["rows"]
+
+    assert [r["year"] for r in yoy] == [2021, 2022, 2023, 2024, 2025]
+    y25 = next(r for r in yoy if r["year"] == 2025)
+    assert y25["flights"] == 2
+    assert y25["flight_hours"] == 1.5
+
+
+def test_annual_yoy_vehicle_count_respects_the_unit_filter(client, db, pilot_headers):
+    """A vehicle that only flew a non-counted flight is left out of the
+    Year-over-Year unique-vehicles count, consistent with the flight, hour and
+    pilot totals in the same row. Previously the flight-based columns applied
+    the counted-unit rule but the vehicle count did not, so a vendor-only
+    aircraft inflated the year's fleet count."""
+    ana = _seed_pilot(db, "Ana", "Alvarez")
+    one = _seed_vehicle(db, "SN-1", "One")
+    _mark_uncounted(db, _seed_flight(db, ana.id, one.id, 3600, flight_date=date(2025, 2, 1)))
+
+    y25 = next(r for r in _annual(client, pilot_headers, 2025)["rows"] if r["year"] == 2025)
+
+    assert y25["flights"] == 0            # excluded by the unit filter
+    assert y25["unique_vehicles"] == 0    # its vehicle is excluded too, consistently
+
+
+def test_annual_personnel_and_tempo_measure_mission_hours_differently(client, db, pilot_headers):
+    """By design the two sections report different mission-hour measures:
+    Operational Tempo sums log-level man_hours (total person-hours logged),
+    while Personnel Activity attributes per-pilot link hours. They can differ,
+    and this pins that intended distinction so a later change does not silently
+    conflate them."""
+    ana = _seed_pilot(db, "Ana", "Alvarez")
+    ben = _seed_pilot(db, "Ben", "Boyd")
+    _seed_mission(db, date(2025, 2, 1), man_hours=10.0, pilots=[(ana.id, 2.0), (ben.id, 3.0)])
+
+    payload = _annual(client, pilot_headers, 2025)
+    tempo_mission = sum(r["mission_hours"] for r in _section(payload, "Operational Tempo")["rows"])
+    personnel_mission = sum(r["mission_hours"] for r in _section(payload, "Personnel Activity")["rows"])
+
+    assert tempo_mission == 10.0          # log man_hours
+    assert personnel_mission == 5.0       # sum of per-pilot hours
+    assert tempo_mission != personnel_mission
+
+
+# --- export endpoints: PDF and per-pilot ZIP -------------------------------
+
+def test_generate_pdf_endpoint_returns_a_pdf(client, db, pilot_headers):
+    _fleet(db)
+    resp = client.post("/api/reports/generate/pdf",
+                       json={"report_type": "pilot_hours"}, headers=pilot_headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.headers["content-type"] == "application/pdf"
+    assert resp.content.startswith(b"%PDF")
+
+
+def test_generate_pdf_endpoint_renders_the_annual_report_with_charts(client, db, pilot_headers):
+    """The annual report drives the chart path (matplotlib) inside the PDF."""
+    _seed_annual_year(db, 2025)
+    resp = client.post("/api/reports/generate/pdf",
+                       json={"report_type": "annual_unit_report",
+                             "date_from": "2025-01-01", "date_to": "2025-12-31"},
+                       headers=pilot_headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.content.startswith(b"%PDF")
+    assert len(resp.content) > 1000
+
+
+def test_generate_pdf_endpoint_tolerates_an_unknown_report_type(client, db, pilot_headers):
+    """An unknown type still produces a (blank) PDF rather than erroring."""
+    resp = client.post("/api/reports/generate/pdf",
+                       json={"report_type": "does_not_exist"}, headers=pilot_headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.content.startswith(b"%PDF")
+
+
+def test_per_pilot_zip_returns_one_pdf_per_pilot(client, db, pilot_headers):
+    import io
+    import zipfile
+
+    ana = _seed_pilot(db, "Ana", "Alvarez")
+    one = _seed_vehicle(db, "SN-1", "One")
+    _seed_flight(db, ana.id, one.id, 3600, flight_date=date(2025, 2, 1))
+
+    resp = client.post("/api/reports/per-pilot/zip",
+                       json={"report_type": "per_pilot_annual_review",
+                             "date_from": "2025-01-01", "date_to": "2025-12-31",
+                             "pilot_ids": [ana.id]},
+                       headers=pilot_headers)
+
+    assert resp.status_code == 200, resp.text
+    assert resp.headers["content-type"] == "application/zip"
+    with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
+        names = zf.namelist()
+        assert len(names) == 1
+        assert names[0].endswith(".pdf")
+        assert "Ana_Alvarez" in names[0]
+        assert zf.read(names[0]).startswith(b"%PDF")

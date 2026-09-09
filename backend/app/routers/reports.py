@@ -1370,7 +1370,8 @@ def _annual_yoy_rows(db: Session, period_year: int, include_all: bool = False) -
         t_hrs = db.query(func.coalesce(func.sum(TrainingLog.man_hours), 0)).filter(TrainingLog.date.between(y_start, y_end)).scalar() or 0
         p_count = db.query(func.count(func.distinct(Flight.pilot_id))).filter(
             *_flight_conds(include_all, Flight.date.between(y_start, y_end))).scalar() or 0
-        v_count = db.query(func.count(func.distinct(Flight.vehicle_id))).filter(Flight.date.between(y_start, y_end)).scalar() or 0
+        v_count = db.query(func.count(func.distinct(Flight.vehicle_id))).filter(
+            *_flight_conds(include_all, Flight.date.between(y_start, y_end))).scalar() or 0
         rows.append({
             "year": y,
             "flights": f_count,
