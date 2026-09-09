@@ -314,6 +314,16 @@ function FlightInfoHeader({ flight, isSupervisor, onToggleTelemetry }) {
   )
 }
 
+/** The battery-serial read-only value: a link to the battery when the serial
+ *  matches one in the fleet, otherwise the bare serial (or a dash when unset). */
+function batterySerialDisplay(flight, batteries) {
+  if (!flight.battery_serial) return '—'
+  const bat = batteries.find(b => b.serial_number === flight.battery_serial)
+  return bat
+    ? <Link to={`/fleet/batteries/${bat.id}`} className="text-primary hover:underline">{flight.battery_serial}</Link>
+    : flight.battery_serial
+}
+
 /** The always-present cells of the info grid (pilot through carrier). Returns a
  *  fragment so each cell stays a direct child of the grid. */
 function FlightCoreFields({ editing, flight, editForm, setEditForm, pilots, vehicles, purposes, batteries, sensors }) {
@@ -393,10 +403,7 @@ function FlightCoreFields({ editing, flight, editForm, setEditForm, pilots, vehi
             </datalist>
           </>
         }
-        display={<p className="text-sm text-foreground">{flight.battery_serial ? (() => {
-          const bat = batteries.find(b => b.serial_number === flight.battery_serial)
-          return bat ? <Link to={`/fleet/batteries/${bat.id}`} className="text-primary hover:underline">{flight.battery_serial}</Link> : flight.battery_serial
-        })() : '—'}</p>}
+        display={<p className="text-sm text-foreground">{batterySerialDisplay(flight, batteries)}</p>}
       />
 
       <EditableField editing={editing} label="Sensor Package" htmlFor="sensor-package"
