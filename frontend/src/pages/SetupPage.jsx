@@ -4,7 +4,7 @@ import { Shield, ArrowRight, Upload, Loader2, Image as ImageIcon, Mail, Plug, Fi
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 import { TIMEZONES } from '@/lib/utils'
 
-export default function SetupPage() {
+export default function SetupPage({ recovery = false }) {
   const [step, setStep] = useState(1)
   const [form, setForm] = useState({
     display_name: '',
@@ -153,8 +153,21 @@ export default function SetupPage() {
             <QuadcopterIcon className="w-8 h-8 text-primary" />
           </div>
           <h1 className="text-3xl font-bold text-foreground">Drone Unit Manager</h1>
-          <p className="text-muted-foreground mt-2">Welcome! Let's set up your account.</p>
+          <p className="text-muted-foreground mt-2">
+            {recovery ? 'Backup restored. Reactivate an administrator to sign in.' : "Welcome! Let's set up your account."}
+          </p>
         </div>
+
+        {recovery && (
+          <div className="bg-amber-500/10 border border-amber-500/30 text-amber-300 rounded-xl p-4 mb-4 text-sm">
+            <p className="font-medium text-amber-200">Restored backup detected</p>
+            <p className="mt-1">
+              Your data is back, but passwords are never included in a backup. Enter the{' '}
+              <span className="font-medium">username of an administrator from the restored data</span>{' '}
+              and a new password to regain access. Organization and name fields are ignored in this step.
+            </p>
+          </div>
+        )}
 
         <div className="bg-card border border-border rounded-xl p-6 space-y-4">
           {step === 1 && (

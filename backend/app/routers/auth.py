@@ -226,29 +226,90 @@ def _validate_password(password: str):
         raise HTTPException(400, "Password must contain at least one number")
 
 
+def _has_usable_login(db) -> bool:
+    """True when at least one active user has a real (non-blank) password hash.
+
+    A backup blanks every password_hash (backup._serialize_database redacts
+    them), so a database restored onto a fresh install has user rows but no way
+    to authenticate. That locked-out state, like a genuinely empty install, has
+    no usable login and must be able to reach setup/recovery again.
+    """
+    return (
+        db.query(User)
+        .filter(User.is_active.is_(True), User.password_hash != "")
+        .count()
+        > 0
+    )
+
+
 @router.get("/setup-required")
 def check_setup_required(db: DBSession):
-    """Check if initial setup is needed (no users exist)."""
-    user_count = db.query(User).count()
-    return {"setup_required": user_count == 0}
+    """Report whether initial setup or lockout recovery is needed.
+
+    ``setup_required`` is true when no active user has a usable password: a
+    genuine fresh install (no users) or a restore that redacted every password
+    hash. ``recovery`` distinguishes the latter (users exist but none can log
+    in) so the setup page can tell the operator to re-claim an existing admin.
+    """
+    usable = _has_usable_login(db)
+    has_users = db.query(User).count() > 0
+    return {"setup_required": not usable, "recovery": (not usable) and has_users}
+
+
+def _reclaim_admin(db, username: str, password: str) -> User:
+    """Restore login access to an existing admin after a redacted-backup restore.
+
+    The operator supplies the username of an administrator from the restored
+    backup; we set its password and reactivate it. Other restored users keep
+    their blank hashes until this admin resets them, and no default data is
+    seeded because the restore already brought it back.
+    """
+    admin = db.query(User).filter(User.username == username).first()
+    if not admin or admin.role != "admin":
+        raise HTTPException(
+            400,
+            "Enter the username of an administrator account from the restored backup.",
+        )
+    admin.password_hash = hash_password(password)
+    admin.is_active = True
+    return admin
 
 
 @router.post("/setup", responses=responses(400, 403))
 def initial_setup(data: SetupRequest, db: DBSession):
-    """Create the first admin account. Only works when no users exist."""
-    user_count = db.query(User).count()
-    if user_count > 0:
+    """Create the first admin, or re-claim one after a redacted-backup restore.
+
+    Allowed only while no active user has a usable password (see
+    _has_usable_login). On a genuine fresh install it creates the admin and
+    seeds default folders and flight purposes. When users already exist (a
+    restore blanked their hashes) it instead sets the password on the existing
+    admin named by ``username`` and seeds nothing, since the restore already
+    loaded that data.
+    """
+    if _has_usable_login(db):
         raise HTTPException(403, "Setup already completed. Use the login page.")
 
     username = data.username.strip()
     password = data.password
-    display_name = data.display_name.strip()
-    org_name = data.org_name.strip()
-
     if not username or len(username) < 3:
         raise HTTPException(400, "Username must be at least 3 characters")
-
     _validate_password(password)
+
+    # Post-restore recovery: reactivate an existing admin rather than seed a
+    # second copy of the default data the restore already loaded.
+    if db.query(User).count() > 0:
+        admin = _reclaim_admin(db, username, password)
+        db.commit()
+        db.refresh(admin)
+        token = create_token(admin.id)
+        return {
+            "token": token,
+            "user": {"id": admin.id, "username": admin.username,
+                     "display_name": admin.display_name, "role": admin.role},
+        }
+
+    display_name = data.display_name.strip()
+    org_name = data.org_name.strip()
 
     from app.models.setting import Setting
     from app.models.folder import Folder
