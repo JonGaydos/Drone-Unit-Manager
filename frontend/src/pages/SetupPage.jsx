@@ -37,7 +37,7 @@ function RecoveryTokenField({ recovery, value, onChange }) {
         className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-xs font-mono focus:outline-none focus:ring-2 focus:ring-ring"
       />
       <p className="text-xs text-muted-foreground mt-1">
-        Run <code className="text-foreground">docker logs &lt;container&gt;</code> and look for "install token", or read <code className="text-foreground">install_token.txt</code> from the container's data directory.
+        Read <code className="text-foreground">install_token.txt</code> from the container's data directory (<code className="text-foreground">/app/data</code>). It is also printed in <code className="text-foreground">docker logs</code> at first startup.
       </p>
     </div>
   )
@@ -94,7 +94,7 @@ export default function SetupPage({ recovery = false }) {
     // Recovery reactivates an existing admin and is gated on the install token
     // (host access), the same secret the restore required.
     if (recovery && !installToken) {
-      setError('Install token is required. Read it from the container logs or install_token.txt.')
+      setError('Install token is required. Read install_token.txt from the container data directory (/app/data), or the container logs.')
       return
     }
     if (form.password !== form.password_confirm) {
@@ -516,7 +516,7 @@ export default function SetupPage({ recovery = false }) {
                       className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-xs font-mono focus:outline-none focus:ring-2 focus:ring-ring"
                     />
                     <p className="text-xs text-muted-foreground mt-1">
-                      Required for fresh-install backup restore. Either run <code className="text-foreground">docker logs &lt;container&gt;</code> and look for "install token", or read <code className="text-foreground">install_token.txt</code> from the container's data directory.
+                      Required for a fresh-install restore. Read <code className="text-foreground">install_token.txt</code> from the container's data directory (<code className="text-foreground">/app/data</code>), or run <code className="text-foreground">docker logs &lt;container&gt;</code> and look for "install token" (printed at first startup).
                     </p>
                   </div>
                   <button

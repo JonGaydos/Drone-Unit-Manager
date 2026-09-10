@@ -97,6 +97,10 @@ async def lifespan(app: FastAPI):
     cfg = Config(str(_ini))
     cfg.set_main_option("script_location", str(_ini.parent / "migrations"))
     cfg.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+    # Keep Alembic's env.py from reconfiguring logging (see env.py): the app has
+    # already set it up, and fileConfig would silence every startup log after the
+    # migrations, including the fresh-install backup token.
+    cfg.attributes["configure_logging"] = False
     command.upgrade(cfg, "head")
     # Telemetry DB (unchanged): single table, separate metadata, not under Alembic
     TelemetryBase.metadata.create_all(bind=telemetry_engine)
