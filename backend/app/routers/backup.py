@@ -23,7 +23,6 @@ from sqlalchemy.types import Date, DateTime
 
 from app.config import settings as app_settings
 from app import database
-from app.database import SessionLocal
 
 
 def _telemetry_session():
@@ -148,6 +147,29 @@ EXPORT_ORDER = [
 ]
 
 
+def _serialize_database(db: Session) -> tuple[dict, dict]:
+    """Serialize every main table to ``{table_name: rows}``, redacting secrets.
+
+    Setting rows whose key is a known secret are dropped, and user password
+    hashes are blanked (the column is non-nullable, so the key stays with an
+    empty string; restored accounts need a password reset). Returns
+    ``(database, row_counts)``.
+    """
+    database = {}
+    counts = {}
+    for table_name, model_class in EXPORT_ORDER:
+        rows = _serialize_table(db, model_class)
+        if table_name == "settings":
+            rows = [r for r in rows if r.get("key") not in SECRET_KEYS]
+        elif table_name == "users":
+            for r in rows:
+                r["password_hash"] = ""
+        database[table_name] = rows
+        counts[table_name] = len(rows)
+        logger.info("  Exported %s: %d rows", table_name, len(rows))
+    return database, counts
+
+
 def build_backup_archive(db: Session, include_telemetry: bool = False) -> tuple[tempfile.SpooledTemporaryFile, dict]:
     """Build a full backup ZIP into a SpooledTemporaryFile and return it
     seeked to position 0, along with the manifest.
@@ -156,29 +178,13 @@ def build_backup_archive(db: Session, include_telemetry: bool = False) -> tuple[
     and every uploaded file under 'uploads/...'. This is the reusable core
     shared by the download endpoint and the scheduled backup job.
     """
-    # Build manifest
+    database, table_counts = _serialize_database(db)
     manifest = {
         "app_version": APP_VERSION,
         "export_date": datetime.now().isoformat(),
         "include_telemetry": include_telemetry,
-        "tables": {},
+        "tables": table_counts,
     }
-
-    # Serialize all main DB tables
-    database = {}
-    for table_name, model_class in EXPORT_ORDER:
-        rows = _serialize_table(db, model_class)
-        # Redact secrets on export. Drop Setting rows holding secret values and
-        # blank user password hashes (the column is non-nullable, so keep the
-        # key with an empty string — restored accounts need a password reset).
-        if table_name == "settings":
-            rows = [r for r in rows if r.get("key") not in SECRET_KEYS]
-        elif table_name == "users":
-            for r in rows:
-                r["password_hash"] = ""
-        database[table_name] = rows
-        manifest["tables"][table_name] = len(rows)
-        logger.info("  Exported %s: %d rows", table_name, len(rows))
 
     # Telemetry is counted here and streamed into the archive below. It is the
     # one table big enough that holding it is the difference between a slow
@@ -313,28 +319,34 @@ LEGACY_COLUMN_RENAMES = {
 }
 
 
+def _parse_row(row: dict, col_types: dict, renames: dict) -> dict:
+    """Parse one exported row for insert: apply any legacy column renames and
+    revive ISO datetime/date strings. A malformed temporal value falls back to
+    the raw string so one bad cell cannot abort a whole restore.
+
+    Takes col_types and renames precomputed so a streaming caller resolves them
+    once per table rather than per row.
+    """
+    if renames:
+        row = {renames.get(k, k): v for k, v in row.items()}
+    parsed = {}
+    for key, val in row.items():
+        kind = col_types.get(key)
+        if val is None or kind is None:
+            parsed[key] = val
+            continue
+        try:
+            parsed[key] = datetime.fromisoformat(val) if kind == "datetime" else date.fromisoformat(val)
+        except (ValueError, TypeError):
+            parsed[key] = val
+    return parsed
+
+
 def _parse_rows(rows: list[dict], model_class) -> list[dict]:
-    """Parse ISO datetime strings back to Python datetime/date objects."""
+    """Parse a batch of exported rows for model_class (see _parse_row)."""
     col_types = _get_column_types(model_class)
     renames = LEGACY_COLUMN_RENAMES.get(model_class.__tablename__, {})
-    parsed = []
-    for row in rows:
-        if renames:
-            row = {renames.get(k, k): v for k, v in row.items()}
-        parsed_row = {}
-        for key, val in row.items():
-            if val is not None and key in col_types:
-                try:
-                    if col_types[key] == "datetime":
-                        parsed_row[key] = datetime.fromisoformat(val)
-                    elif col_types[key] == "date":
-                        parsed_row[key] = date.fromisoformat(val)
-                except (ValueError, TypeError):
-                    parsed_row[key] = val
-            else:
-                parsed_row[key] = val
-        parsed.append(parsed_row)
-    return parsed
+    return [_parse_row(row, col_types, renames) for row in rows]
 
 
 def _install_token_path() -> str:
@@ -355,7 +367,7 @@ def init_install_token() -> str | None:
     install is detected; returns None once any admin has been created. The
     token is printed to the logger so an operator can read it from container
     logs and paste it into the first-run setup screen."""
-    db = SessionLocal()
+    db = database.SessionLocal()   # call-time resolution, see import_backup
     try:
         if db.query(User).count() > 0:
             return None
@@ -553,6 +565,121 @@ def backup_status(db: DBSession, admin: AdminUser):
     }
 
 
+def _restore_main_tables(db: Session, db_tables: dict) -> tuple[int, int]:
+    """Replace every main-DB table from the backup, in one atomic transaction.
+
+    A restore makes the database match the backup, so each table is wiped and
+    reloaded rather than appended to (appending would collide on the backup's
+    explicit ids). PRAGMA defer_foreign_keys holds every FK check until COMMIT
+    and, unlike PRAGMA foreign_keys, is honored inside a transaction -- so the
+    wipe-and-reload is all-or-nothing, needs no per-row ordering, and never
+    leaves a pooled connection with enforcement disabled (the pragma clears
+    itself at commit/rollback). Returns (tables_imported, rows_imported).
+    """
+    db.execute(text("PRAGMA defer_foreign_keys=ON"))
+    tables_imported = 0
+    rows_imported = 0
+    try:
+        # Clear children-first, reload parents-first. Ordering is not required
+        # for correctness here (checks are deferred to commit), only tidy.
+        for _name, model in reversed(EXPORT_ORDER):
+            db.execute(model.__table__.delete())
+        for name, model in EXPORT_ORDER:
+            rows = _parse_rows(db_tables.get(name, []), model)
+            if not rows:
+                continue
+            db.execute(model.__table__.insert(), rows)
+            tables_imported += 1
+            rows_imported += len(rows)
+            logger.info("  Imported %s: %d rows", name, len(rows))
+        db.commit()  # FK consistency is verified here
+    except Exception:
+        db.rollback()
+        raise
+    return tables_imported, rows_imported
+
+
+def _stream_json_array(stream, read_size: int = 1 << 20):
+    """Yield each top-level element of a JSON array from a binary stream without
+    holding the whole array in memory.
+
+    The backup writes telemetry.json as one large array (see _write_telemetry),
+    the one table big enough that loading it whole is the OOM risk this avoids
+    on restore -- the mirror of the streaming export. Assumes a well-formed
+    array of objects; tolerant of surrounding whitespace.
+    """
+    decoder = json.JSONDecoder()
+    buf = ""
+    eof = False
+
+    def fill():
+        nonlocal buf, eof
+        chunk = stream.read(read_size)
+        buf += chunk.decode("utf-8") if chunk else ""
+        eof = eof or not chunk
+
+    # Consume up to and including the opening '['.
+    while "[" not in buf and not eof:
+        fill()
+    _, _, buf = buf.partition("[")
+
+    while True:
+        buf = buf.lstrip().lstrip(",").lstrip()
+        # End of array, or an empty buffer at end of stream: nothing left.
+        if buf.startswith("]") or (not buf and eof):
+            return
+        try:
+            # Also the path for an empty-but-not-yet-EOF buffer: raw_decode("")
+            # raises, and we top up below rather than special-casing it.
+            obj, end = decoder.raw_decode(buf)
+        except json.JSONDecodeError:
+            if eof:
+                raise
+            fill()
+            continue
+        yield obj
+        buf = buf[end:]
+
+
+def _restore_telemetry(zf: zipfile.ZipFile) -> tuple[bool, int]:
+    """Replace telemetry_points from the backup, streamed in chunks.
+
+    telemetry.json is read one record at a time and inserted in batches so a
+    multi-GB table never lands in memory at once. Existing telemetry is cleared
+    first (replace semantics, matching the main restore). Raises on failure
+    rather than swallowing it -- a telemetry restore that half-completes while
+    the response says "ok" would silently misreport the flights it belongs to.
+    Returns (imported, count).
+    """
+    if TELEMETRY_FILE not in zf.namelist():
+        return False, 0
+    col_types = _get_column_types(TelemetryPoint)
+    renames = LEGACY_COLUMN_RENAMES.get(TelemetryPoint.__tablename__, {})
+    tel_db = _telemetry_session()
+    count = 0
+    chunk = []
+    try:
+        tel_db.query(TelemetryPoint).delete()
+        with zf.open(TELEMETRY_FILE) as stream:
+            for record in _stream_json_array(stream):
+                chunk.append(_parse_row(record, col_types, renames))
+                if len(chunk) >= TELEMETRY_BATCH:
+                    tel_db.execute(TelemetryPoint.__table__.insert(), chunk)
+                    count += len(chunk)
+                    chunk = []
+            if chunk:
+                tel_db.execute(TelemetryPoint.__table__.insert(), chunk)
+                count += len(chunk)
+        tel_db.commit()
+    except Exception:
+        tel_db.rollback()
+        raise
+    finally:
+        tel_db.close()
+    logger.info("  Imported telemetry: %d points", count)
+    return count > 0, count
+
+
 @router.post("/import", responses=responses(400, 401, 403, 413))
 async def import_backup(
     request: Request,
@@ -565,7 +692,10 @@ async def import_backup(
     - Fresh install (no users): requires X-Install-Token header matching
       the token generated at startup (printed to container logs).
     """
-    db = SessionLocal()
+    # Resolved at call time (like _telemetry_session) so the test suite's
+    # per-test engines are used; an imported-by-name SessionLocal binds at
+    # import and would send the restore to the wrong database under test.
+    db = database.SessionLocal()
     try:
         principal = _verify_admin_or_install_token(request, db)
 
@@ -587,64 +717,19 @@ async def import_backup(
         logger.info("Importing backup from %s (version %s), principal=%s",
                     manifest.get("export_date"), manifest.get("app_version"), principal)
 
-        database = json.loads(zf.read(DATABASE_FILE))
+        db_tables = json.loads(zf.read(DATABASE_FILE))
+        tables_imported, rows_imported = _restore_main_tables(db, db_tables)
 
-        # Disable FK constraints for the bulk insert phase.
-        conn = db.connection()
-        conn.execute(text("PRAGMA foreign_keys=OFF"))
-
-        tables_imported = 0
-        rows_imported = 0
-
-        # First failure aborts the whole import. The previous behavior swallowed
-        # per-table failures and committed whatever survived, leaving FK
-        # constraints back on with referential integrity already broken.
-        # The try/finally guarantees FK enforcement is re-enabled on every exit
-        # path (success, HTTPException, or rollback) so a failed import can never
-        # leave the connection with constraints disabled.
+        # Telemetry lives in a separate database, so it cannot share the main
+        # transaction. A failure is surfaced rather than swallowed: the operator
+        # can retry, which is safe because the whole restore is idempotent
+        # (every table is replaced, not appended).
         try:
-            try:
-                for table_name, model_class in EXPORT_ORDER:
-                    table_rows = database.get(table_name, [])
-                    if not table_rows:
-                        continue
-                    parsed = _parse_rows(table_rows, model_class)
-                    try:
-                        db.execute(model_class.__table__.insert(), parsed)
-                        tables_imported += 1
-                        rows_imported += len(parsed)
-                        logger.info("  Imported %s: %d rows", table_name, len(parsed))
-                    except Exception as exc:
-                        logger.exception("Backup import aborted at table %s", table_name)
-                        raise HTTPException(500, f"Backup import failed at table '{table_name}': {exc}")
-            except HTTPException:
-                db.rollback()
-                raise
-            db.commit()
-        finally:
-            conn.execute(text("PRAGMA foreign_keys=ON"))
-
-        # Import telemetry if present
-        telemetry_imported = False
-        if TELEMETRY_FILE in zf.namelist():
-            tel_db = _telemetry_session()
-            try:
-                tel_data = json.loads(zf.read(TELEMETRY_FILE))
-                if tel_data:
-                    parsed_tel = _parse_rows(tel_data, TelemetryPoint)
-                    # Insert in chunks of 5000
-                    chunk_size = 5000
-                    for i in range(0, len(parsed_tel), chunk_size):
-                        chunk = parsed_tel[i:i + chunk_size]
-                        tel_db.execute(TelemetryPoint.__table__.insert(), chunk)
-                    tel_db.commit()
-                    telemetry_imported = True
-                    rows_imported += len(parsed_tel)
-                    logger.info("  Imported telemetry: %d points", len(parsed_tel))
-            except Exception as e:
-                logger.warning("  Failed to import telemetry: %s", e)
-            finally:
-                tel_db.close()
+            telemetry_imported, telemetry_count = _restore_telemetry(zf)
+        except Exception as exc:
+            logger.exception("Backup telemetry import failed")
+            raise HTTPException(500, f"Backup telemetry import failed: {exc}")
+        rows_imported += telemetry_count
 
         # Extract uploaded files on a worker thread; blocking I/O doesn't
         # belong on the event loop.
