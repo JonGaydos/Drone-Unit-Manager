@@ -2,6 +2,7 @@ import io
 import logging
 import os
 from datetime import date
+from types import SimpleNamespace
 from typing import Optional
 
 from fastapi import APIRouter
@@ -214,46 +215,41 @@ def _get_org_branding(db: Session) -> tuple[str, str | None]:
     return org_name, logo_path
 
 
-def _render_report_pdf(data: dict, config: ReportConfig, org_name: str, logo_path: str | None) -> io.BytesIO:
-    """Render a report dict to a PDF and return the BytesIO buffer."""
-    import matplotlib
-    matplotlib.use("Agg")
+def _pdf_theme() -> SimpleNamespace:
+    """The colours, paragraph styles and widths shared across the PDF builders."""
     from reportlab.lib.pagesizes import letter
-    from reportlab.lib.colors import HexColor
+    from reportlab.lib.colors import HexColor, white as rl_white
     from reportlab.lib.units import inch
-    from reportlab.lib import colors
-    from reportlab.platypus import (
-        SimpleDocTemplate, Paragraph, Spacer, Image as RLImage,
-    )
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.enums import TA_LEFT
 
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buffer, pagesize=letter,
-        topMargin=0.5 * inch, bottomMargin=0.5 * inch,
-        leftMargin=0.6 * inch, rightMargin=0.6 * inch,
-    )
     styles = getSampleStyleSheet()
-    elements = []
-
     primary = HexColor("#1e40af")
-    primary_light = HexColor("#dbeafe")
-    header_bg = HexColor("#1e293b")
-    alt_row = HexColor("#f8fafc")
-    white = colors.white
-    avail_width = letter[0] - 1.2 * inch
+    return SimpleNamespace(
+        styles=styles,
+        inch=inch,
+        avail_width=letter[0] - 1.2 * inch,
+        primary=primary,
+        primary_light=HexColor("#dbeafe"),
+        header_bg=HexColor("#1e293b"),
+        alt_row=HexColor("#f8fafc"),
+        white=rl_white,
+        title_style=ParagraphStyle("ReportTitle", parent=styles["Title"], fontSize=20, textColor=primary, spaceAfter=4, alignment=TA_LEFT),
+        subtitle_style=ParagraphStyle("ReportSubtitle", parent=styles["Normal"], fontSize=10, textColor=HexColor("#64748b"), spaceAfter=12),
+        heading_style=ParagraphStyle("SectionHeading", parent=styles["Heading2"], fontSize=14, textColor=primary, spaceBefore=16, spaceAfter=8),
+        title_h1_style=ParagraphStyle("RPTitle", parent=styles["Heading1"], fontSize=16, textColor=HexColor("#334155"), spaceAfter=4, alignment=TA_LEFT),
+        cell_style=ParagraphStyle("CellStyle", parent=styles["Normal"], fontSize=8, leading=10),
+        header_cell_style=ParagraphStyle("HeaderCell", parent=styles["Normal"], fontSize=8, leading=10, textColor=rl_white),
+        narrative_style=ParagraphStyle("Narrative", parent=styles["Normal"], fontSize=10, leading=14, spaceAfter=8),
+    )
 
-    title_style = ParagraphStyle("ReportTitle", parent=styles["Title"], fontSize=20, textColor=primary, spaceAfter=4, alignment=TA_LEFT)
-    subtitle_style = ParagraphStyle("ReportSubtitle", parent=styles["Normal"], fontSize=10, textColor=HexColor("#64748b"), spaceAfter=12)
-    heading_style = ParagraphStyle("SectionHeading", parent=styles["Heading2"], fontSize=14, textColor=primary, spaceBefore=16, spaceAfter=8)
-    cell_style = ParagraphStyle("CellStyle", parent=styles["Normal"], fontSize=8, leading=10)
-    header_cell_style = ParagraphStyle("HeaderCell", parent=styles["Normal"], fontSize=8, leading=10, textColor=white)
 
-    # Masthead: logo on the left, organization over report title to its right,
-    # rather than the logo sitting alone on its own line above centred text.
-    from reportlab.platypus import Table, TableStyle
+def _pdf_masthead(data: dict, config: ReportConfig, org_name: str, logo_path: str | None, theme: SimpleNamespace) -> list:
+    """The masthead flowables: logo on the left with organization over report
+    title to its right, or the text stacked when there is no logo."""
+    from reportlab.platypus import Paragraph, Image as RLImage, Table, TableStyle
 
+    inch = theme.inch
     logo_flowable = None
     if logo_path:
         try:
@@ -269,64 +265,88 @@ def _render_report_pdf(data: dict, config: ReportConfig, org_name: str, logo_pat
 
     date_range = data.get("summary", {}).get("date_range") or f"{config.date_from or 'All'} to {config.date_to or 'Present'}"
     masthead_text = [
-        Paragraph(org_name, title_style),
-        Paragraph(data.get("title", "Report"), ParagraphStyle(
-            "RPTitle", parent=styles["Heading1"], fontSize=16,
-            textColor=HexColor("#334155"), spaceAfter=4, alignment=TA_LEFT)),
-        Paragraph(f"Date Range: {date_range}  |  Generated: {date.today()}", subtitle_style),
+        Paragraph(org_name, theme.title_style),
+        Paragraph(data.get("title", "Report"), theme.title_h1_style),
+        Paragraph(f"Date Range: {date_range}  |  Generated: {date.today()}", theme.subtitle_style),
     ]
 
-    if logo_flowable:
-        logo_col = LOGO_WIDTH_INCHES * inch + 0.2 * inch
-        masthead = Table(
-            [[logo_flowable, masthead_text]],
-            colWidths=[logo_col, avail_width - logo_col],
-        )
-        masthead.setStyle(TableStyle([
-            ("VALIGN", (0, 0), (0, 0), "MIDDLE"),   # logo centred against the text
-            ("VALIGN", (1, 0), (1, 0), "MIDDLE"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 0),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-            ("TOPPADDING", (0, 0), (-1, -1), 0),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-        ]))
-        elements.append(masthead)
-    else:
-        elements.extend(masthead_text)
+    if not logo_flowable:
+        return masthead_text
+
+    logo_col = LOGO_WIDTH_INCHES * inch + 0.2 * inch
+    masthead = Table(
+        [[logo_flowable, masthead_text]],
+        colWidths=[logo_col, theme.avail_width - logo_col],
+    )
+    masthead.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (0, 0), "MIDDLE"),   # logo centred against the text
+        ("VALIGN", (1, 0), (1, 0), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+    ]))
+    return [masthead]
+
+
+def _pdf_render_sections(sections: list, theme: SimpleNamespace) -> list:
+    """Render the multi-section layout (heading, optional narrative, optional
+    summary grid, optional data table) to a flat list of flowables."""
+    from reportlab.platypus import Paragraph, Spacer
+
+    elements = []
+    for sec in sections:
+        elements.append(Paragraph(sec.get("title", "Section"), theme.heading_style))
+        if sec.get("narrative"):
+            elements.append(Paragraph(sec["narrative"], theme.narrative_style))
+        if sec.get("summary"):
+            elements.extend(_build_pdf_summary_table(sec["summary"], theme.styles, theme.primary_light, theme.avail_width))
+        sec_rows = sec.get("rows") or []
+        sec_cols = sec.get("columns") or []
+        if sec_rows and sec_cols:
+            elements.extend(_build_pdf_data_table(sec_rows, sec_cols, theme.header_bg, theme.alt_row, theme.white, theme.cell_style, theme.header_cell_style, theme.avail_width))
+        elements.append(Spacer(1, 4))
+    return elements
+
+
+def _render_report_pdf(data: dict, config: ReportConfig, org_name: str, logo_path: str | None) -> io.BytesIO:
+    """Render a report dict to a PDF and return the BytesIO buffer."""
+    import matplotlib
+    matplotlib.use("Agg")
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.units import inch
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RLImage
+
+    theme = _pdf_theme()
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer, pagesize=letter,
+        topMargin=0.5 * inch, bottomMargin=0.5 * inch,
+        leftMargin=0.6 * inch, rightMargin=0.6 * inch,
+    )
+    elements = _pdf_masthead(data, config, org_name, logo_path, theme)
     elements.append(Spacer(1, 14))
 
     summary = data.get("summary", {})
     if summary:
-        elements.extend(_build_pdf_summary_table(summary, styles, primary_light, avail_width))
+        elements.extend(_build_pdf_summary_table(summary, theme.styles, theme.primary_light, theme.avail_width))
 
     chart_buf = _generate_chart(config.report_type, data)
     if chart_buf:
-        elements.append(Paragraph("Chart", heading_style))
-        chart_img = RLImage(chart_buf, width=6.5 * inch, height=3 * inch)
-        elements.append(chart_img)
+        elements.append(Paragraph("Chart", theme.heading_style))
+        elements.append(RLImage(chart_buf, width=6.5 * inch, height=3 * inch))
         elements.append(Spacer(1, 12))
 
-    rows = data.get("rows", [])
-    columns = data.get("columns", [])
-    sections = data.get("sections")
     # If the report uses multi-section layout, render each section; skip the
     # legacy top-level rows table (the YoY table is duplicated in the last section).
+    sections = data.get("sections")
+    rows = data.get("rows", [])
+    columns = data.get("columns", [])
     if sections:
-        narrative_style = ParagraphStyle("Narrative", parent=styles["Normal"], fontSize=10, leading=14, spaceAfter=8)
-        for sec in sections:
-            elements.append(Paragraph(sec.get("title", "Section"), heading_style))
-            if sec.get("narrative"):
-                elements.append(Paragraph(sec["narrative"], narrative_style))
-            if sec.get("summary"):
-                elements.extend(_build_pdf_summary_table(sec["summary"], styles, primary_light, avail_width))
-            sec_rows = sec.get("rows") or []
-            sec_cols = sec.get("columns") or []
-            if sec_rows and sec_cols:
-                elements.extend(_build_pdf_data_table(sec_rows, sec_cols, header_bg, alt_row, white, cell_style, header_cell_style, avail_width))
-            elements.append(Spacer(1, 4))
+        elements.extend(_pdf_render_sections(sections, theme))
     elif rows and columns:
-        elements.append(Paragraph("Data", heading_style))
-        elements.extend(_build_pdf_data_table(rows, columns, header_bg, alt_row, white, cell_style, header_cell_style, avail_width))
+        elements.append(Paragraph("Data", theme.heading_style))
+        elements.extend(_build_pdf_data_table(rows, columns, theme.header_bg, theme.alt_row, theme.white, theme.cell_style, theme.header_cell_style, theme.avail_width))
 
     doc.build(elements)
     buffer.seek(0)
@@ -1419,13 +1439,189 @@ def _annual_compliance_section(db: Session, pilots_by_id: dict) -> dict:
     }
 
 
+YOY_COLUMNS = ["Year", "Flights", COL_FLIGHT_HOURS, COL_MISSION_HOURS, COL_TRAINING_HOURS, "Unique Pilots", "Unique Vehicles"]
+
+
+def _annual_exec_summary_section(period_label: str, t: dict) -> dict:
+    """Section 1: the narrative state-of-the-unit paragraph."""
+    narrative = (
+        f"During {period_label}, the unit completed {t['total_flights']:,} flight(s) totaling "
+        f"{t['total_flight_hours']:,.1f} flight hours. {t['total_missions']} mission(s) "
+        f"({t['total_mission_hours']:,.1f} man-hours) and {t['total_trainings']} training session(s) "
+        f"({t['total_training_hours']:,.1f} man-hours) were logged. {t['unique_pilots_flown']} pilot(s) "
+        f"flew during this period, with {t['active_pilots']} active pilots on the roster and "
+        f"{t['active_vehicles']} active aircraft in the fleet."
+    )
+    if t["total_incidents"]:
+        narrative += (
+            f" {t['total_incidents']} incident(s) reported"
+            + (f" ({t['open_incidents']} currently open or under investigation)." if t["open_incidents"] else ", all resolved.")
+        )
+    return {"title": "Executive Summary", "type": "narrative", "narrative": narrative}
+
+
+def _annual_personnel_section(db: Session, flights, missions, trainings, pilots_by_id: dict, t: dict) -> dict:
+    """Section 3: per-pilot flight/mission/training hours, top 25 by total."""
+    pmap = _annual_pilot_hours_map(db, flights, missions, trainings)
+    rows = []
+    for pid, h in pmap.items():
+        p = pilots_by_id.get(pid)
+        if not p:
+            continue
+        total = h["flight"] + h["mission"] + h["training"]
+        rows.append({
+            "pilot": p.full_name,
+            "flight_hours": round(h["flight"], 1),
+            "mission_hours": round(h["mission"], 1),
+            "training_hours": round(h["training"], 1),
+            "total_hours": round(total, 1),
+        })
+    rows.sort(key=lambda r: r["total_hours"], reverse=True)
+    return {
+        "title": "Personnel Activity",
+        "type": "table",
+        "summary": {
+            "active_roster": t["active_pilots"],
+            "inactive_roster": t["inactive_pilots"],
+            "pilots_who_flew": t["unique_pilots_flown"],
+        },
+        "columns": ["Pilot", COL_FLIGHT_HOURS, COL_MISSION_HOURS, COL_TRAINING_HOURS, "Total Hours"],
+        "rows": rows[:25],
+    }
+
+
+def _annual_fleet_section(flights, vehicles_by_id: dict, active_vehicles: int) -> dict:
+    """Section 4: flights and hours per aircraft that flew in the period."""
+    vehicle_stats = {}
+    for f in flights:
+        if f.vehicle_id:
+            s = vehicle_stats.setdefault(f.vehicle_id, {"flights": 0, "secs": 0})
+            s["flights"] += 1
+            s["secs"] += f.duration_seconds or 0
+    rows = []
+    for vid, s in vehicle_stats.items():
+        v = vehicles_by_id.get(vid)
+        if not v:
+            continue
+        rows.append({
+            "vehicle": f"{v.manufacturer} {v.model}" + (f" ({v.nickname})" if v.nickname else ""),
+            "status": v.status,
+            "flights": s["flights"],
+            "hours": round(s["secs"] / 3600, 1),
+        })
+    rows.sort(key=lambda r: r["hours"], reverse=True)
+    return {
+        "title": "Fleet Utilization",
+        "type": "table",
+        "summary": {"active_aircraft": active_vehicles, "aircraft_flown": len(vehicle_stats)},
+        "columns": ["Vehicle", "Status", "Flights", "Hours"],
+        "rows": rows,
+    }
+
+
+def _annual_mission_section(db: Session, missions, total_missions: int, total_mission_hours: float) -> dict:
+    """Section 5: missions grouped by reason, with distinct participant count."""
+    mission_reasons = {}
+    for m in missions:
+        k = m.reason or "Unspecified"
+        mission_reasons[k] = mission_reasons.get(k, 0) + 1
+    mission_ids = [m.id for m in missions]
+    participants = (
+        db.query(func.count(func.distinct(MissionLogPilot.pilot_id)))
+          .filter(MissionLogPilot.mission_log_id.in_(mission_ids)).scalar() or 0
+    ) if mission_ids else 0
+    return {
+        "title": "Mission Activity",
+        "type": "table",
+        "summary": {
+            "total_missions": total_missions,
+            "total_man_hours": total_mission_hours,
+            "unique_participants": participants,
+        },
+        "columns": ["Reason", "Missions"],
+        "rows": [{"reason": k, "missions": v} for k, v in sorted(mission_reasons.items(), key=lambda x: x[1], reverse=True)],
+    }
+
+
+def _annual_training_section(db: Session, trainings, total_trainings: int, total_training_hours: float) -> dict:
+    """Section 6: training grouped by type, with distinct attendee count."""
+    training_types = {}
+    for t in trainings:
+        k = t.training_type or "Unspecified"
+        bucket = training_types.setdefault(k, {"sessions": 0, "man_hours": 0.0})
+        bucket["sessions"] += 1
+        bucket["man_hours"] += t.man_hours or 0
+    training_ids = [t.id for t in trainings]
+    attendees = (
+        db.query(func.count(func.distinct(TrainingLogPilot.pilot_id)))
+          .filter(TrainingLogPilot.training_log_id.in_(training_ids)).scalar() or 0
+    ) if training_ids else 0
+    return {
+        "title": "Training Activity",
+        "type": "table",
+        "summary": {
+            "total_sessions": total_trainings,
+            "total_man_hours": total_training_hours,
+            "unique_attendees": attendees,
+        },
+        "columns": ["Training Type", "Sessions", "Man-Hours"],
+        "rows": [
+            {"training_type": k, "sessions": v["sessions"], "man_hours": round(v["man_hours"], 1)}
+            for k, v in sorted(training_types.items(), key=lambda x: x[1]["sessions"], reverse=True)
+        ],
+    }
+
+
+def _annual_maintenance_section(maint_records) -> dict:
+    """Section 9: maintenance record counts by type and total cost."""
+    maint_by_type = {}
+    maint_total_cost = 0.0
+    for m in maint_records:
+        k = m.maintenance_type or "unspecified"
+        maint_by_type[k] = maint_by_type.get(k, 0) + 1
+        maint_total_cost += m.cost or 0
+    return {
+        "title": "Maintenance Summary",
+        "type": "table",
+        "summary": {
+            "total_records": len(maint_records),
+            "total_cost": f"${maint_total_cost:,.2f}" if maint_total_cost > 0 else "—",
+        },
+        "columns": ["Maintenance Type", "Records"],
+        "rows": [{"maintenance_type": k, "records": v} for k, v in sorted(maint_by_type.items(), key=lambda x: x[1], reverse=True)],
+    }
+
+
+def _annual_incidents_section(incidents, total_incidents: int, open_incidents: int) -> dict:
+    """Section 10: incidents by category, with severity rollups in the summary."""
+    inc_by_severity = {}
+    inc_by_category = {}
+    for i in incidents:
+        inc_by_severity[i.severity or "unknown"] = inc_by_severity.get(i.severity or "unknown", 0) + 1
+        inc_by_category[i.category or "unknown"] = inc_by_category.get(i.category or "unknown", 0) + 1
+    return {
+        "title": "Incidents & Safety",
+        "type": "table",
+        "summary": {
+            "total_incidents": total_incidents,
+            "open_or_investigating": open_incidents,
+            "minor": inc_by_severity.get("minor", 0),
+            "moderate_or_worse": sum(v for k, v in inc_by_severity.items() if k in ("moderate", "major", "critical")),
+        },
+        "columns": ["Category", "Count"],
+        "rows": [{"category": k, "count": v} for k, v in sorted(inc_by_category.items(), key=lambda x: x[1], reverse=True)],
+    }
+
+
 def _annual_unit_report(config: ReportConfig, db: Session):
     """Multi-section state-of-the-unit report.
 
     Sections: executive summary (narrative), operational tempo (monthly),
     personnel activity (top pilots), fleet utilization, mission activity,
     training activity, operating authorities, compliance + certifications,
-    maintenance, incidents, year-over-year comparison.
+    maintenance, incidents, year-over-year comparison. Each is built by a
+    dedicated helper; this function pulls the period-scoped slices once and
+    assembles them in order.
     """
     from app.models.incident import Incident
 
@@ -1449,220 +1645,62 @@ def _annual_unit_report(config: ReportConfig, db: Session):
     pilots_by_id = {p.id: p for p in db.query(Pilot).all()}
     vehicles_by_id = {v.id: v for v in db.query(Vehicle).all()}
 
-    # Headline totals
-    total_flights = len(flights)
-    total_flight_hours = round(sum(f.duration_seconds or 0 for f in flights) / 3600, 1)
-    total_missions = len(missions)
-    total_mission_hours = round(sum(m.man_hours or 0 for m in missions), 1)
-    total_trainings = len(trainings)
-    total_training_hours = round(sum(t.man_hours or 0 for t in trainings), 1)
-    active_pilots = db.query(Pilot).filter(Pilot.status == "active").count()
-    inactive_pilots = db.query(Pilot).filter(Pilot.status != "active").count()
-    active_vehicles = db.query(Vehicle).filter(Vehicle.status == "active").count()
-    unique_pilots_flown = len({f.pilot_id for f in flights if f.pilot_id})
-    total_incidents = len(incidents)
-    open_incidents = sum(1 for i in incidents if i.status not in ("resolved", "closed"))
+    totals = {
+        "total_flights": len(flights),
+        "total_flight_hours": round(sum(f.duration_seconds or 0 for f in flights) / 3600, 1),
+        "total_missions": len(missions),
+        "total_mission_hours": round(sum(m.man_hours or 0 for m in missions), 1),
+        "total_trainings": len(trainings),
+        "total_training_hours": round(sum(t.man_hours or 0 for t in trainings), 1),
+        "active_pilots": db.query(Pilot).filter(Pilot.status == "active").count(),
+        "inactive_pilots": db.query(Pilot).filter(Pilot.status != "active").count(),
+        "active_vehicles": db.query(Vehicle).filter(Vehicle.status == "active").count(),
+        "unique_pilots_flown": len({f.pilot_id for f in flights if f.pilot_id}),
+        "total_incidents": len(incidents),
+        "open_incidents": sum(1 for i in incidents if i.status not in ("resolved", "closed")),
+    }
 
-    sections = []
-
-    # --- Section 1: Executive Summary (narrative) ---
-    narrative = (
-        f"During {period_label}, the unit completed {total_flights:,} flight(s) totaling "
-        f"{total_flight_hours:,.1f} flight hours. {total_missions} mission(s) "
-        f"({total_mission_hours:,.1f} man-hours) and {total_trainings} training session(s) "
-        f"({total_training_hours:,.1f} man-hours) were logged. {unique_pilots_flown} pilot(s) "
-        f"flew during this period, with {active_pilots} active pilots on the roster and "
-        f"{active_vehicles} active aircraft in the fleet."
-    )
-    if total_incidents:
-        narrative += (
-            f" {total_incidents} incident(s) reported"
-            + (f" ({open_incidents} currently open or under investigation)." if open_incidents else ", all resolved.")
-        )
-    sections.append({"title": "Executive Summary", "type": "narrative", "narrative": narrative})
-
-    # --- Section 2: Operational Tempo (monthly) ---
-    sections.append({
-        "title": "Operational Tempo",
-        "type": "table",
-        "columns": ["Month", "Flights", COL_FLIGHT_HOURS, "Missions", COL_MISSION_HOURS, COL_TRAINING_HOURS],
-        "rows": _annual_monthly_tempo(flights, missions, trainings),
-    })
-
-    # --- Section 3: Personnel Activity ---
-    pmap = _annual_pilot_hours_map(db, flights, missions, trainings)
-    personnel_rows = []
-    for pid, h in pmap.items():
-        p = pilots_by_id.get(pid)
-        if not p:
-            continue
-        total = h["flight"] + h["mission"] + h["training"]
-        personnel_rows.append({
-            "pilot": p.full_name,
-            "flight_hours": round(h["flight"], 1),
-            "mission_hours": round(h["mission"], 1),
-            "training_hours": round(h["training"], 1),
-            "total_hours": round(total, 1),
-        })
-    personnel_rows.sort(key=lambda r: r["total_hours"], reverse=True)
-    sections.append({
-        "title": "Personnel Activity",
-        "type": "table",
-        "summary": {
-            "active_roster": active_pilots,
-            "inactive_roster": inactive_pilots,
-            "pilots_who_flew": unique_pilots_flown,
-        },
-        "columns": ["Pilot", COL_FLIGHT_HOURS, COL_MISSION_HOURS, COL_TRAINING_HOURS, "Total Hours"],
-        "rows": personnel_rows[:25],
-    })
-
-    # --- Section 4: Fleet Utilization ---
-    vehicle_stats = {}
-    for f in flights:
-        if f.vehicle_id:
-            s = vehicle_stats.setdefault(f.vehicle_id, {"flights": 0, "secs": 0})
-            s["flights"] += 1
-            s["secs"] += f.duration_seconds or 0
-    fleet_rows = []
-    for vid, s in vehicle_stats.items():
-        v = vehicles_by_id.get(vid)
-        if not v:
-            continue
-        fleet_rows.append({
-            "vehicle": f"{v.manufacturer} {v.model}" + (f" ({v.nickname})" if v.nickname else ""),
-            "status": v.status,
-            "flights": s["flights"],
-            "hours": round(s["secs"] / 3600, 1),
-        })
-    fleet_rows.sort(key=lambda r: r["hours"], reverse=True)
-    sections.append({
-        "title": "Fleet Utilization",
-        "type": "table",
-        "summary": {
-            "active_aircraft": active_vehicles,
-            "aircraft_flown": len(vehicle_stats),
-        },
-        "columns": ["Vehicle", "Status", "Flights", "Hours"],
-        "rows": fleet_rows,
-    })
-
-    # --- Section 5: Mission Activity ---
-    mission_reasons = {}
-    for m in missions:
-        k = m.reason or "Unspecified"
-        mission_reasons[k] = mission_reasons.get(k, 0) + 1
-    mission_ids = [m.id for m in missions]
-    mission_participants = (
-        db.query(func.count(func.distinct(MissionLogPilot.pilot_id)))
-          .filter(MissionLogPilot.mission_log_id.in_(mission_ids)).scalar() or 0
-    ) if mission_ids else 0
-    sections.append({
-        "title": "Mission Activity",
-        "type": "table",
-        "summary": {
-            "total_missions": total_missions,
-            "total_man_hours": total_mission_hours,
-            "unique_participants": mission_participants,
-        },
-        "columns": ["Reason", "Missions"],
-        "rows": [{"reason": k, "missions": v} for k, v in sorted(mission_reasons.items(), key=lambda x: x[1], reverse=True)],
-    })
-
-    # --- Section 6: Training Activity ---
-    training_types = {}
-    for t in trainings:
-        k = t.training_type or "Unspecified"
-        bucket = training_types.setdefault(k, {"sessions": 0, "man_hours": 0.0})
-        bucket["sessions"] += 1
-        bucket["man_hours"] += t.man_hours or 0
-    training_ids = [t.id for t in trainings]
-    training_attendees = (
-        db.query(func.count(func.distinct(TrainingLogPilot.pilot_id)))
-          .filter(TrainingLogPilot.training_log_id.in_(training_ids)).scalar() or 0
-    ) if training_ids else 0
-    sections.append({
-        "title": "Training Activity",
-        "type": "table",
-        "summary": {
-            "total_sessions": total_trainings,
-            "total_man_hours": total_training_hours,
-            "unique_attendees": training_attendees,
-        },
-        "columns": ["Training Type", "Sessions", "Man-Hours"],
-        "rows": [
-            {"training_type": k, "sessions": v["sessions"], "man_hours": round(v["man_hours"], 1)}
-            for k, v in sorted(training_types.items(), key=lambda x: x[1]["sessions"], reverse=True)
-        ],
-    })
-
-    # --- Section 7: Operating Authorities ---
-    sections.append(_authority_section(db, period_start, period_end))
-
-    # --- Section 8: Compliance & Certifications ---
-    sections.append(_annual_compliance_section(db, pilots_by_id))
-
-    # --- Section 9: Maintenance ---
-    maint_by_type = {}
-    maint_total_cost = 0.0
-    for m in maint_records:
-        k = m.maintenance_type or "unspecified"
-        maint_by_type[k] = maint_by_type.get(k, 0) + 1
-        maint_total_cost += m.cost or 0
-    sections.append({
-        "title": "Maintenance Summary",
-        "type": "table",
-        "summary": {
-            "total_records": len(maint_records),
-            "total_cost": f"${maint_total_cost:,.2f}" if maint_total_cost > 0 else "—",
-        },
-        "columns": ["Maintenance Type", "Records"],
-        "rows": [{"maintenance_type": k, "records": v} for k, v in sorted(maint_by_type.items(), key=lambda x: x[1], reverse=True)],
-    })
-
-    # --- Section 10: Incidents & Safety ---
-    inc_by_severity = {}
-    inc_by_category = {}
-    for i in incidents:
-        inc_by_severity[i.severity or "unknown"] = inc_by_severity.get(i.severity or "unknown", 0) + 1
-        inc_by_category[i.category or "unknown"] = inc_by_category.get(i.category or "unknown", 0) + 1
-    sections.append({
-        "title": "Incidents & Safety",
-        "type": "table",
-        "summary": {
-            "total_incidents": total_incidents,
-            "open_or_investigating": open_incidents,
-            "minor": inc_by_severity.get("minor", 0),
-            "moderate_or_worse": sum(v for k, v in inc_by_severity.items() if k in ("moderate", "major", "critical")),
-        },
-        "columns": ["Category", "Count"],
-        "rows": [{"category": k, "count": v} for k, v in sorted(inc_by_category.items(), key=lambda x: x[1], reverse=True)],
-    })
-
-    # --- Section 11: Year-over-Year Comparison ---
     yoy_rows = _annual_yoy_rows(db, period_start.year)
-    sections.append({
-        "title": "Year-over-Year Comparison",
-        "type": "table",
-        "columns": ["Year", "Flights", COL_FLIGHT_HOURS, COL_MISSION_HOURS, COL_TRAINING_HOURS, "Unique Pilots", "Unique Vehicles"],
-        "rows": yoy_rows,
-    })
+
+    sections = [
+        _annual_exec_summary_section(period_label, totals),
+        {
+            "title": "Operational Tempo",
+            "type": "table",
+            "columns": ["Month", "Flights", COL_FLIGHT_HOURS, "Missions", COL_MISSION_HOURS, COL_TRAINING_HOURS],
+            "rows": _annual_monthly_tempo(flights, missions, trainings),
+        },
+        _annual_personnel_section(db, flights, missions, trainings, pilots_by_id, totals),
+        _annual_fleet_section(flights, vehicles_by_id, totals["active_vehicles"]),
+        _annual_mission_section(db, missions, totals["total_missions"], totals["total_mission_hours"]),
+        _annual_training_section(db, trainings, totals["total_trainings"], totals["total_training_hours"]),
+        _authority_section(db, period_start, period_end),
+        _annual_compliance_section(db, pilots_by_id),
+        _annual_maintenance_section(maint_records),
+        _annual_incidents_section(incidents, totals["total_incidents"], totals["open_incidents"]),
+        {
+            "title": "Year-over-Year Comparison",
+            "type": "table",
+            "columns": YOY_COLUMNS,
+            "rows": yoy_rows,
+        },
+    ]
 
     return {
         "report_type": "annual_unit_report",
         "title": f"Annual Unit Report - {period_label}",
         "summary": {
             "period": period_label,
-            "total_flights": total_flights,
-            "total_flight_hours": total_flight_hours,
-            "total_missions": total_missions,
-            "total_training_hours": total_training_hours,
-            "active_pilots": active_pilots,
-            "active_aircraft": active_vehicles,
-            "incidents_reported": total_incidents,
+            "total_flights": totals["total_flights"],
+            "total_flight_hours": totals["total_flight_hours"],
+            "total_missions": totals["total_missions"],
+            "total_training_hours": totals["total_training_hours"],
+            "active_pilots": totals["active_pilots"],
+            "active_aircraft": totals["active_vehicles"],
+            "incidents_reported": totals["total_incidents"],
         },
         "sections": sections,
         # Year-over-year also exposed at top level for legacy PDF chart + table
-        "columns": ["Year", "Flights", COL_FLIGHT_HOURS, COL_MISSION_HOURS, COL_TRAINING_HOURS, "Unique Pilots", "Unique Vehicles"],
+        "columns": YOY_COLUMNS,
         "rows": yoy_rows,
     }
