@@ -555,6 +555,20 @@ def _generate_chart(report_type: str, data: dict) -> io.BytesIO | None:
         return None
 
 
+def _flight_summary_row(f, db: Session) -> dict:
+    """One flight-summary row, resolving the flight's pilot and vehicle names."""
+    pilot = db.query(Pilot).filter(Pilot.id == f.pilot_id).first() if f.pilot_id else None
+    vehicle = db.query(Vehicle).filter(Vehicle.id == f.vehicle_id).first() if f.vehicle_id else None
+    return {
+        "date": str(f.date) if f.date else "",
+        "pilot": pilot.full_name if pilot else "Unassigned",
+        "vehicle": f"{vehicle.manufacturer} {vehicle.model}" if vehicle else "—",
+        "purpose": f.purpose or "—",
+        "duration_min": round((f.duration_seconds or 0) / 60, 1),
+        "location": f.takeoff_address or "—",
+    }
+
+
 def _flight_summary(config: ReportConfig, db: Session):
     q = counted_only(db.query(Flight), config.include_non_unit)
     if config.date_from:
@@ -569,18 +583,7 @@ def _flight_summary(config: ReportConfig, db: Session):
     flights = q.order_by(Flight.date.desc()).all()
     total_seconds = sum(f.duration_seconds or 0 for f in flights)
 
-    rows = []
-    for f in flights:
-        pilot = db.query(Pilot).filter(Pilot.id == f.pilot_id).first() if f.pilot_id else None
-        vehicle = db.query(Vehicle).filter(Vehicle.id == f.vehicle_id).first() if f.vehicle_id else None
-        rows.append({
-            "date": str(f.date) if f.date else "",
-            "pilot": pilot.full_name if pilot else "Unassigned",
-            "vehicle": f"{vehicle.manufacturer} {vehicle.model}" if vehicle else "—",
-            "purpose": f.purpose or "—",
-            "duration_min": round((f.duration_seconds or 0) / 60, 1),
-            "location": f.takeoff_address or "—",
-        })
+    rows = [_flight_summary_row(f, db) for f in flights]
 
     return {
         "report_type": "flight_summary",
@@ -767,6 +770,31 @@ def _authority_section(db: Session, period_start: date | None = None, period_end
     }
 
 
+def _certification_rows_and_totals(records, today: date) -> tuple[list, dict]:
+    """Build the certification table rows and tally active/expired/pending."""
+    totals = {"active": 0, "expired": 0, "pending": 0}
+    rows = []
+    for pc in records:
+        pilot = pc.pilot
+        ct = pc.certification_type
+        days_until = (pc.expiration_date - today).days if pc.expiration_date else None
+        if pc.status in ("active", "complete"):
+            totals["active"] += 1
+        elif pc.status == "expired":
+            totals["expired"] += 1
+        elif pc.status == "pending":
+            totals["pending"] += 1
+        rows.append({
+            "pilot": pilot.full_name if pilot else "Unknown",
+            "cert_name": ct.name if ct else "Unknown",
+            "status": pc.status.replace("_", " "),
+            "issue_date": str(pc.issue_date) if pc.issue_date else "—",
+            "expiration_date": str(pc.expiration_date) if pc.expiration_date else "—",
+            "days_until_expiry": days_until if days_until is not None else "N/A",
+        })
+    return rows, totals
+
+
 def _pilot_certifications(config: ReportConfig, db: Session):
     q = db.query(PilotCertification).join(Pilot, PilotCertification.pilot_id == Pilot.id).join(
         CertificationType, PilotCertification.certification_type_id == CertificationType.id
@@ -776,35 +804,7 @@ def _pilot_certifications(config: ReportConfig, db: Session):
 
     records = q.order_by(Pilot.last_name, Pilot.first_name, CertificationType.sort_order).all()
 
-    total_active = 0
-    total_expired = 0
-    total_pending = 0
-    rows = []
-    today = date.today()
-
-    for pc in records:
-        pilot = pc.pilot
-        ct = pc.certification_type
-        days_until = None
-        if pc.expiration_date:
-            days_until = (pc.expiration_date - today).days
-
-        if pc.status in ("active", "complete"):
-            total_active += 1
-        elif pc.status == "expired":
-            total_expired += 1
-        elif pc.status == "pending":
-            total_pending += 1
-
-        rows.append({
-            "pilot": pilot.full_name if pilot else "Unknown",
-            "cert_name": ct.name if ct else "Unknown",
-            "status": pc.status.replace("_", " "),
-            "issue_date": str(pc.issue_date) if pc.issue_date else "—",
-            "expiration_date": str(pc.expiration_date) if pc.expiration_date else "—",
-            "days_until_expiry": days_until if days_until is not None else "N/A",
-        })
-
+    rows, totals = _certification_rows_and_totals(records, date.today())
     pilot_ids_seen = {pc.pilot_id for pc in records}
 
     cert_columns = ["Pilot", "Cert Name", "Status", "Issue Date", COL_EXPIRATION_DATE, "Days Until Expiry"]
@@ -814,9 +814,9 @@ def _pilot_certifications(config: ReportConfig, db: Session):
         "title": "Pilot Certifications Report",
         "summary": {
             "total_pilots": len(pilot_ids_seen),
-            "total_active": total_active,
-            "total_expired": total_expired,
-            "total_pending": total_pending,
+            "total_active": totals["active"],
+            "total_expired": totals["expired"],
+            "total_pending": totals["pending"],
         },
         # Same audience and purpose as the certification matrix, so the unit's own
         # operating authorities are appended as a second section.
@@ -873,6 +873,18 @@ def _battery_status(config: ReportConfig, db: Session):
     }
 
 
+def _maintenance_row(r, cost: float) -> dict:
+    """One maintenance-history row, with the description clipped to 80 chars."""
+    return {
+        "date": str(r.performed_date) if r.performed_date else "—",
+        "entity_type": r.entity_type or "—",
+        "description": (r.description[:80] + "...") if r.description and len(r.description) > 80 else (r.description or "—"),
+        "type": (r.maintenance_type or "other").replace("_", " "),
+        "performed_by": r.performed_by or "—",
+        "cost": f"${cost:,.2f}" if cost else "—",
+    }
+
+
 def _maintenance_history(config: ReportConfig, db: Session):
     q = db.query(MaintenanceRecord)
     if config.date_from:
@@ -891,15 +903,7 @@ def _maintenance_history(config: ReportConfig, db: Session):
         total_cost += cost
         mtype = r.maintenance_type or "other"
         type_counts[mtype] = type_counts.get(mtype, 0) + 1
-
-        rows.append({
-            "date": str(r.performed_date) if r.performed_date else "—",
-            "entity_type": r.entity_type or "—",
-            "description": (r.description[:80] + "...") if r.description and len(r.description) > 80 else (r.description or "—"),
-            "type": mtype.replace("_", " "),
-            "performed_by": r.performed_by or "—",
-            "cost": f"${cost:,.2f}" if cost else "—",
-        })
+        rows.append(_maintenance_row(r, cost))
 
     by_type_str = ", ".join(f"{k.replace('_', ' ')}: {v}" for k, v in sorted(type_counts.items()))
 
