@@ -60,6 +60,17 @@ describe('SetupPage', () => {
     expect(localStorage.getItem('token')).toBe('setup-token')
   })
 
+  it('shows the recovery banner when recovery mode is active', () => {
+    renderWithProviders(<SetupPage recovery />, { route: '/setup' })
+    expect(screen.getByText('Restored backup detected')).toBeInTheDocument()
+    expect(screen.getByText(/Reactivate an administrator/)).toBeInTheDocument()
+  })
+
+  it('omits the recovery banner on a normal fresh install', () => {
+    renderWithProviders(<SetupPage />, { route: '/setup' })
+    expect(screen.queryByText('Restored backup detected')).not.toBeInTheDocument()
+  })
+
   it('reveals the restore-from-backup panel on demand', async () => {
     const { user } = renderWithProviders(<SetupPage />, { route: '/setup' })
     await user.click(screen.getByRole('button', { name: /Restore from a backup instead/ }))

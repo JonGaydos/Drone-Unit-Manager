@@ -123,10 +123,13 @@ function AdminRoute({ children }) {
 function AppRoutes() {
   const { user, loading } = useAuth()
   const [setupRequired, setSetupRequired] = useState(null)
+  const [recovery, setRecovery] = useState(false)
   const [tzReady, setTzReady] = useState(false)
 
   useEffect(() => {
-    api.get('/auth/setup-required').then(d => setSetupRequired(d.setup_required)).catch(() => setSetupRequired(false))
+    api.get('/auth/setup-required')
+      .then(d => { setSetupRequired(d.setup_required); setRecovery(!!d.recovery) })
+      .catch(() => setSetupRequired(false))
   }, [])
 
   useEffect(() => {
@@ -139,7 +142,7 @@ function AppRoutes() {
   }, [user, loading])
 
   if (loading || setupRequired === null || !tzReady) return <div className="min-h-screen bg-background flex items-center justify-center"><Spinner /></div>
-  if (setupRequired) return <Suspense fallback={<Spinner />}><SetupPage /></Suspense>
+  if (setupRequired) return <Suspense fallback={<Spinner />}><SetupPage recovery={recovery} /></Suspense>
 
   return (
     <Suspense fallback={<Spinner />}>
