@@ -7,7 +7,12 @@ from app.database import Base
 import app.models  # noqa: F401  -- populate Base.metadata with every table
 
 config = context.config
-if config.config_file_name is not None:
+# Configure logging from alembic.ini only when Alembic runs as a standalone CLI.
+# When embedded (the app calls command.upgrade at startup, setting
+# configure_logging=False), fileConfig would disable the app's existing loggers
+# and reset the root level to WARN, silencing every startup log after the
+# migrations -- including the fresh-install backup token banner.
+if config.config_file_name is not None and config.attributes.get("configure_logging", True):
     fileConfig(config.config_file_name)
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 target_metadata = Base.metadata
