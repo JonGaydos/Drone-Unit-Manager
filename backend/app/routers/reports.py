@@ -770,28 +770,33 @@ def _authority_section(db: Session, period_start: date | None = None, period_end
     }
 
 
+def _certification_row(pc, today: date) -> dict:
+    """One certification table row, with days-until-expiry from today."""
+    days_until = (pc.expiration_date - today).days if pc.expiration_date else None
+    pilot = pc.pilot
+    ct = pc.certification_type
+    return {
+        "pilot": pilot.full_name if pilot else "Unknown",
+        "cert_name": ct.name if ct else "Unknown",
+        "status": pc.status.replace("_", " "),
+        "issue_date": str(pc.issue_date) if pc.issue_date else "—",
+        "expiration_date": str(pc.expiration_date) if pc.expiration_date else "—",
+        "days_until_expiry": days_until if days_until is not None else "N/A",
+    }
+
+
 def _certification_rows_and_totals(records, today: date) -> tuple[list, dict]:
     """Build the certification table rows and tally active/expired/pending."""
     totals = {"active": 0, "expired": 0, "pending": 0}
     rows = []
     for pc in records:
-        pilot = pc.pilot
-        ct = pc.certification_type
-        days_until = (pc.expiration_date - today).days if pc.expiration_date else None
         if pc.status in ("active", "complete"):
             totals["active"] += 1
         elif pc.status == "expired":
             totals["expired"] += 1
         elif pc.status == "pending":
             totals["pending"] += 1
-        rows.append({
-            "pilot": pilot.full_name if pilot else "Unknown",
-            "cert_name": ct.name if ct else "Unknown",
-            "status": pc.status.replace("_", " "),
-            "issue_date": str(pc.issue_date) if pc.issue_date else "—",
-            "expiration_date": str(pc.expiration_date) if pc.expiration_date else "—",
-            "days_until_expiry": days_until if days_until is not None else "N/A",
-        })
+        rows.append(_certification_row(pc, today))
     return rows, totals
 
 
