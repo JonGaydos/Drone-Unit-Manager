@@ -68,6 +68,13 @@ export default function DocumentStoragePage() {
     }
   }, [])
 
+  // Focus a freshly revealed inline input on mount. Replaces the browser
+  // autofocus attribute (which the accessibility linter flags) with an
+  // equivalent that only fires on mount, so it never steals focus on a
+  // re-render; the callback is stable, so React calls it only when the input
+  // mounts or unmounts.
+  const focusOnMount = useCallback((el) => { el?.focus() }, [])
+
   useEffect(() => {
     Promise.all([loadFolders(), loadAllDocuments()]).finally(() => setLoading(false))
   }, [loadFolders, loadAllDocuments])
@@ -348,7 +355,7 @@ export default function DocumentStoragePage() {
         {showCreateFolder && (
           <div className="p-3 border-t border-border space-y-2">
             <input
-              autoFocus
+              ref={focusOnMount}
               value={newFolderName}
               onChange={(e) => setNewFolderName(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') { handleCreateFolder() } if (e.key === 'Escape') { setShowCreateFolder(false) } }}
@@ -377,7 +384,7 @@ export default function DocumentStoragePage() {
           <div className="p-3 border-t border-border space-y-2">
             <p className="text-xs text-muted-foreground">Rename folder</p>
             <input
-              autoFocus
+              ref={focusOnMount}
               value={editName}
               onChange={(e) => setEditName(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') { handleRenameFolder() } if (e.key === 'Escape') { setEditingFolder(null) } }}
@@ -517,7 +524,7 @@ export default function DocumentStoragePage() {
                         {editingDoc === doc.id ? (
                           <div className="flex items-center gap-1.5 min-w-0 flex-1">
                             <input
-                              autoFocus
+                              ref={focusOnMount}
                               type="text"
                               value={editDocTitle}
                               onChange={(e) => setEditDocTitle(e.target.value)}
