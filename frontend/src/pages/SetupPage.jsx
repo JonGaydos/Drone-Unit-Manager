@@ -162,9 +162,9 @@ export default function SetupPage({ recovery = false }) {
           <div className="bg-amber-500/10 border border-amber-500/30 text-amber-300 rounded-xl p-4 mb-4 text-sm">
             <p className="font-medium text-amber-200">Restored backup detected</p>
             <p className="mt-1">
-              Your data is back, but passwords are never included in a backup. Enter the
-              <span className="font-medium"> username of an administrator from the restored data</span> and
-              a new password to regain access. Organization and name fields are ignored in this step.
+              Your data is back, but passwords are never included in a backup. Enter the{' '}
+              <span className="font-medium">username of an administrator from the restored data</span>{' '}
+              and a new password to regain access. Organization and name fields are ignored in this step.
             </p>
           </div>
         )}
