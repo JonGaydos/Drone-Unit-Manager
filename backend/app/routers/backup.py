@@ -615,28 +615,22 @@ def _stream_json_array(stream, read_size: int = 1 << 20):
     def fill():
         nonlocal buf, eof
         chunk = stream.read(read_size)
-        if chunk:
-            buf += chunk.decode("utf-8")
-        else:
-            eof = True
+        buf += chunk.decode("utf-8") if chunk else ""
+        eof = eof or not chunk
 
+    # Consume up to and including the opening '['.
     while "[" not in buf and not eof:
         fill()
-    start = buf.find("[")
-    if start == -1:
-        return
-    buf = buf[start + 1:]
+    _, _, buf = buf.partition("[")
 
     while True:
         buf = buf.lstrip().lstrip(",").lstrip()
-        if buf[:1] == "]":
+        # End of array, or an empty buffer at end of stream: nothing left.
+        if buf.startswith("]") or (not buf and eof):
             return
-        if not buf:
-            if eof:
-                return
-            fill()
-            continue
         try:
+            # Also the path for an empty-but-not-yet-EOF buffer: raw_decode("")
+            # raises, and we top up below rather than special-casing it.
             obj, end = decoder.raw_decode(buf)
         except json.JSONDecodeError:
             if eof:
