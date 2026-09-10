@@ -52,6 +52,12 @@ export default function SetupPage({ recovery = false }) {
 
   const handleSubmit = async () => {
     setError('')
+    // Recovery reactivates an existing admin and is gated on the install token
+    // (host access), the same secret the restore required.
+    if (recovery && !installToken) {
+      setError('Install token is required. Read it from the container logs or install_token.txt.')
+      return
+    }
     if (form.password !== form.password_confirm) {
       setError('Passwords do not match')
       return
@@ -71,7 +77,8 @@ export default function SetupPage({ recovery = false }) {
 
     setLoading(true)
     try {
-      const result = await api.post('/auth/setup', form)
+      const opts = recovery ? { headers: { 'X-Install-Token': installToken } } : undefined
+      const result = await api.post('/auth/setup', form, opts)
       localStorage.setItem('token', result.token)
       // Move to optional setup (logo, Skydio, SMTP, initial import).
       setStep(3)
@@ -168,8 +175,8 @@ export default function SetupPage({ recovery = false }) {
             </p>
             <p className="mt-1 text-muted-foreground">
               Your data is back, but passwords are never included in a backup. Enter the{' '}
-              <span className="font-medium text-foreground">username of an administrator from the restored data</span>{' '}
-              and a new password to regain access. Organization and name fields are ignored in this step.
+              <span className="font-medium text-foreground">username of an administrator from the restored data</span>, a
+              new password, and the install token to regain access. Organization and name fields are ignored in this step.
             </p>
           </div>
         )}
@@ -409,6 +416,23 @@ export default function SetupPage({ recovery = false }) {
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground"
                 />
               </div>
+              {recovery && (
+                <div>
+                  <label htmlFor="recovery-install-token" className="block text-sm font-medium mb-1">Install Token</label>
+                  <input id="recovery-install-token"
+                    type="text"
+                    autoComplete="off"
+                    spellCheck="false"
+                    value={installToken}
+                    onChange={e => setInstallToken(e.target.value.trim())}
+                    placeholder="64-character token"
+                    className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-xs font-mono focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Run <code className="text-foreground">docker logs &lt;container&gt;</code> and look for "install token", or read <code className="text-foreground">install_token.txt</code> from the container's data directory.
+                  </p>
+                </div>
+              )}
               {error && (
                 <div className="bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg p-3 text-sm">{error}</div>
               )}
@@ -418,7 +442,7 @@ export default function SetupPage({ recovery = false }) {
                 )}
                 <button
                   onClick={handleSubmit}
-                  disabled={loading || !form.username || !form.password}
+                  disabled={loading || !form.username || !form.password || (recovery && !installToken)}
                   className="flex-1 py-2.5 bg-primary text-primary-foreground rounded-lg font-medium disabled:opacity-50"
                 >
                   {loading ? (recovery ? 'Reactivating...' : 'Creating...') : (recovery ? 'Reactivate & Sign In' : 'Create Account & Start')}

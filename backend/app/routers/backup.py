@@ -362,14 +362,19 @@ def _legacy_install_token_path() -> str:
 
 
 def init_install_token() -> str | None:
-    """Generate the install token at startup if (a) no users exist and (b) the
-    file isn't already there. Returns the token (existing or new) when a fresh
-    install is detected; returns None once any admin has been created. The
-    token is printed to the logger so an operator can read it from container
-    logs and paste it into the first-run setup screen."""
+    """Generate or surface the install token whenever the install has no usable
+    login, logging it so an operator can read it from container logs.
+
+    "No usable login" covers a genuine fresh install (no users) and a database
+    restored from a backup (users exist but every password hash was redacted, so
+    nobody can sign in). Both need the token: the first to import a backup, the
+    second to reactivate an admin. Returns None (and issues nothing) once a real
+    login exists. Called at startup and again after an import, since a restore
+    blanks the hashes and re-opens the no-usable-login state."""
+    from app.routers.auth import _has_usable_login
     db = database.SessionLocal()   # call-time resolution, see import_backup
     try:
-        if db.query(User).count() > 0:
+        if _has_usable_login(db):
             return None
     finally:
         db.close()
@@ -416,6 +421,38 @@ def init_install_token() -> str | None:
     logger.info("\n%s\nDrone Unit Manager — install token (fresh install):\n  %s\nFile: %s\nUse the X-Install-Token header (or paste into the setup screen) to\nimport a backup before the first admin user is created.\n%s",
                 banner, token, path, banner)
     return token
+
+
+def verify_install_token(provided: str) -> bool:
+    """Constant-time check of a provided install token against the token file.
+
+    False when the file is missing, empty, or the value does not match, so the
+    caller can fail closed. Used to gate both backup import and, after a redacted
+    restore, admin reactivation on the setup screen."""
+    provided = (provided or "").strip()
+    if not provided:
+        return False
+    path = _install_token_path()
+    if not os.path.exists(path):
+        return False
+    try:
+        with open(path) as f:
+            stored = f.read().strip()
+    except OSError:
+        return False
+    return bool(stored) and secrets.compare_digest(provided, stored)
+
+
+def retire_install_token() -> None:
+    """Delete the install token file if present (idempotent). Called once a
+    usable login exists, so the fresh-install/recovery back door is closed."""
+    path = _install_token_path()
+    try:
+        if os.path.exists(path):
+            os.remove(path)
+            logger.info("Install token retired")
+    except OSError as exc:
+        logger.warning("Could not delete install token file: %s", exc)
 
 
 def _verify_admin_or_install_token(request: Request, db: Session) -> str:
@@ -740,15 +777,14 @@ async def import_backup(
         logger.info("Backup import complete: %d tables, %d rows, %d files (principal=%s)",
                     tables_imported, rows_imported, files_restored, principal)
 
-        # After a successful fresh-install import, retire the install token —
-        # the database now contains an admin, so future import calls must use
-        # admin auth. Leaving the file in place would create a back-door.
-        if principal == "install_token":
-            try:
-                os.remove(_install_token_path())
-                logger.info("Install token retired after successful import")
-            except OSError as exc:
-                logger.warning("Could not delete install token file: %s", exc)
+        # A restore blanks every password hash, so the install is left with no
+        # usable login. Keep the SAME install token available (and logged) so the
+        # operator can reactivate an admin on the setup screen; /auth/setup
+        # retires it once that succeeds. init_install_token reuses the existing
+        # token file untouched -- it never replaces a token -- and only mints one
+        # when none is on disk (an admin restoring in-app, where no token existed
+        # at boot). No-ops if a usable login somehow remains.
+        init_install_token()
 
         # Audit log entry (best-effort — table may not have existed pre-import).
         try:

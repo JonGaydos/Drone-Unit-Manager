@@ -275,19 +275,24 @@ def _reclaim_admin(db, username: str, password: str) -> User:
     return admin
 
 
-@router.post("/setup", responses=responses(400, 403))
-def initial_setup(data: SetupRequest, db: DBSession):
+@router.post("/setup", responses=responses(400, 401, 403))
+def initial_setup(data: SetupRequest, request: Request, db: DBSession):
     """Create the first admin, or re-claim one after a redacted-backup restore.
 
     Allowed only while no active user has a usable password (see
     _has_usable_login). On a genuine fresh install it creates the admin and
     seeds default folders and flight purposes. When users already exist (a
-    restore blanked their hashes) it instead sets the password on the existing
-    admin named by ``username`` and seeds nothing, since the restore already
-    loaded that data.
+    restore blanked their hashes) it instead reactivates the existing admin
+    named by ``username`` and seeds nothing, since the restore already loaded
+    that data. Reactivation additionally requires the X-Install-Token (host
+    access), so a locked-out install cannot be seized by anyone who merely
+    reaches the page and guesses an admin username. The token is retired once a
+    usable login exists.
     """
     if _has_usable_login(db):
         raise HTTPException(403, "Setup already completed. Use the login page.")
+
+    from app.routers.backup import verify_install_token, retire_install_token
 
     username = data.username.strip()
     password = data.password
@@ -296,11 +301,16 @@ def initial_setup(data: SetupRequest, db: DBSession):
     _validate_password(password)
 
     # Post-restore recovery: reactivate an existing admin rather than seed a
-    # second copy of the default data the restore already loaded.
+    # second copy of the default data the restore already loaded. Gate it on the
+    # same install token that authorized the restore -- knowing a username is not
+    # enough to take over a locked-out install.
     if db.query(User).count() > 0:
+        if not verify_install_token(request.headers.get("X-Install-Token", "")):
+            raise HTTPException(401, "Install token required to reactivate an administrator. Read it from the container logs or install_token.txt.")
         admin = _reclaim_admin(db, username, password)
         db.commit()
         db.refresh(admin)
+        retire_install_token()
         token = create_token(admin.id)
         return {
             "token": token,
@@ -368,6 +378,8 @@ def initial_setup(data: SetupRequest, db: DBSession):
 
     db.commit()
     db.refresh(admin)
+    # A usable login now exists, so the fresh-install token is no longer needed.
+    retire_install_token()
 
     # Generate token so they're logged in immediately
     token = create_token(admin.id)
