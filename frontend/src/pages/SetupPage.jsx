@@ -4,6 +4,45 @@ import { Shield, ArrowRight, Upload, Loader2, Image as ImageIcon, Mail, Plug, Fi
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 import { TIMEZONES } from '@/lib/utils'
 
+// Recovery-only pieces are their own components so their render guards live here
+// rather than adding branches to the main SetupPage function.
+function RecoveryBanner({ recovery }) {
+  if (!recovery) return null
+  return (
+    <div className="bg-amber-500/10 border border-amber-500/40 rounded-xl p-4 mb-4 text-sm text-foreground">
+      <p className="font-semibold flex items-center gap-2">
+        <AlertTriangle className="w-4 h-4 text-amber-500" /> Restored backup detected
+      </p>
+      <p className="mt-1 text-muted-foreground">
+        Your data is back, but passwords are never included in a backup. Enter the{' '}
+        <span className="font-medium text-foreground">username of an administrator from the restored data</span>, a
+        new password, and the install token to regain access. Organization and name fields are ignored in this step.
+      </p>
+    </div>
+  )
+}
+
+function RecoveryTokenField({ recovery, value, onChange }) {
+  if (!recovery) return null
+  return (
+    <div>
+      <label htmlFor="recovery-install-token" className="block text-sm font-medium mb-1">Install Token</label>
+      <input id="recovery-install-token"
+        type="text"
+        autoComplete="off"
+        spellCheck="false"
+        value={value}
+        onChange={e => onChange(e.target.value.trim())}
+        placeholder="64-character token"
+        className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-xs font-mono focus:outline-none focus:ring-2 focus:ring-ring"
+      />
+      <p className="text-xs text-muted-foreground mt-1">
+        Run <code className="text-foreground">docker logs &lt;container&gt;</code> and look for "install token", or read <code className="text-foreground">install_token.txt</code> from the container's data directory.
+      </p>
+    </div>
+  )
+}
+
 export default function SetupPage({ recovery = false }) {
   // In recovery mode the organization step is irrelevant (the restore already
   // has that data and the backend ignores it), and the username/password fields
@@ -155,13 +194,16 @@ export default function SetupPage({ recovery = false }) {
   }
 
   // Recovery mode reactivates an existing admin after a redacted-backup restore;
-  // it reuses the fresh-install wizard with different copy, so derive the strings
+  // it reuses the fresh-install wizard with different copy, so pick the strings
   // once rather than branching inside the JSX.
-  const subtitle = recovery ? 'Backup restored. Reactivate an administrator to sign in.' : "Welcome! Let's set up your account."
-  const adminStepHeading = recovery ? 'Reactivate Administrator' : 'Create Admin Account'
-  const usernamePlaceholder = recovery ? 'Existing administrator username' : 'Choose a username'
-  let submitLabel = recovery ? 'Reactivate & Sign In' : 'Create Account & Start'
-  if (loading) submitLabel = recovery ? 'Reactivating...' : 'Creating...'
+  const copy = recovery
+    ? { subtitle: 'Backup restored. Reactivate an administrator to sign in.',
+        heading: 'Reactivate Administrator', placeholder: 'Existing administrator username',
+        submitIdle: 'Reactivate & Sign In', submitBusy: 'Reactivating...' }
+    : { subtitle: "Welcome! Let's set up your account.",
+        heading: 'Create Admin Account', placeholder: 'Choose a username',
+        submitIdle: 'Create Account & Start', submitBusy: 'Creating...' }
+  const submitLabel = loading ? copy.submitBusy : copy.submitIdle
 
   return (
     <div className="min-h-screen bg-bg flex items-center justify-center p-4">
@@ -173,22 +215,11 @@ export default function SetupPage({ recovery = false }) {
           </div>
           <h1 className="text-3xl font-bold text-foreground">Drone Unit Manager</h1>
           <p className="text-muted-foreground mt-2">
-            {subtitle}
+            {copy.subtitle}
           </p>
         </div>
 
-        {recovery && (
-          <div className="bg-amber-500/10 border border-amber-500/40 rounded-xl p-4 mb-4 text-sm text-foreground">
-            <p className="font-semibold flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-500" /> Restored backup detected
-            </p>
-            <p className="mt-1 text-muted-foreground">
-              Your data is back, but passwords are never included in a backup. Enter the{' '}
-              <span className="font-medium text-foreground">username of an administrator from the restored data</span>, a
-              new password, and the install token to regain access. Organization and name fields are ignored in this step.
-            </p>
-          </div>
-        )}
+        <RecoveryBanner recovery={recovery} />
 
         <div className="bg-card border border-border rounded-xl p-6 space-y-4">
           {step === 1 && (
@@ -393,7 +424,7 @@ export default function SetupPage({ recovery = false }) {
           {step === 2 && (
             <>
               <h2 className="text-lg font-semibold flex items-center gap-2">
-                <Shield className="w-5 h-5 text-primary" /> {adminStepHeading}
+                <Shield className="w-5 h-5 text-primary" /> {copy.heading}
               </h2>
               <div>
                 <label htmlFor="username" className="block text-sm font-medium mb-1">Username</label>
@@ -401,7 +432,7 @@ export default function SetupPage({ recovery = false }) {
                   type="text"
                   value={form.username}
                   onChange={e => setForm({...form, username: e.target.value})}
-                  placeholder={usernamePlaceholder}
+                  placeholder={copy.placeholder}
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground"
                 />
               </div>
@@ -425,23 +456,7 @@ export default function SetupPage({ recovery = false }) {
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground"
                 />
               </div>
-              {recovery && (
-                <div>
-                  <label htmlFor="recovery-install-token" className="block text-sm font-medium mb-1">Install Token</label>
-                  <input id="recovery-install-token"
-                    type="text"
-                    autoComplete="off"
-                    spellCheck="false"
-                    value={installToken}
-                    onChange={e => setInstallToken(e.target.value.trim())}
-                    placeholder="64-character token"
-                    className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-xs font-mono focus:outline-none focus:ring-2 focus:ring-ring"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Run <code className="text-foreground">docker logs &lt;container&gt;</code> and look for "install token", or read <code className="text-foreground">install_token.txt</code> from the container's data directory.
-                  </p>
-                </div>
-              )}
+              <RecoveryTokenField recovery={recovery} value={installToken} onChange={setInstallToken} />
               {error && (
                 <div className="bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg p-3 text-sm">{error}</div>
               )}
