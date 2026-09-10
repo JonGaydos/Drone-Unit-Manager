@@ -275,6 +275,28 @@ def _reclaim_admin(db, username: str, password: str) -> User:
     return admin
 
 
+def _reactivate_admin(request, db, username: str, password: str) -> dict:
+    """Recovery path for a locked-out (redacted-restore) install.
+
+    Gated on the same install token that authorized the restore -- knowing an
+    admin username is not enough to take over a locked-out install. Reactivates
+    the named admin, retires the token (a usable login now exists), and returns
+    the login response.
+    """
+    from app.routers.backup import verify_install_token, retire_install_token
+    if not verify_install_token(request.headers.get("X-Install-Token", "")):
+        raise HTTPException(401, "Install token required to reactivate an administrator. Read it from the container logs or install_token.txt.")
+    admin = _reclaim_admin(db, username, password)
+    db.commit()
+    db.refresh(admin)
+    retire_install_token()
+    return {
+        "token": create_token(admin.id),
+        "user": {"id": admin.id, "username": admin.username,
+                 "display_name": admin.display_name, "role": admin.role},
+    }
+
+
 @router.post("/setup", responses=responses(400, 401, 403))
 def initial_setup(data: SetupRequest, request: Request, db: DBSession):
     """Create the first admin, or re-claim one after a redacted-backup restore.
@@ -292,8 +314,6 @@ def initial_setup(data: SetupRequest, request: Request, db: DBSession):
     if _has_usable_login(db):
         raise HTTPException(403, "Setup already completed. Use the login page.")
 
-    from app.routers.backup import verify_install_token, retire_install_token
-
     username = data.username.strip()
     password = data.password
     if not username or len(username) < 3:
@@ -301,22 +321,9 @@ def initial_setup(data: SetupRequest, request: Request, db: DBSession):
     _validate_password(password)
 
     # Post-restore recovery: reactivate an existing admin rather than seed a
-    # second copy of the default data the restore already loaded. Gate it on the
-    # same install token that authorized the restore -- knowing a username is not
-    # enough to take over a locked-out install.
+    # second copy of the default data the restore already loaded.
     if db.query(User).count() > 0:
-        if not verify_install_token(request.headers.get("X-Install-Token", "")):
-            raise HTTPException(401, "Install token required to reactivate an administrator. Read it from the container logs or install_token.txt.")
-        admin = _reclaim_admin(db, username, password)
-        db.commit()
-        db.refresh(admin)
-        retire_install_token()
-        token = create_token(admin.id)
-        return {
-            "token": token,
-            "user": {"id": admin.id, "username": admin.username,
-                     "display_name": admin.display_name, "role": admin.role},
-        }
+        return _reactivate_admin(request, db, username, password)
 
     display_name = data.display_name.strip()
     org_name = data.org_name.strip()
@@ -379,6 +386,7 @@ def initial_setup(data: SetupRequest, request: Request, db: DBSession):
     db.commit()
     db.refresh(admin)
     # A usable login now exists, so the fresh-install token is no longer needed.
+    from app.routers.backup import retire_install_token
     retire_install_token()
 
     # Generate token so they're logged in immediately

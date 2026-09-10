@@ -154,6 +154,15 @@ export default function SetupPage({ recovery = false }) {
     } finally { setImporting(false) }
   }
 
+  // Recovery mode reactivates an existing admin after a redacted-backup restore;
+  // it reuses the fresh-install wizard with different copy, so derive the strings
+  // once rather than branching inside the JSX.
+  const subtitle = recovery ? 'Backup restored. Reactivate an administrator to sign in.' : "Welcome! Let's set up your account."
+  const adminStepHeading = recovery ? 'Reactivate Administrator' : 'Create Admin Account'
+  const usernamePlaceholder = recovery ? 'Existing administrator username' : 'Choose a username'
+  let submitLabel = recovery ? 'Reactivate & Sign In' : 'Create Account & Start'
+  if (loading) submitLabel = recovery ? 'Reactivating...' : 'Creating...'
+
   return (
     <div className="min-h-screen bg-bg flex items-center justify-center p-4">
       <div className="w-full max-w-lg">
@@ -164,7 +173,7 @@ export default function SetupPage({ recovery = false }) {
           </div>
           <h1 className="text-3xl font-bold text-foreground">Drone Unit Manager</h1>
           <p className="text-muted-foreground mt-2">
-            {recovery ? 'Backup restored. Reactivate an administrator to sign in.' : "Welcome! Let's set up your account."}
+            {subtitle}
           </p>
         </div>
 
@@ -384,7 +393,7 @@ export default function SetupPage({ recovery = false }) {
           {step === 2 && (
             <>
               <h2 className="text-lg font-semibold flex items-center gap-2">
-                <Shield className="w-5 h-5 text-primary" /> {recovery ? 'Reactivate Administrator' : 'Create Admin Account'}
+                <Shield className="w-5 h-5 text-primary" /> {adminStepHeading}
               </h2>
               <div>
                 <label htmlFor="username" className="block text-sm font-medium mb-1">Username</label>
@@ -392,7 +401,7 @@ export default function SetupPage({ recovery = false }) {
                   type="text"
                   value={form.username}
                   onChange={e => setForm({...form, username: e.target.value})}
-                  placeholder={recovery ? 'Existing administrator username' : 'Choose a username'}
+                  placeholder={usernamePlaceholder}
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground"
                 />
               </div>
@@ -445,7 +454,7 @@ export default function SetupPage({ recovery = false }) {
                   disabled={loading || !form.username || !form.password || (recovery && !installToken)}
                   className="flex-1 py-2.5 bg-primary text-primary-foreground rounded-lg font-medium disabled:opacity-50"
                 >
-                  {loading ? (recovery ? 'Reactivating...' : 'Creating...') : (recovery ? 'Reactivate & Sign In' : 'Create Account & Start')}
+                  {submitLabel}
                 </button>
               </div>
             </>
