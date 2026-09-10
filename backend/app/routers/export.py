@@ -82,6 +82,67 @@ SKYDIO_LOCAL_TAKEOFF_COL = "Local Takeoff Time"
 EXCEL_EXTENSIONS = ('.xlsx', '.xls')
 
 
+def _resolve_display_tz(db):
+    """The configured display timezone, falling back to TZ env then Central."""
+    import os
+    from zoneinfo import ZoneInfo
+    from app.models.setting import Setting
+
+    tz_row = db.query(Setting).filter(Setting.key == "display_timezone").first()
+    tz_name = (tz_row.value if tz_row and tz_row.value else None) or os.environ.get("TZ", "America/Chicago")
+    try:
+        return ZoneInfo(tz_name)
+    except Exception:
+        return ZoneInfo("America/Chicago")
+
+
+def _csv_fmt_utc(dt):
+    """A stored (already-UTC) datetime rendered as-is, or empty."""
+    return dt.strftime("%Y-%m-%d %H:%M") if dt else ""
+
+
+def _csv_fmt_local(dt, local_tz):
+    """A stored UTC datetime converted to the configured local zone, or empty."""
+    if not dt:
+        return ""
+    from datetime import timezone
+    return dt.replace(tzinfo=timezone.utc).astimezone(local_tz).strftime("%Y-%m-%d %H:%M")
+
+
+def _csv_eq(v):
+    """Equipment field: 'N/A' when empty (matches the Skydio export)."""
+    return v if v else "N/A"
+
+
+def _flight_csv_row(f, local_tz):
+    """One flights-export row in the Skydio column order."""
+    pilot_str = ""
+    if f.pilot:
+        name = f"{f.pilot.first_name or ''} {f.pilot.last_name or ''}".strip()
+        pilot_str = f.pilot.email or name
+    vehicle_str = f.vehicle.serial_number if f.vehicle and f.vehicle.serial_number else ""
+    return [
+        _csv_safe(f.external_id or ""),
+        _csv_safe(vehicle_str),
+        _csv_safe(pilot_str),
+        _csv_fmt_local(f.takeoff_time, local_tz),
+        _csv_fmt_utc(f.takeoff_time),
+        _csv_safe(f.takeoff_address or ""),
+        f.takeoff_lat if f.takeoff_lat is not None else "",
+        f.takeoff_lon if f.takeoff_lon is not None else "",
+        _csv_fmt_utc(f.landing_time),
+        f.duration_seconds if f.duration_seconds is not None else "",
+        _csv_safe(_csv_eq(f.battery_serial)),
+        _csv_safe(_csv_eq(f.sensor_package)),
+        _csv_safe(_csv_eq(f.attachment_top)),
+        _csv_safe(_csv_eq(f.attachment_bottom)),
+        _csv_safe(_csv_eq(f.attachment_left)),
+        _csv_safe(_csv_eq(f.attachment_right)),
+        _csv_safe(_csv_eq(f.carrier)),
+        _csv_safe(f.purpose or ""),
+    ]
+
+
 @router.get("/flights/csv")
 def export_flights_csv(
     db: DBSession,
@@ -96,31 +157,7 @@ def export_flights_csv(
     stored UTC values; Local Takeoff Time is converted to the configured
     display timezone.
     """
-    import os
-    from datetime import timezone
-    from zoneinfo import ZoneInfo
-    from app.models.setting import Setting
-
-    tz_row = db.query(Setting).filter(Setting.key == "display_timezone").first()
-    tz_name = (tz_row.value if tz_row and tz_row.value else None) or os.environ.get("TZ", "America/Chicago")
-    try:
-        local_tz = ZoneInfo(tz_name)
-    except Exception:
-        local_tz = ZoneInfo("America/Chicago")
-
-    def _fmt_utc(dt):
-        # Stored value is already UTC; render as-is.
-        return dt.strftime("%Y-%m-%d %H:%M") if dt else ""
-
-    def _fmt_local(dt):
-        # Convert stored UTC to the configured local zone.
-        if not dt:
-            return ""
-        return dt.replace(tzinfo=timezone.utc).astimezone(local_tz).strftime("%Y-%m-%d %H:%M")
-
-    def _eq(v):
-        """Equipment field: 'N/A' when empty (matches the Skydio export)."""
-        return v if v else "N/A"
+    local_tz = _resolve_display_tz(db)
 
     q = db.query(Flight).options(joinedload(Flight.pilot), joinedload(Flight.vehicle))
     if date_from:
@@ -139,31 +176,7 @@ def export_flights_csv(
         "Attachment (RIGHT)", "Carrier(s)", "Purpose",
     ])
     for f in flights:
-        pilot_str = ""
-        if f.pilot:
-            name = f"{f.pilot.first_name or ''} {f.pilot.last_name or ''}".strip()
-            pilot_str = f.pilot.email or name
-        vehicle_str = f.vehicle.serial_number if f.vehicle and f.vehicle.serial_number else ""
-        writer.writerow([
-            _csv_safe(f.external_id or ""),
-            _csv_safe(vehicle_str),
-            _csv_safe(pilot_str),
-            _fmt_local(f.takeoff_time),
-            _fmt_utc(f.takeoff_time),
-            _csv_safe(f.takeoff_address or ""),
-            f.takeoff_lat if f.takeoff_lat is not None else "",
-            f.takeoff_lon if f.takeoff_lon is not None else "",
-            _fmt_utc(f.landing_time),
-            f.duration_seconds if f.duration_seconds is not None else "",
-            _csv_safe(_eq(f.battery_serial)),
-            _csv_safe(_eq(f.sensor_package)),
-            _csv_safe(_eq(f.attachment_top)),
-            _csv_safe(_eq(f.attachment_bottom)),
-            _csv_safe(_eq(f.attachment_left)),
-            _csv_safe(_eq(f.attachment_right)),
-            _csv_safe(_eq(f.carrier)),
-            _csv_safe(f.purpose or ""),
-        ])
+        writer.writerow(_flight_csv_row(f, local_tz))
 
     output.seek(0)
     return StreamingResponse(
@@ -475,6 +488,19 @@ def export_mission_logs_csv(
     )
 
 
+def _incident_csv_row(inc, db):
+    """One incidents-export row."""
+    pilot = db.query(Pilot).filter(Pilot.id == inc.pilot_id).first() if inc.pilot_id else None
+    return [
+        inc.date, _csv_safe(inc.title), _csv_safe(pilot.full_name) if pilot else "",
+        getattr(inc, 'report_type', 'incident') or 'incident',
+        inc.severity, _csv_safe(inc.category), _csv_safe(inc.description or ""),
+        _csv_safe(inc.location or ""), inc.status, _csv_safe(inc.resolution or ""),
+        "Yes" if inc.equipment_grounded else "No",
+        _csv_safe(inc.damage_description or ""), inc.estimated_cost or "", _csv_safe(inc.notes or ""),
+    ]
+
+
 @router.get("/incidents/csv")
 def export_incidents_csv(
     db: DBSession,
@@ -500,21 +526,27 @@ def export_incidents_csv(
         "Damage Description", "Estimated Cost", "Notes",
     ])
     for inc in incidents:
-        pilot = db.query(Pilot).filter(Pilot.id == inc.pilot_id).first() if inc.pilot_id else None
-        writer.writerow([
-            inc.date, _csv_safe(inc.title), _csv_safe(pilot.full_name) if pilot else "",
-            getattr(inc, 'report_type', 'incident') or 'incident',
-            inc.severity, _csv_safe(inc.category), _csv_safe(inc.description or ""),
-            _csv_safe(inc.location or ""), inc.status, _csv_safe(inc.resolution or ""),
-            "Yes" if inc.equipment_grounded else "No",
-            _csv_safe(inc.damage_description or ""), inc.estimated_cost or "", _csv_safe(inc.notes or ""),
-        ])
+        writer.writerow(_incident_csv_row(inc, db))
     output.seek(0)
     return StreamingResponse(
         iter([output.getvalue()]),
         media_type=CSV_MEDIA_TYPE,
         headers={"Content-Disposition": "attachment; filename=incidents_export.csv"},
     )
+
+
+def _flight_plan_csv_row(p, db):
+    """One flight-plans-export row."""
+    pilot = db.query(Pilot).filter(Pilot.id == p.pilot_id).first() if p.pilot_id else None
+    vehicle = db.query(Vehicle).filter(Vehicle.id == p.vehicle_id).first() if p.vehicle_id else None
+    return [
+        _csv_safe(p.title), p.date_planned,
+        _csv_safe(pilot.full_name) if pilot else "",
+        _csv_safe(f"{vehicle.manufacturer} {vehicle.model}") if vehicle else "",
+        _csv_safe(p.location or ""), _csv_safe(p.purpose or ""), _csv_safe(p.case_number or ""),
+        p.status, p.max_altitude_planned or "", p.estimated_duration_min or "",
+        _csv_safe(p.notes or ""),
+    ]
 
 
 @router.get("/flight-plans/csv")
@@ -539,16 +571,7 @@ def export_flight_plans_csv(
         COL_CASE_NUMBER, "Status", "Max Altitude", "Est Duration (min)", "Notes",
     ])
     for p in plans:
-        pilot = db.query(Pilot).filter(Pilot.id == p.pilot_id).first() if p.pilot_id else None
-        vehicle = db.query(Vehicle).filter(Vehicle.id == p.vehicle_id).first() if p.vehicle_id else None
-        writer.writerow([
-            _csv_safe(p.title), p.date_planned,
-            _csv_safe(pilot.full_name) if pilot else "",
-            _csv_safe(f"{vehicle.manufacturer} {vehicle.model}") if vehicle else "",
-            _csv_safe(p.location or ""), _csv_safe(p.purpose or ""), _csv_safe(p.case_number or ""),
-            p.status, p.max_altitude_planned or "", p.estimated_duration_min or "",
-            _csv_safe(p.notes or ""),
-        ])
+        writer.writerow(_flight_plan_csv_row(p, db))
     output.seek(0)
     return StreamingResponse(
         iter([output.getvalue()]),
@@ -593,6 +616,20 @@ def export_audit_csv(
     )
 
 
+def _equipment_checkout_csv_row(c, db):
+    """One equipment-checkouts-export row."""
+    pilot_out = db.query(Pilot).filter(Pilot.id == c.checked_out_by_id).first() if c.checked_out_by_id else None
+    return [
+        _csv_safe(c.entity_type), _csv_safe(c.entity_name or ""),
+        _csv_safe(pilot_out.full_name) if pilot_out else "",
+        c.checked_out_at.strftime("%Y-%m-%d %H:%M") if c.checked_out_at else "",
+        c.expected_return.strftime("%Y-%m-%d %H:%M") if c.expected_return else "",
+        c.checked_in_at.strftime("%Y-%m-%d %H:%M") if c.checked_in_at else "",
+        _csv_safe(c.condition_out or ""), _csv_safe(c.condition_in or ""),
+        _csv_safe(c.notes_out or ""), _csv_safe(c.notes_in or ""),
+    ]
+
+
 @router.get("/equipment-checkouts/csv")
 def export_equipment_checkouts_csv(
     db: DBSession,
@@ -616,16 +653,7 @@ def export_equipment_checkouts_csv(
         "Notes Out", "Notes In",
     ])
     for c in checkouts:
-        pilot_out = db.query(Pilot).filter(Pilot.id == c.checked_out_by_id).first() if c.checked_out_by_id else None
-        writer.writerow([
-            _csv_safe(c.entity_type), _csv_safe(c.entity_name or ""),
-            _csv_safe(pilot_out.full_name) if pilot_out else "",
-            c.checked_out_at.strftime("%Y-%m-%d %H:%M") if c.checked_out_at else "",
-            c.expected_return.strftime("%Y-%m-%d %H:%M") if c.expected_return else "",
-            c.checked_in_at.strftime("%Y-%m-%d %H:%M") if c.checked_in_at else "",
-            _csv_safe(c.condition_out or ""), _csv_safe(c.condition_in or ""),
-            _csv_safe(c.notes_out or ""), _csv_safe(c.notes_in or ""),
-        ])
+        writer.writerow(_equipment_checkout_csv_row(c, db))
     output.seek(0)
     return StreamingResponse(
         iter([output.getvalue()]),
