@@ -74,6 +74,9 @@ USER app
 
 ENV DATA_DIR=/app/data
 ENV DATABASE_URL=sqlite:////app/data/drone_unit_manager.db
+# Unbuffered stdout/stderr so startup logs (including the fresh-install backup
+# token) reach `docker logs` immediately instead of sitting in a block buffer.
+ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8000
 

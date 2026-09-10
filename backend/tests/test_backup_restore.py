@@ -147,8 +147,13 @@ def test_backup_import_round_trip(client, db, telemetry_db, tmp_path, monkeypatc
     # The uploaded file was extracted back to disk.
     assert (upload_dir / "documents" / "evidence.txt").read_text() == "body-camera notes"
 
-    # The install token is retired after a successful fresh-install import.
-    assert not (tmp_path / "install_token.txt").exists()
+    # A restore blanks every password hash, so the install is left with no usable
+    # login. The same install token is kept in place (not retired, not replaced)
+    # so the operator can reactivate an admin on the setup screen; it is retired
+    # only once that succeeds.
+    token_file = tmp_path / "install_token.txt"
+    assert token_file.exists()
+    assert token_file.read_text().strip() == token   # unchanged, not a new token
 
 
 def test_backup_import_rejects_a_non_zip(client, db, tmp_path, monkeypatch):

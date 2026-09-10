@@ -60,10 +60,32 @@ describe('SetupPage', () => {
     expect(localStorage.getItem('token')).toBe('setup-token')
   })
 
-  it('shows the recovery banner when recovery mode is active', () => {
+  it('shows the recovery banner and lands on the admin-fields step in recovery mode', () => {
     renderWithProviders(<SetupPage recovery />, { route: '/setup' })
     expect(screen.getByText('Restored backup detected')).toBeInTheDocument()
     expect(screen.getByText(/Reactivate an administrator/)).toBeInTheDocument()
+    // Skips the (ignored) Organization step and shows username/password directly.
+    expect(screen.getByRole('heading', { name: 'Reactivate Administrator' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Username')).toBeInTheDocument()
+    expect(screen.getByLabelText('Password')).toBeInTheDocument()
+    expect(screen.getByLabelText('Install Token')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Organization' })).not.toBeInTheDocument()
+  })
+
+  it('sends the install token header when reactivating in recovery mode', async () => {
+    let sentToken = null
+    server.use(http.post('/api/auth/setup', async ({ request }) => {
+      sentToken = request.headers.get('X-Install-Token')
+      return HttpResponse.json({ token: 't', user: { id: 1, username: 'chief', role: 'admin' } })
+    }))
+    const { user } = renderWithProviders(<SetupPage recovery />, { route: '/setup' })
+    await user.type(screen.getByLabelText('Username'), 'chief')
+    await user.type(screen.getByLabelText('Password'), 'Recovered1234')
+    await user.type(screen.getByLabelText('Confirm Password'), 'Recovered1234')
+    await user.type(screen.getByLabelText('Install Token'), 'the-install-token')
+    await user.click(screen.getByRole('button', { name: /Reactivate & Sign In/ }))
+
+    await waitFor(() => expect(sentToken).toBe('the-install-token'))
   })
 
   it('omits the recovery banner on a normal fresh install', () => {

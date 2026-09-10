@@ -5,11 +5,15 @@ past incident produced a 500 here), token-protected routes, and admin role
 gating on a real admin-only endpoint (GET /api/audit).
 """
 
+import os
+
 from tests.conftest import ADMIN_PASSWORD, PILOT_PASSWORD
 
+from app.config import settings as app_settings
 from app.models.user import User
 from app.models.flight import FlightPurpose
 from app.models.folder import Folder
+from app.routers.backup import _install_token_path
 
 LOGIN_URL = "/api/auth/login"
 ME_URL = "/api/auth/me"
@@ -17,6 +21,7 @@ AUDIT_URL = "/api/audit"
 SETUP_URL = "/api/auth/setup"
 SETUP_REQUIRED_URL = "/api/auth/setup-required"
 RECOVERY_PASSWORD = "Recovered1Passw0rd!"
+INSTALL_TOKEN = "recovery-install-token"
 
 
 def _seed_blank_hash_user(db, username, role):
@@ -25,6 +30,19 @@ def _seed_blank_hash_user(db, username, role):
     db.add(User(username=username, password_hash="", display_name=username.title(),
                 role=role, is_active=True))
     db.commit()
+
+
+def _arm_install_token(monkeypatch, tmp_path, token=INSTALL_TOKEN):
+    """Point DATA_DIR at tmp and write an install token file, so recovery
+    reactivation (which the endpoint gates on that token) can succeed."""
+    monkeypatch.setattr(app_settings, "DATA_DIR", tmp_path)
+    with open(_install_token_path(), "w") as f:
+        f.write(token)
+    return {"X-Install-Token": token}
+
+
+def _install_token_path_exists():
+    return os.path.exists(_install_token_path())
 
 
 def test_login_correct_credentials_returns_token(client, admin_user):
@@ -103,7 +121,9 @@ def test_setup_required_recovery_when_all_hashes_blank(client, db):
     assert body["recovery"] is True
 
 
-def test_initial_setup_creates_admin_and_seeds_defaults(client, db):
+def test_initial_setup_creates_admin_and_seeds_defaults(client, db, tmp_path, monkeypatch):
+    # Isolate DATA_DIR so the fresh-install token retirement stays in tmp.
+    monkeypatch.setattr(app_settings, "DATA_DIR", tmp_path)
     resp = client.post(SETUP_URL, json={
         "username": "founder", "password": ADMIN_PASSWORD, "display_name": "Fleet Founder",
     })
@@ -121,12 +141,15 @@ def test_initial_setup_blocked_when_usable_login_exists(client, admin_user):
     assert resp.status_code == 403, resp.text
 
 
-def test_setup_reclaims_existing_admin_after_redacted_restore(client, db):
+def test_setup_reclaims_existing_admin_after_redacted_restore(client, db, tmp_path, monkeypatch):
     """The core fix: with users present but every hash blank, setup re-claims the
-    named admin (sets its password) rather than seeding a second install."""
+    named admin (sets its password), gated on the install token, rather than
+    seeding a second install."""
     _seed_blank_hash_user(db, "chief", "admin")
+    headers = _arm_install_token(monkeypatch, tmp_path)
 
-    resp = client.post(SETUP_URL, json={"username": "chief", "password": RECOVERY_PASSWORD})
+    resp = client.post(SETUP_URL, headers=headers,
+                       json={"username": "chief", "password": RECOVERY_PASSWORD})
     assert resp.status_code == 200, resp.text
     assert resp.json()["user"]["username"] == "chief"
 
@@ -138,18 +161,43 @@ def test_setup_reclaims_existing_admin_after_redacted_restore(client, db):
     # The reclaimed admin logs in with the new password, and setup closes again.
     assert client.post(LOGIN_URL, json={"username": "chief", "password": RECOVERY_PASSWORD}).status_code == 200
     assert client.get(SETUP_REQUIRED_URL).json()["setup_required"] is False
+    # The token is single-use: retired once a usable login exists.
+    assert not _install_token_path_exists()
 
 
-def test_setup_recovery_rejects_unknown_username(client, db):
+def test_setup_recovery_requires_install_token(client, db, tmp_path, monkeypatch):
+    """Knowing an admin username is not enough; without the install token the
+    reactivation is refused, closing the post-restore takeover window."""
     _seed_blank_hash_user(db, "chief", "admin")
-    resp = client.post(SETUP_URL, json={"username": "nobody", "password": RECOVERY_PASSWORD})
+    monkeypatch.setattr(app_settings, "DATA_DIR", tmp_path)  # token file absent
+    resp = client.post(SETUP_URL, json={"username": "chief", "password": RECOVERY_PASSWORD})
+    assert resp.status_code == 401, resp.text
+    # The admin is untouched: still no usable login.
+    assert client.post(LOGIN_URL, json={"username": "chief", "password": RECOVERY_PASSWORD}).status_code == 401
+
+
+def test_setup_recovery_rejects_bad_install_token(client, db, tmp_path, monkeypatch):
+    _seed_blank_hash_user(db, "chief", "admin")
+    _arm_install_token(monkeypatch, tmp_path)
+    resp = client.post(SETUP_URL, headers={"X-Install-Token": "wrong-token"},
+                       json={"username": "chief", "password": RECOVERY_PASSWORD})
+    assert resp.status_code == 401, resp.text
+
+
+def test_setup_recovery_rejects_unknown_username(client, db, tmp_path, monkeypatch):
+    _seed_blank_hash_user(db, "chief", "admin")
+    headers = _arm_install_token(monkeypatch, tmp_path)
+    resp = client.post(SETUP_URL, headers=headers,
+                       json={"username": "nobody", "password": RECOVERY_PASSWORD})
     assert resp.status_code == 400, resp.text
 
 
-def test_setup_recovery_rejects_non_admin_username(client, db):
+def test_setup_recovery_rejects_non_admin_username(client, db, tmp_path, monkeypatch):
     """Claiming a non-admin account would leave the operator without admin
     access, so only an administrator username is accepted for recovery."""
     _seed_blank_hash_user(db, "chief", "admin")
     _seed_blank_hash_user(db, "observer", "pilot")
-    resp = client.post(SETUP_URL, json={"username": "observer", "password": RECOVERY_PASSWORD})
+    headers = _arm_install_token(monkeypatch, tmp_path)
+    resp = client.post(SETUP_URL, headers=headers,
+                       json={"username": "observer", "password": RECOVERY_PASSWORD})
     assert resp.status_code == 400, resp.text
