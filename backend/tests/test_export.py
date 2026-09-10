@@ -143,7 +143,8 @@ def test_flights_csv_headers_and_row(client, db, admin_headers):
     resp = client.get("/api/export/flights/csv", headers=admin_headers)
     assert resp.status_code == 200, resp.text
     rows = _rows(resp)
-    assert rows and "Purpose" in rows[0]
+    assert rows
+    assert "Purpose" in rows[0]
     r = rows[0]
     assert r["Pilot"] == "ana@example.gov"   # email preferred over the name
     assert r["Vehicle"] == "SN-1"
@@ -172,7 +173,8 @@ def test_incidents_csv_headers_and_row(client, db, admin_headers):
     db.commit()
 
     rows = _rows(client.get("/api/export/incidents/csv", headers=admin_headers))
-    assert rows and "Report Type" in rows[0]
+    assert rows
+    assert "Report Type" in rows[0]
     r = rows[0]
     assert r["Title"] == "Bird strike"
     assert r["Pilot"] == "Bo Reed"
@@ -189,7 +191,8 @@ def test_flight_plans_csv_headers_and_row(client, db, admin_user, admin_headers)
     db.commit()
 
     rows = _rows(client.get("/api/export/flight-plans/csv", headers=admin_headers))
-    assert rows and "Date Planned" in rows[0]
+    assert rows
+    assert "Date Planned" in rows[0]
     r = rows[0]
     assert r["Title"] == "Overwatch"
     assert r["Pilot"] == "Cy Lang"
@@ -205,7 +208,8 @@ def test_equipment_checkouts_csv_headers_and_row(client, db, admin_headers):
     db.commit()
 
     rows = _rows(client.get("/api/export/equipment-checkouts/csv", headers=admin_headers))
-    assert rows and "Checked Out By" in rows[0]
+    assert rows
+    assert "Checked Out By" in rows[0]
     r = rows[0]
     assert r["Entity Name"] == "X10-1"
     assert r["Checked Out By"] == "Di Vance"
