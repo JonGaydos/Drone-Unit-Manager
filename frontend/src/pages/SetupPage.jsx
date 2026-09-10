@@ -1,11 +1,14 @@
 import { useState, useRef } from 'react'
 import { api } from '@/api/client'
-import { Shield, ArrowRight, Upload, Loader2, Image as ImageIcon, Mail, Plug, FileUp, CheckCircle2 } from 'lucide-react'
+import { Shield, ArrowRight, Upload, Loader2, Image as ImageIcon, Mail, Plug, FileUp, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 import { TIMEZONES } from '@/lib/utils'
 
 export default function SetupPage({ recovery = false }) {
-  const [step, setStep] = useState(1)
+  // In recovery mode the organization step is irrelevant (the restore already
+  // has that data and the backend ignores it), and the username/password fields
+  // the banner refers to live on step 2, so start there.
+  const [step, setStep] = useState(recovery ? 2 : 1)
   const [form, setForm] = useState({
     display_name: '',
     org_name: '',
@@ -159,11 +162,13 @@ export default function SetupPage({ recovery = false }) {
         </div>
 
         {recovery && (
-          <div className="bg-amber-500/10 border border-amber-500/30 text-amber-300 rounded-xl p-4 mb-4 text-sm">
-            <p className="font-medium text-amber-200">Restored backup detected</p>
-            <p className="mt-1">
+          <div className="bg-amber-500/10 border border-amber-500/40 rounded-xl p-4 mb-4 text-sm text-foreground">
+            <p className="font-semibold flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-500" /> Restored backup detected
+            </p>
+            <p className="mt-1 text-muted-foreground">
               Your data is back, but passwords are never included in a backup. Enter the{' '}
-              <span className="font-medium">username of an administrator from the restored data</span>{' '}
+              <span className="font-medium text-foreground">username of an administrator from the restored data</span>{' '}
               and a new password to regain access. Organization and name fields are ignored in this step.
             </p>
           </div>
@@ -372,7 +377,7 @@ export default function SetupPage({ recovery = false }) {
           {step === 2 && (
             <>
               <h2 className="text-lg font-semibold flex items-center gap-2">
-                <Shield className="w-5 h-5 text-primary" /> Create Admin Account
+                <Shield className="w-5 h-5 text-primary" /> {recovery ? 'Reactivate Administrator' : 'Create Admin Account'}
               </h2>
               <div>
                 <label htmlFor="username" className="block text-sm font-medium mb-1">Username</label>
@@ -380,7 +385,7 @@ export default function SetupPage({ recovery = false }) {
                   type="text"
                   value={form.username}
                   onChange={e => setForm({...form, username: e.target.value})}
-                  placeholder="Choose a username"
+                  placeholder={recovery ? 'Existing administrator username' : 'Choose a username'}
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground"
                 />
               </div>
@@ -408,13 +413,15 @@ export default function SetupPage({ recovery = false }) {
                 <div className="bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg p-3 text-sm">{error}</div>
               )}
               <div className="flex gap-2">
-                <button onClick={() => setStep(1)} className="px-4 py-2.5 bg-secondary text-foreground rounded-lg">Back</button>
+                {!recovery && (
+                  <button onClick={() => setStep(1)} className="px-4 py-2.5 bg-secondary text-foreground rounded-lg">Back</button>
+                )}
                 <button
                   onClick={handleSubmit}
                   disabled={loading || !form.username || !form.password}
                   className="flex-1 py-2.5 bg-primary text-primary-foreground rounded-lg font-medium disabled:opacity-50"
                 >
-                  {loading ? 'Creating...' : 'Create Account & Start'}
+                  {loading ? (recovery ? 'Reactivating...' : 'Creating...') : (recovery ? 'Reactivate & Sign In' : 'Create Account & Start')}
                 </button>
               </div>
             </>

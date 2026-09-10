@@ -60,10 +60,15 @@ describe('SetupPage', () => {
     expect(localStorage.getItem('token')).toBe('setup-token')
   })
 
-  it('shows the recovery banner when recovery mode is active', () => {
+  it('shows the recovery banner and lands on the admin-fields step in recovery mode', () => {
     renderWithProviders(<SetupPage recovery />, { route: '/setup' })
     expect(screen.getByText('Restored backup detected')).toBeInTheDocument()
     expect(screen.getByText(/Reactivate an administrator/)).toBeInTheDocument()
+    // Skips the (ignored) Organization step and shows username/password directly.
+    expect(screen.getByRole('heading', { name: 'Reactivate Administrator' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Username')).toBeInTheDocument()
+    expect(screen.getByLabelText('Password')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Organization' })).not.toBeInTheDocument()
   })
 
   it('omits the recovery banner on a normal fresh install', () => {
