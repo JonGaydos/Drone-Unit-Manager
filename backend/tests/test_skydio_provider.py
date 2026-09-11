@@ -50,7 +50,8 @@ def test_log_provider_error_api_status_is_a_warning_without_traceback(caplog):
     with caplog.at_level(logging.DEBUG):
         _log_provider_error("sync widgets", _http_error(403))
     recs = _records(caplog, "sync widgets")
-    assert recs and recs[0].levelno == logging.WARNING
+    assert recs
+    assert recs[0].levelno == logging.WARNING
     assert recs[0].exc_info is None
     assert "403" in recs[0].getMessage()
 
@@ -59,7 +60,8 @@ def test_log_provider_error_unexpected_keeps_full_traceback(caplog):
     with caplog.at_level(logging.DEBUG):
         _log_provider_error("sync widgets", ValueError("boom"))
     recs = _records(caplog, "sync widgets")
-    assert recs and recs[0].levelno == logging.ERROR
+    assert recs
+    assert recs[0].levelno == logging.ERROR
     assert recs[0].exc_info is not None
 
 
@@ -177,7 +179,8 @@ def test_sync_media_warns_and_returns_empty_on_api_error(caplog):
     with caplog.at_level(logging.DEBUG):
         assert provider.sync_media(CREDS) == []
     recs = _records(caplog, "sync Skydio media")
-    assert recs and recs[0].levelno == logging.WARNING
+    assert recs
+    assert recs[0].levelno == logging.WARNING
     assert recs[0].exc_info is None
 
 
@@ -189,5 +192,6 @@ def test_sync_controllers_logs_error_with_traceback_on_bug(caplog):
     with caplog.at_level(logging.DEBUG):
         assert provider.sync_controllers(CREDS) == []
     recs = _records(caplog, "sync Skydio controllers")
-    assert recs and recs[0].levelno == logging.ERROR
+    assert recs
+    assert recs[0].levelno == logging.ERROR
     assert recs[0].exc_info is not None
