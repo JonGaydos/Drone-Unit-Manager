@@ -124,7 +124,7 @@ function AppRoutes() {
   const { user, loading } = useAuth()
   const [setupRequired, setSetupRequired] = useState(null)
   const [recovery, setRecovery] = useState(false)
-  const [tzReady, setTzReady] = useState(false)
+  const [tzLoaded, setTzLoaded] = useState(false)
 
   useEffect(() => {
     api.get('/auth/setup-required')
@@ -132,14 +132,18 @@ function AppRoutes() {
       .catch(() => setSetupRequired(false))
   }, [])
 
+  // Load the signed-in user's display timezone. Only the async completion sets
+  // state; a signed-out (or still-loading) session needs no fetch, so readiness
+  // for that case is derived below rather than set synchronously in the effect.
   useEffect(() => {
-    if (loading) return
-    if (!user) { setTzReady(true); return }
+    if (loading || !user) return
     api.get('/settings/display_timezone')
       .then(d => setDisplayTimezone(d.value || 'America/Chicago'))
       .catch(() => setDisplayTimezone('America/Chicago'))
-      .finally(() => setTzReady(true))
+      .finally(() => setTzLoaded(true))
   }, [user, loading])
+
+  const tzReady = !loading && (!user || tzLoaded)
 
   if (loading || setupRequired === null || !tzReady) return <div className="min-h-screen bg-background flex items-center justify-center"><Spinner /></div>
   if (setupRequired) return <Suspense fallback={<Spinner />}><SetupPage recovery={recovery} /></Suspense>

@@ -17,6 +17,21 @@ TELEMETRY_BASE = "https://api.skydio.com/api/v1"
 MAX_RETRIES = 3
 
 
+def _log_provider_error(action: str, exc: Exception) -> None:
+    """Log a Skydio provider failure at the right volume.
+
+    An error status the Skydio API returned (HTTPStatusError, e.g. a 403 for a
+    scope the token lacks or a 500 on their side) is expected and recovered from,
+    so it logs a single warning line. Anything else (a bug here, a JSON/parse
+    failure) keeps its full traceback so real problems stay debuggable.
+    """
+    if isinstance(exc, httpx.HTTPStatusError):
+        logger.warning("Could not %s: Skydio API returned HTTP %s for %s",
+                       action, exc.response.status_code, exc.request.url)
+    else:
+        logger.error("Failed to %s", action, exc_info=exc)
+
+
 def _to_str(val):
     """Convert API values to strings for DB storage. Handles dicts, lists, None."""
     if val is None:
@@ -102,30 +117,42 @@ def _map_raw_flight(f: dict) -> dict:
     }
 
 
+def _first_list_in_dict(d: dict) -> list | None:
+    """The first telemetry list under a known key, or the first list nested one
+    level deeper under such a key. None if nothing list-shaped is found."""
+    for key in ("flight_telemetry", "telemetry", "points", "data"):
+        val = d.get(key)
+        if isinstance(val, list):
+            return val
+        if isinstance(val, dict):
+            for subval in val.values():
+                if isinstance(subval, list):
+                    return subval
+    return None
+
+
 def _unwrap_telemetry_response(body) -> list:
     """Unwrap nested Skydio telemetry response to get a flat list of point dicts."""
     raw = body
-    if isinstance(raw, dict) and "data" in raw and isinstance(raw["data"], dict):
+    if isinstance(raw, dict) and isinstance(raw.get("data"), dict):
         raw = raw["data"]
     if isinstance(raw, dict):
-        for key in ("flight_telemetry", "telemetry", "points", "data"):
-            val = raw.get(key)
-            if isinstance(val, list):
-                return val
-            if isinstance(val, dict):
-                for _subkey, subval in val.items():
-                    if isinstance(subval, list):
-                        return subval
+        found = _first_list_in_dict(raw)
+        if found is not None:
+            return found
     if isinstance(raw, list):
         return raw
     return []
 
 
-def _map_telemetry_point(p: dict, takeoff_gps_alt: float | None) -> dict | None:
-    """Map a raw Skydio telemetry point to our standard format."""
-    if not isinstance(p, dict):
-        return None
+def _telemetry_point_derived(p: dict, takeoff_gps_alt: float | None):
+    """Compute (battery %, altitude AGL, horizontal speed) for a raw point.
 
+    Battery is normalized to a percentage (Skydio sends 0-1 or 0-100); altitude
+    prefers height_above_takeoff, else derives AGL from gps_altitude minus the
+    takeoff ground level; speed is the horizontal magnitude of the velocity
+    vector. Any of the three may be None when the inputs are absent.
+    """
     import math
 
     battery = p.get("battery_percentage")
@@ -144,6 +171,16 @@ def _map_telemetry_point(p: dict, takeoff_gps_alt: float | None) -> dict | None:
     speed = None
     if isinstance(velocity, list) and len(velocity) >= 2:
         speed = round(math.sqrt(sum(v**2 for v in velocity[:3])), 2)
+
+    return battery, alt, speed
+
+
+def _map_telemetry_point(p: dict, takeoff_gps_alt: float | None) -> dict | None:
+    """Map a raw Skydio telemetry point to our standard format."""
+    if not isinstance(p, dict):
+        return None
+
+    battery, alt, speed = _telemetry_point_derived(p, takeoff_gps_alt)
 
     return {
         "timestamp_ms": p.get("timestamp_ms") or p.get("timestamp"),
@@ -263,6 +300,41 @@ class SkydioProvider(DroneProvider):
 
         return "STOP", params
 
+    @staticmethod
+    def _log_page(url: str, page: int, resp: httpx.Response, body) -> None:
+        """Log one page's shape and any pagination fields (diagnostic only)."""
+        shape = list(body.keys()) if isinstance(body, dict) else f"list[{len(body)}]"
+        logger.info("Paginate %s (page %d): status=%d, type=%s, keys=%s",
+                    url.split("/")[-1], page, resp.status_code, type(body).__name__, shape)
+        if isinstance(body, dict):
+            for pkey in ("next", "next_cursor", "cursor", "has_more", "total",
+                         "count", "page", "per_page", "offset", "limit"):
+                if pkey in body:
+                    logger.info("  Pagination field '%s': %s", pkey, body[pkey])
+
+    def _consume_page(self, body, params: dict, all_data: list) -> tuple[dict, str | None, bool]:
+        """Fold one page body into all_data and report the next step.
+
+        Returns (params, next_url_or_None, stop). A bare list is the whole
+        result; a non-dict body is unusable; an empty item set ends paging.
+        Otherwise the items are appended and the next page computed -- the offset
+        math runs after the extend, exactly as the original loop did.
+        """
+        if isinstance(body, list):
+            all_data.extend(body)
+            return params, None, True
+        if not isinstance(body, dict):
+            return params, None, True
+        items = self._extract_items_from_body(body)
+        if not items:
+            return params, None, True
+        all_data.extend(items)
+        logger.info("  Got %d items this page, %d total", len(items), len(all_data))
+        new_url, params = self._advance_pagination(body, params, all_data)
+        if new_url == "STOP":
+            return params, None, True
+        return params, new_url, False
+
     def _paginate(
         self,
         url: str,
@@ -270,50 +342,23 @@ class SkydioProvider(DroneProvider):
         params: dict | None = None,
         default_per_page: int | None = 200,
     ) -> list[dict]:
-        """Fetch all pages from a paginated Skydio endpoint."""
+        """Fetch all pages from a paginated Skydio endpoint (100-page safety cap)."""
         all_data = []
         params = dict(params or {})
         if default_per_page is not None:
             params.setdefault("per_page", default_per_page)
-        page = 0
 
-        while True:
-            page += 1
-            if page > 100:
-                logger.warning("Pagination safety limit reached (100 pages), stopping")
-                break
-
+        for page in range(1, 101):
             resp = self._request("GET", url, creds, params=params)
             body = resp.json()
-
-            logger.info("Paginate %s (page %d): status=%d, type=%s, keys=%s",
-                url.split("/")[-1], page, resp.status_code,
-                type(body).__name__,
-                list(body.keys()) if isinstance(body, dict) else f"list[{len(body)}]")
-            if isinstance(body, dict):
-                for pkey in ("next", "next_cursor", "cursor", "has_more", "total", "count", "page", "per_page", "offset", "limit"):
-                    if pkey in body:
-                        logger.info("  Pagination field '%s': %s", pkey, body[pkey])
-
-            if isinstance(body, list):
-                all_data.extend(body)
-                break
-
-            if not isinstance(body, dict):
-                break
-
-            items = self._extract_items_from_body(body)
-            if items is None or len(items) == 0:
-                break
-
-            all_data.extend(items)
-            logger.info("  Got %d items this page, %d total", len(items), len(all_data))
-
-            new_url, params = self._advance_pagination(body, params, all_data)
-            if new_url == "STOP":
+            self._log_page(url, page, resp, body)
+            params, new_url, stop = self._consume_page(body, params, all_data)
+            if stop:
                 break
             if new_url is not None:
                 url = new_url
+        else:
+            logger.warning("Pagination safety limit reached (100 pages), stopping")
 
         logger.info("Paginate complete: %d total items", len(all_data))
         return all_data
@@ -327,8 +372,8 @@ class SkydioProvider(DroneProvider):
             data = resp.json()
             logger.info("Skydio credentials valid. User: %s", data)
             return True
-        except Exception:
-            logger.exception("Skydio credential validation failed")
+        except Exception as exc:
+            _log_provider_error("validate Skydio credentials", exc)
             return False
 
     def get_user_info(self, creds: ProviderCredentials) -> dict:
@@ -336,8 +381,8 @@ class SkydioProvider(DroneProvider):
         try:
             resp = self._request("GET", f"{BASE_URL}/whoami", creds)
             return resp.json()
-        except Exception:
-            logger.exception("Failed to get Skydio user info")
+        except Exception as exc:
+            _log_provider_error("get Skydio user info", exc)
             return {}
 
     def sync_vehicles(self, creds: ProviderCredentials) -> list[dict]:
@@ -359,8 +404,8 @@ class SkydioProvider(DroneProvider):
                 })
             logger.info("Fetched %d vehicles from Skydio", len(vehicles))
             return vehicles
-        except Exception:
-            logger.exception("Failed to sync Skydio vehicles")
+        except Exception as exc:
+            _log_provider_error("sync Skydio vehicles", exc)
             return []
 
     def sync_flights(self, creds: ProviderCredentials, since: str | None = None) -> list[dict]:
@@ -378,64 +423,59 @@ class SkydioProvider(DroneProvider):
             flights = [_map_raw_flight(f) for f in raw]
             logger.info("Fetched %d flights from Skydio", len(flights))
             return flights
-        except Exception:
-            logger.exception("Failed to sync Skydio flights")
+        except Exception as exc:
+            _log_provider_error("sync Skydio flights", exc)
             return []
+
+    @staticmethod
+    def _collect_new_flights(raw: list[dict], seen_ids: set, all_raw: list) -> int:
+        """Append flights with an unseen id to all_raw; return how many were added."""
+        added = 0
+        for f in raw:
+            fid = f.get("flight_id") or f.get("uuid") or f.get("id")
+            if fid and fid not in seen_ids:
+                seen_ids.add(fid)
+                all_raw.append(f)
+                added += 1
+        return added
 
     def sync_flights_deep(self, creds: ProviderCredentials) -> list[dict]:
         """Fetch ALL historical flights by paging backwards through date windows."""
         all_raw = []
         date_to = None
-        batch = 0
         seen_ids = set()
 
-        while True:
-            batch += 1
-            if batch > 50:
-                logger.warning("Deep sync safety limit: 50 batches")
-                break
-
+        for batch in range(1, 51):
             params = {"per_page": 200}
             if date_to:
                 params["date_to"] = date_to
 
             logger.info("Deep sync batch %d (date_to=%s)", batch, date_to)
             raw = self._paginate(f"{BASE_URL}/flights", creds, params=params)
-
             if not raw:
                 logger.info("Deep sync: empty batch, stopping")
                 break
 
-            # Deduplicate within the deep sync itself
-            new_in_batch = 0
-            for f in raw:
-                fid = f.get("flight_id") or f.get("uuid") or f.get("id")
-                if fid and fid not in seen_ids:
-                    seen_ids.add(fid)
-                    all_raw.append(f)
-                    new_in_batch += 1
-
+            new_in_batch = self._collect_new_flights(raw, seen_ids, all_raw)
             logger.info("Deep sync batch %d: %d raw, %d new, %d total unique",
                         batch, len(raw), new_in_batch, len(all_raw))
-
             if new_in_batch == 0:
                 logger.info("Deep sync: no new flights in batch, stopping")
                 break
 
-            # Find oldest takeoff time in this batch to set next window
+            # Oldest takeoff time in this batch sets the next backward window.
             next_date_to = _extract_oldest_date(raw)
             if next_date_to is None:
                 logger.info("Deep sync: no dates found in batch, stopping")
                 break
-
             if next_date_to == date_to:
                 logger.info("Deep sync: date_to unchanged (%s), stopping", date_to)
                 break
-
             date_to = next_date_to
+        else:
+            logger.warning("Deep sync safety limit reached: 50 batches")
 
-        logger.info("Deep sync complete: %d total unique flights across %d batches", len(all_raw), batch)
-
+        logger.info("Deep sync complete: %d total unique flights", len(all_raw))
         return [_map_raw_flight(f) for f in all_raw]
 
     def sync_batteries(self, creds: ProviderCredentials) -> list[dict]:
@@ -462,8 +502,8 @@ class SkydioProvider(DroneProvider):
                 })
             logger.info("Fetched %d batteries from Skydio", len(batteries))
             return batteries
-        except Exception:
-            logger.exception("Failed to sync Skydio batteries")
+        except Exception as exc:
+            _log_provider_error("sync Skydio batteries", exc)
             return []
 
     def sync_controllers(self, creds: ProviderCredentials) -> list[dict]:
@@ -481,8 +521,8 @@ class SkydioProvider(DroneProvider):
                 })
             logger.info("Fetched %d controllers from Skydio", len(controllers))
             return controllers
-        except Exception:
-            logger.exception("Failed to sync Skydio controllers")
+        except Exception as exc:
+            _log_provider_error("sync Skydio controllers", exc)
             return []
 
     def get_flight_detail(self, creds: ProviderCredentials, flight_id: str) -> dict | None:
@@ -504,7 +544,7 @@ class SkydioProvider(DroneProvider):
             logger.info("Flight detail for %s: %d keys: %s", flight_id, len(flight.keys()), list(flight.keys()))
             return flight
         except Exception as exc:
-            logger.warning("Failed to get flight detail for %s: %s", flight_id, exc)
+            _log_provider_error(f"get flight detail for {flight_id}", exc)
             return None
 
     def get_flight_telemetry(self, creds: ProviderCredentials, flight_id: str) -> list[dict]:
@@ -537,8 +577,8 @@ class SkydioProvider(DroneProvider):
 
             logger.info("Fetched %d telemetry points for flight %s", len(points), flight_id)
             return points
-        except Exception:
-            logger.exception("Failed to fetch telemetry for flight %s", flight_id)
+        except Exception as exc:
+            _log_provider_error(f"fetch telemetry for flight {flight_id}", exc)
             return []
 
     def sync_media(self, creds: ProviderCredentials, since: str | None = None) -> list[dict]:
@@ -569,8 +609,8 @@ class SkydioProvider(DroneProvider):
 
             logger.info("Fetched %d media files from Skydio", len(media))
             return media
-        except Exception:
-            logger.exception("Failed to sync Skydio media")
+        except Exception as exc:
+            _log_provider_error("sync Skydio media", exc)
             return []
 
     def sync_docks(self, creds: ProviderCredentials) -> list[dict]:
@@ -590,8 +630,8 @@ class SkydioProvider(DroneProvider):
                 })
             logger.info("Fetched %d docks from Skydio", len(docks))
             return docks
-        except Exception:
-            logger.exception("Failed to sync Skydio docks")
+        except Exception as exc:
+            _log_provider_error("sync Skydio docks", exc)
             return []
 
     def sync_sensor_packages(self, creds: ProviderCredentials) -> list[dict]:
@@ -611,8 +651,8 @@ class SkydioProvider(DroneProvider):
                 })
             logger.info("Fetched %d sensor packages from Skydio", len(sensors))
             return sensors
-        except Exception:
-            logger.exception("Failed to sync Skydio sensor packages")
+        except Exception as exc:
+            _log_provider_error("sync Skydio sensor packages", exc)
             return []
 
     def sync_attachments(self, creds: ProviderCredentials) -> list[dict]:
@@ -632,8 +672,8 @@ class SkydioProvider(DroneProvider):
                 })
             logger.info("Fetched %d attachments from Skydio", len(attachments))
             return attachments
-        except Exception:
-            logger.exception("Failed to sync Skydio attachments")
+        except Exception as exc:
+            _log_provider_error("sync Skydio attachments", exc)
             return []
 
     def sync_users(self, creds: ProviderCredentials) -> list[dict]:
@@ -652,8 +692,8 @@ class SkydioProvider(DroneProvider):
                 })
             logger.info("Fetched %d users from Skydio", len(users))
             return users
-        except Exception:
-            logger.exception("Failed to sync Skydio users")
+        except Exception as exc:
+            _log_provider_error("sync Skydio users", exc)
             return []
 
 
