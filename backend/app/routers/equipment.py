@@ -682,6 +682,31 @@ def get_attachment_stats(aid: int, db: DBSession, user: CurrentUser):
     return {"total_flights": flight_count, "total_hours": round(total_seconds / 3600, 2)}
 
 
+def _attachment_flight_item(f, sn) -> dict:
+    """Serialize one flight that used an attachment, listing the mount positions
+    the attachment occupied on that flight."""
+    positions = []
+    if f.attachment_top == sn:
+        positions.append("top")
+    if f.attachment_bottom == sn:
+        positions.append("bottom")
+    if f.attachment_left == sn:
+        positions.append("left")
+    if f.attachment_right == sn:
+        positions.append("right")
+    return {
+        "id": f.id,
+        "date": str(f.date) if f.date else None,
+        "pilot_name": f"{f.pilot.first_name} {f.pilot.last_name}" if f.pilot else None,
+        "pilot_id": f.pilot_id,
+        "vehicle_name": f.vehicle.nickname or f"{f.vehicle.manufacturer} {f.vehicle.model}" if f.vehicle else None,
+        "duration_seconds": f.duration_seconds,
+        "purpose": f.purpose,
+        "max_altitude_m": f.max_altitude_m,
+        "positions": positions,
+    }
+
+
 @router.get("/attachments/{aid}/flights", responses=responses(401, 404))
 def get_attachment_flights(aid: int, db: DBSession, user: CurrentUser):
     """Get all flights that used a specific attachment, including which position."""
@@ -699,29 +724,7 @@ def get_attachment_flights(aid: int, db: DBSession, user: CurrentUser):
         Flight.attachment_right == sn,
     )
     flights = db.query(Flight).filter(attachment_filter).order_by(Flight.date.desc()).all()
-    results = []
-    for f in flights:
-        positions = []
-        if f.attachment_top == sn:
-            positions.append("top")
-        if f.attachment_bottom == sn:
-            positions.append("bottom")
-        if f.attachment_left == sn:
-            positions.append("left")
-        if f.attachment_right == sn:
-            positions.append("right")
-        results.append({
-            "id": f.id,
-            "date": str(f.date) if f.date else None,
-            "pilot_name": f"{f.pilot.first_name} {f.pilot.last_name}" if f.pilot else None,
-            "pilot_id": f.pilot_id,
-            "vehicle_name": f.vehicle.nickname or f"{f.vehicle.manufacturer} {f.vehicle.model}" if f.vehicle else None,
-            "duration_seconds": f.duration_seconds,
-            "purpose": f.purpose,
-            "max_altitude_m": f.max_altitude_m,
-            "positions": positions,
-        })
-    return results
+    return [_attachment_flight_item(f, sn) for f in flights]
 
 
 @router.get("/attachments/{aid}/pilots", responses=responses(401, 404))

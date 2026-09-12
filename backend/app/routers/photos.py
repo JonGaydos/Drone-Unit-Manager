@@ -150,6 +150,45 @@ def _generate_thumbnail(file_path: str, photo_dir: str, stored_name: str) -> str
         return None
 
 
+def _parse_date_taken(date_taken: Optional[str]):
+    """Parse an optional ISO 8601 date_taken form value. None when not provided;
+    raises 400 on a malformed value."""
+    if not date_taken:
+        return None
+    try:
+        return datetime.fromisoformat(date_taken.replace("Z", UTC_OFFSET).replace(UTC_OFFSET, ""))
+    except (ValueError, AttributeError):
+        raise HTTPException(400, "Invalid date format. Use ISO 8601 (e.g., 2026-04-02).")
+
+
+def _stream_to_disk(file_obj, file_path: str, first_chunk: bytes, chunk_size: int, max_size: int) -> int:
+    """Write an already-started upload stream to disk, enforcing the size cap.
+    Returns total bytes written; removes the partial file and raises 413 on
+    overflow."""
+    total = 0
+    with open(file_path, "wb") as f:
+        chunk = first_chunk
+        while chunk:
+            total += len(chunk)
+            if total > max_size:
+                f.close()
+                os.remove(file_path)
+                raise HTTPException(413, f"File too large. Maximum size is {max_size // (1024*1024)}MB")
+            f.write(chunk)
+            chunk = file_obj.read(chunk_size)
+    return total
+
+
+def _attach_photo_pilots(db, photo_id: int, pilot_ids: Optional[str]) -> None:
+    """Attach comma-separated pilot IDs to a photo, ignoring non-numeric tokens."""
+    if not pilot_ids:
+        return
+    for pid_str in pilot_ids.split(","):
+        pid_str = pid_str.strip()
+        if pid_str.isdigit():
+            db.add(PhotoPilot(photo_id=photo_id, pilot_id=int(pid_str)))
+
+
 @router.post("/upload", responses=responses(400, 413))
 def upload_photo(
 
@@ -190,12 +229,7 @@ def upload_photo(
         raise HTTPException(400, f"File type '{ext}' not allowed. Allowed: {', '.join(sorted(ALLOWED_IMAGE_EXTENSIONS))}")
 
     # Create photo record first to get ID
-    parsed_date = None
-    if date_taken:
-        try:
-            parsed_date = datetime.fromisoformat(date_taken.replace("Z", UTC_OFFSET).replace(UTC_OFFSET, ""))
-        except (ValueError, AttributeError):
-            raise HTTPException(400, "Invalid date format. Use ISO 8601 (e.g., 2026-04-02).")
+    parsed_date = _parse_date_taken(date_taken)
 
     stored_name = f"{uuid.uuid4().hex}{ext}"
 
@@ -225,37 +259,48 @@ def upload_photo(
     _validate_path(file_path)
 
     from app.services.file_validation import is_image
-    total = 0
     chunk_size = 64 * 1024
     first = file.file.read(chunk_size)
     if not is_image(first):
         raise HTTPException(400, "File content is not a recognized image")
-    with open(file_path, "wb") as f:
-        chunk = first
-        while chunk:
-            total += len(chunk)
-            if total > settings.MAX_UPLOAD_SIZE:
-                f.close()
-                os.remove(file_path)
-                raise HTTPException(413, f"File too large. Maximum size is {settings.MAX_UPLOAD_SIZE // (1024*1024)}MB")
-            f.write(chunk)
-            chunk = file.file.read(chunk_size)
-
-    photo.file_size = total
+    photo.file_size = _stream_to_disk(file.file, file_path, first, chunk_size, settings.MAX_UPLOAD_SIZE)
 
     # Generate thumbnail
     photo.thumbnail_path = _generate_thumbnail(file_path, photo_dir, stored_name)
 
     # Create pilot associations
-    if pilot_ids:
-        for pid_str in pilot_ids.split(","):
-            pid_str = pid_str.strip()
-            if pid_str.isdigit():
-                db.add(PhotoPilot(photo_id=photo.id, pilot_id=int(pid_str)))
+    _attach_photo_pilots(db, photo.id, pilot_ids)
 
     db.commit()
     db.refresh(photo)
     return {"id": photo.id, "message": "Photo uploaded successfully"}
+
+
+def _photo_list_item(p, pilot_ids_for_photo, pilots_map) -> dict:
+    """Serialize one photo (with its resolved pilot names/ids and signed URLs)
+    for the list endpoint."""
+    pilot_names = []
+    pilot_ids_list = []
+    for pid in pilot_ids_for_photo:
+        pilot = pilots_map.get(pid)
+        if pilot:
+            pilot_names.append(f"{pilot.first_name} {pilot.last_name}".strip())
+            pilot_ids_list.append(pilot.id)
+    urls = _photo_urls(p.id)
+    return {
+        "id": p.id,
+        "filename": p.original_filename,
+        "title": p.title,
+        "description": p.description,
+        "date_taken": p.date_taken.isoformat() if p.date_taken else None,
+        "file_size": p.file_size,
+        "mime_type": p.mime_type,
+        "has_thumbnail": p.thumbnail_path is not None,
+        "pilot_names": pilot_names,
+        "pilot_ids": pilot_ids_list,
+        "created_at": p.created_at.isoformat() if p.created_at else None,
+        **urls,
+    }
 
 
 @router.get("", responses=responses(401))
@@ -292,32 +337,10 @@ def list_photos(db: DBSession, _user: CurrentUser, flight_id: int | None = None,
     for a in associations:
         photo_assoc.setdefault(a.photo_id, []).append(a.pilot_id)
 
-    result = []
-    for p in photos:
-        pilot_names = []
-        pilot_ids_list = []
-        for pid in photo_assoc.get(p.id, []):
-            pilot = pilots_map.get(pid)
-            if pilot:
-                name = f"{pilot.first_name} {pilot.last_name}".strip()
-                pilot_names.append(name)
-                pilot_ids_list.append(pilot.id)
-
-        urls = _photo_urls(p.id)
-        result.append({
-            "id": p.id,
-            "filename": p.original_filename,
-            "title": p.title,
-            "description": p.description,
-            "date_taken": p.date_taken.isoformat() if p.date_taken else None,
-            "file_size": p.file_size,
-            "mime_type": p.mime_type,
-            "has_thumbnail": p.thumbnail_path is not None,
-            "pilot_names": pilot_names,
-            "pilot_ids": pilot_ids_list,
-            "created_at": p.created_at.isoformat() if p.created_at else None,
-            **urls,
-        })
+    result = [
+        _photo_list_item(p, photo_assoc.get(p.id, []), pilots_map)
+        for p in photos
+    ]
     return result
 
 

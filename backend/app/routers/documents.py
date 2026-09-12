@@ -48,6 +48,29 @@ def _doc_to_out(doc: Document) -> DocumentOut:
     return out
 
 
+def _document_entity_fks(entity_type: str, entity_id):
+    """Map an entity_type/id to the specific FK column it populates.
+    Returns (pilot_id, vehicle_id, certification_id)."""
+    return (
+        entity_id if entity_type == "pilot" else None,
+        entity_id if entity_type == "vehicle" else None,
+        entity_id if entity_type == "certification" else None,
+    )
+
+
+def _validate_document_request(entity_type: str, entity_id, ext: str) -> None:
+    """Validate the entity type/id combination and file extension for an upload.
+    Raises 400 on any violation."""
+    # entity_type is part of the destination path, so it must be allowlisted;
+    # a free-form value would let the client steer the write to arbitrary dirs.
+    if entity_type not in ALLOWED_ENTITY_TYPES:
+        raise HTTPException(400, f"entity_type must be one of {sorted(ALLOWED_ENTITY_TYPES)}")
+    if entity_type != "general" and entity_id is None:
+        raise HTTPException(400, f"entity_id is required for entity_type '{entity_type}'")
+    if ext and ext not in ALLOWED_DOCUMENT_EXTENSIONS:
+        raise HTTPException(400, f"File type '{ext}' not allowed.")
+
+
 @router.post("/upload", response_model=DocumentOut, responses=responses(400, 413))
 async def upload_document(
     db: DBSession,
@@ -82,20 +105,12 @@ async def upload_document(
     # filename like "../../etc/passwd" would otherwise let the upload land
     # outside upload_dir via path concatenation.
     safe_filename = Path(file.filename or "upload").name or "upload"
-
-    # Validate entity_type against an allowlist — it is also part of the
-    # destination path. A free-form value would let the client steer the
-    # write to arbitrary subdirectories.
-    if entity_type not in ALLOWED_ENTITY_TYPES:
-        raise HTTPException(400, f"entity_type must be one of {sorted(ALLOWED_ENTITY_TYPES)}")
-    if entity_type != "general" and entity_id is None:
-        raise HTTPException(400, f"entity_id is required for entity_type '{entity_type}'")
-
-    # Validate file extension
     ext = Path(safe_filename).suffix.lower()
-    if ext and ext not in ALLOWED_DOCUMENT_EXTENSIONS:
-        raise HTTPException(400, f"File type '{ext}' not allowed.")
+    _validate_document_request(entity_type, entity_id, ext)
 
+    # Path build + realpath containment stays inline: the resolved.relative_to
+    # check is the taint sanitizer for the write below, and moving it into a
+    # helper hides it from static path-traversal analysis.
     upload_root = Path(settings.UPLOAD_DIR).resolve()
     if entity_id is None:
         upload_dir = upload_root / "documents" / entity_type
@@ -128,9 +143,7 @@ async def upload_document(
     dest.write_bytes(contents)
 
     # Map entity_type to the appropriate foreign key column
-    pilot_id = entity_id if entity_type == "pilot" else None
-    vehicle_id = entity_id if entity_type == "vehicle" else None
-    certification_id = entity_id if entity_type == "certification" else None
+    pilot_id, vehicle_id, certification_id = _document_entity_fks(entity_type, entity_id)
 
     doc = Document(
         pilot_id=pilot_id,
