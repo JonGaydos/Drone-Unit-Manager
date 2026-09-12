@@ -224,6 +224,23 @@ def _reminder_html(pilot, lapsed_rules, org_name: str, intro: str) -> str:
 </body></html>"""
 
 
+def _send_one_reminder(pilot, rules, org_name: str, intro: str, db) -> tuple:
+    """Evaluate one pilot and send a reminder when lapsed with an email on file.
+    Returns (status, recipient_label); status is one of sent / failed /
+    skipped_current / skipped_no_email, and recipient_label is set only on sent."""
+    from app.services.email_digest import send_email
+    rule_results = _pilot_currency(pilot, rules, db)
+    lapsed_rules = [r for r in rule_results if not r["is_current"]]
+    if not lapsed_rules:
+        return "skipped_current", None
+    if not pilot.email:
+        return "skipped_no_email", None
+    html = _reminder_html(pilot, lapsed_rules, org_name, intro)
+    if send_email(pilot.email, f"Flight currency reminder — {org_name}", html, db):
+        return "sent", f"{pilot.full_name} <{pilot.email}>"
+    return "failed", None
+
+
 @router.post("/send-reminders", responses=responses(401, 503))
 def send_currency_reminders(
     data: ReminderRequest,
@@ -238,7 +255,6 @@ def send_currency_reminders(
     already current)."""
     from app.constants import APP_TITLE
     from app.models.setting import Setting
-    from app.services.email_digest import send_email
     from app.services.audit import log_action
 
     # SMTP must be configured + enabled
@@ -258,44 +274,23 @@ def send_currency_reminders(
     org_name_row = db.query(Setting).filter(Setting.key == "org_name").first()
     org_name = org_name_row.value if org_name_row else APP_TITLE
 
-    sent = 0
-    skipped_no_email = 0
-    skipped_current = 0
-    failed = 0
+    counts = {"sent": 0, "skipped_no_email": 0, "skipped_current": 0, "failed": 0}
     recipients_logged: list[str] = []
+    intro = (data.custom_message or "").strip()
 
     for pilot in pilots:
-        rule_results = _pilot_currency(pilot, rules, db)
-        lapsed_rules = [r for r in rule_results if not r["is_current"]]
-        if not lapsed_rules:
-            skipped_current += 1
-            continue
-        if not pilot.email:
-            skipped_no_email += 1
-            continue
-
-        intro = (data.custom_message or "").strip()
-        html = _reminder_html(pilot, lapsed_rules, org_name, intro)
-
-        ok = send_email(pilot.email, f"Flight currency reminder — {org_name}", html, db)
-        if ok:
-            sent += 1
-            recipients_logged.append(f"{pilot.full_name} <{pilot.email}>")
-        else:
-            failed += 1
+        status, recipient = _send_one_reminder(pilot, rules, org_name, intro, db)
+        counts[status] += 1
+        if recipient:
+            recipients_logged.append(recipient)
 
     log_action(db, admin.id, admin.display_name, "send_reminders", "currency",
-               details=f"sent={sent}, skipped_no_email={skipped_no_email}, "
-                       f"skipped_current={skipped_current}, failed={failed}; "
+               details=f"sent={counts['sent']}, skipped_no_email={counts['skipped_no_email']}, "
+                       f"skipped_current={counts['skipped_current']}, failed={counts['failed']}; "
                        f"recipients={'; '.join(recipients_logged) if recipients_logged else 'none'}")
     db.commit()
 
-    return {
-        "sent": sent,
-        "skipped_no_email": skipped_no_email,
-        "skipped_current": skipped_current,
-        "failed": failed,
-    }
+    return counts
 
 
 @router.get("/status/{pilot_id}", responses=responses(401, 404))

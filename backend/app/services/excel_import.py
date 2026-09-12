@@ -455,6 +455,32 @@ def _assign_faa_part107(db: Session, pilot: Pilot, ws, r: int, cert_types: dict,
     result["cert_assignments"] += 1
 
 
+def _import_pilot_row(ws, r: int, db: Session, cert_types: dict, result: dict) -> int:
+    """Import one Pilot Info row. Returns 1 if a new pilot was created, else 0.
+    A created pilot still counts even if a later cert-assignment step raises, so
+    the count is fixed before the risky calls (matching the original flow)."""
+    name = ws.cell(r, 1).value
+    if not name or str(name).strip() == "" or "STATUS KEY" in str(name):
+        return 0
+    created = 0
+    try:
+        pilot, pilot_new = _find_or_create_pilot(db, str(name))
+        if pilot_new:
+            created = 1
+        if not pilot:
+            return created
+
+        status_val = ws.cell(r, 2).value
+        if status_val:
+            pilot.status = "active" if str(status_val).lower() == "active" else "inactive"
+
+        _assign_cert_columns(db, pilot, ws, r, _COL_MAP, cert_types, result)
+        _assign_faa_part107(db, pilot, ws, r, cert_types, result)
+    except Exception as e:
+        result["errors"].append(f"Pilot Info row {r}: {str(e)}")
+    return created
+
+
 def _import_pilot_info_sheet(ws, db: Session, result: dict) -> int:
     """Import pilot certifications from the Pilot Info sheet. Returns pilots_created count."""
     cert_types = {}
@@ -464,28 +490,8 @@ def _import_pilot_info_sheet(ws, db: Session, result: dict) -> int:
         result["certifications_created"] += 1
 
     pilots_created = 0
-
     for r in range(7, ws.max_row + 1):
-        name = ws.cell(r, 1).value
-        if not name or str(name).strip() == "" or "STATUS KEY" in str(name):
-            continue
-
-        try:
-            pilot, pilot_new = _find_or_create_pilot(db, str(name))
-            if pilot_new:
-                pilots_created += 1
-            if not pilot:
-                continue
-
-            status_val = ws.cell(r, 2).value
-            if status_val:
-                pilot.status = "active" if str(status_val).lower() == "active" else "inactive"
-
-            _assign_cert_columns(db, pilot, ws, r, _COL_MAP, cert_types, result)
-            _assign_faa_part107(db, pilot, ws, r, cert_types, result)
-
-        except Exception as e:
-            result["errors"].append(f"Pilot Info row {r}: {str(e)}")
+        pilots_created += _import_pilot_row(ws, r, db, cert_types, result)
 
     return pilots_created
 

@@ -813,6 +813,32 @@ def _store_telemetry_points(flight, telemetry_data: list, session_factory, point
         tdb.close()
 
 
+# Provider-entity sync steps that share the identical fetch/upsert/commit shape.
+# Each: (provider method name, model, update fn, create fn, result counter, label).
+_ENTITY_SYNCS = [
+    ("sync_batteries", Battery, _update_battery, _create_battery, "batteries_synced", "Batteries"),
+    ("sync_controllers", Controller, _update_controller, _create_controller, "controllers_synced", "Controllers"),
+    ("sync_docks", Dock, _update_dock, _create_dock, "docks_synced", "Docks"),
+    ("sync_sensor_packages", SensorPackage, _update_sensor, _create_sensor, "sensors_synced", "Sensors"),
+    ("sync_attachments", Attachment, _update_attachment, _create_attachment, "attachments_synced", "Attachments"),
+]
+
+
+def _run_entity_sync(provider, creds, db: Session, result: SyncResult, spec) -> None:
+    """Run one provider-entity sync step, committing on success and rolling back
+    with a recorded error on failure. Each step is independent so a later
+    failure cannot discard rows an earlier step already committed."""
+    sync_attr, model, update_fn, create_fn, counter, label = spec
+    try:
+        _sync_entity_list(getattr(provider, sync_attr), creds, db, model, "serial_number",
+                          update_fn, create_fn, counter, result)
+        db.commit()
+    except Exception as exc:
+        result.errors.append(f"{label} sync error: {exc}")
+        logger.exception("%s sync error", label)
+        db.rollback()
+
+
 class SyncManager:
 
     @staticmethod
@@ -913,55 +939,10 @@ class SyncManager:
             logger.exception("Flight enrichment error")
             db.rollback()
 
-        # --- Sync batteries ---
-        try:
-            _sync_entity_list(provider.sync_batteries, creds, db, Battery, "serial_number",
-                              _update_battery, _create_battery, "batteries_synced", result)
-            db.commit()
-        except Exception as exc:
-            result.errors.append(f"Batteries sync error: {exc}")
-            logger.exception("Batteries sync error")
-            db.rollback()
-
-        # --- Sync controllers ---
-        try:
-            _sync_entity_list(provider.sync_controllers, creds, db, Controller, "serial_number",
-                              _update_controller, _create_controller, "controllers_synced", result)
-            db.commit()
-        except Exception as exc:
-            result.errors.append(f"Controllers sync error: {exc}")
-            logger.exception("Controllers sync error")
-            db.rollback()
-
-        # --- Sync docks ---
-        try:
-            _sync_entity_list(provider.sync_docks, creds, db, Dock, "serial_number",
-                              _update_dock, _create_dock, "docks_synced", result)
-            db.commit()
-        except Exception as exc:
-            result.errors.append(f"Docks sync error: {exc}")
-            logger.exception("Docks sync error")
-            db.rollback()
-
-        # --- Sync sensor packages ---
-        try:
-            _sync_entity_list(provider.sync_sensor_packages, creds, db, SensorPackage, "serial_number",
-                              _update_sensor, _create_sensor, "sensors_synced", result)
-            db.commit()
-        except Exception as exc:
-            result.errors.append(f"Sensors sync error: {exc}")
-            logger.exception("Sensors sync error")
-            db.rollback()
-
-        # --- Sync attachments ---
-        try:
-            _sync_entity_list(provider.sync_attachments, creds, db, Attachment, "serial_number",
-                              _update_attachment, _create_attachment, "attachments_synced", result)
-            db.commit()
-        except Exception as exc:
-            result.errors.append(f"Attachments sync error: {exc}")
-            logger.exception("Attachments sync error")
-            db.rollback()
+        # --- Sync batteries, controllers, docks, sensors, attachments ---
+        # Identical fetch/upsert/commit shape; each step commits independently.
+        for spec in _ENTITY_SYNCS:
+            _run_entity_sync(provider, creds, db, result, spec)
 
         # --- Sync media ---
         try:

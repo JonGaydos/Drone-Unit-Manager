@@ -261,6 +261,33 @@ def _get_telemetry_sync_interval_minutes() -> int | None:
         db.close()
 
 
+def _first_sync_run_time(interval_minutes: int):
+    """When the first scheduled sync should fire, from the last sync timestamp.
+    Overdue -> 2 minutes out (let the app finish starting); otherwise the due
+    time. None if it cannot be determined, so the trigger's default applies."""
+    from datetime import datetime, timezone, timedelta
+    try:
+        db = SessionLocal()
+    except Exception:
+        return None
+    try:
+        last_ts = db.query(Setting).filter(Setting.key == "last_sync_timestamp").first()
+        if not (last_ts and last_ts.value):
+            return None
+        last_sync = datetime.fromisoformat(last_ts.value)
+        due_at = last_sync + timedelta(minutes=interval_minutes)
+        now = datetime.now(timezone.utc)
+        if due_at <= now:
+            logger.info("Sync is overdue (last: %s), scheduling first run in 2 minutes", last_ts.value)
+            return now + timedelta(minutes=2)
+        logger.info("Next sync due at %s (%d minutes from now)", due_at.isoformat(), (due_at - now).total_seconds() / 60)
+        return due_at
+    except Exception:
+        return None
+    finally:
+        db.close()
+
+
 def start_scheduler():
     """Start the background scheduler if a sync interval is configured."""
     global _scheduler
@@ -281,27 +308,7 @@ def start_scheduler():
     _scheduler.start()
 
     if interval_minutes:
-        # Calculate how long since last sync to determine first run time
-        from datetime import datetime, timezone, timedelta
-        next_run = None
-        try:
-            db = SessionLocal()
-            last_ts = db.query(Setting).filter(Setting.key == "last_sync_timestamp").first()
-            if last_ts and last_ts.value:
-                last_sync = datetime.fromisoformat(last_ts.value)
-                due_at = last_sync + timedelta(minutes=interval_minutes)
-                now = datetime.now(timezone.utc)
-                if due_at <= now:
-                    # Overdue — run in 2 minutes to let the app finish starting
-                    next_run = now + timedelta(minutes=2)
-                    logger.info("Sync is overdue (last: %s), scheduling first run in 2 minutes", last_ts.value)
-                else:
-                    next_run = due_at
-                    logger.info("Next sync due at %s (%d minutes from now)", due_at.isoformat(), (due_at - now).total_seconds() / 60)
-            db.close()
-        except Exception:
-            pass
-
+        next_run = _first_sync_run_time(interval_minutes)
         _scheduler.add_job(
             _run_scheduled_sync,
             trigger=IntervalTrigger(minutes=interval_minutes),

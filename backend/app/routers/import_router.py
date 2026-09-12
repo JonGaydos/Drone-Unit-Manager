@@ -161,25 +161,34 @@ async def commit_import(
     return _commit_maintenance(db, rows, mapping_dict, admin.id)
 
 
+def _clean(mapping: dict, key: str, row: dict):
+    """Mapped cell value trimmed, or None when blank."""
+    return (_get(mapping, key, row) or "").strip() or None
+
+
+def _cap(v, n: int):
+    """Truncate an optional string to n chars, preserving None."""
+    return v[:n] if v else None
+
+
 def _build_mission_from_row(row: dict, mapping: dict, user_id) -> tuple:
     """Build a MissionLog (not yet added to the session) and the row's
     members string. Returns (None, '') if the row should be skipped."""
     d = parse_date_value(_get(mapping, "date", row))
     if not d:
         return None, ""
-    reason = (_get(mapping, "reason", row) or "").strip() or None
-    location = (_get(mapping, "location", row) or "").strip() or None
-    title = (_get(mapping, "title", row) or "").strip() or reason or location or f"Mission {d}"
-    case_number = (_get(mapping, "case_number", row) or "").strip() or None
-    notes = (_get(mapping, "notes", row) or "").strip() or None
+    reason = _clean(mapping, "reason", row)
+    location = _clean(mapping, "location", row)
+    title = _clean(mapping, "title", row) or reason or location or f"Mission {d}"
+    notes = _clean(mapping, "notes", row)
     man_hours = parse_float_safe(_get(mapping, "man_hours", row)) or 0.0
     members_str = _get(mapping, "members", row) or ""
     return MissionLog(
         date=d,
         title=title[:300],
-        reason=reason[:200] if reason else None,
-        location=location[:500] if location else None,
-        case_number=case_number[:100] if case_number else None,
+        reason=_cap(reason, 200),
+        location=_cap(location, 500),
+        case_number=_cap(_clean(mapping, "case_number", row), 100),
         man_hours=man_hours,
         status="completed",
         notes=notes,
@@ -193,11 +202,9 @@ def _build_training_from_row(row: dict, mapping: dict, user_id) -> tuple:
     if not d:
         return None, ""
     info = (_get(mapping, "description", row) or "").strip()
-    title = (_get(mapping, "title", row) or "").strip() or (info[:80] if info else f"Training {d}")
-    training_type = (_get(mapping, "training_type", row) or "").strip() or "Practice"
-    location = (_get(mapping, "location", row) or "").strip() or None
-    instructor = (_get(mapping, "instructor", row) or "").strip() or None
-    notes = (_get(mapping, "notes", row) or "").strip() or None
+    title = _clean(mapping, "title", row) or (info[:80] if info else f"Training {d}")
+    training_type = _clean(mapping, "training_type", row) or "Practice"
+    notes = _clean(mapping, "notes", row)
     man_hours = parse_float_safe(_get(mapping, "man_hours", row)) or 0.0
     members_str = _get(mapping, "members", row) or ""
     return TrainingLog(
@@ -205,8 +212,8 @@ def _build_training_from_row(row: dict, mapping: dict, user_id) -> tuple:
         title=title[:300],
         training_type=training_type[:100],
         description=info or None,
-        location=location[:500] if location else None,
-        instructor=instructor[:200] if instructor else None,
+        location=_cap(_clean(mapping, "location", row), 500),
+        instructor=_cap(_clean(mapping, "instructor", row), 200),
         man_hours=man_hours,
         outcome="completed",
         notes=notes,
