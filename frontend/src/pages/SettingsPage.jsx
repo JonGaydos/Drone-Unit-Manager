@@ -23,6 +23,55 @@ const DEFAULT_PLACES = ['North', 'Central', 'South']
 let placeIdCounter = 0
 const asPlace = (value) => ({ id: ++placeIdCounter, value })
 
+const DEFAULT_SIDEBAR_ITEMS = [
+  { to: '/', label: 'Dashboard' },
+  { to: '/weather', label: 'Weather' },
+  { to: '/airspace', label: 'Airspace' },
+  { to: '/analytics', label: 'Analytics' },
+  { to: '/flight-plans', label: 'Flight Plans' },
+  { to: '/checklists', label: 'Checklists' },
+  { to: '/flights', label: 'Flights' },
+  { to: '/missions', label: 'Mission Log' },
+  { to: '/training', label: 'Training Log' },
+  { to: '/pilots', label: 'Pilots' },
+  { to: '/fleet', label: 'Fleet' },
+  { to: '/certifications', label: 'Certifications' },
+  { to: '/maintenance', label: 'Maintenance' },
+  { to: '/media', label: 'Photo Gallery' },
+  { to: '/documents', label: 'Documents' },
+  { to: '/reports', label: 'Reports' },
+  { to: '/compliance', label: 'Compliance' },
+  { to: '/alerts', label: 'Alerts' },
+  { to: '/incidents', label: 'Activity Reports' },
+  { to: '/settings', label: 'Settings' },
+  { to: '/audit-log', label: 'Audit Log' },
+]
+
+// Parse a JSON-encoded setting, returning fallback for missing or invalid input.
+function parseJsonSetting(raw, fallback) {
+  if (raw === undefined || raw === null) return fallback
+  try { return JSON.parse(raw) } catch { return fallback }
+}
+
+// Merge a saved sidebar config over the defaults: new default items appear, and
+// saved visibility/order win. Returns defaults for a missing or invalid config.
+function buildSidebarItems(rawConfig) {
+  const defaults = DEFAULT_SIDEBAR_ITEMS.map((item, i) => ({ ...item, visible: true, order: i }))
+  const parsed = parseJsonSetting(rawConfig, null)
+  if (!Array.isArray(parsed)) return defaults
+  const configMap = {}
+  parsed.forEach(c => { configMap[c.to] = c })
+  return DEFAULT_SIDEBAR_ITEMS.map((item, i) => {
+    const existing = configMap[item.to]
+    return {
+      to: item.to,
+      label: item.label,
+      visible: existing ? existing.visible !== false : true,
+      order: existing ? existing.order : i,
+    }
+  }).sort((a, b) => a.order - b.order)
+}
+
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('general')
   const [settings, setSettings] = useState({})
@@ -178,30 +227,6 @@ export default function SettingsPage() {
   const [resetUserId, setResetUserId] = useState(null)
   const [resetPw, setResetPw] = useState('')
 
-  const DEFAULT_SIDEBAR_ITEMS = [
-    { to: '/', label: 'Dashboard' },
-    { to: '/weather', label: 'Weather' },
-    { to: '/airspace', label: 'Airspace' },
-    { to: '/analytics', label: 'Analytics' },
-    { to: '/flight-plans', label: 'Flight Plans' },
-    { to: '/checklists', label: 'Checklists' },
-    { to: '/flights', label: 'Flights' },
-    { to: '/missions', label: 'Mission Log' },
-    { to: '/training', label: 'Training Log' },
-    { to: '/pilots', label: 'Pilots' },
-    { to: '/fleet', label: 'Fleet' },
-    { to: '/certifications', label: 'Certifications' },
-    { to: '/maintenance', label: 'Maintenance' },
-    { to: '/media', label: 'Photo Gallery' },
-    { to: '/documents', label: 'Documents' },
-    { to: '/reports', label: 'Reports' },
-    { to: '/compliance', label: 'Compliance' },
-    { to: '/alerts', label: 'Alerts' },
-    { to: '/incidents', label: 'Activity Reports' },
-    { to: '/settings', label: 'Settings' },
-    { to: '/audit-log', label: 'Audit Log' },
-  ]
-
   // The flight_purposes table is the source of truth: it is what the Flights
   // and Flight-detail dropdowns read. Editing here used to write a separate
   // mission_purposes setting instead, so removing an option changed nothing on
@@ -305,47 +330,18 @@ export default function SettingsPage() {
       data.forEach(s => { map[s.key] = s.value })
       setSettings(map)
       if (map.org_logo) setLogoUrl(map.org_logo + '?t=' + Date.now())
-      // Load sidebar config
-      if (map.sidebar_config) {
-        try {
-          const parsed = JSON.parse(map.sidebar_config)
-          // Merge with defaults to pick up any new items
-          const configMap = {}
-          parsed.forEach(c => { configMap[c.to] = c })
-          const merged = DEFAULT_SIDEBAR_ITEMS.map((item, i) => {
-            const existing = configMap[item.to]
-            return {
-              to: item.to,
-              label: item.label,
-              visible: existing ? existing.visible !== false : true,
-              order: existing ? existing.order : i,
-            }
-          })
-          merged.sort((a, b) => a.order - b.order)
-          setSidebarItems(merged)
-        } catch {
-          setSidebarItems(DEFAULT_SIDEBAR_ITEMS.map((item, i) => ({ ...item, visible: true, order: i })))
-        }
-      } else {
-        setSidebarItems(DEFAULT_SIDEBAR_ITEMS.map((item, i) => ({ ...item, visible: true, order: i })))
-      }
-      // Load sidebar group-display toggle (defaults to true if unset)
+      setSidebarItems(buildSidebarItems(map.sidebar_config))
+      // Sidebar group headers default to shown unless explicitly disabled.
       if (map.sidebar_show_groups !== undefined) {
         setShowSidebarGroups(map.sidebar_show_groups !== 'false')
       }
-      // Load cert status labels
-      if (map.cert_status_labels) {
-        try { setCertLabels(JSON.parse(map.cert_status_labels)) } catch { /* invalid JSON */ }
-      }
-      // Load weather thresholds
-      if (map.weather_thresholds) {
-        try { setWeatherThresholds(JSON.parse(map.weather_thresholds)) } catch { /* invalid JSON */ }
-      }
+      const certLabelsSaved = parseJsonSetting(map.cert_status_labels, null)
+      if (certLabelsSaved) setCertLabels(certLabelsSaved)
+      const thresholdsSaved = parseJsonSetting(map.weather_thresholds, null)
+      if (thresholdsSaved) setWeatherThresholds(thresholdsSaved)
       loadPurposes()
-      // Load drone location places
-      if (map.drone_location_places) {
-        try { const j = JSON.parse(map.drone_location_places); if (Array.isArray(j)) setDronePlaces(j.map(asPlace)) } catch { /* keep default */ }
-      }
+      const placesSaved = parseJsonSetting(map.drone_location_places, null)
+      if (Array.isArray(placesSaved)) setDronePlaces(placesSaved.map(asPlace))
     }).catch(console.error)
     if (isAdmin) {
       api.get('/auth/users').then(setUsers).catch(console.error)
@@ -564,41 +560,9 @@ export default function SettingsPage() {
     ...(isAdmin ? [{ id: 'api-tokens', label: 'API Tokens' }] : []),
   ]
 
-  return (
-    <div className="space-y-6">
-      {/* Tab Navigation */}
-      <div className="flex gap-1 border-b border-border">
-        {TABS.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
-              activeTab === tab.id
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Integrations Tab */}
-      {activeTab === 'integrations' && isAdmin && (
-        <React.Suspense fallback={<div className="flex items-center justify-center h-32"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}>
-          <IntegrationsContent />
-        </React.Suspense>
-      )}
-
-      {/* API Tokens Tab */}
-      {activeTab === 'api-tokens' && isAdmin && (
-        <React.Suspense fallback={<div className="flex items-center justify-center h-32"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}>
-          <ApiTokensSection />
-        </React.Suspense>
-      )}
-
-      {/* Users Tab */}
-      {activeTab === 'users' && isAdmin && (
+  const renderUsersTab = () => {
+    if (activeTab !== 'users' || !isAdmin) return null
+    return (
         <div className="max-w-2xl space-y-6">
           {/* Change Password */}
           <div className="bg-card border border-border rounded-xl p-6">
@@ -778,71 +742,12 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
-      )}
+    )
+  }
 
-      {/* General Tab */}
-      {activeTab !== 'integrations' && activeTab !== 'users' && (
-      <div className="space-y-6 max-w-2xl">
-      {/* Organization */}
-      <div className="bg-card border border-border rounded-xl p-6">
-        <h3 className="text-lg font-semibold text-foreground mb-4">Organization</h3>
-        <div className="space-y-4">
-          {field('Organization Name', 'org_name', 'text', 'Displayed on reports and exports')}
-
-          <div>
-            <label htmlFor="setting-display_timezone" className="block text-sm font-medium text-foreground mb-1">Time Zone</label>
-            <p className="text-xs text-muted-foreground mb-1.5">All flight times display in this zone. Stored data stays in UTC.</p>
-            <select
-              id="setting-display_timezone"
-              ref={el => { inputRefs.current['display_timezone'] = el }}
-              key={`display_timezone-${settings.display_timezone === undefined ? 'loading' : 'loaded'}`}
-              defaultValue={settings.display_timezone || 'America/Chicago'}
-              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              disabled={!isAdmin}
-              onInput={() => setHasUnsavedChanges(true)}
-            >
-              {TIMEZONES.map(tz => <option key={tz} value={tz}>{tz}</option>)}
-            </select>
-          </div>
-
-          {/* Logo Upload */}
-          <div>
-            <p className="block text-sm font-medium text-foreground mb-1">Organization Logo</p>
-            <p className="text-xs text-muted-foreground mb-2">Used on reports and exports</p>
-            <div className="flex items-center gap-4">
-              {logoUrl ? (
-                <img src={logoUrl} alt="Org logo" className="w-16 h-16 object-contain rounded-lg border border-border bg-secondary p-1" />
-              ) : (
-                <div className="w-16 h-16 rounded-lg border border-border border-dashed bg-secondary/50 flex items-center justify-center">
-                  <ImageIcon className="w-6 h-6 text-muted-foreground" />
-                </div>
-              )}
-              {isAdmin && (
-                <label className="flex items-center gap-2 px-4 py-2 bg-secondary border border-border rounded-lg text-sm cursor-pointer hover:bg-accent/30 transition-colors">
-                  {uploadingLogo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                  <span className="text-muted-foreground">{uploadingLogo ? 'Uploading...' : 'Upload Logo'}</span>
-                  <input type="file" accept="image/*" className="hidden" disabled={uploadingLogo} onChange={async (e) => {
-                    const file = e.target.files[0]
-                    if (!file) return
-                    setUploadingLogo(true)
-                    try {
-                      const formData = new FormData()
-                      formData.append('file', file)
-                      const result = await api.upload('/settings/logo', formData)
-                      setLogoUrl(result.logo_url + '?t=' + Date.now())
-                    } catch (err) { toast.error(err.message) }
-                    finally { setUploadingLogo(false) }
-                    e.target.value = ''
-                  }} />
-                </label>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Certification Status Labels - Admin Only */}
-      {isAdmin && (
+  const renderCertLabels = () => {
+    if (!isAdmin) return null
+    return (
         <div className="bg-card border border-border rounded-xl p-6">
           <h3 className="text-lg font-semibold text-foreground mb-1">Certification Status Labels</h3>
           <p className="text-sm text-muted-foreground mb-3">Customize the display names for certification statuses.</p>
@@ -876,10 +781,12 @@ export default function SettingsPage() {
             Save Labels
           </button>
         </div>
-      )}
+    )
+  }
 
-      {/* Weather Thresholds - Admin Only */}
-      {isAdmin && (
+  const renderWeatherThresholds = () => {
+    if (!isAdmin) return null
+    return (
         <div className="bg-card border border-border rounded-xl p-6">
           <h3 className="text-lg font-semibold text-foreground mb-1">Weather Thresholds</h3>
           <p className="text-sm text-muted-foreground mb-3">Customize weather advisory thresholds for GO / CAUTION / NO-GO.</p>
@@ -953,10 +860,12 @@ export default function SettingsPage() {
             </button>
           </div>
         </div>
-      )}
+    )
+  }
 
-      {/* Mission/Flight Purposes - Admin Only */}
-      {isAdmin && (
+  const renderPurposes = () => {
+    if (!isAdmin) return null
+    return (
         <div className="bg-card border border-border rounded-xl p-6">
           <h3 className="text-lg font-semibold text-foreground mb-1">Mission / Flight Purposes</h3>
           <p className="text-sm text-muted-foreground mb-3">
@@ -1000,10 +909,12 @@ export default function SettingsPage() {
             </button>
           </div>
         </div>
-      )}
+    )
+  }
 
-      {/* Drone Locations - Admin Only */}
-      {isAdmin && (
+  const renderDroneLocations = () => {
+    if (!isAdmin) return null
+    return (
         <div className="bg-card border border-border rounded-xl p-6">
           <h2 className="text-lg font-semibold text-foreground mb-1">Drone Locations</h2>
           <p className="text-xs text-muted-foreground mb-3">Named places shown in the dashboard location dropdown (pilots are always available too).</p>
@@ -1035,10 +946,12 @@ export default function SettingsPage() {
               }}>Save locations</button>
           </div>
         </div>
-      )}
+    )
+  }
 
-      {/* Default Location - Admin Only */}
-      {isAdmin && (
+  const renderDefaultLocation = () => {
+    if (!isAdmin) return null
+    return (
         <div className="bg-card border border-border rounded-xl p-6">
           <h3 className="text-lg font-semibold text-foreground mb-1 flex items-center gap-2">
             <MapPin className="w-5 h-5" /> Default Location
@@ -1091,10 +1004,12 @@ export default function SettingsPage() {
             </div>
           )}
         </div>
-      )}
+    )
+  }
 
-      {/* Backup Export - Admin Only */}
-      {isAdmin && (
+  const renderBackupExport = () => {
+    if (!isAdmin) return null
+    return (
         <div className="bg-card border border-border rounded-xl p-6">
           <h3 className="text-lg font-semibold text-foreground mb-1">Backup & Restore</h3>
           <p className="text-sm text-muted-foreground mb-4">
@@ -1125,10 +1040,12 @@ export default function SettingsPage() {
             {exporting ? 'Exporting...' : 'Export Backup'}
           </button>
         </div>
-      )}
+    )
+  }
 
-      {/* Automated Backups - Admin Only */}
-      {isAdmin && (
+  const renderAutomatedBackups = () => {
+    if (!isAdmin) return null
+    return (
         <div className="bg-card border border-border rounded-xl p-6">
           <h3 className="text-lg font-semibold text-foreground mb-1">Automated Backups</h3>
           <p className="text-sm text-muted-foreground mb-4">
@@ -1202,10 +1119,12 @@ export default function SettingsPage() {
             </div>
           )}
         </div>
-      )}
+    )
+  }
 
-      {/* Save */}
-      {isAdmin && (
+  const renderSaveButton = () => {
+    if (!isAdmin) return null
+    return (
         <div className={`sticky bottom-4 z-10 flex items-center gap-3 ${hasUnsavedChanges ? 'bg-card border border-border rounded-lg p-3 shadow-lg' : ''}`}>
           <button
             onClick={handleSave}
@@ -1217,19 +1136,12 @@ export default function SettingsPage() {
           </button>
           {hasUnsavedChanges && <span className="text-xs text-amber-500">Unsaved changes</span>}
         </div>
-      )}
+    )
+  }
 
-      {/* API Documentation */}
-      <div className="bg-card border border-border rounded-xl p-6">
-        <h3 className="text-lg font-semibold text-foreground mb-2">API Documentation</h3>
-        <p className="text-sm text-muted-foreground mb-3">Browse the interactive API documentation powered by Swagger UI.</p>
-        <a href="/docs" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-primary hover:underline text-sm">
-          <ExternalLink className="w-4 h-4" /> Open API Documentation (Swagger UI)
-        </a>
-      </div>
-
-      {/* Currency Rules - Admin Only */}
-      {isAdmin && (
+  const renderCurrencyRules = () => {
+    if (!isAdmin) return null
+    return (
         <div className="bg-card border border-border rounded-xl p-6">
           <div className="flex items-center justify-between mb-1">
             <h3 className="text-lg font-semibold text-foreground">Currency Rules</h3>
@@ -1283,10 +1195,81 @@ export default function SettingsPage() {
             </div>
           )}
         </div>
-      )}
+    )
+  }
 
-      {/* Sidebar Configuration - Admin Only */}
-      {isAdmin && sidebarItems.length > 0 && (
+  const renderOrganization = () => (
+      <div className="bg-card border border-border rounded-xl p-6">
+        <h3 className="text-lg font-semibold text-foreground mb-4">Organization</h3>
+        <div className="space-y-4">
+          {field('Organization Name', 'org_name', 'text', 'Displayed on reports and exports')}
+
+          <div>
+            <label htmlFor="setting-display_timezone" className="block text-sm font-medium text-foreground mb-1">Time Zone</label>
+            <p className="text-xs text-muted-foreground mb-1.5">All flight times display in this zone. Stored data stays in UTC.</p>
+            <select
+              id="setting-display_timezone"
+              ref={el => { inputRefs.current['display_timezone'] = el }}
+              key={`display_timezone-${settings.display_timezone === undefined ? 'loading' : 'loaded'}`}
+              defaultValue={settings.display_timezone || 'America/Chicago'}
+              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              disabled={!isAdmin}
+              onInput={() => setHasUnsavedChanges(true)}
+            >
+              {TIMEZONES.map(tz => <option key={tz} value={tz}>{tz}</option>)}
+            </select>
+          </div>
+
+          {/* Logo Upload */}
+          <div>
+            <p className="block text-sm font-medium text-foreground mb-1">Organization Logo</p>
+            <p className="text-xs text-muted-foreground mb-2">Used on reports and exports</p>
+            <div className="flex items-center gap-4">
+              {logoUrl ? (
+                <img src={logoUrl} alt="Org logo" className="w-16 h-16 object-contain rounded-lg border border-border bg-secondary p-1" />
+              ) : (
+                <div className="w-16 h-16 rounded-lg border border-border border-dashed bg-secondary/50 flex items-center justify-center">
+                  <ImageIcon className="w-6 h-6 text-muted-foreground" />
+                </div>
+              )}
+              {isAdmin && (
+                <label className="flex items-center gap-2 px-4 py-2 bg-secondary border border-border rounded-lg text-sm cursor-pointer hover:bg-accent/30 transition-colors">
+                  {uploadingLogo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                  <span className="text-muted-foreground">{uploadingLogo ? 'Uploading...' : 'Upload Logo'}</span>
+                  <input type="file" accept="image/*" className="hidden" disabled={uploadingLogo} onChange={async (e) => {
+                    const file = e.target.files[0]
+                    if (!file) return
+                    setUploadingLogo(true)
+                    try {
+                      const formData = new FormData()
+                      formData.append('file', file)
+                      const result = await api.upload('/settings/logo', formData)
+                      setLogoUrl(result.logo_url + '?t=' + Date.now())
+                    } catch (err) { toast.error(err.message) }
+                    finally { setUploadingLogo(false) }
+                    e.target.value = ''
+                  }} />
+                </label>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+  )
+
+  const renderApiDocs = () => (
+      <div className="bg-card border border-border rounded-xl p-6">
+        <h3 className="text-lg font-semibold text-foreground mb-2">API Documentation</h3>
+        <p className="text-sm text-muted-foreground mb-3">Browse the interactive API documentation powered by Swagger UI.</p>
+        <a href="/docs" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-primary hover:underline text-sm">
+          <ExternalLink className="w-4 h-4" /> Open API Documentation (Swagger UI)
+        </a>
+      </div>
+  )
+
+  const renderSidebarConfig = () => {
+    if (!isAdmin || sidebarItems.length === 0) return null
+    return (
         <div className="bg-card border border-border rounded-xl p-6">
           <h3 className="text-lg font-semibold text-foreground mb-1">Sidebar Configuration</h3>
           <p className="text-sm text-muted-foreground mb-4">Toggle visibility and reorder sidebar navigation items.</p>
@@ -1390,13 +1373,12 @@ export default function SettingsPage() {
             Save Sidebar Config
           </button>
         </div>
-      )}
+    )
+  }
 
-      </div>
-      )}
-
-      {/* Currency Rule Modal */}
-      {editingRule && (
+  const renderCurrencyModal = () => {
+    if (!editingRule) return null
+    return (
         <Modal open onClose={() => setEditingRule(null)} title={editingRule.id ? 'Edit Currency Rule' : 'New Currency Rule'} className="max-w-md">
             <div className="space-y-3">
               <div>
@@ -1477,10 +1459,12 @@ export default function SettingsPage() {
               </div>
             </div>
         </Modal>
-      )}
+    )
+  }
 
-      {/* Edit User Modal */}
-      {editUser && (
+  const renderEditUserModal = () => {
+    if (!editUser) return null
+    return (
         <Modal open onClose={() => setEditUser(null)} title={`Edit User: ${editUser.username}`} className="max-w-md">
             <div className="space-y-3">
               <div>
@@ -1521,7 +1505,66 @@ export default function SettingsPage() {
               </div>
             </div>
         </Modal>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Tab Navigation */}
+      <div className="flex gap-1 border-b border-border">
+        {TABS.map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
+              activeTab === tab.id
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Integrations Tab */}
+      {activeTab === 'integrations' && isAdmin && (
+        <React.Suspense fallback={<div className="flex items-center justify-center h-32"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}>
+          <IntegrationsContent />
+        </React.Suspense>
       )}
+
+      {/* API Tokens Tab */}
+      {activeTab === 'api-tokens' && isAdmin && (
+        <React.Suspense fallback={<div className="flex items-center justify-center h-32"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}>
+          <ApiTokensSection />
+        </React.Suspense>
+      )}
+
+      {/* Users Tab */}
+      {renderUsersTab()}
+
+      {/* General Tab */}
+      {activeTab !== 'integrations' && activeTab !== 'users' && (
+      <div className="space-y-6 max-w-2xl">
+      {renderOrganization()}
+      {renderCertLabels()}
+      {renderWeatherThresholds()}
+      {renderPurposes()}
+      {renderDroneLocations()}
+      {renderDefaultLocation()}
+      {renderBackupExport()}
+      {renderAutomatedBackups()}
+      {renderSaveButton()}
+      {renderApiDocs()}
+      {renderCurrencyRules()}
+      {renderSidebarConfig()}
+
+      </div>
+      )}
+
+      {renderCurrencyModal()}
+      {renderEditUserModal()}
 
       <ConfirmDialog {...confirmProps} />
     </div>
