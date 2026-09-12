@@ -105,39 +105,33 @@ def _parse_datetime(value: str) -> datetime:
         raise HTTPException(status_code=422, detail=f"Invalid datetime format: {value}")
 
 
+def _resolve(obj_id, cache, db: Session, model):
+    """Resolve a row by id from a prebuilt cache (list endpoint) or a direct
+    query (single-item callers). None when there is no id or no match."""
+    if not obj_id:
+        return None
+    if cache is not None:
+        return cache.get(obj_id)
+    return db.query(model).filter(model.id == obj_id).first()
+
+
 def _enrich(plan: FlightPlan, db: Session, pilot_cache=None, vehicle_cache=None, user_cache=None) -> FlightPlanOut:
     """Serialize a flight plan. For the list endpoint, pass prebuilt caches
     (id -> object) to avoid a pilot/vehicle/user query per row; single-item
     callers omit them and fall back to direct lookups."""
     out = FlightPlanOut.model_validate(plan)
-    if plan.pilot_id:
-        if pilot_cache is not None:
-            pilot = pilot_cache.get(plan.pilot_id)
-        else:
-            pilot = db.query(Pilot).filter(Pilot.id == plan.pilot_id).first()
-        if pilot:
-            out.pilot_name = pilot.full_name
-    if plan.vehicle_id:
-        if vehicle_cache is not None:
-            v = vehicle_cache.get(plan.vehicle_id)
-        else:
-            v = db.query(Vehicle).filter(Vehicle.id == plan.vehicle_id).first()
-        if v:
-            out.vehicle_name = f"{v.manufacturer} {v.model}" + (f" ({v.nickname})" if v.nickname else "")
-    if plan.submitted_by_id:
-        if user_cache is not None:
-            u = user_cache.get(plan.submitted_by_id)
-        else:
-            u = db.query(User).filter(User.id == plan.submitted_by_id).first()
-        if u:
-            out.submitted_by_name = u.display_name
-    if plan.reviewed_by_id:
-        if user_cache is not None:
-            u = user_cache.get(plan.reviewed_by_id)
-        else:
-            u = db.query(User).filter(User.id == plan.reviewed_by_id).first()
-        if u:
-            out.reviewed_by_name = u.display_name
+    pilot = _resolve(plan.pilot_id, pilot_cache, db, Pilot)
+    if pilot:
+        out.pilot_name = pilot.full_name
+    v = _resolve(plan.vehicle_id, vehicle_cache, db, Vehicle)
+    if v:
+        out.vehicle_name = f"{v.manufacturer} {v.model}" + (f" ({v.nickname})" if v.nickname else "")
+    submitter = _resolve(plan.submitted_by_id, user_cache, db, User)
+    if submitter:
+        out.submitted_by_name = submitter.display_name
+    reviewer = _resolve(plan.reviewed_by_id, user_cache, db, User)
+    if reviewer:
+        out.reviewed_by_name = reviewer.display_name
     return out
 
 

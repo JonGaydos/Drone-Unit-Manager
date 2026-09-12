@@ -132,11 +132,45 @@ def sync_deep(
     return SyncResultResponse(**asdict(result))
 
 
-def _apply_enrichment_detail(flight, detail: dict, db):
-    """Apply all enrichment data from an API detail response to a flight."""
-    from app.services.sync_manager import _match_pilot
+# Location/metric flight fields mapped to the API detail keys to try, in order.
+_ENRICHMENT_FIELDS = {
+    "takeoff_lat": ("takeoff_latitude", "takeoff_lat", "latitude"),
+    "takeoff_lon": ("takeoff_longitude", "takeoff_lon", "longitude"),
+    "landing_lat": ("landing_latitude", "landing_lat"),
+    "landing_lon": ("landing_longitude", "landing_lon"),
+    "takeoff_address": ("takeoff_address", "location", "address"),
+    "max_altitude_m": ("max_altitude_m", "max_altitude", "max_height"),
+    "max_speed_mps": ("max_speed_mps", "max_speed", "max_ground_speed"),
+    "distance_m": ("distance_m", "total_distance", "distance"),
+}
 
-    # Date / time
+# Equipment flight fields mapped the same way.
+_EQUIPMENT_FIELDS = {
+    "battery_serial": ("battery_serial", "battery"),
+    "sensor_package": ("sensor_package",),
+    "attachment_top": ("attachment_top",),
+    "attachment_bottom": ("attachment_bottom",),
+    "attachment_left": ("attachment_left",),
+    "attachment_right": ("attachment_right",),
+    "carrier": ("carrier", "carriers"),
+}
+
+
+def _apply_first_present(flight, detail: dict, field_map: dict) -> None:
+    """Fill each flight attribute in field_map from the first truthy API value
+    among its candidate keys, but only when the flight field is currently empty."""
+    for field, api_keys in field_map.items():
+        if getattr(flight, field, None):
+            continue
+        for key in api_keys:
+            val = detail.get(key)
+            if val:
+                setattr(flight, field, val)
+                break
+
+
+def _enrich_timestamps(flight, detail: dict) -> None:
+    """Set takeoff/landing time and date from the API detail, tolerating bad values."""
     takeoff_str = detail.get("takeoff_time") or detail.get("start_time") or detail.get("created_at")
     landing_str = detail.get("landing_time") or detail.get("end_time")
     if takeoff_str:
@@ -152,38 +186,26 @@ def _apply_enrichment_detail(flight, detail: dict, db):
         except (ValueError, AttributeError):
             pass
 
-    # Duration
+
+def _enrich_duration(flight, detail: dict) -> None:
+    """Set duration from the API detail, else derive it from takeoff/landing."""
     duration = detail.get("duration_seconds") or detail.get("duration") or detail.get("flight_duration")
     if duration is not None:
         flight.duration_seconds = int(float(duration))
     elif flight.takeoff_time and flight.landing_time:
         flight.duration_seconds = int((flight.landing_time - flight.takeoff_time).total_seconds())
 
-    # Location + Metrics — apply first truthy API value if flight field is empty
-    _ENRICHMENT_FIELDS = {
-        "takeoff_lat": ("takeoff_latitude", "takeoff_lat", "latitude"),
-        "takeoff_lon": ("takeoff_longitude", "takeoff_lon", "longitude"),
-        "landing_lat": ("landing_latitude", "landing_lat"),
-        "landing_lon": ("landing_longitude", "landing_lon"),
-        "takeoff_address": ("takeoff_address", "location", "address"),
-        "max_altitude_m": ("max_altitude_m", "max_altitude", "max_height"),
-        "max_speed_mps": ("max_speed_mps", "max_speed", "max_ground_speed"),
-        "distance_m": ("distance_m", "total_distance", "distance"),
-    }
-    for field, api_keys in _ENRICHMENT_FIELDS.items():
-        if not getattr(flight, field, None):
-            for key in api_keys:
-                val = detail.get(key)
-                if val:
-                    setattr(flight, field, val)
-                    break
 
-    # Pilot
+def _enrich_pilot(flight, detail: dict, db) -> None:
+    """Match a pilot by the API detail's operator name when the flight has none."""
+    from app.services.sync_manager import _match_pilot
     pilot_name = detail.get("pilot_name") or detail.get("operator_name") or detail.get("user_name")
     if pilot_name and not flight.pilot_id:
         flight.pilot_id = _match_pilot(db, pilot_name)
 
-    # Vehicle
+
+def _enrich_vehicle(flight, detail: dict, db) -> None:
+    """Match a vehicle by serial from the API detail when the flight has none."""
     from app.models.vehicle import Vehicle
     vehicle_serial = detail.get("vehicle_serial") or detail.get("serial_number") or detail.get("vehicle_id")
     if vehicle_serial and not flight.vehicle_id:
@@ -193,23 +215,15 @@ def _apply_enrichment_detail(flight, detail: dict, db):
         if vehicle:
             flight.vehicle_id = vehicle.id
 
-    # Equipment — same pattern
-    _EQUIPMENT_FIELDS = {
-        "battery_serial": ("battery_serial", "battery"),
-        "sensor_package": ("sensor_package",),
-        "attachment_top": ("attachment_top",),
-        "attachment_bottom": ("attachment_bottom",),
-        "attachment_left": ("attachment_left",),
-        "attachment_right": ("attachment_right",),
-        "carrier": ("carrier", "carriers"),
-    }
-    for field, api_keys in _EQUIPMENT_FIELDS.items():
-        if not getattr(flight, field, None):
-            for key in api_keys:
-                val = detail.get(key)
-                if val:
-                    setattr(flight, field, val)
-                    break
+
+def _apply_enrichment_detail(flight, detail: dict, db):
+    """Apply all enrichment data from an API detail response to a flight."""
+    _enrich_timestamps(flight, detail)
+    _enrich_duration(flight, detail)
+    _apply_first_present(flight, detail, _ENRICHMENT_FIELDS)
+    _enrich_pilot(flight, detail, db)
+    _enrich_vehicle(flight, detail, db)
+    _apply_first_present(flight, detail, _EQUIPMENT_FIELDS)
 
 
 @router.post("/enrich", response_model=SyncResultResponse)

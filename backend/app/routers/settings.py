@@ -170,6 +170,34 @@ def view_logo():
     raise HTTPException(404, "No logo found")
 
 
+def _upsert_settings(db, data) -> None:
+    """Write each allowed setting, skipping unknown keys and never overwriting a
+    stored secret with an empty or redacted placeholder value."""
+    for item in data:
+        if item.key not in ALLOWED_SETTING_KEYS:
+            continue
+        if item.key in SECRET_KEYS and (item.value or "") in ("", REDACTED_MARKER):
+            continue
+        setting = db.query(Setting).filter(Setting.key == item.key).first()
+        if setting:
+            setting.value = item.value
+        else:
+            db.add(Setting(key=item.key, value=item.value))
+
+
+def _interval_from(data, key) -> int | None:
+    """The last valid int value for setting `key` in `data`; None if absent or
+    unparseable (an unparseable value keeps the previous valid one, as before)."""
+    interval = None
+    for item in data:
+        if item.key == key and item.value:
+            try:
+                interval = int(item.value)
+            except ValueError:
+                pass
+    return interval
+
+
 @router.put("/bulk", responses=responses(401))
 def set_settings_bulk(data: list[SettingValue], db: DBSession, admin: AdminUser):
     """Update multiple settings in a single request. Admin only.
@@ -177,43 +205,16 @@ def set_settings_bulk(data: list[SettingValue], db: DBSession, admin: AdminUser)
     Skips keys not in ALLOWED_SETTING_KEYS and ignores masked placeholder
     values to avoid overwriting real secrets with redacted strings.
     """
-    for item in data:
-        if item.key not in ALLOWED_SETTING_KEYS:
-            continue
-        # Never write the redaction marker (or empty) over a stored secret.
-        if item.key in SECRET_KEYS and (item.value or "") in ("", REDACTED_MARKER):
-            continue
-        setting = db.query(Setting).filter(Setting.key == item.key).first()
-        if setting:
-            setting.value = item.value
-        else:
-            setting = Setting(key=item.key, value=item.value)
-            db.add(setting)
+    _upsert_settings(db, data)
     db.commit()
 
-    # Reschedule sync job if interval was changed
+    # Reschedule the sync/telemetry jobs only when their interval was in the request.
     if any(item.key == "sync_interval" for item in data):
         from app.services.scheduler import reschedule_sync
-        interval_minutes = None
-        for item in data:
-            if item.key == "sync_interval" and item.value:
-                try:
-                    interval_minutes = int(item.value)
-                except ValueError:
-                    pass
-        reschedule_sync(interval_minutes)
-
-    # Reschedule telemetry job if its interval changed
+        reschedule_sync(_interval_from(data, "sync_interval"))
     if any(item.key == "telemetry_sync_interval" for item in data):
         from app.services.scheduler import reschedule_telemetry_sync
-        telemetry_minutes = None
-        for item in data:
-            if item.key == "telemetry_sync_interval" and item.value:
-                try:
-                    telemetry_minutes = int(item.value)
-                except ValueError:
-                    pass
-        reschedule_telemetry_sync(telemetry_minutes)
+        reschedule_telemetry_sync(_interval_from(data, "telemetry_sync_interval"))
 
     return {"ok": True}
 

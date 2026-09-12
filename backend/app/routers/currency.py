@@ -84,6 +84,55 @@ def delete_rule(rule_id: int, db: DBSession, user: SupervisorUser):
     return {"ok": True}
 
 
+def _currency_expiry(flights_in_period, rule):
+    """The date currency lapses: walk newest -> oldest accumulating hours and
+    flights, find the flight that first meets ALL minimums, and age it out by the
+    rule period. That boundary flight aging out is when currency lapses. None if
+    no flight reaches the minimums (caller only asks when the pilot is current)."""
+    cum_hours = 0.0
+    cum_flights = 0
+    for f in sorted(flights_in_period, key=lambda f: f.date or date.min, reverse=True):
+        cum_hours += (f.duration_seconds or 0) / 3600.0
+        cum_flights += 1
+        hours_ok = cum_hours >= rule.required_hours
+        flights_ok = rule.required_flights is None or cum_flights >= rule.required_flights
+        if hours_ok and flights_ok and f.date:
+            return str(f.date + timedelta(days=rule.period_days))
+    return None
+
+
+def _evaluate_rule(rule: CurrencyRule, flights: list[Flight], today):
+    """Evaluate one currency rule against an already-loaded flight list."""
+    cutoff = today - timedelta(days=rule.period_days)
+    model = rule.vehicle_model.lower() if rule.vehicle_model else None
+    # In-period flights, matching the prior SQL filter: date >= cutoff, and for
+    # model-specific rules an inner join on a matching vehicle model (flights
+    # with no vehicle or a different model are excluded).
+    flights_in_period = [
+        f for f in flights
+        if f.date and f.date >= cutoff
+        and (model is None or (f.vehicle is not None and (f.vehicle.model or "").lower() == model))
+    ]
+    actual_flights = len(flights_in_period)
+    actual_hours = sum((f.duration_seconds or 0) for f in flights_in_period) / 3600.0
+    hours_met = actual_hours >= rule.required_hours
+    flights_met = rule.required_flights is None or actual_flights >= rule.required_flights
+    is_current = hours_met and flights_met
+    expires_date = _currency_expiry(flights_in_period, rule) if (is_current and flights_in_period) else None
+    return {
+        "rule_id": rule.id,
+        "rule_name": rule.name,
+        "vehicle_model": rule.vehicle_model,
+        "required_hours": rule.required_hours,
+        "actual_hours": round(actual_hours, 2),
+        "required_flights": rule.required_flights,
+        "actual_flights": actual_flights,
+        "is_current": is_current,
+        "expires_date": expires_date,
+        "period_days": rule.period_days,
+    }
+
+
 def _evaluate_currency(rules: list[CurrencyRule], flights: list[Flight]):
     """Evaluate currency for one pilot from an already-loaded flight list.
 
@@ -91,64 +140,8 @@ def _evaluate_currency(rules: list[CurrencyRule], flights: list[Flight]):
     rules can be filtered in memory; the caller loads them once in bulk instead
     of running a query per pilot per rule.
     """
-    rule_results = []
     today = date.today()
-    for rule in rules:
-        cutoff = today - timedelta(days=rule.period_days)
-        model = rule.vehicle_model.lower() if rule.vehicle_model else None
-
-        # In-period flights, matching the prior SQL filter: date >= cutoff, and
-        # for model-specific rules an inner join on a matching vehicle model
-        # (flights with no vehicle or a different model are excluded).
-        flights_in_period = [
-            f for f in flights
-            if f.date and f.date >= cutoff
-            and (model is None or (f.vehicle is not None and (f.vehicle.model or "").lower() == model))
-        ]
-        actual_flights = len(flights_in_period)
-        actual_hours = sum((f.duration_seconds or 0) for f in flights_in_period) / 3600.0
-
-        hours_met = actual_hours >= rule.required_hours
-        flights_met = rule.required_flights is None or actual_flights >= rule.required_flights
-        is_current = hours_met and flights_met
-
-        # Currency expiry: walk newest -> oldest accumulating hours/flights.
-        # The boundary flight is the one that first gets us to ALL minimums.
-        # Currency lapses when THAT flight ages out of the period (its date
-        # + period_days). The previous logic used the oldest flight in the
-        # window, which is wrong when older flights are surplus.
-        expires_date = None
-        if is_current and flights_in_period:
-            sorted_desc = sorted(
-                flights_in_period,
-                key=lambda f: f.date or date.min,
-                reverse=True,
-            )
-            cum_hours = 0.0
-            cum_flights = 0
-            for f in sorted_desc:
-                cum_hours += (f.duration_seconds or 0) / 3600.0
-                cum_flights += 1
-                hours_ok = cum_hours >= rule.required_hours
-                flights_ok = rule.required_flights is None or cum_flights >= rule.required_flights
-                if hours_ok and flights_ok and f.date:
-                    expires_date = str(f.date + timedelta(days=rule.period_days))
-                    break
-
-        rule_results.append({
-            "rule_id": rule.id,
-            "rule_name": rule.name,
-            "vehicle_model": rule.vehicle_model,
-            "required_hours": rule.required_hours,
-            "actual_hours": round(actual_hours, 2),
-            "required_flights": rule.required_flights,
-            "actual_flights": actual_flights,
-            "is_current": is_current,
-            "expires_date": expires_date,
-            "period_days": rule.period_days,
-        })
-
-    return rule_results
+    return [_evaluate_rule(rule, flights, today) for rule in rules]
 
 
 def _pilot_currency(pilot: Pilot, rules: list[CurrencyRule], db: Session):
