@@ -144,6 +144,28 @@ def create_maintenance(data: MaintenanceCreate, db: DBSession, admin: PilotUser)
     return MaintenanceOut.model_validate(record)
 
 
+def _resolve_entity_change(db, record, update_data: dict) -> None:
+    """When an update touches entity_type/entity_id, validate the target entity
+    and normalize the sentinel 0 for types whose id is optional. Mutates
+    update_data in place; raises 400 on an invalid combination."""
+    if "entity_type" not in update_data and "entity_id" not in update_data:
+        return
+    new_type = update_data.get("entity_type", record.entity_type)
+    id_optional = ENTITY_MODELS.get(new_type) is None or new_type in OPTIONAL_ENTITY_ID
+    # Changing to a different table-backed type requires a fresh entity_id;
+    # the old id must not be reinterpreted against the new type's table.
+    if new_type != record.entity_type and "entity_id" not in update_data:
+        if id_optional:
+            update_data["entity_id"] = 0
+        else:
+            raise HTTPException(status_code=400, detail=f"entity_id is required when changing entity_type to '{new_type}'")
+    new_id = update_data.get("entity_id", record.entity_id)
+    # The stored sentinel 0 ("no entity") is None for validation.
+    _validate_entity(db, new_type, new_id or None)
+    if id_optional and not new_id:
+        update_data["entity_id"] = 0
+
+
 @router.patch("/{record_id}", response_model=MaintenanceOut, responses=responses(401, 404))
 def update_maintenance(record_id: int, data: MaintenanceUpdate, db: DBSession, admin: PilotUser):
     from app.services.audit import log_action
@@ -151,21 +173,7 @@ def update_maintenance(record_id: int, data: MaintenanceUpdate, db: DBSession, a
     if not record:
         raise HTTPException(status_code=404, detail=RECORD_NOT_FOUND)
     update_data = data.model_dump(exclude_unset=True)
-    if "entity_type" in update_data or "entity_id" in update_data:
-        new_type = update_data.get("entity_type", record.entity_type)
-        id_optional = ENTITY_MODELS.get(new_type) is None or new_type in OPTIONAL_ENTITY_ID
-        # Changing to a different table-backed type requires a fresh entity_id;
-        # the old id must not be reinterpreted against the new type's table.
-        if new_type != record.entity_type and "entity_id" not in update_data:
-            if id_optional:
-                update_data["entity_id"] = 0
-            else:
-                raise HTTPException(status_code=400, detail=f"entity_id is required when changing entity_type to '{new_type}'")
-        new_id = update_data.get("entity_id", record.entity_id)
-        # The stored sentinel 0 ("no entity") is None for validation.
-        _validate_entity(db, new_type, new_id or None)
-        if id_optional and not new_id:
-            update_data["entity_id"] = 0
+    _resolve_entity_change(db, record, update_data)
     for key, value in update_data.items():
         setattr(record, key, value)
     log_action(db, admin.id, admin.display_name, "update", "maintenance", record.id, record.description[:100] if record.description else None)

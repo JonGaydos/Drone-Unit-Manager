@@ -48,6 +48,44 @@ def _doc_to_out(doc: Document) -> DocumentOut:
     return out
 
 
+def _document_entity_fks(entity_type: str, entity_id):
+    """Map an entity_type/id to the specific FK column it populates.
+    Returns (pilot_id, vehicle_id, certification_id)."""
+    return (
+        entity_id if entity_type == "pilot" else None,
+        entity_id if entity_type == "vehicle" else None,
+        entity_id if entity_type == "certification" else None,
+    )
+
+
+def _resolve_document_dest(upload_root: Path, entity_type: str, entity_id, safe_filename: str) -> Path:
+    """Build the on-disk destination for an uploaded document: a per-entity
+    subdirectory, the filename deduplicated with a counter suffix, and a final
+    realpath check that the resolved path stays inside upload_root."""
+    if entity_id is None:
+        upload_dir = upload_root / "documents" / entity_type
+    else:
+        upload_dir = upload_root / "documents" / entity_type / str(entity_id)
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    dest = upload_dir / safe_filename
+    # Deduplicate filenames by appending a counter suffix
+    counter = 1
+    while dest.exists():
+        stem = Path(safe_filename).stem
+        suffix = Path(safe_filename).suffix
+        dest = upload_dir / f"{stem}_{counter}{suffix}"
+        counter += 1
+
+    # Final realpath check — even with sanitization above, defend in depth.
+    resolved = dest.resolve()
+    try:
+        resolved.relative_to(upload_root)
+    except ValueError:
+        raise HTTPException(400, "Resolved upload path escapes upload root")
+    return dest
+
+
 @router.post("/upload", response_model=DocumentOut, responses=responses(400, 413))
 async def upload_document(
     db: DBSession,
@@ -97,27 +135,7 @@ async def upload_document(
         raise HTTPException(400, f"File type '{ext}' not allowed.")
 
     upload_root = Path(settings.UPLOAD_DIR).resolve()
-    if entity_id is None:
-        upload_dir = upload_root / "documents" / entity_type
-    else:
-        upload_dir = upload_root / "documents" / entity_type / str(entity_id)
-    upload_dir.mkdir(parents=True, exist_ok=True)
-
-    dest = upload_dir / safe_filename
-    # Deduplicate filenames by appending a counter suffix
-    counter = 1
-    while dest.exists():
-        stem = Path(safe_filename).stem
-        suffix = Path(safe_filename).suffix
-        dest = upload_dir / f"{stem}_{counter}{suffix}"
-        counter += 1
-
-    # Final realpath check — even with sanitization above, defend in depth.
-    resolved = dest.resolve()
-    try:
-        resolved.relative_to(upload_root)
-    except ValueError:
-        raise HTTPException(400, "Resolved upload path escapes upload root")
+    dest = _resolve_document_dest(upload_root, entity_type, entity_id, safe_filename)
 
     contents = await file.read()
     if len(contents) > settings.MAX_UPLOAD_SIZE:
@@ -128,9 +146,7 @@ async def upload_document(
     dest.write_bytes(contents)
 
     # Map entity_type to the appropriate foreign key column
-    pilot_id = entity_id if entity_type == "pilot" else None
-    vehicle_id = entity_id if entity_type == "vehicle" else None
-    certification_id = entity_id if entity_type == "certification" else None
+    pilot_id, vehicle_id, certification_id = _document_entity_fks(entity_type, entity_id)
 
     doc = Document(
         pilot_id=pilot_id,
