@@ -514,43 +514,49 @@ def change_password(req: ChangePasswordRequest, user: Annotated[User, Depends(ge
     return {"ok": True, "message": "Password changed successfully"}
 
 
+def _apply_user_change(target, changes: dict, field: str, new) -> None:
+    """Record and apply a changed scalar field on a user, in the same audit-log
+    shape as the flight/pilot/vehicle edits. No-op when new is None or unchanged."""
+    from app.services.audit import _fmt_change
+    old = getattr(target, field)
+    if new is not None and new != old:
+        changes[field] = _fmt_change(old, new)
+        setattr(target, field, new)
+
+
+def _apply_pilot_link(target, changes: dict, data, db) -> None:
+    """Update the linked pilot (0 clears it) and auto-fill the user's email from
+    the linked pilot when the user has none. Records the pilot_id change only."""
+    if data.pilot_id is None:
+        return
+    from app.services.audit import _fmt_change
+    new_pid = data.pilot_id if data.pilot_id != 0 else None
+    if new_pid != target.pilot_id:
+        changes["pilot_id"] = _fmt_change(target.pilot_id, new_pid)
+    target.pilot_id = new_pid
+    if target.pilot_id and not target.email:
+        from app.models.pilot import Pilot
+        pilot = db.query(Pilot).filter(Pilot.id == target.pilot_id).first()
+        if pilot and pilot.email:
+            target.email = pilot.email
+
+
 @router.patch("/users/{user_id}", response_model=UserOut, responses=responses(404))
 def update_user(user_id: int, data: UserUpdate, admin: Annotated[User, Depends(require_admin)], db: DBSession):
     """Update a user's profile, role, or active status. Admin only."""
-    from app.services.audit import log_action, _fmt_change
+    from app.services.audit import log_action
     target = db.query(User).filter(User.id == user_id).first()
     if not target:
         raise HTTPException(status_code=404, detail=USER_NOT_FOUND)
-    # Record field-level changes as a dict (same shape as compute_changes /
-    # the flight/pilot/vehicle edits) so the audit log renders consistently.
-    changes = {}
-
-    def _record(field, old, new):
-        changes[field] = _fmt_change(old, new)
-
-    if data.display_name is not None and data.display_name != target.display_name:
-        _record("display_name", target.display_name, data.display_name)
-        target.display_name = data.display_name
-    if data.role is not None and data.role != target.role:
-        _record("role", target.role, data.role)
-        target.role = data.role
-    if data.is_active is not None and data.is_active != target.is_active:
-        _record("is_active", target.is_active, data.is_active)
-        target.is_active = data.is_active
-    if data.pilot_id is not None:
-        new_pid = data.pilot_id if data.pilot_id != 0 else None
-        if new_pid != target.pilot_id:
-            _record("pilot_id", target.pilot_id, new_pid)
-        target.pilot_id = new_pid
-        # Auto-sync email from linked pilot if user has no email
-        if target.pilot_id and not target.email:
-            from app.models.pilot import Pilot
-            pilot = db.query(Pilot).filter(Pilot.id == target.pilot_id).first()
-            if pilot and pilot.email:
-                target.email = pilot.email
-    if data.email is not None and data.email != target.email:
-        _record("email", target.email, data.email)
-        target.email = data.email
+    # Field-level changes recorded as a dict so the audit log renders consistently.
+    # Order matters: the pilot link may auto-fill email before an explicit email
+    # value (if any) overrides it, matching the original sequence.
+    changes: dict = {}
+    _apply_user_change(target, changes, "display_name", data.display_name)
+    _apply_user_change(target, changes, "role", data.role)
+    _apply_user_change(target, changes, "is_active", data.is_active)
+    _apply_pilot_link(target, changes, data, db)
+    _apply_user_change(target, changes, "email", data.email)
     if changes:
         log_action(db, admin.id, admin.display_name, "update", "user", target.id,
                    target.username, changes=changes)

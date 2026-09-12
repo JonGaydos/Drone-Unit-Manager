@@ -39,25 +39,48 @@ def list_vehicles(
     return [VehicleOut.model_validate(v) for v in q.order_by(Vehicle.nickname, Vehicle.serial_number).all()]
 
 
+def _latest_vehicle_checkouts(db, vids):
+    """Map each vehicle id to its most recent open (not checked-in) checkout."""
+    from app.models.equipment_checkout import EquipmentCheckout
+    active = {}
+    if not vids:
+        return active
+    rows = db.query(EquipmentCheckout).filter(
+        EquipmentCheckout.entity_type == "vehicle",
+        EquipmentCheckout.entity_id.in_(vids),
+        EquipmentCheckout.checked_in_at.is_(None),
+    ).all()
+    for c in rows:
+        cur = active.get(c.entity_id)
+        if cur is None or c.checked_out_at > cur.checked_out_at:
+            active[c.entity_id] = c
+    return active
+
+
+def _resolve_vehicle_location(v, co, names):
+    """Resolve a vehicle's location text/source from the more recent of a manual
+    set or an open checkout. Returns (location_text, source)."""
+    co_time = co.checked_out_at if co else None
+    man_time = v.location_set_at
+    manual_newer = man_time is not None and (co_time is None or man_time >= co_time)
+    if manual_newer:
+        if v.manual_location_pilot_id:
+            return f"with {names.get(v.manual_location_pilot_id, 'a pilot')}", "manual"
+        if v.manual_location_place:
+            return v.manual_location_place, "manual"
+        return "Unknown", "manual"
+    if co is not None:
+        return f"with {names.get(co.checked_out_by_id, 'a pilot')}", "checkout"
+    return "Unknown", "unknown"
+
+
 @router.get("/locations", responses=responses(401))
 def vehicle_locations(db: DBSession, user: CurrentUser):
     """Current location per active drone: the more recent of an active checkout
     (with a pilot) or a manually-set location. Readable by any user."""
-    from app.models.equipment_checkout import EquipmentCheckout
     from app.models.pilot import Pilot
     vehicles = db.query(Vehicle).filter(Vehicle.status != "retired").all()
-    vids = [v.id for v in vehicles]
-    active = {}
-    if vids:
-        rows = db.query(EquipmentCheckout).filter(
-            EquipmentCheckout.entity_type == "vehicle",
-            EquipmentCheckout.entity_id.in_(vids),
-            EquipmentCheckout.checked_in_at.is_(None),
-        ).all()
-        for c in rows:
-            cur = active.get(c.entity_id)
-            if cur is None or c.checked_out_at > cur.checked_out_at:
-                active[c.entity_id] = c
+    active = _latest_vehicle_checkouts(db, [v.id for v in vehicles])
     pilot_ids = {c.checked_out_by_id for c in active.values()}
     pilot_ids |= {v.manual_location_pilot_id for v in vehicles if v.manual_location_pilot_id}
     names = {}
@@ -66,20 +89,7 @@ def vehicle_locations(db: DBSession, user: CurrentUser):
     result = []
     for v in vehicles:
         label = v.nickname or f"{v.manufacturer} {v.model}"
-        co = active.get(v.id)
-        co_time = co.checked_out_at if co else None
-        man_time = v.location_set_at
-        location_text, source = "Unknown", "unknown"
-        manual_newer = man_time is not None and (co_time is None or man_time >= co_time)
-        if manual_newer:
-            source = "manual"
-            if v.manual_location_pilot_id:
-                location_text = f"with {names.get(v.manual_location_pilot_id, 'a pilot')}"
-            elif v.manual_location_place:
-                location_text = v.manual_location_place
-        elif co is not None:
-            source = "checkout"
-            location_text = f"with {names.get(co.checked_out_by_id, 'a pilot')}"
+        location_text, source = _resolve_vehicle_location(v, active.get(v.id), names)
         result.append({"vehicle_id": v.id, "label": label, "location_text": location_text, "source": source})
     return result
 

@@ -189,6 +189,41 @@ class ReminderRequest(BaseModel):
     custom_message: Optional[str] = None   # Optional intro text from supervisor
 
 
+def _reminder_html(pilot, lapsed_rules, org_name: str, intro: str) -> str:
+    """Build the HTML body of a currency-reminder email for one pilot."""
+    rule_rows_html = "".join(
+        f'<tr><td style="padding:6px 12px;border-bottom:1px solid #eee;">{r["rule_name"]}</td>'
+        f'<td style="padding:6px 12px;border-bottom:1px solid #eee;text-align:right;color:#c62828;">'
+        f'{r["actual_hours"]}/{r["required_hours"]}h in {r["period_days"]}d</td></tr>'
+        for r in lapsed_rules
+    )
+    intro_html = f'<p style="margin:0 0 16px;color:#555;">{intro}</p>' if intro else ""
+    rule_plural = "s" if len(lapsed_rules) != 1 else ""
+    return f"""<html><body style="font-family:Arial,sans-serif;background:#f5f5f5;padding:20px;margin:0;">
+<div style="max-width:600px;margin:0 auto;background:white;border-radius:8px;overflow:hidden;">
+  <div style="background:#1a1a2e;color:white;padding:20px;text-align:center;">
+    <h1 style="margin:0;font-size:20px;">{org_name}</h1>
+    <p style="margin:4px 0 0;opacity:0.8;font-size:13px;">Flight Currency Reminder</p>
+  </div>
+  <div style="padding:24px;">
+    <p style="margin:0 0 16px;">Hi {pilot.first_name or pilot.full_name},</p>
+    {intro_html}
+    <p style="margin:0 0 16px;color:#333;">
+      Your flight currency status is below the minimum on the following rule{rule_plural}.
+      Please log additional qualifying flights to regain currency.
+    </p>
+    <table style="border-collapse:collapse;width:100%;margin:8px 0 24px;border:1px solid #eee;">
+      <thead><tr style="background:#fafafa;"><th style="padding:8px 12px;text-align:left;">Rule</th><th style="padding:8px 12px;text-align:right;">Progress</th></tr></thead>
+      <tbody>{rule_rows_html}</tbody>
+    </table>
+    <p style="font-size:12px;color:#999;text-align:center;margin-top:24px;">
+      Sent by Drone Unit Manager. Reply to this email or contact your supervisor with questions.
+    </p>
+  </div>
+</div>
+</body></html>"""
+
+
 @router.post("/send-reminders", responses=responses(401, 503))
 def send_currency_reminders(
     data: ReminderRequest,
@@ -239,38 +274,8 @@ def send_currency_reminders(
             skipped_no_email += 1
             continue
 
-        # Compose HTML body
-        rule_rows_html = "".join(
-            f'<tr><td style="padding:6px 12px;border-bottom:1px solid #eee;">{r["rule_name"]}</td>'
-            f'<td style="padding:6px 12px;border-bottom:1px solid #eee;text-align:right;color:#c62828;">'
-            f'{r["actual_hours"]}/{r["required_hours"]}h in {r["period_days"]}d</td></tr>'
-            for r in lapsed_rules
-        )
         intro = (data.custom_message or "").strip()
-        intro_html = f'<p style="margin:0 0 16px;color:#555;">{intro}</p>' if intro else ""
-        html = f"""<html><body style="font-family:Arial,sans-serif;background:#f5f5f5;padding:20px;margin:0;">
-<div style="max-width:600px;margin:0 auto;background:white;border-radius:8px;overflow:hidden;">
-  <div style="background:#1a1a2e;color:white;padding:20px;text-align:center;">
-    <h1 style="margin:0;font-size:20px;">{org_name}</h1>
-    <p style="margin:4px 0 0;opacity:0.8;font-size:13px;">Flight Currency Reminder</p>
-  </div>
-  <div style="padding:24px;">
-    <p style="margin:0 0 16px;">Hi {pilot.first_name or pilot.full_name},</p>
-    {intro_html}
-    <p style="margin:0 0 16px;color:#333;">
-      Your flight currency status is below the minimum on the following rule{'s' if len(lapsed_rules) != 1 else ''}.
-      Please log additional qualifying flights to regain currency.
-    </p>
-    <table style="border-collapse:collapse;width:100%;margin:8px 0 24px;border:1px solid #eee;">
-      <thead><tr style="background:#fafafa;"><th style="padding:8px 12px;text-align:left;">Rule</th><th style="padding:8px 12px;text-align:right;">Progress</th></tr></thead>
-      <tbody>{rule_rows_html}</tbody>
-    </table>
-    <p style="font-size:12px;color:#999;text-align:center;margin-top:24px;">
-      Sent by Drone Unit Manager. Reply to this email or contact your supervisor with questions.
-    </p>
-  </div>
-</div>
-</body></html>"""
+        html = _reminder_html(pilot, lapsed_rules, org_name, intro)
 
         ok = send_email(pilot.email, f"Flight currency reminder — {org_name}", html, db)
         if ok:
