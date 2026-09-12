@@ -6,39 +6,9 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
 import { api } from '@/api/client'
-import {
-  LayoutDashboard,
-  BarChart3,
-  Users,
-  Box,
-  ShieldCheck,
-  Wrench,
-  Camera,
-  FileText,
-  FolderOpen,
-  Bell,
-  Settings,
-  ChevronLeft,
-  ChevronRight,
-  LogOut,
-  ClipboardCheck,
-  Target,
-  GraduationCap,
-  ScrollText,
-  AlertTriangle,
-  CloudSun,
-  ClipboardList,
-  Shield,
-  BookOpen,
-  Radar,
-  Calendar,
-  PackageCheck,
-  Stamp,
-} from 'lucide-react'
+import { ChevronLeft, ChevronRight, LogOut, BookOpen } from 'lucide-react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
-
-/** Section order for the grouped (default) sidebar layout. */
-const GROUP_ORDER = ['Overview', 'Flight Ops', 'Fleet & Crew', 'Compliance', 'Media & Reports', 'System']
+import { NAV_ITEMS, GROUP_ORDER } from '@/lib/sidebarNav'
 
 /**
  * Lazy import functions per route. Calling these populates Vite's module
@@ -70,34 +40,6 @@ const PRELOADERS = {
   '/settings': () => import('@/pages/SettingsPage'),
   '/audit-log': () => import('@/pages/AuditLogPage'),
 }
-
-/** @type {Array<{to: string, icon: Function, label: string, group: string, badge?: string, adminOnly?: boolean}>} Navigation menu items. */
-const navItems = [
-  { to: '/', icon: LayoutDashboard, label: 'Dashboard', group: 'Overview' },
-  { to: '/analytics', icon: BarChart3, label: 'Analytics', group: 'Overview' },
-  { to: '/weather', icon: CloudSun, label: 'Weather', group: 'Flight Ops' },
-  { to: '/airspace', icon: Radar, label: 'Airspace', group: 'Flight Ops' },
-  { to: '/flight-plans', icon: ClipboardCheck, label: 'Flight Plans', badge: 'pendingPlansCount', group: 'Flight Ops' },
-  { to: '/checklists', icon: ClipboardList, label: 'Checklists', group: 'Flight Ops' },
-  { to: '/flights', icon: QuadcopterIcon, label: 'Flights', badge: 'reviewCount', group: 'Flight Ops' },
-  { to: '/missions', icon: Target, label: 'Mission Log', group: 'Flight Ops' },
-  { to: '/training', icon: GraduationCap, label: 'Training Log', group: 'Flight Ops' },
-  { to: '/calendar', icon: Calendar, label: 'Calendar', group: 'Flight Ops' },
-  { to: '/pilots', icon: Users, label: 'Pilots', group: 'Fleet & Crew' },
-  { to: '/fleet', icon: Box, label: 'Fleet', group: 'Fleet & Crew' },
-  { to: '/certifications', icon: ShieldCheck, label: 'Certifications', group: 'Fleet & Crew' },
-  { to: '/maintenance', icon: Wrench, label: 'Maintenance', group: 'Fleet & Crew' },
-  { to: '/checkouts', icon: PackageCheck, label: 'Checkouts', group: 'Fleet & Crew' },
-  { to: '/compliance', icon: Shield, label: 'Compliance', group: 'Compliance' },
-  { to: '/operating-authority', icon: Stamp, label: 'Operating Authority', group: 'Compliance' },
-  { to: '/alerts', icon: Bell, label: 'Alerts', group: 'Compliance' },
-  { to: '/incidents', icon: AlertTriangle, label: 'Activity Reports', group: 'Compliance' },
-  { to: '/media', icon: Camera, label: 'Photo Gallery', group: 'Media & Reports' },
-  { to: '/documents', icon: FolderOpen, label: 'Documents', group: 'Media & Reports' },
-  { to: '/reports', icon: FileText, label: 'Reports', group: 'Media & Reports' },
-  { to: '/settings', icon: Settings, label: 'Settings', group: 'System' },
-  { to: '/audit-log', icon: ScrollText, label: 'Audit Log', adminOnly: true, group: 'System' },
-]
 
 /**
  * Sidebar navigation component with collapse toggle and mobile slide-in support.
@@ -193,7 +135,7 @@ export function Sidebar({ mobileOpen, onMobileClose }) {
       <nav className="flex-1 py-4 overflow-y-auto">
         {(() => {
           const showLabels = !collapsed || mobileOpen
-          let items = navItems.filter(item => !item.adminOnly || isAdmin)
+          let items = NAV_ITEMS.filter(item => !item.adminOnly || isAdmin)
           if (sidebarConfig && Array.isArray(sidebarConfig)) {
             const configMap = {}
             sidebarConfig.forEach(c => { configMap[c.to] = c })
