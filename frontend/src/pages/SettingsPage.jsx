@@ -9,6 +9,7 @@ import { sortPilotsActiveFirst } from '@/lib/formatters'
 import { DEFAULT_ORG_LOCATION } from '@/lib/location'
 import { TIMEZONES } from '@/lib/utils'
 import { Save, Loader2, Upload, Download, UserPlus, Key, Trash2, Shield, Image as ImageIcon, ChevronUp, ChevronDown, ExternalLink, X, Edit2, MapPin, Search, GripVertical } from 'lucide-react'
+import { SIDEBAR_META, GROUP_ORDER } from '@/lib/sidebarNav'
 
 const IntegrationsContent = React.lazy(() => import('@/pages/IntegrationsPage'))
 const ApiTokensSection = React.lazy(() => import('@/components/ApiTokensSection'))
@@ -23,49 +24,26 @@ const DEFAULT_PLACES = ['North', 'Central', 'South']
 let placeIdCounter = 0
 const asPlace = (value) => ({ id: ++placeIdCounter, value })
 
-const DEFAULT_SIDEBAR_ITEMS = [
-  { to: '/', label: 'Dashboard' },
-  { to: '/weather', label: 'Weather' },
-  { to: '/airspace', label: 'Airspace' },
-  { to: '/analytics', label: 'Analytics' },
-  { to: '/flight-plans', label: 'Flight Plans' },
-  { to: '/checklists', label: 'Checklists' },
-  { to: '/flights', label: 'Flights' },
-  { to: '/missions', label: 'Mission Log' },
-  { to: '/training', label: 'Training Log' },
-  { to: '/pilots', label: 'Pilots' },
-  { to: '/fleet', label: 'Fleet' },
-  { to: '/certifications', label: 'Certifications' },
-  { to: '/maintenance', label: 'Maintenance' },
-  { to: '/media', label: 'Photo Gallery' },
-  { to: '/documents', label: 'Documents' },
-  { to: '/reports', label: 'Reports' },
-  { to: '/compliance', label: 'Compliance' },
-  { to: '/alerts', label: 'Alerts' },
-  { to: '/incidents', label: 'Activity Reports' },
-  { to: '/settings', label: 'Settings' },
-  { to: '/audit-log', label: 'Audit Log' },
-]
-
 // Parse a JSON-encoded setting, returning fallback for missing or invalid input.
 function parseJsonSetting(raw, fallback) {
   if (raw === undefined || raw === null) return fallback
   try { return JSON.parse(raw) } catch { return fallback }
 }
 
-// Merge a saved sidebar config over the defaults: new default items appear, and
-// saved visibility/order win. Returns defaults for a missing or invalid config.
+// Merge a saved sidebar config over the shared nav metadata: new items appear,
+// saved visibility/order win, and each item keeps its group (so the editor can
+// present the same grouping the sidebar renders). Returns defaults for a missing
+// or invalid config.
 function buildSidebarItems(rawConfig) {
-  const defaults = DEFAULT_SIDEBAR_ITEMS.map((item, i) => ({ ...item, visible: true, order: i }))
+  const defaults = SIDEBAR_META.map((item, i) => ({ ...item, visible: true, order: i }))
   const parsed = parseJsonSetting(rawConfig, null)
   if (!Array.isArray(parsed)) return defaults
   const configMap = {}
   parsed.forEach(c => { configMap[c.to] = c })
-  return DEFAULT_SIDEBAR_ITEMS.map((item, i) => {
+  return SIDEBAR_META.map((item, i) => {
     const existing = configMap[item.to]
     return {
-      to: item.to,
-      label: item.label,
+      ...item,
       visible: existing ? existing.visible !== false : true,
       order: existing ? existing.order : i,
     }
@@ -1269,10 +1247,116 @@ export default function SettingsPage() {
 
   const renderSidebarConfig = () => {
     if (!isAdmin || sidebarItems.length === 0) return null
+
+    const applyOrder = (items) => { items.forEach((it, i) => { it.order = i }); setSidebarItems(items) }
+    const toggleVisible = (idx) => {
+      const items = [...sidebarItems]
+      items[idx] = { ...items[idx], visible: !items[idx].visible }
+      setSidebarItems(items)
+    }
+    const swap = (i, j) => {
+      if (j < 0 || j >= sidebarItems.length) return
+      const items = [...sidebarItems]
+      ;[items[i], items[j]] = [items[j], items[i]]
+      applyOrder(items)
+    }
+    const moveTo = (from, to) => {
+      const items = [...sidebarItems]
+      const [moved] = items.splice(from, 1)
+      items.splice(to, 0, moved)
+      applyOrder(items)
+    }
+    // Nearest item in the same group, searching up (-1) or down (+1). Groups
+    // may be non-contiguous in the flat list if a groups-off reorder ran, so we
+    // scan rather than assume adjacency.
+    const groupNeighbor = (idx, dir) => {
+      let j = idx + dir
+      while (j >= 0 && j < sidebarItems.length && sidebarItems[j].group !== sidebarItems[idx].group) j += dir
+      return (j >= 0 && j < sidebarItems.length) ? j : -1
+    }
+
+    const row = (item, idx, { upDisabled, downDisabled, onUp, onDown, onDropRow }) => (
+      <div
+        key={item.to}
+        draggable
+        onDragStart={() => setDraggedIdx(idx)}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={() => { onDropRow(); setDraggedIdx(null) }}
+        onDragEnd={() => setDraggedIdx(null)}
+        className={`flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/30 ${draggedIdx === idx ? 'opacity-50' : ''}`}
+      >
+        <GripVertical className="w-4 h-4 text-muted-foreground cursor-grab shrink-0" />
+        <div className="flex flex-col gap-0.5">
+          <button onClick={onUp} disabled={upDisabled} className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30">
+            <ChevronUp className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={onDown} disabled={downDisabled} className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30">
+            <ChevronDown className="w-3.5 h-3.5" />
+          </button>
+        </div>
+        <label className="flex items-center gap-3 flex-1 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={item.visible}
+            onChange={() => toggleVisible(idx)}
+            className="w-4 h-4 rounded border-border text-primary focus:ring-ring"
+          />
+          <span className={`text-sm ${item.visible ? 'text-foreground' : 'text-muted-foreground line-through'}`}>
+            {item.label}
+          </span>
+          <span className="text-xs text-muted-foreground ml-auto">{item.to}</span>
+        </label>
+      </div>
+    )
+
+    // Flat list (groups off): reorder across the whole list.
+    const flatList = (
+      <div className="space-y-1">
+        {sidebarItems.map((item, idx) => row(item, idx, {
+          upDisabled: idx === 0,
+          downDisabled: idx === sidebarItems.length - 1,
+          onUp: () => swap(idx, idx - 1),
+          onDown: () => swap(idx, idx + 1),
+          onDropRow: () => { if (draggedIdx !== null && draggedIdx !== idx) moveTo(draggedIdx, idx) },
+        }))}
+      </div>
+    )
+
+    // Grouped list (groups on): matches how the sidebar renders. Items reorder
+    // only within their own group, since the sidebar sorts by order within each
+    // group and ignores cross-group order when headers are shown.
+    const groupedList = (
+      <div className="space-y-3">
+        {GROUP_ORDER.map(group => {
+          const entries = sidebarItems.map((it, i) => ({ it, i })).filter(e => e.it.group === group)
+          if (entries.length === 0) return null
+          return (
+            <div key={group}>
+              <div className="px-1 pb-1 text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold">{group}</div>
+              <div className="space-y-1">
+                {entries.map((e, pos) => row(e.it, e.i, {
+                  upDisabled: pos === 0,
+                  downDisabled: pos === entries.length - 1,
+                  onUp: () => swap(e.i, groupNeighbor(e.i, -1)),
+                  onDown: () => swap(e.i, groupNeighbor(e.i, 1)),
+                  onDropRow: () => {
+                    if (draggedIdx !== null && draggedIdx !== e.i && sidebarItems[draggedIdx]?.group === group) moveTo(draggedIdx, e.i)
+                  },
+                }))}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    )
+
     return (
         <div className="bg-card border border-border rounded-xl p-6">
           <h3 className="text-lg font-semibold text-foreground mb-1">Sidebar Configuration</h3>
-          <p className="text-sm text-muted-foreground mb-4">Toggle visibility and reorder sidebar navigation items.</p>
+          <p className="text-sm text-muted-foreground mb-4">
+            Toggle visibility and reorder sidebar navigation items.
+            {showSidebarGroups ? ' With group headers on, items reorder within their group (matching the sidebar).' : ''}
+          </p>
           <label className="flex items-center gap-3 px-3 py-2 mb-3 bg-muted/30 rounded-lg cursor-pointer">
             <input
               type="checkbox"
@@ -1283,73 +1367,7 @@ export default function SettingsPage() {
             <span className="text-sm text-foreground flex-1">Show group headers (Overview, Flight Ops, etc.)</span>
             <span className="text-xs text-muted-foreground">{showSidebarGroups ? 'On' : 'Off'}</span>
           </label>
-          <div className="space-y-1">
-            {sidebarItems.map((item, idx) => (
-              <div
-                key={item.to}
-                draggable
-                onDragStart={() => setDraggedIdx(idx)}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={() => {
-                  if (draggedIdx === null || draggedIdx === idx) { setDraggedIdx(null); return }
-                  const items = [...sidebarItems]
-                  const [moved] = items.splice(draggedIdx, 1)
-                  items.splice(idx, 0, moved)
-                  items.forEach((it, i) => { it.order = i })
-                  setSidebarItems(items)
-                  setDraggedIdx(null)
-                }}
-                onDragEnd={() => setDraggedIdx(null)}
-                className={`flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/30 ${draggedIdx === idx ? 'opacity-50' : ''}`}
-              >
-                <GripVertical className="w-4 h-4 text-muted-foreground cursor-grab shrink-0" />
-                <div className="flex flex-col gap-0.5">
-                  <button
-                    onClick={() => {
-                      if (idx === 0) return
-                      const items = [...sidebarItems]
-                      ;[items[idx - 1], items[idx]] = [items[idx], items[idx - 1]]
-                      items.forEach((it, i) => { it.order = i })
-                      setSidebarItems(items)
-                    }}
-                    disabled={idx === 0}
-                    className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"
-                  >
-                    <ChevronUp className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (idx === sidebarItems.length - 1) return
-                      const items = [...sidebarItems]
-                      ;[items[idx], items[idx + 1]] = [items[idx + 1], items[idx]]
-                      items.forEach((it, i) => { it.order = i })
-                      setSidebarItems(items)
-                    }}
-                    disabled={idx === sidebarItems.length - 1}
-                    className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30"
-                  >
-                    <ChevronDown className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-                <label className="flex items-center gap-3 flex-1 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={item.visible}
-                    onChange={() => {
-                      const items = [...sidebarItems]
-                      items[idx] = { ...items[idx], visible: !items[idx].visible }
-                      setSidebarItems(items)
-                    }}
-                    className="w-4 h-4 rounded border-border text-primary focus:ring-ring"
-                  />
-                  <span className={`text-sm ${item.visible ? 'text-foreground' : 'text-muted-foreground line-through'}`}>
-                    {item.label}
-                  </span>
-                  <span className="text-xs text-muted-foreground ml-auto">{item.to}</span>
-                </label>
-              </div>
-            ))}
-          </div>
+          {showSidebarGroups ? groupedList : flatList}
           <button
             onClick={async () => {
               setSavingSidebar(true)
