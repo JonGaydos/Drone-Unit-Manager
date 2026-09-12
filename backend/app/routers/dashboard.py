@@ -529,13 +529,75 @@ def fleet_health(db: DBSession, user: CurrentUser):
     }
 
 
+def _currency_status(db, total_pilots):
+    """Evaluate active pilots against active currency rules. Returns
+    (active_rule_count, per_pilot_status, pilots_current, pilots_lapsed). With no
+    rules defined, every pilot is implicitly current."""
+    from app.models.currency_rule import CurrencyRule
+    from app.routers.currency import _pilot_currency
+    rules = db.query(CurrencyRule).filter(CurrencyRule.is_active.is_(True)).all()
+    if not rules:
+        return 0, [], total_pilots, 0
+    status: list[dict] = []
+    pilots_current = 0
+    pilots_lapsed = 0
+    for p in db.query(Pilot).filter(Pilot.status == "active").all():
+        rule_results = _pilot_currency(p, rules, db)
+        is_current = all(r["is_current"] for r in rule_results) if rule_results else True
+        # Earliest expiry across current-passing rules; null when any rule lapsed.
+        expiries = [r["expires_date"] for r in rule_results if r.get("expires_date")]
+        earliest = min(expiries) if (expiries and is_current) else None
+        status.append({
+            "pilot_id": p.id,
+            "pilot_name": p.full_name,
+            "email": p.email,
+            "is_current": is_current,
+            "earliest_expires_date": earliest,
+            "rules": rule_results,
+        })
+        if is_current:
+            pilots_current += 1
+        else:
+            pilots_lapsed += 1
+    return len(rules), status, pilots_current, pilots_lapsed
+
+
+def _authority_summary(db, today):
+    """Score the org's active operating authorities. Returns (authorities,
+    expired, expiring, grounding_expired, advisory_expired, score_cap_reason).
+    Superseded and not-applicable records stay on file but are not scored."""
+    from app.models.operating_authority import OperatingAuthority, authority_status
+    authorities = db.query(OperatingAuthority).filter(
+        OperatingAuthority.record_status == "active"
+    ).all()
+    expired = []
+    expiring = []
+    for a in authorities:
+        state = authority_status(a, today)
+        if state == "expired":
+            expired.append(a)
+        elif state == "expiring":
+            expiring.append(a)
+    # An expired authority the unit depends on caps the score outright; one that
+    # only restricts a kind of operation takes an ordinary deduction instead.
+    grounding_expired = [a for a in expired if a.grounds_unit]
+    advisory_expired = [a for a in expired if not a.grounds_unit]
+    score_cap_reason = None
+    if grounding_expired:
+        score_cap_reason = (
+            f"Capped at {AUTHORITY_SCORE_CAP}: "
+            f"{len(grounding_expired)} operating "
+            f"{'authority' if len(grounding_expired) == 1 else 'authorities'} expired"
+        )
+    return authorities, expired, expiring, grounding_expired, advisory_expired, score_cap_reason
+
+
 @router.get("/compliance", responses=responses(401))
 def compliance_dashboard(db: DBSession, user: CurrentUser):
     from app.models.vehicle_registration import VehicleRegistration
     from app.models.maintenance_schedule import MaintenanceSchedule
     from app.models.incident import Incident
     from app.models.flight_approval import FlightPlan
-    from app.models.operating_authority import OperatingAuthority, authority_status
 
     today = date.today()
     soon = today + timedelta(days=90)
@@ -591,69 +653,12 @@ def compliance_dashboard(db: DBSession, user: CurrentUser):
         FlightPlan.status == "pending"
     ).scalar()
 
-    # --- Pilot currency status ---
-    # Reuses the per-pilot evaluator from currency.py so the rule semantics
-    # (period window, hours met, expiry calc) stay identical to PilotDetailPage.
-    from app.models.currency_rule import CurrencyRule
-    from app.routers.currency import _pilot_currency
-    currency_rules_active = (
-        db.query(func.count(CurrencyRule.id))
-        .filter(CurrencyRule.is_active.is_(True))
-        .scalar() or 0
-    )
-    pilot_currency_status: list[dict] = []
-    pilots_current = 0
-    pilots_lapsed = 0
-    if currency_rules_active > 0:
-        rules = db.query(CurrencyRule).filter(CurrencyRule.is_active.is_(True)).all()
-        active_pilots = db.query(Pilot).filter(Pilot.status == "active").all()
-        for p in active_pilots:
-            rule_results = _pilot_currency(p, rules, db)
-            is_current = all(r["is_current"] for r in rule_results) if rule_results else True
-            # Earliest expiry across current-passing rules; null when any rule lapsed.
-            expiries = [r["expires_date"] for r in rule_results if r.get("expires_date")]
-            earliest = min(expiries) if (expiries and is_current) else None
-            pilot_currency_status.append({
-                "pilot_id": p.id,
-                "pilot_name": p.full_name,
-                "email": p.email,
-                "is_current": is_current,
-                "earliest_expires_date": earliest,
-                "rules": rule_results,
-            })
-            if is_current:
-                pilots_current += 1
-            else:
-                pilots_lapsed += 1
-    else:
-        # No rules defined — every pilot is implicitly current.
-        pilots_current = total_pilots
+    # Pilot currency: reuses currency.py's evaluator so the rule semantics stay
+    # identical to PilotDetailPage.
+    currency_rules_active, pilot_currency_status, pilots_current, pilots_lapsed = _currency_status(db, total_pilots)
 
-    # --- Operating authority (org-level COAs / Part 107 waivers) ---
-    # Only records still marked active are scored. Superseded and not-applicable
-    # ones stay on file for the reports without counting against the unit.
-    authorities = db.query(OperatingAuthority).filter(
-        OperatingAuthority.record_status == "active"
-    ).all()
-    expired_authorities = []
-    expiring_authorities = []
-    for a in authorities:
-        state = authority_status(a, today)
-        if state == "expired":
-            expired_authorities.append(a)
-        elif state == "expiring":
-            expiring_authorities.append(a)
-    # An expired authority the unit depends on caps the score outright; one that
-    # only restricts a kind of operation takes an ordinary deduction instead.
-    grounding_expired = [a for a in expired_authorities if a.grounds_unit]
-    advisory_expired = [a for a in expired_authorities if not a.grounds_unit]
-    score_cap_reason = None
-    if grounding_expired:
-        score_cap_reason = (
-            f"Capped at {AUTHORITY_SCORE_CAP}: "
-            f"{len(grounding_expired)} operating "
-            f"{'authority' if len(grounding_expired) == 1 else 'authorities'} expired"
-        )
+    # Operating authority (org-level COAs / Part 107 waivers).
+    authorities, expired_authorities, expiring_authorities, grounding_expired, advisory_expired, score_cap_reason = _authority_summary(db, today)
 
     return {
         "total_pilots": total_pilots,
