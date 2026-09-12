@@ -252,11 +252,11 @@ function ProviderCard({ provider, settings, onSave, onTest, onSync }) {
               </div>
               <div className="flex flex-col items-start">
                 <button onClick={() => handleSync(true)} disabled={!!syncType}
-                  title="Catch-up sync. Like Sync Now but ignores the last-sync date to re-check Skydio's full flight list, and deletes empty flights (no date or duration). Also pulls telemetry for 10. Slower."
+                  title="Catch-up sync. Like Sync Now but ignores the last-sync date to re-check the recent flights the Skydio API returns (about 200 — the API does not expose older history), and deletes empty flights (no date or duration). Also pulls telemetry for 10. For older history, use the flight-log import instead."
                   className="px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90 flex items-center gap-1.5 disabled:opacity-50">
                   {syncType === 'full' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />} Full Sync
                 </button>
-                <span className="text-[10px] text-muted-foreground mt-0.5 px-1">Re-check all flights, clear empties, + telemetry</span>
+                <span className="text-[10px] text-muted-foreground mt-0.5 px-1">Re-check recent flights, clear empties, + telemetry</span>
               </div>
               <div className="flex flex-col items-start">
                 <button onClick={handleSyncTelemetry} disabled={syncingTelemetry}

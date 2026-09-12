@@ -401,8 +401,10 @@ Authorities appear in the Annual Unit Report (those held during the reporting pe
         body: `The Integrations tab in Settings manages connections to drone manufacturer APIs. Skydio is fully supported; BRINC is shown as "Coming Soon". Each provider has credential fields, a Test Connection button, and three sync buttons:
 
 • **Sync Now** — imports flights added since the last sync and refreshes the fleet (drones, batteries, controllers, sensor packages, attachments), plus telemetry for up to 10 flights. Your everyday sync.
-• **Full Sync** — like Sync Now but ignores the last-sync date to re-check Skydio's full flight list, and deletes empty flights (no date or duration). Slower.
+• **Full Sync** — like Sync Now but ignores the last-sync date to re-check the recent flights the Skydio API returns (about 200), and deletes empty flights (no date or duration). Slower.
 • **Sync Telemetry (10)** — fetches only the detailed flight path (GPS, altitude, speed) for the next 10 flights that need it. Press again to backfill more.
+
+Note: the Skydio sync API only exposes recent flights (roughly the last 200), so neither Sync Now nor Full Sync can reach further back than that. To bring in older or complete history, use the flight-log import (Airdata, CSV, and the other supported formats) described below.
 
 You can also set an Auto-Sync Interval (6, 12, or 24 hours) and a separate Telemetry Auto-Sync Interval (30 minutes to 6 hours) so syncs run automatically in the background.`
       },
