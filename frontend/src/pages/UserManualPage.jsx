@@ -27,7 +27,11 @@ If you have a backup ZIP from another instance, choose "Restore from a backup in
       },
       {
         title: 'Navigating the App',
-        body: 'Use the sidebar on the left to navigate between sections. The sidebar can be collapsed using the arrow at the bottom. On mobile devices, tap the menu icon in the top-left corner to open the sidebar.'
+        body: 'Use the sidebar on the left to navigate between sections. The sidebar can be collapsed using the arrow at the bottom. On mobile devices, tap the menu icon in the top-left corner to open the sidebar. Admins can reorder and hide sidebar items from Settings.'
+      },
+      {
+        title: 'Themes',
+        body: 'Pick a color theme from the palette icon in the top bar. Fourteen themes are available (including Dark, Light, Glass, High Contrast, Night Vision, and the default Sandstone). Your choice is saved to your profile and follows you across devices.'
       },
       {
         title: 'Command Palette (Ctrl/Cmd+K)',
@@ -51,7 +55,7 @@ If you have a backup ZIP from another instance, choose "Restore from a backup in
     content: [
       {
         title: 'Overview',
-        body: 'The dashboard provides a snapshot of your drone program: total flights, flight hours, active pilots, fleet size, flights needing review, and upcoming certification expirations. Click any stat card to navigate to its detail page.'
+        body: 'The dashboard is a snapshot hub of your drone program. A hero panel shows the compliance score and how many pilots are current; a weather tile shows the GO/CAUTION/NO-GO advisory for your default location; and 30-day stat tiles (flights, hours, active pilots, fleet size) show trends. Further tiles cover recent flights, currency risk, flights needing review, maintenance due, certification expirations, activity by month, drone locations, and top pilots and vehicles. Click any card to open its detail page.'
       },
       {
         title: 'Recent Flights',
@@ -106,7 +110,7 @@ Any signed-in user, including pilots, can add their own events and leave. You ca
       },
       {
         title: 'Reviewing Flights',
-        body: 'Flights imported from the Skydio API arrive with "Needs Review" status. Supervisors can review individual flights via the inline edit button, or use "Approve All" to mark all pending flights as reviewed.'
+        body: 'Flights imported from the Skydio API arrive with "Needs Review" status. Supervisors can review individual flights via the inline edit button, or use "Approve Page" to mark the visible page of pending flights as reviewed. Selecting rows with the checkboxes also enables bulk actions (reassign pilot, set purpose, mark reviewed, delete), each shown with a confirmation summarizing exactly what will change.'
       },
       {
         title: 'Flight Detail',
@@ -120,7 +124,7 @@ Any signed-in user, including pilots, can add their own events and leave. You ca
     content: [
       {
         title: 'Vehicles',
-        body: 'The Fleet page shows all drones, batteries, and controllers. Click any item to view its detail page with flight history, maintenance records, and specifications.'
+        body: 'The Fleet page is organized into tabs: Vehicles, Batteries, Controllers, Docks, Sensors, Attachments, and Other equipment. A status filter switches between In service, Retired & damaged, and All. Click any item to view its detail page with flight history, maintenance records, and specifications.'
       },
       {
         title: 'Batteries',
@@ -280,7 +284,7 @@ When nothing is outstanding, the card shows an "All clear" message. The count of
     content: [
       {
         title: 'Live Aircraft Map',
-        body: 'The Airspace page shows a live map of nearby manned aircraft using ADS-B data from airplanes.live. Click anywhere on the map to set your search center — a blue circle shows the search radius. Aircraft markers are color-coded by altitude: red (below 400ft, drone zone), orange (400-1000ft), yellow (1000-5000ft), blue (5000-15000ft), gray (above 15000ft).'
+        body: 'The Airspace page shows a live map of nearby manned aircraft using ADS-B data from adsb.lol. Click anywhere on the map to set your search center — a blue circle shows the search radius. Aircraft markers are color-coded by altitude: red (below 400ft, drone zone), orange (400-1000ft), yellow (1000-5000ft), blue (5000-15000ft), gray (above 15000ft).'
       },
       {
         title: 'Using the Map',
@@ -337,9 +341,12 @@ When nothing is outstanding, the card shows an "All clear" message. The count of
 • Equipment Utilization — Usage statistics per vehicle
 • Pilot Activity Summary — Per-pilot activity report
 • Annual Unit Report — Yearly program summary
+• Per-Pilot Annual Review — A yearly review per pilot; download as one combined PDF, or use "Download PDF Pack" for a ZIP with one PDF per pilot
 • Certifications — Current certification status
 • Battery Status — Battery health and usage
-• Maintenance History — Maintenance records by date range`
+• Maintenance History — Maintenance records by date range
+
+The report builder also has date-range presets, pilot and vehicle filters (shown only for reports that use them), an "Include non-unit flights" toggle, and a logo override.`
       },
       {
         title: 'CSV Export',
@@ -391,7 +398,13 @@ Authorities appear in the Annual Unit Report (those held during the reporting pe
     content: [
       {
         title: 'Drone Provider APIs',
-        body: 'The Integrations tab in Settings manages connections to drone manufacturer APIs. Currently Skydio is supported, with DJI, BRINC, Parrot, and Autel planned. Each provider has credential fields, Test Connection, Sync Now, Full Sync, and Sync Telemetry (10) buttons. Sync Now fetches new flights and automatically syncs telemetry. Sync Telemetry (10) fetches detailed flight path data for up to 10 flights at a time.'
+        body: `The Integrations tab in Settings manages connections to drone manufacturer APIs. Skydio is fully supported; BRINC is shown as "Coming Soon". Each provider has credential fields, a Test Connection button, and three sync buttons:
+
+• **Sync Now** — imports flights added since the last sync and refreshes the fleet (drones, batteries, controllers, sensor packages, attachments), plus telemetry for up to 10 flights. Your everyday sync.
+• **Full Sync** — like Sync Now but ignores the last-sync date to re-check Skydio's full flight list, and deletes empty flights (no date or duration). Slower.
+• **Sync Telemetry (10)** — fetches only the detailed flight path (GPS, altitude, speed) for the next 10 flights that need it. Press again to backfill more.
+
+You can also set an Auto-Sync Interval (6, 12, or 24 hours) and a separate Telemetry Auto-Sync Interval (30 minutes to 6 hours) so syncs run automatically in the background.`
       },
       {
         title: 'Skydio Cloud API',
@@ -448,7 +461,11 @@ Format is auto-detected, or you can pick a specific format. Select multiple file
     content: [
       {
         title: 'Settings Tabs',
-        body: 'The Settings page is organized into tabs: General (organization info, default location, weather thresholds, certification labels, mission purposes, drone locations, currency rules, sidebar config, backup and restore), Users (change password, user management), and Integrations (provider APIs, SMTP, flight log import).'
+        body: 'The Settings page is organized into tabs: General (organization info, default location, weather thresholds, certification labels, mission purposes, drone locations, currency rules, sidebar config, backup and restore, automated backups), Users (change password, user management), Integrations (provider APIs, SMTP, flight log import), and API Tokens (long-lived API keys for external access).'
+      },
+      {
+        title: 'API Tokens',
+        body: `The API Tokens tab (admin only) issues long-lived keys for external tools that call the Drone Unit Manager API. When creating a token, choose a name, read-only or read & write access, and a scope — either all areas or specific ones (Fleet, Flights, Pilots & Certifications, Maintenance, Operations, Documents & Media, Reports & Dashboard). The token value is shown once, so copy it immediately. Existing tokens list their prefix, access, areas, and last-used time, and can be revoked. Settings, users, backups, and sync are never reachable with an API token.`
       },
       {
         title: 'Organization Settings',
@@ -496,9 +513,11 @@ Click "Save Sidebar Config" to apply.`
       },
       {
         title: 'Restoring From Backup',
-        body: `Restore is done on a fresh install. On the setup screen, choose "Restore from a backup instead?", upload the backup ZIP, and enter the one-time install token printed to the container logs at first boot. After a successful restore the install token is retired.
+        body: `Restore is done on a fresh install. On the setup screen, choose "Restore from a backup instead?", upload the backup ZIP, and enter the install token. The token is written to install_token.txt in the container's data directory (/app/data) and also printed to the container logs at first boot.
 
-Once any user account exists, the in-app restore option is no longer shown; restoring into an existing install is an operator task done against the backup API with an admin token rather than through the app.`
+Passwords are never included in a backup, so right after a restore no one can sign in yet. The setup screen reopens in recovery mode ("Restored backup detected"): enter the username of an administrator from the restored data, a new password, and the install token to reactivate that admin. The token is required for this step (it proves host access) and is retired once an admin is reactivated. Other restored users keep blank passwords until that admin resets them from Settings → Users.
+
+Restoring into an install that already has working logins is an operator task done against the backup API with an admin token rather than through the app.`
       },
       {
         title: 'Filesystem Backup (Fallback)',
