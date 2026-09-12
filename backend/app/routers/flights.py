@@ -340,32 +340,26 @@ def _refresh_pilot(flight: Flight, detail: dict, db, updated_fields: list):
                 updated_fields.append("pilot")
 
 
-def _refresh_equipment(flight: Flight, detail: dict, updated_fields: list):
-    """Apply equipment fields (battery, sensor, attachments, carrier) from API detail."""
-    from app.integrations.skydio import _to_str
-
-    for api_key, fld in [
-        ("battery_serial", "battery_serial"), ("sensor_package", "sensor_package"),
-        ("carrier", "carrier"),
-    ]:
-        val = detail.get(api_key)
-        if val is not None:
-            setattr(flight, fld, _to_str(val))
+def _apply_attachments(flight: Flight, attachments, updated_fields: list):
+    """Map API mount-point attachments onto the flight's top/bottom/left/right fields."""
+    if not isinstance(attachments, list):
+        return
+    mount_map = {"TOP": "attachment_top", "BOTTOM": "attachment_bottom",
+                 "LEFT": "attachment_left", "RIGHT": "attachment_right"}
+    for att in attachments:
+        if not isinstance(att, dict):
+            continue
+        fld = mount_map.get(att.get("mount_point", "").upper())
+        if fld:
+            label = f"{att.get('attachment_type', '')} ({att.get('attachment_serial', '')})"
+            setattr(flight, fld, label.strip())
             updated_fields.append(fld)
 
-    attachments = detail.get("attachments")
-    if isinstance(attachments, list):
-        mount_map = {"TOP": "attachment_top", "BOTTOM": "attachment_bottom",
-                     "LEFT": "attachment_left", "RIGHT": "attachment_right"}
-        for att in attachments:
-            if not isinstance(att, dict):
-                continue
-            mount = att.get("mount_point", "").upper()
-            fld = mount_map.get(mount)
-            if fld:
-                label = f"{att.get('attachment_type', '')} ({att.get('attachment_serial', '')})"
-                setattr(flight, fld, label.strip())
-                updated_fields.append(fld)
+
+def _apply_battery_sensor(flight: Flight, detail: dict, updated_fields: list):
+    """Fill battery_serial / sensor_package from the API detail's nested or string
+    forms, only when the flight does not already have that value."""
+    from app.integrations.skydio import _to_str
 
     battery = detail.get("battery")
     if isinstance(battery, dict) and not flight.battery_serial:
@@ -379,6 +373,23 @@ def _refresh_equipment(flight: Flight, detail: dict, updated_fields: list):
     if isinstance(sensor, dict) and not flight.sensor_package:
         flight.sensor_package = sensor.get("sensor_package_serial") or sensor.get("serial_number") or _to_str(sensor)
         updated_fields.append("sensor_package")
+
+
+def _refresh_equipment(flight: Flight, detail: dict, updated_fields: list):
+    """Apply equipment fields (battery, sensor, attachments, carrier) from API detail."""
+    from app.integrations.skydio import _to_str
+
+    for api_key, fld in [
+        ("battery_serial", "battery_serial"), ("sensor_package", "sensor_package"),
+        ("carrier", "carrier"),
+    ]:
+        val = detail.get(api_key)
+        if val is not None:
+            setattr(flight, fld, _to_str(val))
+            updated_fields.append(fld)
+
+    _apply_attachments(flight, detail.get("attachments"), updated_fields)
+    _apply_battery_sensor(flight, detail, updated_fields)
 
 
 def _refresh_vehicle(flight: Flight, detail: dict, db, updated_fields: list):

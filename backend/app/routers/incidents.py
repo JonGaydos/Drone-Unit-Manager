@@ -99,30 +99,29 @@ class IncidentOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+def _cached_or_query(cache, db: Session, model, obj_id):
+    """Fetch a row from a prebuilt id->object cache, or query it directly when no
+    cache was supplied (single-item callers)."""
+    if cache is not None:
+        return cache.get(obj_id)
+    return db.query(model).filter(model.id == obj_id).first()
+
+
 def _enrich(incident: Incident, db: Session, pilot_cache=None, vehicle_cache=None, user_cache=None) -> IncidentOut:
     """Serialize an incident. For the list endpoint, pass prebuilt caches
     (id -> object) to avoid a pilot/vehicle/user query per row; single-item
     callers omit them and fall back to direct lookups."""
     out = IncidentOut.model_validate(incident)
     if incident.pilot_id:
-        if pilot_cache is not None:
-            pilot = pilot_cache.get(incident.pilot_id)
-        else:
-            pilot = db.query(Pilot).filter(Pilot.id == incident.pilot_id).first()
+        pilot = _cached_or_query(pilot_cache, db, Pilot, incident.pilot_id)
         if pilot:
             out.pilot_name = pilot.full_name
     if incident.vehicle_id:
-        if vehicle_cache is not None:
-            v = vehicle_cache.get(incident.vehicle_id)
-        else:
-            v = db.query(Vehicle).filter(Vehicle.id == incident.vehicle_id).first()
+        v = _cached_or_query(vehicle_cache, db, Vehicle, incident.vehicle_id)
         if v:
             out.vehicle_name = f"{v.manufacturer} {v.model}" + (f" ({v.nickname})" if v.nickname else "")
     if incident.reported_by_id:
-        if user_cache is not None:
-            u = user_cache.get(incident.reported_by_id)
-        else:
-            u = db.query(User).filter(User.id == incident.reported_by_id).first()
+        u = _cached_or_query(user_cache, db, User, incident.reported_by_id)
         if u:
             out.reported_by_name = u.display_name
     return out

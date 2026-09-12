@@ -353,6 +353,28 @@ def delete_pilot_equipment_qual(
     return {"ok": True}
 
 
+def _cert_cell(pc) -> dict:
+    """Build one certification-matrix cell for a pilot/cert-type pair. A missing
+    cert renders as a 'not_started' placeholder."""
+    if not pc:
+        return {
+            "id": None,
+            "status": "not_started",
+            "issue_date": None,
+            "expiration_date": None,
+            "certificate_number": None,
+            "nist_level": None,
+        }
+    return {
+        "id": pc.id,
+        "status": pc.status,
+        "issue_date": pc.issue_date.isoformat() if pc.issue_date else None,
+        "expiration_date": pc.expiration_date.isoformat() if pc.expiration_date else None,
+        "certificate_number": pc.certificate_number,
+        "nist_level": pc.nist_level,
+    }
+
+
 @router.get("/api/certifications/matrix")
 def certification_matrix(
     db: DBSession,
@@ -377,27 +399,7 @@ def certification_matrix(
 
     matrix = []
     for pilot in pilots:
-        certs = {}
-        for ct in cert_types:
-            pc = cert_map.get((pilot.id, ct.id))
-            if pc:
-                certs[ct.id] = {
-                    "id": pc.id,
-                    "status": pc.status,
-                    "issue_date": pc.issue_date.isoformat() if pc.issue_date else None,
-                    "expiration_date": pc.expiration_date.isoformat() if pc.expiration_date else None,
-                    "certificate_number": pc.certificate_number,
-                    "nist_level": pc.nist_level,
-                }
-            else:
-                certs[ct.id] = {
-                    "id": None,
-                    "status": "not_started",
-                    "issue_date": None,
-                    "expiration_date": None,
-                    "certificate_number": None,
-                    "nist_level": None,
-                }
+        certs = {ct.id: _cert_cell(cert_map.get((pilot.id, ct.id))) for ct in cert_types}
         matrix.append({
             "pilot_id": pilot.id,
             "pilot_name": pilot.full_name,
