@@ -58,32 +58,17 @@ def _document_entity_fks(entity_type: str, entity_id):
     )
 
 
-def _resolve_document_dest(upload_root: Path, entity_type: str, entity_id, safe_filename: str) -> Path:
-    """Build the on-disk destination for an uploaded document: a per-entity
-    subdirectory, the filename deduplicated with a counter suffix, and a final
-    realpath check that the resolved path stays inside upload_root."""
-    if entity_id is None:
-        upload_dir = upload_root / "documents" / entity_type
-    else:
-        upload_dir = upload_root / "documents" / entity_type / str(entity_id)
-    upload_dir.mkdir(parents=True, exist_ok=True)
-
-    dest = upload_dir / safe_filename
-    # Deduplicate filenames by appending a counter suffix
-    counter = 1
-    while dest.exists():
-        stem = Path(safe_filename).stem
-        suffix = Path(safe_filename).suffix
-        dest = upload_dir / f"{stem}_{counter}{suffix}"
-        counter += 1
-
-    # Final realpath check — even with sanitization above, defend in depth.
-    resolved = dest.resolve()
-    try:
-        resolved.relative_to(upload_root)
-    except ValueError:
-        raise HTTPException(400, "Resolved upload path escapes upload root")
-    return dest
+def _validate_document_request(entity_type: str, entity_id, ext: str) -> None:
+    """Validate the entity type/id combination and file extension for an upload.
+    Raises 400 on any violation."""
+    # entity_type is part of the destination path, so it must be allowlisted;
+    # a free-form value would let the client steer the write to arbitrary dirs.
+    if entity_type not in ALLOWED_ENTITY_TYPES:
+        raise HTTPException(400, f"entity_type must be one of {sorted(ALLOWED_ENTITY_TYPES)}")
+    if entity_type != "general" and entity_id is None:
+        raise HTTPException(400, f"entity_id is required for entity_type '{entity_type}'")
+    if ext and ext not in ALLOWED_DOCUMENT_EXTENSIONS:
+        raise HTTPException(400, f"File type '{ext}' not allowed.")
 
 
 @router.post("/upload", response_model=DocumentOut, responses=responses(400, 413))
@@ -120,22 +105,34 @@ async def upload_document(
     # filename like "../../etc/passwd" would otherwise let the upload land
     # outside upload_dir via path concatenation.
     safe_filename = Path(file.filename or "upload").name or "upload"
-
-    # Validate entity_type against an allowlist — it is also part of the
-    # destination path. A free-form value would let the client steer the
-    # write to arbitrary subdirectories.
-    if entity_type not in ALLOWED_ENTITY_TYPES:
-        raise HTTPException(400, f"entity_type must be one of {sorted(ALLOWED_ENTITY_TYPES)}")
-    if entity_type != "general" and entity_id is None:
-        raise HTTPException(400, f"entity_id is required for entity_type '{entity_type}'")
-
-    # Validate file extension
     ext = Path(safe_filename).suffix.lower()
-    if ext and ext not in ALLOWED_DOCUMENT_EXTENSIONS:
-        raise HTTPException(400, f"File type '{ext}' not allowed.")
+    _validate_document_request(entity_type, entity_id, ext)
 
+    # Path build + realpath containment stays inline: the resolved.relative_to
+    # check is the taint sanitizer for the write below, and moving it into a
+    # helper hides it from static path-traversal analysis.
     upload_root = Path(settings.UPLOAD_DIR).resolve()
-    dest = _resolve_document_dest(upload_root, entity_type, entity_id, safe_filename)
+    if entity_id is None:
+        upload_dir = upload_root / "documents" / entity_type
+    else:
+        upload_dir = upload_root / "documents" / entity_type / str(entity_id)
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    dest = upload_dir / safe_filename
+    # Deduplicate filenames by appending a counter suffix
+    counter = 1
+    while dest.exists():
+        stem = Path(safe_filename).stem
+        suffix = Path(safe_filename).suffix
+        dest = upload_dir / f"{stem}_{counter}{suffix}"
+        counter += 1
+
+    # Final realpath check — even with sanitization above, defend in depth.
+    resolved = dest.resolve()
+    try:
+        resolved.relative_to(upload_root)
+    except ValueError:
+        raise HTTPException(400, "Resolved upload path escapes upload root")
 
     contents = await file.read()
     if len(contents) > settings.MAX_UPLOAD_SIZE:
