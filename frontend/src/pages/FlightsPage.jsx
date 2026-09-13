@@ -184,6 +184,20 @@ function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachmen
   )
 }
 
+// Sort value for a flight under the given column key. Strings are lowercased so
+// the comparison is case-insensitive; numbers/dates compare as-is.
+function flightSortValue(f, sortKey) {
+  switch (sortKey) {
+    case 'date': return f.date || f.takeoff_time || ''
+    case 'pilot_name': return (f.pilot_name || '').toLowerCase()
+    case 'vehicle_name': return (f.vehicle_name || '').toLowerCase()
+    case 'purpose': return (f.purpose || '').toLowerCase()
+    case 'duration_seconds': return f.duration_seconds || 0
+    case 'review_status': return (f.review_status || '').toLowerCase()
+    default: return (f[sortKey] || '').toString().toLowerCase()
+  }
+}
+
 // Build the /flights request path from the active filters. Only set params that
 // are present so the backend sees a clean query string.
 function buildFlightsPath({ filterDateFrom, filterDateTo, filterPilotId, filterVehicleId, filterPurpose, statusFilter, page }) {
@@ -361,29 +375,8 @@ export default function FlightsPage() {
     )
 
     return [...list].sort((a, b) => {
-      let aVal, bVal
-      if (sortKey === 'date') {
-        aVal = a.date || a.takeoff_time || ''
-        bVal = b.date || b.takeoff_time || ''
-      } else if (sortKey === 'pilot_name') {
-        aVal = (a.pilot_name || '').toLowerCase()
-        bVal = (b.pilot_name || '').toLowerCase()
-      } else if (sortKey === 'vehicle_name') {
-        aVal = (a.vehicle_name || '').toLowerCase()
-        bVal = (b.vehicle_name || '').toLowerCase()
-      } else if (sortKey === 'purpose') {
-        aVal = (a.purpose || '').toLowerCase()
-        bVal = (b.purpose || '').toLowerCase()
-      } else if (sortKey === 'duration_seconds') {
-        aVal = a.duration_seconds || 0
-        bVal = b.duration_seconds || 0
-      } else if (sortKey === 'review_status') {
-        aVal = (a.review_status || '').toLowerCase()
-        bVal = (b.review_status || '').toLowerCase()
-      } else {
-        aVal = (a[sortKey] || '').toString().toLowerCase()
-        bVal = (b[sortKey] || '').toString().toLowerCase()
-      }
+      const aVal = flightSortValue(a, sortKey)
+      const bVal = flightSortValue(b, sortKey)
       if (aVal < bVal) return sortDir === 'asc' ? -1 : 1
       if (aVal > bVal) return sortDir === 'asc' ? 1 : -1
       return 0
