@@ -66,63 +66,78 @@ function StatCard({ icon: Icon, label, value, color, onClick }) {
   )
 }
 
+// Simple "count > 0" attention alerts, in their original push order. Kept as a
+// contiguous block because the final severity sort is stable: reordering equal-
+// severity items would change what the user sees.
+const COUNT_ATTENTION_ALERTS = [
+  { field: 'overdue_maintenance', type: 'Overdue Maintenance', severity: 'high', link: '/maintenance' },
+  { field: 'open_incidents', type: 'Open Incidents', severity: 'high', link: '/incidents' },
+  { field: 'unreviewed_flights', type: 'Unreviewed Flights', severity: 'medium', link: '/flights' },
+  { field: 'pending_flight_plans', type: 'Pending Flight Plans', severity: 'low', link: '/flight-plans' },
+  { field: 'pilots_lapsed', type: 'Pilots Out of Currency', severity: 'high', link: '#currency' },
+]
+
+function expiringCertItem(c) {
+  return {
+    type: 'Expiring Certification',
+    detail: `Pilot #${c.pilot_id} - ${c.days_remaining} days remaining`,
+    severity: c.days_remaining <= 30 ? 'high' : 'medium',
+    link: '/certifications',
+  }
+}
+
+function expiredAuthorityItem(a) {
+  // Operating authority is org-level: an expired one the unit depends on means
+  // every flight is unauthorised, so it outranks any per-pilot or per-aircraft item.
+  return {
+    type: a.grounds_unit ? 'Operating Authority Expired' : 'Operating Authority Expired (restricted operations)',
+    detail: a.identifier ? `${a.title} (${a.identifier})` : a.title,
+    severity: a.grounds_unit ? 'grounding' : 'critical',
+    link: '/operating-authority',
+  }
+}
+
+function expiringAuthorityItem(a) {
+  return {
+    type: 'Operating Authority Expiring',
+    detail: `${a.title} - ${a.days_remaining} days remaining`,
+    severity: a.days_remaining <= 30 ? 'high' : 'medium',
+    link: '/operating-authority',
+  }
+}
+
+// Pilots expiring currency within 14 days (and currently still current).
+function expiringCurrencySoonCount(data) {
+  return (data.pilot_currency_status || []).filter(p => {
+    if (!p.is_current || !p.earliest_expires_date) return false
+    const days = daysUntil(p.earliest_expires_date)
+    return days !== null && days >= 0 && days <= 14
+  }).length
+}
+
 function buildAttentionItems(data) {
   const items = []
   if (data.expired_certifications > 0) {
     items.push({ type: 'Expired Certifications', count: data.expired_certifications, severity: 'critical', link: '/certifications' })
   }
-  if (data.expiring_certifications?.length > 0) {
-    for (const c of data.expiring_certifications) {
-      items.push({
-        type: 'Expiring Certification',
-        detail: `Pilot #${c.pilot_id} - ${c.days_remaining} days remaining`,
-        severity: c.days_remaining <= 30 ? 'high' : 'medium',
-        link: '/certifications',
-      })
-    }
+  for (const c of data.expiring_certifications || []) {
+    items.push(expiringCertItem(c))
   }
   if (data.expired_registrations > 0) {
     items.push({ type: 'Expired FAA Registrations', count: data.expired_registrations, severity: 'critical', link: '/fleet' })
   }
-  // Operating authority is org-level: an expired one the unit depends on means
-  // every flight is unauthorised, so it outranks any per-pilot or per-aircraft item.
   for (const a of data.expired_authorities || []) {
-    items.push({
-      type: a.grounds_unit ? 'Operating Authority Expired' : 'Operating Authority Expired (restricted operations)',
-      detail: a.identifier ? `${a.title} (${a.identifier})` : a.title,
-      severity: a.grounds_unit ? 'grounding' : 'critical',
-      link: '/operating-authority',
-    })
+    items.push(expiredAuthorityItem(a))
   }
   for (const a of data.expiring_authorities || []) {
-    items.push({
-      type: 'Operating Authority Expiring',
-      detail: `${a.title} - ${a.days_remaining} days remaining`,
-      severity: a.days_remaining <= 30 ? 'high' : 'medium',
-      link: '/operating-authority',
-    })
+    items.push(expiringAuthorityItem(a))
   }
-  if (data.overdue_maintenance > 0) {
-    items.push({ type: 'Overdue Maintenance', count: data.overdue_maintenance, severity: 'high', link: '/maintenance' })
+  for (const alert of COUNT_ATTENTION_ALERTS) {
+    if (data[alert.field] > 0) {
+      items.push({ type: alert.type, count: data[alert.field], severity: alert.severity, link: alert.link })
+    }
   }
-  if (data.open_incidents > 0) {
-    items.push({ type: 'Open Incidents', count: data.open_incidents, severity: 'high', link: '/incidents' })
-  }
-  if (data.unreviewed_flights > 0) {
-    items.push({ type: 'Unreviewed Flights', count: data.unreviewed_flights, severity: 'medium', link: '/flights' })
-  }
-  if (data.pending_flight_plans > 0) {
-    items.push({ type: 'Pending Flight Plans', count: data.pending_flight_plans, severity: 'low', link: '/flight-plans' })
-  }
-  if (data.pilots_lapsed > 0) {
-    items.push({ type: 'Pilots Out of Currency', count: data.pilots_lapsed, severity: 'high', link: '#currency' })
-  }
-  // Pilots expiring currency within 14 days (and currently still current)
-  const expiringSoon = (data.pilot_currency_status || []).filter(p => {
-    if (!p.is_current || !p.earliest_expires_date) return false
-    const days = daysUntil(p.earliest_expires_date)
-    return days !== null && days >= 0 && days <= 14
-  }).length
+  const expiringSoon = expiringCurrencySoonCount(data)
   if (expiringSoon > 0) {
     items.push({ type: 'Pilots Expiring Currency Soon', count: expiringSoon, severity: 'medium', link: '#currency' })
   }

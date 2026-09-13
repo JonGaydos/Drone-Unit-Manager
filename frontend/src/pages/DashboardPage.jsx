@@ -392,6 +392,30 @@ function ActivityChartTile({ data }) {
   )
 }
 
+/** Coerce a value that should be a list into an array ([] when it isn't one). */
+function asArray(x) {
+  return Array.isArray(x) ? x : []
+}
+
+/** Accept either a bare array or an object wrapping the list under keyA/keyB
+ *  (the shapes different endpoints return). Falls back to []. */
+function asItemList(x, keyA, keyB) {
+  if (Array.isArray(x)) return x
+  return x?.[keyA] || x?.[keyB] || []
+}
+
+/** Parse the configured drone-location place labels from the settings row,
+ *  falling back to the North/Central/South default on missing or bad JSON. */
+function parseLocationPlaces(placesRow) {
+  const fallback = ['North', 'Central', 'South']
+  if (!placesRow?.value) return fallback
+  try {
+    const j = JSON.parse(placesRow.value)
+    if (Array.isArray(j) && j.length) return j
+  } catch { /* keep default */ }
+  return fallback
+}
+
 /* ───────────────────── page ───────────────────── */
 
 export default function DashboardPage() {
@@ -430,20 +454,16 @@ export default function DashboardPage() {
       if (!alive) return
       setStats(s)
       setTrends(t)
-      const flights = Array.isArray(f) ? f : (f?.items || f?.flights || [])
-      setRecentFlights(flights)
-      const maint = Array.isArray(m) ? m : (m?.items || m?.maintenance || [])
-      setUpcomingMaintenance(maint)
+      setRecentFlights(asItemList(f, 'items', 'flights'))
+      setUpcomingMaintenance(asItemList(m, 'items', 'maintenance'))
       setCompliance(c)
-      setTopPilots(Array.isArray(tp) ? tp : [])
-      setTopVehicles(Array.isArray(tv) ? tv : [])
-      setActivity(Array.isArray(ac) ? ac : [])
-      setLocations(Array.isArray(locs) ? locs : [])
-      setPilots(Array.isArray(pilotList) ? pilotList.filter(p => p.status === 'active') : [])
-      const placesRow = Array.isArray(settingsList) ? settingsList.find(s => s.key === 'drone_location_places') : null
-      let places = ['North', 'Central', 'South']
-      if (placesRow?.value) { try { const j = JSON.parse(placesRow.value); if (Array.isArray(j) && j.length) places = j } catch { /* keep default */ } }
-      setLocationPlaces(places)
+      setTopPilots(asArray(tp))
+      setTopVehicles(asArray(tv))
+      setActivity(asArray(ac))
+      setLocations(asArray(locs))
+      setPilots(asArray(pilotList).filter(p => p.status === 'active'))
+      const placesRow = asArray(settingsList).find(s => s.key === 'drone_location_places')
+      setLocationPlaces(parseLocationPlaces(placesRow))
       // Weather tile: /weather/briefing requires lat/lon, so resolve the org
       // default (or White House) from settings before building the URL.
       const { lat, lon } = resolveOrgLocation(settingsList)
