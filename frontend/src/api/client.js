@@ -73,6 +73,40 @@ function parseFilename(disposition, fallback) {
   return fallback
 }
 
+/** Build a request AbortSignal that fires when the caller's signal aborts or the
+ *  timeout elapses (whichever first). Pass timeoutMs 0/falsy to skip the timeout.
+ *  @returns {{signal: AbortSignal|undefined, timeoutId: ReturnType<typeof setTimeout>|null}} */
+function buildTimedSignal(callerSignal, timeoutMs) {
+  if (!timeoutMs) {
+    return { signal: callerSignal, timeoutId: null }
+  }
+  const timeoutController = new AbortController()
+  const timeoutId = setTimeout(
+    () => timeoutController.abort(new DOMException('Request timed out', 'TimeoutError')),
+    timeoutMs,
+  )
+  const signal = callerSignal ? anySignal([callerSignal, timeoutController.signal]) : timeoutController.signal
+  return { signal, timeoutId }
+}
+
+/** Parse a non-OK response body and throw a sanitized Error. Hides SQL errors,
+ *  tracebacks, and internal paths. Always throws.
+ *  @param {Response} res @returns {Promise<never>} */
+async function throwSanitizedError(res) {
+  const error = await res.json().catch(() => ({ detail: res.statusText }))
+  let sanitized = 'An error occurred. Please try again.'
+  if (typeof error.detail === 'string') {
+    sanitized = error.detail
+  } else if (Array.isArray(error.detail)) {
+    sanitized = error.detail.map(e => e.msg || e.message || JSON.stringify(e)).join('; ')
+  }
+  // Don't expose SQL errors, tracebacks, or internal paths
+  if (sanitized.includes('SQL') || sanitized.includes('Traceback') || sanitized.includes('/app/')) {
+    throw new Error('An unexpected error occurred. Please try again.')
+  }
+  throw new Error(sanitized)
+}
+
 /**
  * Core fetch wrapper that attaches auth headers and handles common error cases.
  * On 401 responses, clears stored credentials and redirects to login.
@@ -97,16 +131,7 @@ async function request(path, options = {}) {
   // caller-provided signal (whichever fires first wins). Pass timeout: 0 to
   // disable for long-running operations (provider sync, telemetry pull).
   const timeoutMs = timeout === undefined ? DEFAULT_TIMEOUT_MS : timeout
-  let signal = callerSignal
-  let timeoutId = null
-  if (timeoutMs) {
-    const timeoutController = new AbortController()
-    timeoutId = setTimeout(
-      () => timeoutController.abort(new DOMException('Request timed out', 'TimeoutError')),
-      timeoutMs,
-    )
-    signal = callerSignal ? anySignal([callerSignal, timeoutController.signal]) : timeoutController.signal
-  }
+  const { signal, timeoutId } = buildTimedSignal(callerSignal, timeoutMs)
 
   let res
   try {
@@ -130,18 +155,7 @@ async function request(path, options = {}) {
   }
 
   if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: res.statusText }))
-    let sanitized = 'An error occurred. Please try again.'
-    if (typeof error.detail === 'string') {
-      sanitized = error.detail
-    } else if (Array.isArray(error.detail)) {
-      sanitized = error.detail.map(e => e.msg || e.message || JSON.stringify(e)).join('; ')
-    }
-    // Don't expose SQL errors, tracebacks, or internal paths
-    if (sanitized.includes('SQL') || sanitized.includes('Traceback') || sanitized.includes('/app/')) {
-      throw new Error('An unexpected error occurred. Please try again.')
-    }
-    throw new Error(sanitized)
+    await throwSanitizedError(res)
   }
 
   // 204 No Content and other empty bodies have nothing to parse.

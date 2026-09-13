@@ -184,6 +184,22 @@ function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachmen
   )
 }
 
+// Build the /flights request path from the active filters. Only set params that
+// are present so the backend sees a clean query string.
+function buildFlightsPath({ filterDateFrom, filterDateTo, filterPilotId, filterVehicleId, filterPurpose, statusFilter, page }) {
+  const qp = new URLSearchParams()
+  if (filterDateFrom) qp.set('date_from', filterDateFrom)
+  if (filterDateTo) qp.set('date_to', filterDateTo)
+  if (filterPilotId) qp.set('pilot_id', filterPilotId)
+  if (filterVehicleId) qp.set('vehicle_id', filterVehicleId)
+  if (filterPurpose) qp.set('purpose', filterPurpose)
+  if (statusFilter && statusFilter !== 'all') qp.set('review_status', statusFilter)
+  qp.set('page', page)
+  qp.set('per_page', 100)
+  const qs = qp.toString()
+  return qs ? `/flights?${qs}` : '/flights'
+}
+
 export default function FlightsPage() {
   const [flights, setFlights] = useState([])
   const [pilots, setPilots] = useState([])
@@ -246,17 +262,9 @@ export default function FlightsPage() {
     const { signal } = controller
     setSelectedIds(new Set())  // never act on rows hidden by a filter/page change
 
-    const qp = new URLSearchParams()
-    if (filterDateFrom) qp.set('date_from', filterDateFrom)
-    if (filterDateTo) qp.set('date_to', filterDateTo)
-    if (filterPilotId) qp.set('pilot_id', filterPilotId)
-    if (filterVehicleId) qp.set('vehicle_id', filterVehicleId)
-    if (filterPurpose) qp.set('purpose', filterPurpose)
-    if (statusFilter && statusFilter !== 'all') qp.set('review_status', statusFilter)
-    qp.set('page', page)
-    qp.set('per_page', 100)
-    const qs = qp.toString()
-    const path = qs ? `/flights?${qs}` : '/flights'
+    const path = buildFlightsPath({
+      filterDateFrom, filterDateTo, filterPilotId, filterVehicleId, filterPurpose, statusFilter, page,
+    })
 
     Promise.all([
       api.get(path, { signal }),
