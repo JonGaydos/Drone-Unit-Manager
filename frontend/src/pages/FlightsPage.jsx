@@ -184,6 +184,14 @@ function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachmen
   )
 }
 
+// Ascending/descending chevron shown on the active sort column header.
+function SortIndicator({ column, sortKey, sortDir }) {
+  if (sortKey !== column) return null
+  return sortDir === 'asc'
+    ? <ChevronUp className="w-3 h-3 inline ml-1" />
+    : <ChevronDown className="w-3 h-3 inline ml-1" />
+}
+
 // Sort value for a flight under the given column key. Strings are lowercased so
 // the comparison is case-insensitive; numbers/dates compare as-is.
 function flightSortValue(f, sortKey) {
@@ -586,23 +594,23 @@ export default function FlightsPage() {
               )}
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Flight ID</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none" onClick={() => toggleSort('date')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('date'))() } }} tabIndex={0}>
-                Date{sortKey === 'date' && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />)}
+                Date<SortIndicator column="date" sortKey={sortKey} sortDir={sortDir} />
               </th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none" onClick={() => toggleSort('pilot_name')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('pilot_name'))() } }} tabIndex={0}>
-                Pilot{sortKey === 'pilot_name' && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />)}
+                Pilot<SortIndicator column="pilot_name" sortKey={sortKey} sortDir={sortDir} />
               </th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none hidden md:table-cell" onClick={() => toggleSort('vehicle_name')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('vehicle_name'))() } }} tabIndex={0}>
-                Vehicle{sortKey === 'vehicle_name' && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />)}
+                Vehicle<SortIndicator column="vehicle_name" sortKey={sortKey} sortDir={sortDir} />
               </th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none hidden md:table-cell" onClick={() => toggleSort('purpose')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('purpose'))() } }} tabIndex={0}>
-                Purpose{sortKey === 'purpose' && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />)}
+                Purpose<SortIndicator column="purpose" sortKey={sortKey} sortDir={sortDir} />
               </th>
               <th className="text-right px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none" onClick={() => toggleSort('duration_seconds')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('duration_seconds'))() } }} tabIndex={0}>
-                Duration{sortKey === 'duration_seconds' && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />)}
+                Duration<SortIndicator column="duration_seconds" sortKey={sortKey} sortDir={sortDir} />
               </th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden lg:table-cell">Location</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none" onClick={() => toggleSort('review_status')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('review_status'))() } }} tabIndex={0}>
-                Status{sortKey === 'review_status' && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />)}
+                Status<SortIndicator column="review_status" sortKey={sortKey} sortDir={sortDir} />
               </th>
               <th className="text-right px-4 py-3 font-medium text-muted-foreground w-20">Actions</th>
             </tr>
