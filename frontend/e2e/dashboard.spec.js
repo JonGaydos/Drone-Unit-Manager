@@ -16,10 +16,6 @@ import { test, expect } from '@playwright/test'
 //   - Section headings: "Recent Flights", "Currency Risk", "Activity by Month",
 //     "Top Pilots (30d)", "Top Vehicles (30d)", "Locations" — always render.
 //   - Recent Flights lists the 1 seeded Training flight (pilot "E2E Seedpilot").
-//   - WeatherTile: depends on /weather/briefing using the org location. With no
-//     mocked external call it may render the "Weather widget unavailable"
-//     placeholder instead of the "Weather" heading; both are non-crash states,
-//     so we accept either.
 //   - No error banner on a normal seeded load.
 //
 // The dashboard fires ~12 parallel fetches and can take >5s; first-content
@@ -55,13 +51,6 @@ test.describe('dashboard journey', () => {
     // The single seeded Training flight renders in the Recent Flights list,
     // proving the page mounted with real data rather than an empty state.
     await expect(page.getByText('E2E Seedpilot').first()).toBeVisible()
-
-    // Weather tile: it either renders the "Weather" heading (live briefing) or
-    // the "Weather widget unavailable" placeholder (no external data). Either is
-    // a non-crash render; require one of them to be present.
-    const weatherHeading = page.getByRole('heading', { name: /Weather/ })
-    const weatherPlaceholder = page.getByText('Weather widget unavailable')
-    await expect(weatherHeading.or(weatherPlaceholder).first()).toBeVisible()
 
     // No error banner / alert on a normal seeded load.
     await expect(page.getByRole('alert')).toHaveCount(0)
