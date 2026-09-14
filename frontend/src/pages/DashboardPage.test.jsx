@@ -95,10 +95,6 @@ describe('DashboardPage', () => {
     expect(screen.getByText('Active Pilots')).toBeInTheDocument()
     // Recent flights list rendered.
     expect(screen.getByText('Jane Pilot')).toBeInTheDocument()
-    // Weather tile object fields rendered as scalars.
-    expect(screen.getByText('KDCA')).toBeInTheDocument()
-    expect(screen.getByText('GO')).toBeInTheDocument()
-    expect(screen.getByText('6kt')).toBeInTheDocument()
     // Operating authority clause appears once the unit tracks any.
     expect(screen.getByText(/authority current/)).toBeInTheDocument()
   })
@@ -126,8 +122,8 @@ describe('DashboardPage', () => {
     mockDashboard(POPULATED)
     renderWithProviders(<DashboardPage />, { role: 'admin' })
 
-    // Wait for content to settle (weather is the last async fetch).
-    expect(await screen.findByText('KDCA')).toBeInTheDocument()
+    // Wait for content to settle.
+    expect(await screen.findByText('Top Tom')).toBeInTheDocument()
 
     // The crash signature: an object stringified into JSX.
     expect(screen.queryByText('[object Object]')).toBeNull()
@@ -135,7 +131,6 @@ describe('DashboardPage', () => {
 
     // Key tiles are present as text, proving the page mounted fully.
     expect(screen.getByText(/Recent Flights/)).toBeInTheDocument()
-    expect(screen.getByText('Weather')).toBeInTheDocument()
     expect(screen.getByText('Currency Risk')).toBeInTheDocument()
     expect(screen.getByText('Activity by Month')).toBeInTheDocument()
   })
@@ -146,8 +141,6 @@ describe('DashboardPage', () => {
 
     // Recent flights empty state.
     expect(await screen.findByText('No recent flights')).toBeInTheDocument()
-    // Weather tile unavailable fallback (weather resolved to null).
-    expect(screen.getByText('Weather widget unavailable')).toBeInTheDocument()
     // Leaderboards empty.
     expect(screen.getAllByText('No flight activity').length).toBeGreaterThan(0)
   })
@@ -279,31 +272,6 @@ describe('DashboardPage', () => {
       expect(await screen.findByText('LAPSED')).toBeInTheDocument()
       expect(badgeFor('LAPSED')).toContain('red')
       expect(badgeFor('9d')).toContain('amber')
-    })
-  })
-
-  describe('weather advisory', () => {
-    const withAdvisory = (status) => ({
-      ...POPULATED,
-      weather: { ...POPULATED.weather, advisory: { status, reason: 'because' } },
-    })
-
-    it.each([
-      ['GO', 'emerald'],
-      ['NO-GO', 'red'],
-      ['CAUTION', 'amber'],
-    ])('colours a %s advisory', async (status, tone) => {
-      mockDashboard(withAdvisory(status))
-      renderWithProviders(<DashboardPage />, { role: 'admin' })
-
-      expect((await screen.findByText(status)).className).toContain(tone)
-    })
-
-    it('falls back to caution for a status it does not recognise', async () => {
-      mockDashboard(withAdvisory('MARGINAL'))
-      renderWithProviders(<DashboardPage />, { role: 'admin' })
-
-      expect((await screen.findByText('MARGINAL')).className).toContain('amber')
     })
   })
 
