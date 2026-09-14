@@ -10,10 +10,9 @@ import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { daysUntil, formatHours } from '@/lib/utils'
-import { resolveOrgLocation } from '@/lib/location'
 import {
   Clock, Users, Box, AlertTriangle, ClipboardCheck, ArrowRight, Wrench,
-  CloudSun, TrendingUp, TrendingDown, Minus, Target, GraduationCap, ChevronRight,
+  TrendingUp, TrendingDown, Minus, Target, GraduationCap, ChevronRight,
 } from 'lucide-react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip as RTooltip } from 'recharts'
@@ -99,7 +98,7 @@ function HeroTile({ user, compliance }) {
     return 'Good evening'
   })()
   return (
-    <Tile className="lg:col-span-8 p-5 flex flex-col sm:flex-row gap-5 items-center">
+    <Tile className="lg:col-span-12 p-5 flex flex-col sm:flex-row gap-5 items-center">
       <div className={`relative w-24 h-24 sm:w-28 sm:h-28 rounded-2xl flex items-center justify-center border-2 ${theme.bg} ${theme.border || 'border-border'} shrink-0`}>
         <div className="text-center">
           <div className={`text-3xl font-bold ${theme.color}`}>{compliance?.compliance_score ?? '—'}</div>
@@ -131,60 +130,6 @@ function HeroTile({ user, compliance }) {
           Open compliance dashboard <ArrowRight className="w-3 h-3" />
         </Link>
       </div>
-    </Tile>
-  )
-}
-
-const ADVISORY_TONE = {
-  'GO': 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
-  'NO-GO': 'bg-red-500/15 text-red-400 border-red-500/30',
-  CAUTION: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
-}
-
-function WeatherTile({ weather }) {
-  if (!weather) {
-    return (
-      <Tile className="lg:col-span-4 p-5 flex flex-col items-center justify-center text-center min-h-[140px]">
-        <CloudSun className="w-8 h-8 text-muted-foreground/50 mb-2" />
-        <p className="text-sm text-muted-foreground">Weather widget unavailable</p>
-        <Link to="/settings" className="text-xs text-primary hover:underline mt-1">Set location in Settings</Link>
-      </Tile>
-    )
-  }
-  const advisory = weather.advisory || {}
-  // Anything that is neither GO nor NO-GO (CAUTION, or no briefing at all)
-  // reads as caution.
-  const advClass = ADVISORY_TONE[advisory.status] || ADVISORY_TONE.CAUTION
-  return (
-    <Tile className="lg:col-span-4 p-5 flex flex-col gap-2">
-      <div className="flex items-start justify-between">
-        <div>
-          <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5"><CloudSun className="w-4 h-4 text-primary" /> Weather</h3>
-          <p className="text-xs text-muted-foreground truncate">{weather.station?.name || 'Local'}</p>
-        </div>
-        {advisory.status && (
-          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${advClass}`}>
-            {advisory.status}
-          </span>
-        )}
-      </div>
-      <div className="grid grid-cols-3 gap-2 mt-1">
-        <div className="text-center">
-          <p className="text-xs text-muted-foreground">Wind</p>
-          <p className="text-sm font-medium text-foreground">{weather.wind_kts != null ? `${weather.wind_kts}kt` : '—'}</p>
-        </div>
-        <div className="text-center">
-          <p className="text-xs text-muted-foreground">Vis</p>
-          <p className="text-sm font-medium text-foreground">{weather.visibility_sm != null ? `${weather.visibility_sm}sm` : '—'}</p>
-        </div>
-        <div className="text-center">
-          <p className="text-xs text-muted-foreground">Ceil</p>
-          <p className="text-sm font-medium text-foreground">{weather.ceiling_ft != null ? `${weather.ceiling_ft}ft` : '—'}</p>
-        </div>
-      </div>
-      <Link to="/weather" className="inline-flex items-center gap-1 text-xs text-primary hover:underline self-end">
-        Full briefing <ArrowRight className="w-3 h-3" />
-      </Link>
     </Tile>
   )
 }
@@ -429,7 +374,6 @@ export default function DashboardPage() {
   const [topPilots, setTopPilots] = useState([])
   const [topVehicles, setTopVehicles] = useState([])
   const [activity, setActivity] = useState([])
-  const [weather, setWeather] = useState(null)
   const [locations, setLocations] = useState([])
   const [pilots, setPilots] = useState([])
   const [locationPlaces, setLocationPlaces] = useState(['North', 'Central', 'South'])
@@ -450,7 +394,7 @@ export default function DashboardPage() {
       api.get('/vehicles/locations').catch(() => []),
       api.get('/pilots').catch(() => []),
       api.get('/settings').catch(() => []),
-    ]).then(async ([s, t, f, m, c, tp, tv, ac, locs, pilotList, settingsList]) => {
+    ]).then(([s, t, f, m, c, tp, tv, ac, locs, pilotList, settingsList]) => {
       if (!alive) return
       setStats(s)
       setTrends(t)
@@ -464,11 +408,6 @@ export default function DashboardPage() {
       setPilots(asArray(pilotList).filter(p => p.status === 'active'))
       const placesRow = asArray(settingsList).find(s => s.key === 'drone_location_places')
       setLocationPlaces(parseLocationPlaces(placesRow))
-      // Weather tile: /weather/briefing requires lat/lon, so resolve the org
-      // default (or White House) from settings before building the URL.
-      const { lat, lon } = resolveOrgLocation(settingsList)
-      const w = await api.get(`/weather/briefing?lat=${lat}&lon=${lon}`).catch(() => null)
-      if (alive) setWeather(w)
     }).finally(() => alive && setLoading(false))
     return () => { alive = false }
   }, [])
@@ -497,9 +436,8 @@ export default function DashboardPage() {
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 auto-rows-min">
-      {/* Row 1: Hero + Weather */}
+      {/* Row 1: Hero */}
       <HeroTile user={user} compliance={compliance} />
-      <WeatherTile weather={weather} />
 
       {/* Row 2: 4 trend stats */}
       <StatTile
