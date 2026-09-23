@@ -1,6 +1,6 @@
 import re
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -17,11 +17,16 @@ def _validate_optional_email(value: Optional[str]) -> Optional[str]:
     return value
 
 
+# The roles the permission checks recognize. Anything else would create an
+# account that silently matches no check.
+Role = Literal["admin", "supervisor", "pilot", "viewer"]
+
+
 class UserCreate(BaseModel):
     username: str = Field(min_length=1, max_length=150)
     password: str = Field(min_length=8, max_length=255)
     display_name: str = Field(max_length=255)
-    role: str = "viewer"
+    role: Role = "viewer"
     pilot_id: Optional[int] = None
     email: Optional[str] = Field(default=None, max_length=255)
 
@@ -30,7 +35,7 @@ class UserCreate(BaseModel):
 
 class UserUpdate(BaseModel):
     display_name: Optional[str] = Field(default=None, max_length=255)
-    role: Optional[str] = None
+    role: Optional[Role] = None
     is_active: Optional[bool] = None
     theme: Optional[str] = None
     pilot_id: Optional[int] = None

@@ -34,7 +34,12 @@ class Settings(BaseSettings):
     # One file inside an archive. A flight log is under a megabyte; this is
     # generous and stops an archive that claims to decompress to gigabytes.
     MAX_ARCHIVE_ENTRY_SIZE: int = 50 * 1024 * 1024
-    TRUST_PROXY_HEADERS: bool = True  # Honor X-Forwarded-For/X-Real-IP (behind a trusted reverse proxy)
+    TRUST_PROXY_HEADERS: bool = True  # Honor CF-Connecting-IP/X-Forwarded-For from trusted proxies
+    # Peers whose forwarding headers are believed: loopback, private and ULA
+    # ranges by default, i.e. a reverse proxy or tunnel on your own network.
+    # A public peer is never trusted, so an internet client cannot spoof its
+    # address. Narrow this to your proxy's address for stricter handling.
+    TRUSTED_PROXIES: str = "127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7"
     # The interactive API docs (/docs, /redoc, /openapi.json). Off in
     # production so the full API surface is not handed out unauthenticated;
     # set true in development to get them back.

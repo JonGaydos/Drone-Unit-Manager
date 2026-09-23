@@ -560,14 +560,7 @@ export default function DocumentStoragePage() {
                         <button
                           onClick={async () => {
                             try {
-                              const res = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/documents/${doc.id}/view`, {
-                                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-                              })
-                              if (!res.ok) throw new Error('Failed to fetch document')
-                              const blob = await res.blob()
-                              const url = URL.createObjectURL(blob)
-                              globalThis.open(url, '_blank')
-                              setTimeout(() => URL.revokeObjectURL(url), 60000)
+                              await api.openFile(`/documents/${doc.id}/view`)
                             } catch (err) {
                               toast.error(err.message || 'Could not open document')
                             }

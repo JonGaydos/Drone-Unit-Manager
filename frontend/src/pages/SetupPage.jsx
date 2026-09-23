@@ -22,12 +22,14 @@ function RecoveryBanner({ recovery }) {
   )
 }
 
-function RecoveryTokenField({ recovery, value, onChange }) {
-  if (!recovery) return null
+// Creating or reclaiming the first admin requires the install token. The token
+// is only readable with host access, so reaching the setup page is not enough
+// to take over an install.
+function InstallTokenField({ value, onChange }) {
   return (
     <div>
-      <label htmlFor="recovery-install-token" className="block text-sm font-medium mb-1">Install Token</label>
-      <input id="recovery-install-token"
+      <label htmlFor="setup-install-token" className="block text-sm font-medium mb-1">Install Token</label>
+      <input id="setup-install-token"
         type="text"
         autoComplete="off"
         spellCheck="false"
@@ -37,7 +39,7 @@ function RecoveryTokenField({ recovery, value, onChange }) {
         className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-xs font-mono focus:outline-none focus:ring-2 focus:ring-ring"
       />
       <p className="text-xs text-muted-foreground mt-1">
-        Read <code className="text-foreground">install_token.txt</code> from the container's data directory (<code className="text-foreground">/app/data</code>). It is also printed in <code className="text-foreground">docker logs</code> at first startup.
+        Read <code className="text-foreground">install_token.txt</code> from the container's data directory (<code className="text-foreground">/app/data</code>). It is also printed in <code className="text-foreground">docker logs</code> at startup.
       </p>
     </div>
   )
@@ -91,9 +93,9 @@ export default function SetupPage({ recovery = false }) {
 
   const handleSubmit = async () => {
     setError('')
-    // Recovery reactivates an existing admin and is gated on the install token
-    // (host access), the same secret the restore required.
-    if (recovery && !installToken) {
+    // Both creating the first admin and reactivating one after a restore are
+    // gated on the install token (host access).
+    if (!installToken) {
       setError('Install token is required. Read install_token.txt from the container data directory (/app/data), or the container logs.')
       return
     }
@@ -116,8 +118,7 @@ export default function SetupPage({ recovery = false }) {
 
     setLoading(true)
     try {
-      const opts = recovery ? { headers: { 'X-Install-Token': installToken } } : undefined
-      const result = await api.post('/auth/setup', form, opts)
+      const result = await api.post('/auth/setup', form, { headers: { 'X-Install-Token': installToken } })
       localStorage.setItem('token', result.token)
       // Move to optional setup (logo, Skydio, SMTP, initial import).
       setStep(3)
@@ -456,7 +457,7 @@ export default function SetupPage({ recovery = false }) {
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground"
                 />
               </div>
-              <RecoveryTokenField recovery={recovery} value={installToken} onChange={setInstallToken} />
+              <InstallTokenField value={installToken} onChange={setInstallToken} />
               {error && (
                 <div className="bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg p-3 text-sm">{error}</div>
               )}
@@ -466,7 +467,7 @@ export default function SetupPage({ recovery = false }) {
                 )}
                 <button
                   onClick={handleSubmit}
-                  disabled={loading || !form.username || !form.password || (recovery && !installToken)}
+                  disabled={loading || !form.username || !form.password || !installToken}
                   className="flex-1 py-2.5 bg-primary text-primary-foreground rounded-lg font-medium disabled:opacity-50"
                 >
                   {submitLabel}

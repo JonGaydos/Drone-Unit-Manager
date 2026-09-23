@@ -32,6 +32,7 @@ from app.models.pilot import Pilot
 from app.models.flight import Flight
 from app.models.incident import Incident
 from app.responses import responses
+from app.services.file_validation import mime_for_filename, user_file_headers
 
 logger = logging.getLogger(__name__)
 
@@ -244,7 +245,7 @@ def upload_photo(
         title=title,
         description=description,
         date_taken=parsed_date,
-        mime_type=file.content_type or MIME_JPEG,
+        mime_type=mime_for_filename(stored_name),
         uploaded_by_id=user.id,
     )
     db.add(photo)
@@ -353,6 +354,14 @@ def _resolve_photo_path(photo) -> Optional[Path]:
     return None
 
 
+def _serve_image(path: Path, mime: str | None = None) -> FileResponse:
+    """Serve a stored photo. The type comes from the server-chosen file
+    extension, never the stored upload type, so a record saved with a spoofed
+    type is still served as an image."""
+    mime = mime or mime_for_filename(str(path))
+    return FileResponse(str(path), media_type=mime, headers=user_file_headers(mime))
+
+
 @router.get("/{photo_id}/view", responses=responses(401, 404))
 def view_photo(
     photo_id: int,
@@ -372,10 +381,7 @@ def view_photo(
     resolved = _resolve_photo_path(photo)
     if not resolved:
         raise HTTPException(404, "File not found on disk")
-    response = FileResponse(str(resolved), media_type=photo.mime_type or MIME_JPEG)
-    response.headers["Referrer-Policy"] = "no-referrer"
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    return response
+    return _serve_image(resolved)
 
 
 @router.get("/{photo_id}/thumbnail", responses=responses(401, 404))
@@ -394,18 +400,12 @@ def view_thumbnail(
     if photo.thumbnail_path:
         thumb_resolved = _validate_path(photo.thumbnail_path)
         if thumb_resolved.exists():
-            response = FileResponse(str(thumb_resolved), media_type=MIME_JPEG)
-            response.headers["Referrer-Policy"] = "no-referrer"
-            response.headers["X-Content-Type-Options"] = "nosniff"
-            return response
+            return _serve_image(thumb_resolved, MIME_JPEG)
     # Fall back to full image
     resolved = _resolve_photo_path(photo)
     if not resolved:
         raise HTTPException(404, "File not found on disk")
-    response = FileResponse(str(resolved), media_type=photo.mime_type or MIME_JPEG)
-    response.headers["Referrer-Policy"] = "no-referrer"
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    return response
+    return _serve_image(resolved)
 
 
 @router.get("/{photo_id}/signed-urls", responses=responses(401, 404))

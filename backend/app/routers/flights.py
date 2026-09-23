@@ -565,14 +565,27 @@ def create_flight(data: FlightCreate, db: DBSession, admin: PilotUser):
     return _flight_to_out(flight)
 
 
-@router.patch("/{flight_id}", response_model=FlightOut, responses=responses(401, 404))
+# Sign-off fields. Setting them is a review decision, which the dedicated
+# review endpoint already reserves for supervisors; a general edit must not be
+# a way around that.
+REVIEW_FIELDS = ("review_status", "pilot_confirmed", "counts_toward_totals")
+
+
+@router.patch("/{flight_id}", response_model=FlightOut, responses=responses(401, 403, 404))
 def update_flight(flight_id: int, data: FlightUpdate, db: DBSession, admin: PilotUser):
     from app.services.audit import log_action, compute_changes
     flight = db.query(Flight).filter(Flight.id == flight_id).first()
     if not flight:
         raise HTTPException(status_code=404, detail=FLIGHT_NOT_FOUND)
     update_data = data.model_dump(exclude_unset=True)
-    changes = compute_changes(flight, update_data, ["pilot_id", "vehicle_id", "purpose", "review_status", "date", "notes"])
+    # Rejected only when a value actually changes, so an edit form that echoes
+    # the current review state back is not refused.
+    if admin.role not in ("admin", "supervisor") and any(
+        f in update_data and update_data[f] != getattr(flight, f) for f in REVIEW_FIELDS
+    ):
+        raise HTTPException(status_code=403, detail="Only a supervisor can change a flight's review fields")
+    # Flights are records of what happened, so every changed field is audited.
+    changes = compute_changes(flight, update_data, list(update_data.keys()))
     for key, value in update_data.items():
         setattr(flight, key, value)
     # Auto-create Fleet records for any new equipment serials

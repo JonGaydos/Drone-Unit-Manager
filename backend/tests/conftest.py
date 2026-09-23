@@ -191,6 +191,7 @@ def _reset_login_rate_limiter():
     from app.routers import auth
 
     auth._login_attempts.clear()
+    auth._failed_by_user.clear()
     auth._last_sweep = 0.0
 
 

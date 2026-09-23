@@ -18,6 +18,7 @@ from app.deps import DBSession, CurrentUser, PilotUser
 from app.models.document import Document
 from app.schemas.document import DocumentOut
 from app.responses import responses
+from app.services.file_validation import is_inline_safe, mime_for_filename, user_file_headers
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
@@ -67,8 +68,9 @@ def _validate_document_request(entity_type: str, entity_id, ext: str) -> None:
         raise HTTPException(400, f"entity_type must be one of {sorted(ALLOWED_ENTITY_TYPES)}")
     if entity_type != "general" and entity_id is None:
         raise HTTPException(400, f"entity_id is required for entity_type '{entity_type}'")
-    if ext and ext not in ALLOWED_DOCUMENT_EXTENSIONS:
-        raise HTTPException(400, f"File type '{ext}' not allowed.")
+    # An extension is required: the served content type is derived from it.
+    if ext not in ALLOWED_DOCUMENT_EXTENSIONS:
+        raise HTTPException(400, f"File type '{ext or '(none)'}' not allowed.")
 
 
 @router.post("/upload", response_model=DocumentOut, responses=responses(400, 413))
@@ -155,7 +157,7 @@ async def upload_document(
         title=title,
         filename=dest.name,
         file_path=str(dest),
-        mime_type=file.content_type or "application/octet-stream",
+        mime_type=mime_for_filename(dest.name),
         file_size_bytes=len(contents),
         notes=notes,
         folder_id=folder_id,
@@ -221,17 +223,16 @@ def view_document(
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found on disk")
 
-    # Serve PDFs inline, everything else as attachment
-    if doc.mime_type and doc.mime_type.startswith("application/pdf"):
-        disposition = "inline"
-    else:
-        disposition = "attachment"
-
+    # Type comes from the stored file's extension, never the upload's claimed
+    # type, so a record saved with a spoofed type cannot be served as HTML.
+    # PDFs and images display inline; everything else downloads.
+    mime = mime_for_filename(doc.filename or str(file_path))
     return FileResponse(
         path=str(file_path),
-        media_type=doc.mime_type,
+        media_type=mime,
         filename=doc.filename,
-        content_disposition_type=disposition,
+        content_disposition_type="inline" if is_inline_safe(mime) else "attachment",
+        headers=user_file_headers(mime),
     )
 
 

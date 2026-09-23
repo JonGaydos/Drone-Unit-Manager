@@ -4,8 +4,11 @@ Provides JWT-based auth, role-based access control, rate-limited login,
 password policy enforcement, and full CRUD for user accounts.
 """
 
+import logging
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
+from ipaddress import ip_address, ip_network
 from time import time
 from typing import Annotated
 
@@ -22,6 +25,8 @@ from app.database import get_db
 from app.models.user import User
 from app.schemas.user import LoginRequest, LoginResponse, UserOut, UserCreate, UserUpdate, ChangePasswordRequest, AdminResetPasswordRequest, SetupRequest
 from app.responses import responses
+
+logger = logging.getLogger(__name__)
 
 DBSession = Annotated[Session, Depends(get_db)]
 
@@ -157,14 +162,50 @@ _RATE_LIMIT = 5  # max attempts per window
 _RATE_WINDOW = 60  # window size in seconds
 _last_sweep = 0.0  # last time expired buckets were swept (monotonic-ish wall clock)
 
+# Per-account lockout. The per-IP limit alone lets a distributed guesser try
+# one password per address; this caps guesses against any single account.
+_failed_by_user = defaultdict(list)  # lowercased username -> [failure timestamps]
+_USER_FAIL_LIMIT = 10  # failures allowed per window before the account locks
+_USER_FAIL_WINDOW = 900  # 15 minutes, both the counting window and the lock
+_USER_FAIL_MAX_KEYS = 5000  # prune expired entries past this many usernames
+
+
+@lru_cache(maxsize=4)
+def _trusted_networks(spec: str) -> tuple:
+    """Parse the comma-separated TRUSTED_PROXIES CIDR list (cached per value).
+
+    A malformed entry is skipped with a warning rather than raised, so a typo in
+    the setting cannot take down every login. Skipping fails safe: a proxy that
+    is not recognized just has its forwarding headers ignored."""
+    networks = []
+    for part in (p.strip() for p in spec.split(",")):
+        if not part:
+            continue
+        try:
+            networks.append(ip_network(part, strict=False))
+        except ValueError:
+            logger.warning("Ignoring invalid TRUSTED_PROXIES entry: %r", part)
+    return tuple(networks)
+
+
+def _is_trusted_proxy(host: str) -> bool:
+    """True when ``host`` is an IP inside a TRUSTED_PROXIES network."""
+    try:
+        addr = ip_address(host)
+    except ValueError:
+        return False
+    return any(addr in net for net in _trusted_networks(settings.TRUSTED_PROXIES))
+
 
 def _client_ip(request) -> str:
-    """Resolve the client IP, honoring proxy headers when configured.
+    """Resolve the client IP for rate limiting and the audit trail.
 
-    When ``TRUST_PROXY_HEADERS`` is set (the app runs behind a trusted reverse
-    proxy such as nginx/Cloudflare), the leftmost X-Forwarded-For entry or
-    X-Real-IP is used so rate limiting keys on the real client rather than the
-    proxy. When unset, these headers are ignored to prevent spoofing.
+    Forwarding headers are believed only when the direct peer is a trusted
+    proxy; otherwise anyone could claim any address and reset the login limit.
+    Behind a trusted proxy, CF-Connecting-IP wins (Cloudflare's edge overwrites
+    it, so a client cannot set it). Failing that, X-Forwarded-For is read from
+    the right: each proxy appends the address it saw, so the leftmost entries
+    are whatever the client sent and only the rightmost non-proxy hop is real.
 
     Args:
         request: The incoming FastAPI Request.
@@ -172,16 +213,20 @@ def _client_ip(request) -> str:
     Returns:
         The resolved client IP string, or "unknown" if unavailable.
     """
-    if settings.TRUST_PROXY_HEADERS:
-        xff = request.headers.get("x-forwarded-for")
-        if xff:
-            first = xff.split(",")[0].strip()
-            if first:
-                return first
-        real = request.headers.get("x-real-ip")
-        if real and real.strip():
-            return real.strip()
-    return request.client.host if request.client else "unknown"
+    peer = request.client.host if request.client else "unknown"
+    if not settings.TRUST_PROXY_HEADERS or not _is_trusted_proxy(peer):
+        return peer
+    cf = (request.headers.get("cf-connecting-ip") or "").strip()
+    if cf:
+        return cf
+    hops = [h.strip() for h in (request.headers.get("x-forwarded-for") or "").split(",") if h.strip()]
+    for hop in reversed(hops):
+        if not _is_trusted_proxy(hop):
+            return hop
+    if hops:
+        return hops[0]  # every hop is on the trusted network
+    real = (request.headers.get("x-real-ip") or "").strip()
+    return real or peer
 
 
 def _check_rate_limit(request):
@@ -207,6 +252,32 @@ def _check_rate_limit(request):
     if len(_login_attempts[ip]) >= _RATE_LIMIT:
         raise HTTPException(status_code=429, detail="Too many login attempts. Try again later.")
     _login_attempts[ip].append(now)
+
+
+def _recent_failures(username: str, now: float) -> list:
+    """Failure timestamps for ``username`` still inside the lockout window."""
+    return [t for t in _failed_by_user.get(username.strip().lower(), []) if now - t < _USER_FAIL_WINDOW]
+
+
+def _check_account_lock(username: str) -> None:
+    """Refuse the attempt, before any password check, while the account is
+    locked by too many recent failures.
+
+    Raises:
+        HTTPException: 429 while the account is locked.
+    """
+    if len(_recent_failures(username, time())) >= _USER_FAIL_LIMIT:
+        raise HTTPException(status_code=429, detail="Too many failed attempts for this account. Try again later.")
+
+
+def _record_failure(username: str) -> None:
+    """Count a failed login against ``username``."""
+    now = time()
+    if len(_failed_by_user) > _USER_FAIL_MAX_KEYS:
+        for key in [k for k in _failed_by_user if not _recent_failures(k, now)]:
+            del _failed_by_user[key]
+    key = username.strip().lower()
+    _failed_by_user[key] = _recent_failures(key, now) + [now]
 
 
 def _validate_password(password: str):
@@ -325,6 +396,13 @@ def initial_setup(data: SetupRequest, request: Request, db: DBSession):
     if db.query(User).count() > 0:
         return _reactivate_admin(request, db, username, password)
 
+    # A fresh install is reachable on the network before its operator finishes
+    # setup. The install token (printed to the logs, readable only with host
+    # access) proves the caller is that operator and not whoever got there first.
+    from app.routers.backup import verify_install_token
+    if not verify_install_token(request.headers.get("X-Install-Token", "")):
+        raise HTTPException(401, "Install token required to create the first administrator. Read it from the container logs or install_token.txt.")
+
     display_name = data.display_name.strip()
     org_name = data.org_name.strip()
 
@@ -413,6 +491,7 @@ def login(req: LoginRequest, request: Request, db: DBSession):
         LoginResponse with JWT token and user profile.
     """
     _check_rate_limit(request)
+    _check_account_lock(req.username)
     from app.services.audit import log_action
     client_ip = _client_ip(request)
     user = db.query(User).filter(User.username == req.username).first()
@@ -421,6 +500,7 @@ def login(req: LoginRequest, request: Request, db: DBSession):
         # both branches cost one bcrypt op (mitigates username enumeration).
         if not user:
             verify_password(req.password, _DUMMY_HASH)
+        _record_failure(req.username)
         log_action(db, None, req.username, "login_failed", "auth",
                    ip_address=client_ip,
                    details=f"Failed login attempt for '{req.username}'")
@@ -428,6 +508,7 @@ def login(req: LoginRequest, request: Request, db: DBSession):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled")
+    _failed_by_user.pop(req.username.strip().lower(), None)
     token = create_token(user.id)
     log_action(db, user.id, user.display_name, "login", "auth",
                ip_address=client_ip, details="Successful login")
@@ -541,13 +622,32 @@ def _apply_pilot_link(target, changes: dict, data, db) -> None:
             target.email = pilot.email
 
 
-@router.patch("/users/{user_id}", response_model=UserOut, responses=responses(404))
+def _removes_last_admin(db, target: User, data: UserUpdate) -> bool:
+    """True when this update would demote or deactivate the only remaining
+    active admin, leaving no one able to manage users or restore access."""
+    if target.role != "admin" or not target.is_active:
+        return False
+    demoted = data.role is not None and data.role != "admin"
+    deactivated = data.is_active is False
+    if not (demoted or deactivated):
+        return False
+    others = (
+        db.query(User)
+        .filter(User.role == "admin", User.is_active.is_(True), User.id != target.id)
+        .count()
+    )
+    return others == 0
+
+
+@router.patch("/users/{user_id}", response_model=UserOut, responses=responses(400, 404))
 def update_user(user_id: int, data: UserUpdate, admin: Annotated[User, Depends(require_admin)], db: DBSession):
     """Update a user's profile, role, or active status. Admin only."""
     from app.services.audit import log_action
     target = db.query(User).filter(User.id == user_id).first()
     if not target:
         raise HTTPException(status_code=404, detail=USER_NOT_FOUND)
+    if _removes_last_admin(db, target, data):
+        raise HTTPException(status_code=400, detail="Cannot demote or deactivate the last active administrator")
     # Field-level changes recorded as a dict so the audit log renders consistently.
     # Order matters: the pilot link may auto-fill email before an explicit email
     # value (if any) overrides it, matching the original sequence.

@@ -34,15 +34,31 @@ describe('SetupPage', () => {
     await user.type(screen.getByLabelText('Username'), 'admin')
     await user.type(screen.getByLabelText('Password'), 'short')
     await user.type(screen.getByLabelText('Confirm Password'), 'short')
+    await user.type(screen.getByLabelText('Install Token'), 'the-install-token')
     await user.click(screen.getByRole('button', { name: 'Create Account & Start' }))
 
     expect(await screen.findByText('Password must be at least 12 characters')).toBeInTheDocument()
   })
 
-  it('POSTs /auth/setup with valid input and advances to optional setup', async () => {
+  it('keeps Create Account disabled on a fresh install until the install token is entered', async () => {
+    const { user } = renderWithProviders(<SetupPage />, { route: '/setup' })
+    await user.type(screen.getByLabelText('Your Name'), 'John Doe')
+    await user.click(screen.getByRole('button', { name: /Continue/ }))
+    await user.type(screen.getByLabelText('Username'), 'admin')
+    await user.type(screen.getByLabelText('Password'), 'Password1234')
+    await user.type(screen.getByLabelText('Confirm Password'), 'Password1234')
+
+    expect(screen.getByRole('button', { name: 'Create Account & Start' })).toBeDisabled()
+    await user.type(screen.getByLabelText('Install Token'), 'the-install-token')
+    expect(screen.getByRole('button', { name: 'Create Account & Start' })).toBeEnabled()
+  })
+
+  it('POSTs /auth/setup with valid input and the install token, and advances to optional setup', async () => {
     let body = null
+    let sentToken = null
     server.use(http.post('/api/auth/setup', async ({ request }) => {
       body = await request.json()
+      sentToken = request.headers.get('X-Install-Token')
       return HttpResponse.json({ token: 'setup-token' })
     }))
 
@@ -53,10 +69,12 @@ describe('SetupPage', () => {
     await user.type(screen.getByLabelText('Username'), 'admin')
     await user.type(screen.getByLabelText('Password'), 'Password1234')
     await user.type(screen.getByLabelText('Confirm Password'), 'Password1234')
+    await user.type(screen.getByLabelText('Install Token'), 'the-install-token')
     await user.click(screen.getByRole('button', { name: 'Create Account & Start' }))
 
     expect(await screen.findByText('Account created')).toBeInTheDocument()
     expect(body.username).toBe('admin')
+    expect(sentToken).toBe('the-install-token')
     expect(localStorage.getItem('token')).toBe('setup-token')
   })
 
@@ -113,6 +131,7 @@ describe('SetupPage', () => {
     await user.type(screen.getByLabelText('Username'), 'admin')
     await user.type(screen.getByLabelText('Password'), 'AdminPassw0rd!!')
     await user.type(screen.getByLabelText('Confirm Password'), 'AdminPassw0rd!!')
+    await user.type(screen.getByLabelText('Install Token'), 'the-install-token')
     await user.click(screen.getByRole('button', { name: /Create Account/ }))
 
     await waitFor(() => expect(setupBody).not.toBeNull())
