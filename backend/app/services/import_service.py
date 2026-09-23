@@ -35,6 +35,12 @@ def _xlsx_row_to_dict(row, headers: list[str]) -> dict:
     return d
 
 
+# Rows read from one file. Each parser reads one past the cap, so the caller
+# can tell the file was cut short and say so instead of importing part of it
+# silently.
+MAX_IMPORT_ROWS = 5000
+
+
 def _parse_xlsx(content: bytes) -> tuple[list[str], list[dict]]:
     """Parse XLSX bytes into (headers, rows)."""
     wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
@@ -44,10 +50,10 @@ def _parse_xlsx(content: bytes) -> tuple[list[str], list[dict]]:
     headers = [str(h) if h is not None else "" for h in raw[0]]
     rows = [
         _xlsx_row_to_dict(row, headers)
-        for row in raw[1:5001]
+        for row in raw[1:]
         if any(cell is not None and str(cell) != "" for cell in row)
     ]
-    return headers, rows
+    return headers, rows[:MAX_IMPORT_ROWS + 1]
 
 
 def _parse_csv(content: bytes) -> tuple[list[str], list[dict]]:
@@ -57,16 +63,18 @@ def _parse_csv(content: bytes) -> tuple[list[str], list[dict]]:
     rows = []
     for r in reader:
         rows.append({k: ("" if v is None else v) for k, v in r.items() if k})
-        if len(rows) >= 5000:
+        if len(rows) > MAX_IMPORT_ROWS:
             break
     return headers, rows
 
 
-def parse_file(content: bytes, filename: str) -> tuple[list[str], list[dict]]:
-    """Parse the uploaded CSV or XLSX into (headers, rows). Rows are dicts keyed
-    by header. Caps at ~5000 rows for safety."""
+def parse_file(content: bytes, filename: str) -> tuple[list[str], list[dict], bool]:
+    """Parse the uploaded CSV or XLSX into (headers, rows, truncated). Rows are
+    dicts keyed by header, at most MAX_IMPORT_ROWS of them; truncated is True
+    when the file had more."""
     is_xlsx = (filename or "").lower().endswith((".xlsx", ".xls"))
-    return _parse_xlsx(content) if is_xlsx else _parse_csv(content)
+    headers, rows = _parse_xlsx(content) if is_xlsx else _parse_csv(content)
+    return headers, rows[:MAX_IMPORT_ROWS], len(rows) > MAX_IMPORT_ROWS
 
 
 def _normalize_header(s: str) -> str:

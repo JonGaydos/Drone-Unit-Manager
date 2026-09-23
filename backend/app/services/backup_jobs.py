@@ -9,12 +9,13 @@ a failed backup never crashes the scheduler.
 import glob
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from app.config import settings as app_settings
 from app.database import SessionLocal
 from app.models.setting import Setting
 from app.routers.backup import build_backup_archive
+from app.services.sync_lock import restore_active
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,10 @@ DEFAULT_BACKUP_HOUR = 3
 
 BACKUP_FILE_PREFIX = "dum-backup-"
 BACKUP_FILE_GLOB = BACKUP_FILE_PREFIX + "*.zip"
+
+# A backup older than this at startup means the daily run was missed (the
+# container was down at backup time), so one runs shortly after boot.
+CATCH_UP_AFTER = timedelta(hours=26)
 
 
 def backup_dir() -> str:
@@ -99,7 +104,12 @@ def run_scheduled_backup() -> None:
     """
     import json
 
+    if restore_active.is_set():
+        logger.warning("Scheduled backup skipped: a restore is in progress")
+        return
+
     db = SessionLocal()
+    partial = None
     try:
         directory = backup_dir()
         os.makedirs(directory, exist_ok=True)
@@ -108,11 +118,15 @@ def run_scheduled_backup() -> None:
         ts = datetime.now()
         filename = f"{BACKUP_FILE_PREFIX}{ts.strftime('%Y%m%d-%H%M%S')}.zip"
         path = os.path.join(directory, filename)
+        # Written under a name rotation ignores, then renamed: a run cut short
+        # leaves a .part file, never a truncated ZIP that counts as a backup
+        # and pushes a good one out of the rotation.
+        partial = path + ".part"
 
-        spooled, _ = build_backup_archive(db, include_telemetry=False)
+        spooled, _ = build_backup_archive(db, include_telemetry=True)
         try:
             size = 0
-            with open(path, "wb") as out:
+            with open(partial, "wb") as out:
                 while True:
                     chunk = spooled.read(1024 * 1024)
                     if not chunk:
@@ -121,6 +135,8 @@ def run_scheduled_backup() -> None:
                     size += len(chunk)
         finally:
             spooled.close()
+        os.replace(partial, path)
+        partial = None
 
         _rotate(directory, retention)
 
@@ -132,6 +148,8 @@ def run_scheduled_backup() -> None:
         logger.info("Scheduled backup complete: %s (%d bytes)", filename, size)
     except Exception as exc:
         logger.exception("Scheduled backup failed")
+        if partial and os.path.exists(partial):
+            os.remove(partial)
         try:
             db.rollback()
             now_iso = datetime.now(timezone.utc).isoformat()
@@ -143,3 +161,23 @@ def run_scheduled_backup() -> None:
             logger.exception("Could not record backup failure result")
     finally:
         db.close()
+
+
+def run_catch_up_backup() -> None:
+    """Run the backup now if backups are on and the last one is stale, for a
+    container that was down when the daily job was due."""
+    db = SessionLocal()
+    try:
+        if not get_backup_enabled(db):
+            return
+        last = _get_setting(db, "last_backup_at")
+    finally:
+        db.close()
+    try:
+        last_at = datetime.fromisoformat(last) if last else None
+    except ValueError:
+        last_at = None
+    if last_at and datetime.now(timezone.utc) - last_at < CATCH_UP_AFTER:
+        return
+    logger.info("Last backup %s; running a catch-up backup", last or "never")
+    run_scheduled_backup()
