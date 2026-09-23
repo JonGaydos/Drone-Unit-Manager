@@ -667,8 +667,11 @@ def _lookup_pilot_by_name(db, full_name: str) -> int | None:
 
 def _parse_csv_flight_row(row: dict, db) -> Flight:
     """Parse a single CSV row into a Flight object with pilot lookup."""
+    date_text = (row.get("Date") or "").strip()
     flight = Flight(
-        date=row.get("Date") or None,
+        # A string here fails on insert, so every row of the app's own export
+        # was refused on the way back in. A bad value fails the row by name.
+        date=date.fromisoformat(date_text[:10]) if date_text else None,
         purpose=row.get("Purpose") or None,
         duration_seconds=int(row[COL_DURATION_S]) if row.get(COL_DURATION_S) else None,
         takeoff_address=row.get("Takeoff Address") or None,

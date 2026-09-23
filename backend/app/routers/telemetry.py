@@ -16,6 +16,12 @@ def _avg(values):
     return round(sum(valid) / len(valid), 2) if valid else None
 
 
+def _round(value, digits: int):
+    """Round a reading, keeping 0 as 0: a zero altitude, speed or heading is a
+    reading, and treating it as missing left gaps at takeoff and landing."""
+    return round(value, digits) if value is not None else None
+
+
 def _downsample_with_averaging(points, max_points):
     """Downsample telemetry by averaging values within each bucket.
 
@@ -55,9 +61,9 @@ def _downsample_with_averaging(points, max_points):
             "speed_mps": _avg([p.speed_mps for p in bucket]),
             "battery_pct": _avg([p.battery_pct for p in bucket]),
             "battery_voltage": _avg([p.battery_voltage for p in bucket]),
-            "heading_deg": mid.heading_deg and round(mid.heading_deg, 1),
-            "pitch_deg": mid.pitch_deg and round(mid.pitch_deg, 1),
-            "roll_deg": mid.roll_deg and round(mid.roll_deg, 1),
+            "heading_deg": _round(mid.heading_deg, 1),
+            "pitch_deg": _round(mid.pitch_deg, 1),
+            "roll_deg": _round(mid.roll_deg, 1),
             "satellites": mid.satellites,
         })
 
@@ -108,13 +114,13 @@ def get_flight_telemetry(
             "elapsed_s": round((p.timestamp_ms - base_ts) / 1000, 1),
             "lat": p.lat,
             "lon": p.lon,
-            "altitude_m": round(p.altitude_m, 1) if p.altitude_m else None,
-            "speed_mps": round(p.speed_mps, 1) if p.speed_mps else None,
-            "battery_pct": round(p.battery_pct, 1) if p.battery_pct else None,
-            "battery_voltage": round(p.battery_voltage, 2) if p.battery_voltage else None,
-            "heading_deg": round(p.heading_deg, 1) if p.heading_deg else None,
-            "pitch_deg": round(p.pitch_deg, 1) if p.pitch_deg else None,
-            "roll_deg": round(p.roll_deg, 1) if p.roll_deg else None,
+            "altitude_m": _round(p.altitude_m, 1),
+            "speed_mps": _round(p.speed_mps, 1),
+            "battery_pct": _round(p.battery_pct, 1),
+            "battery_voltage": _round(p.battery_voltage, 2),
+            "heading_deg": _round(p.heading_deg, 1),
+            "pitch_deg": _round(p.pitch_deg, 1),
+            "roll_deg": _round(p.roll_deg, 1),
             "satellites": p.satellites,
         }
         for p in points

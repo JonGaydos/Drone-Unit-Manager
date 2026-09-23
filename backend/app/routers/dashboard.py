@@ -58,10 +58,12 @@ def _due_items(db):
             "due_date": s.next_due,
         })
 
+    from app.services.maintenance_due import superseded_record_ids
+    superseded = superseded_record_ids(db)
     records = db.query(MaintenanceRecord).filter(
         MaintenanceRecord.next_due_date.isnot(None)).all()
     for r in records:
-        if (r.entity_type, r.entity_id, r.next_due_date) in seen:
+        if r.id in superseded or (r.entity_type, r.entity_id, r.next_due_date) in seen:
             continue
         items.append({
             "source": "record",
@@ -534,32 +536,38 @@ def _currency_status(db, total_pilots):
     (active_rule_count, per_pilot_status, pilots_current, pilots_lapsed). With no
     rules defined, every pilot is implicitly current."""
     from app.models.currency_rule import CurrencyRule
-    from app.routers.currency import _pilot_currency
+    from app.routers.currency import _evaluate_currency, flights_by_pilot
     rules = db.query(CurrencyRule).filter(CurrencyRule.is_active.is_(True)).all()
     if not rules:
         return 0, [], total_pilots, 0
     status: list[dict] = []
     pilots_current = 0
     pilots_lapsed = 0
-    for p in db.query(Pilot).filter(Pilot.status == "active").all():
-        rule_results = _pilot_currency(p, rules, db)
-        is_current = all(r["is_current"] for r in rule_results) if rule_results else True
-        # Earliest expiry across current-passing rules; null when any rule lapsed.
-        expiries = [r["expires_date"] for r in rule_results if r.get("expires_date")]
-        earliest = min(expiries) if (expiries and is_current) else None
-        status.append({
-            "pilot_id": p.id,
-            "pilot_name": p.full_name,
-            "email": p.email,
-            "is_current": is_current,
-            "earliest_expires_date": earliest,
-            "rules": rule_results,
-        })
-        if is_current:
+    pilots = db.query(Pilot).filter(Pilot.status == "active").all()
+    flights = flights_by_pilot(db, [p.id for p in pilots], rules)
+    for p in pilots:
+        entry = _pilot_currency_entry(p, _evaluate_currency(rules, flights.get(p.id, [])))
+        status.append(entry)
+        if entry["is_current"]:
             pilots_current += 1
         else:
             pilots_lapsed += 1
     return len(rules), status, pilots_current, pilots_lapsed
+
+
+def _pilot_currency_entry(pilot, rule_results: list[dict]) -> dict:
+    """One pilot's line in the compliance currency list."""
+    is_current = all(r["is_current"] for r in rule_results) if rule_results else True
+    # Earliest expiry across current-passing rules; null when any rule lapsed.
+    expiries = [r["expires_date"] for r in rule_results if r.get("expires_date")]
+    return {
+        "pilot_id": pilot.id,
+        "pilot_name": pilot.full_name,
+        "email": pilot.email,
+        "is_current": is_current,
+        "earliest_expires_date": min(expiries) if (expiries and is_current) else None,
+        "rules": rule_results,
+    }
 
 
 def _authority_summary(db, today):

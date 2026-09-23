@@ -10,7 +10,7 @@ from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import func, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.constants import APP_TITLE
 from app.config import settings
@@ -571,10 +571,10 @@ def _generate_chart(report_type: str, data: dict) -> io.BytesIO | None:
         return None
 
 
-def _flight_summary_row(f, db: Session) -> dict:
-    """One flight-summary row, resolving the flight's pilot and vehicle names."""
-    pilot = db.query(Pilot).filter(Pilot.id == f.pilot_id).first() if f.pilot_id else None
-    vehicle = db.query(Vehicle).filter(Vehicle.id == f.vehicle_id).first() if f.vehicle_id else None
+def _flight_summary_row(f) -> dict:
+    """One flight-summary row. Pilot and vehicle come loaded with the flight
+    (see _flight_summary), not as two queries per row."""
+    pilot, vehicle = f.pilot, f.vehicle
     return {
         "date": str(f.date) if f.date else "",
         "pilot": pilot.full_name if pilot else "Unassigned",
@@ -596,10 +596,10 @@ def _flight_summary(config: ReportConfig, db: Session):
     if config.vehicle_ids:
         q = q.filter(Flight.vehicle_id.in_(config.vehicle_ids))
 
-    flights = q.order_by(Flight.date.desc()).all()
+    flights = q.options(joinedload(Flight.pilot), joinedload(Flight.vehicle)).order_by(Flight.date.desc()).all()
     total_seconds = sum(f.duration_seconds or 0 for f in flights)
 
-    rows = [_flight_summary_row(f, db) for f in flights]
+    rows = [_flight_summary_row(f) for f in flights]
 
     return {
         "report_type": "flight_summary",

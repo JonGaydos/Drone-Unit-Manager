@@ -107,15 +107,18 @@ def _find_equipment_by_serial(db: Session, model_class, serial: str):
     and matches when exactly ONE record's serial ends with it. Ambiguous
     suffixes match nothing rather than guessing.
     """
-    rows = db.query(model_class).all()
     lowered = serial.lower()
-    for row in rows:
-        if (row.serial_number or "").lower() == lowered:
-            return row
+    exact = db.query(model_class).filter(func.lower(model_class.serial_number) == lowered).first()
+    if exact:
+        return exact
     tail = lowered.lstrip("-").strip()
     if len(tail) < MIN_SERIAL_SUFFIX:
         return None
-    matches = [r for r in rows if (r.serial_number or "").lower().endswith(tail)]
+    # In SQL rather than a scan of every row: this runs for each synced flight.
+    escaped = tail.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    matches = db.query(model_class).filter(
+        func.lower(model_class.serial_number).like("%" + escaped, escape="\\")
+    ).limit(2).all()
     return matches[0] if len(matches) == 1 else None
 
 

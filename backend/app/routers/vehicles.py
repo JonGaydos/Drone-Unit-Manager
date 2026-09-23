@@ -283,6 +283,8 @@ def delete_vehicle(vehicle_id: int, db: DBSession, admin: SupervisorUser):
     vehicle.status = "retired"
     if vehicle.decommissioned_date is None:
         vehicle.decommissioned_date = date.today()
+    from app.services.equipment_lifecycle import end_schedules
+    end_schedules(db, vehicle)
     log_action(db, admin.id, admin.display_name, "retire", "vehicle", vehicle.id, vehicle.nickname or f"{vehicle.manufacturer} {vehicle.model}")
     db.commit()
     return {"ok": True, "message": "Vehicle retired"}

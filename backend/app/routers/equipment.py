@@ -14,6 +14,7 @@ from app.models.sensor import SensorPackage
 from app.models.attachment import Attachment
 from app.models.other_equipment import OtherEquipment
 from app.responses import responses
+from app.services.equipment_lifecycle import end_schedules
 from app.services.equipment_lifecycle import set_fields_with_lifecycle as _set_fields_with_lifecycle
 
 router = APIRouter(prefix="/api", tags=["equipment"])
@@ -89,6 +90,7 @@ def delete_battery(bid: int, db: DBSession, admin: SupervisorUser):
     b = db.query(Battery).filter(Battery.id == bid).first()
     if not b:
         raise HTTPException(404, BATTERY_NOT_FOUND)
+    end_schedules(db, b)
     db.delete(b)
     db.commit()
     return {"ok": True}
@@ -352,6 +354,7 @@ def delete_controller(cid: int, db: DBSession, admin: SupervisorUser):
     c = db.query(Controller).filter(Controller.id == cid).first()
     if not c:
         raise HTTPException(404, CONTROLLER_NOT_FOUND)
+    end_schedules(db, c)
     db.delete(c)
     db.commit()
     return {"ok": True}
@@ -436,6 +439,7 @@ def delete_dock(did: int, db: DBSession, admin: SupervisorUser):
     d = db.query(Dock).filter(Dock.id == did).first()
     if not d:
         raise HTTPException(404, DOCK_NOT_FOUND)
+    end_schedules(db, d)
     db.delete(d)
     db.commit()
     return {"ok": True}
@@ -521,6 +525,7 @@ def delete_sensor(sid: int, db: DBSession, admin: SupervisorUser):
     s = db.query(SensorPackage).filter(SensorPackage.id == sid).first()
     if not s:
         raise HTTPException(404, SENSOR_NOT_FOUND)
+    end_schedules(db, s)
     db.delete(s)
     db.commit()
     return {"ok": True}
@@ -649,6 +654,7 @@ def delete_attachment(aid: int, db: DBSession, admin: SupervisorUser):
     a = db.query(Attachment).filter(Attachment.id == aid).first()
     if not a:
         raise HTTPException(404, ATTACHMENT_NOT_FOUND)
+    end_schedules(db, a)
     db.delete(a)
     db.commit()
     return {"ok": True}
@@ -808,6 +814,7 @@ def delete_other_equipment(oid: int, db: DBSession, admin: SupervisorUser):
     o = db.query(OtherEquipment).filter(OtherEquipment.id == oid).first()
     if not o:
         raise HTTPException(404, OTHER_EQUIPMENT_NOT_FOUND)
+    end_schedules(db, o)
     db.delete(o)
     db.commit()
     return {"ok": True}
