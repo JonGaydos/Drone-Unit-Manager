@@ -5,6 +5,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime, date, timezone
 
+import httpx
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -21,6 +22,7 @@ from app.models.attachment import Attachment
 from app.models.media import MediaFile
 from app.models.pilot import Pilot
 from app.models.setting import Setting
+from app.services.flight_delete import delete_flights, purge_flight_telemetry
 
 logger = logging.getLogger(__name__)
 
@@ -233,12 +235,16 @@ def _parse_flight_date(date_val) -> date | None:
 
 def _upsert_flights(flights_data: list[dict], skydio_users: list[dict], db: Session, result: SyncResult):
     """Shared flight upsert logic used by both sync_all and sync_all_deep."""
+    # Flights added in this run. The session does not autoflush, so the query
+    # below cannot see them, and a flight the provider lists twice (paging can
+    # repeat a row) would otherwise be inserted twice.
+    added: dict[str, Flight] = {}
     for f_data in flights_data:
         ext_id = str(f_data.get("external_id", "")).upper().replace("-", "")
         if not ext_id:
             continue
 
-        existing = db.query(Flight).filter(
+        existing = added.get(ext_id) or db.query(Flight).filter(
             func.replace(func.upper(Flight.external_id), "-", "") == ext_id,
         ).first()
 
@@ -285,6 +291,7 @@ def _upsert_flights(flights_data: list[dict], skydio_users: list[dict], db: Sess
             data_source="skydio_api",
         )
         db.add(flight)
+        added[ext_id] = flight
         result.flights_new += 1
 
         try:
@@ -328,39 +335,51 @@ def _match_pilot_emails(skydio_users: list[dict], db: Session) -> int:
     return matched
 
 
+def _only(rows: list):
+    """The single row, or None when there are none or several. A match that
+    could be one of two pilots credits neither: a flight left unassigned is
+    visible and fixable, one assigned to the wrong pilot is not."""
+    return rows[0] if len(rows) == 1 else None
+
+
 def _find_pilot_by_name(db: Session, su_name: str) -> Pilot | None:
-    """Try exact first+last name match for a Skydio user."""
+    """Exact first+last name match for a Skydio user, when it is unambiguous."""
     if not su_name:
         return None
     parts = su_name.split()
     if len(parts) >= 2:
         first, last = parts[0], parts[-1]
-        return db.query(Pilot).filter(
+        return _only(db.query(Pilot).filter(
             Pilot.first_name.ilike(first),
             Pilot.last_name.ilike(last),
             Pilot.status == "active",
-        ).first()
+        ).limit(2).all())
     return None
+
+
+def _email_pattern_matches(username: str, pilot: Pilot) -> bool:
+    """Whether an email username follows a usual pattern for this pilot's name
+    (first initial + last, first + last, last + first, and so on)."""
+    last_lower = (pilot.last_name or "").lower()
+    first_lower = (pilot.first_name or "").lower()
+    if not last_lower or not first_lower:
+        return False
+    patterns = (first_lower[0] + last_lower, last_lower[:3] + first_lower,
+                last_lower + first_lower, first_lower + last_lower)
+    return username in patterns or (len(last_lower) >= 4 and last_lower in username)
 
 
 def _find_pilot_by_email_pattern(db: Session, su_email: str) -> Pilot | None:
-    """Match email username patterns to pilots (firstinitial+lastname, etc.)."""
+    """Match an email username to a pilot's name, when exactly one pilot fits."""
     username = su_email.split("@")[0].lower()
-    all_pilots = db.query(Pilot).filter(Pilot.status == "active").all()
-    for p in all_pilots:
-        last_lower = (p.last_name or "").lower()
-        first_lower = (p.first_name or "").lower()
-        if not last_lower or not first_lower:
-            continue
-        p1 = first_lower[0] + last_lower
-        p2 = last_lower[:3] + first_lower
-        if username in (p1, p2, last_lower + first_lower, first_lower + last_lower):
-            logger.info("    -> Pattern match: '%s' matched pilot %s %s", username, p.first_name, p.last_name)
-            return p
-        if len(last_lower) >= 4 and last_lower in username:
-            logger.info("    -> Substring match: '%s' contains '%s' -> %s %s", username, last_lower, p.first_name, p.last_name)
-            return p
-    return None
+    candidates = [p for p in db.query(Pilot).filter(Pilot.status == "active").all()
+                  if _email_pattern_matches(username, p)]
+    pilot = _only(candidates)
+    if pilot:
+        logger.info("    -> Pattern match: '%s' -> %s %s", username, pilot.first_name, pilot.last_name)
+    elif candidates:
+        logger.info("    -> '%s' fits %d pilots; not matching", username, len(candidates))
+    return pilot
 
 
 def _find_vehicle_for_sync(db: Session, serial: str) -> Vehicle | None:
@@ -440,26 +459,24 @@ def _enrich_flight_timestamps(flight: Flight, detail: dict):
 
 
 def _enrich_flight_equipment(flight: Flight, detail: dict):
-    """Fill in attachments, sensor, battery from flight detail."""
-    from app.integrations.skydio import _to_str
+    """Fill in attachments, sensor, battery from flight detail. Only empty
+    fields are filled: a value a user corrected by hand stays corrected."""
+    from app.integrations.skydio import _clean_serial, _to_str
 
     attachments = detail.get("attachments")
     if isinstance(attachments, list):
         mount_map = {"TOP": "attachment_top", "BOTTOM": "attachment_bottom",
                      "LEFT": "attachment_left", "RIGHT": "attachment_right"}
         for att in attachments:
-            if isinstance(att, dict):
-                mount = att.get("mount_point", "").upper()
-                fld = mount_map.get(mount)
-                if fld:
-                    setattr(flight, fld, f"{att.get('attachment_type', '')} ({att.get('attachment_serial', '')})")
+            fld = mount_map.get(att.get("mount_point", "").upper()) if isinstance(att, dict) else None
+            if fld and not getattr(flight, fld):
+                setattr(flight, fld, f"{att.get('attachment_type', '')} ({att.get('attachment_serial', '')})")
 
     sensor = detail.get("sensor_package")
-    if isinstance(sensor, dict):
+    if isinstance(sensor, dict) and not flight.sensor_package:
         flight.sensor_package = sensor.get("sensor_package_serial") or _to_str(sensor)
     battery = detail.get("battery_serial")
-    if battery:
-        from app.integrations.skydio import _clean_serial
+    if battery and not flight.battery_serial:
         flight.battery_serial = _clean_serial(battery)
 
 
@@ -523,11 +540,14 @@ def _enrich_flight_associations(flight: Flight, detail: dict, db: Session):
             flight.pilot_id = pilot.id
 
 
-def _enrich_single_flight(flight: Flight, provider, creds, db: Session) -> bool:
-    """Enrich a single flight with full details from the API. Returns True if enriched."""
+def _enrich_single_flight(flight: Flight, provider, creds, db: Session) -> bool | None:
+    """Enrich a single flight with full details from the API.
+
+    Returns True when enriched, None when the provider says the flight does
+    not exist (404). A failed request raises."""
     detail = provider.get_flight_detail(creds, flight.external_id)
-    if not detail:
-        return False
+    if detail is None:
+        return None
 
     _enrich_flight_timestamps(flight, detail)
     _enrich_flight_equipment(flight, detail)
@@ -538,9 +558,9 @@ def _enrich_single_flight(flight: Flight, provider, creds, db: Session) -> bool:
     return True
 
 
-def _enrich_flights(provider, creds, db: Session, result: SyncResult):
-    """Enrich flights with full details and clean up ghost flights."""
-    from app.integrations.skydio import _to_str
+def _flights_to_enrich(db: Session) -> list[Flight]:
+    """API flights missing pilot/vehicle/altitude, then up to 100 other flights
+    (Excel imports) still missing altitude."""
     # Pass 1: All API flights missing pilot/vehicle/altitude
     urgent = db.query(Flight).filter(
         Flight.external_id.isnot(None),
@@ -549,33 +569,39 @@ def _enrich_flights(provider, creds, db: Session, result: SyncResult):
     ).all()
     # Pass 2: Excel imports needing telemetry (cap at 100)
     urgent_ids = {f.id for f in urgent}
-    remaining_slots = 100
-    extra = []
-    if remaining_slots > 0:
-        extra = db.query(Flight).filter(
-            Flight.max_altitude_m.is_(None),
-            Flight.external_id.isnot(None),
-            Flight.id.notin_(urgent_ids) if urgent_ids else True,
-        ).limit(remaining_slots).all()
-    unenriched = urgent + extra
-    logger.info("Enrichment: %d urgent API flights + %d extra = %d total", len(urgent), len(extra), len(unenriched))
+    extra = db.query(Flight).filter(
+        Flight.max_altitude_m.is_(None),
+        Flight.external_id.isnot(None),
+        Flight.id.notin_(urgent_ids) if urgent_ids else True,
+    ).limit(100).all()
+    logger.info("Enrichment: %d urgent API flights + %d extra = %d total", len(urgent), len(extra),
+                len(urgent) + len(extra))
+    return urgent + extra
 
+
+def _enrich_each(flights: list[Flight], provider, creds, db: Session) -> tuple[int, list[Flight]]:
+    """Enrich each flight. Returns (how many were enriched, the flights Skydio
+    reported missing). A lookup that fails is logged and skipped."""
     enriched_count = 0
-    for flight in unenriched:
+    missing = []
+    for flight in flights:
         try:
-            if _enrich_single_flight(flight, provider, creds, db):
-                enriched_count += 1
+            outcome = _enrich_single_flight(flight, provider, creds, db)
         except Exception as exc:
             logger.warning("Failed to enrich flight %s: %s", flight.external_id, exc)
+            continue
+        if outcome is None:
+            missing.append(flight)
+        elif outcome:
+            enriched_count += 1
+    return enriched_count, missing
 
-    db.flush()
-    logger.info("Enriched %d flights with full details", enriched_count)
 
-    # Reverse-geocode missing addresses AFTER the flush so the synchronous
-    # Nominatim HTTP calls do not hold the write transaction open. Collect
-    # candidates, geocode, then write the results back.
+def _geocode_missing_addresses(db: Session, flights: list[Flight]) -> None:
+    """Reverse-geocode flights that have coordinates but no address. Call with
+    nothing pending, so the Nominatim requests hold no write lock."""
     geocode_targets = [
-        f for f in unenriched
+        f for f in flights
         if not f.takeoff_address and f.takeoff_lat and f.takeoff_lon
     ]
     geocoded_count = 0
@@ -589,20 +615,32 @@ def _enrich_flights(provider, creds, db: Session, result: SyncResult):
         logger.info("Reverse-geocoded %d of %d flights missing an address",
                     geocoded_count, len(geocode_targets))
 
-    # Clean up ghost flights
-    ghosts = db.query(Flight).filter(
-        Flight.api_provider == "skydio",
-        Flight.date.is_(None),
-        Flight.max_altitude_m.is_(None),
-        Flight.external_id.isnot(None),
-    ).all()
-    ghost_count = len(ghosts)
-    for ghost in ghosts:
-        db.delete(ghost)
-    db.flush()
-    if ghost_count:
-        logger.info("Deleted %d ghost flights with no data", ghost_count)
-        result.errors.append(f"Auto-cleaned {ghost_count} flights with no data")
+
+def _delete_ghosts(db: Session, missing: list[Flight]) -> None:
+    """Delete ghost flights: Skydio confirmed they do not exist (404) and they
+    hold no data of their own. A flight whose lookup failed for any other reason
+    never gets here, since an outage says nothing about whether it is real."""
+    ghosts = [f for f in missing if f.date is None and f.max_altitude_m is None]
+    if not ghosts:
+        return
+    ghost_ids = delete_flights(db, ghosts)
+    db.commit()
+    purge_flight_telemetry(ghost_ids)
+    logger.info("Deleted %d ghost flights that Skydio no longer has", len(ghost_ids))
+
+
+def _enrich_flights(provider, creds, db: Session, result: SyncResult):
+    """Enrich flights with full details and clean up ghost flights."""
+    unenriched = _flights_to_enrich(db)
+    enriched_count, missing = _enrich_each(unenriched, provider, creds, db)
+
+    # Commit, not flush: a flush opens SQLite's write transaction and would
+    # hold it through the Nominatim requests below, stalling every other writer.
+    db.commit()
+    logger.info("Enriched %d flights with full details", enriched_count)
+
+    _geocode_missing_addresses(db, unenriched)
+    _delete_ghosts(db, missing)
 
 
 def _sync_entity_list(provider_method, creds, db: Session, model_class, serial_field: str,
@@ -900,10 +938,14 @@ class SyncManager:
             logger.exception("Users sync error")
 
         # --- Match Skydio users to pilots and populate emails ---
+        # Committed here so the write lock is not held through the network
+        # calls that follow.
         try:
             _match_pilot_emails(skydio_users, db)
+            db.commit()
         except Exception as exc:
             logger.warning("Pilot email matching error: %s", exc)
+            db.rollback()
 
         # --- Sync vehicles (commit independently so a later step's failure
         #     can't discard vehicles already staged) ---
@@ -1061,13 +1103,23 @@ class SyncManager:
         for flight in flights:
             try:
                 telemetry_data = provider.get_flight_telemetry(creds, flight.external_id)
-                if telemetry_data and len(telemetry_data) > 0:
-                    _store_telemetry_points(flight, telemetry_data, TelemetrySessionLocal, TelemetryPoint)
-                flight.telemetry_synced = True
-                flight.has_telemetry = True
-                synced += 1
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code >= 500:
+                    logger.warning("Telemetry sync failed for flight %s: %s", flight.external_id, exc)
+                    continue
+                # A 4xx will not change on retry (429 is retried inside the
+                # client): record the flight as checked, with no telemetry, so
+                # it stops taking a slot in every batch.
+                telemetry_data = []
             except Exception as exc:
+                # Network trouble: leave the flight for the next batch.
                 logger.warning("Telemetry sync failed for flight %s: %s", flight.external_id, exc)
+                continue
+            if telemetry_data:
+                _store_telemetry_points(flight, telemetry_data, TelemetrySessionLocal, TelemetryPoint)
+            flight.telemetry_synced = True
+            flight.has_telemetry = bool(telemetry_data)
+            synced += 1
 
         _set_setting(db, "last_telemetry_sync_timestamp", datetime.now(timezone.utc).isoformat())
         _set_setting(db, "last_telemetry_sync_result", json.dumps({"synced": synced}))
@@ -1081,21 +1133,23 @@ def _match_pilot(db: Session, pilot_name: str) -> int | None:
         return None
 
     parts = pilot_name.strip().split()
+    if not parts:
+        return None
     if len(parts) < 2:
-        # Try matching just first name
-        pilot = db.query(Pilot).filter(
+        # A first name alone matches only when one active pilot has it.
+        pilot = _only(db.query(Pilot).filter(
             Pilot.first_name.ilike(parts[0]),
             Pilot.status == "active",
-        ).first()
+        ).limit(2).all())
         return pilot.id if pilot else None
 
     first_name = parts[0]
     last_name = " ".join(parts[1:])
 
-    pilot = db.query(Pilot).filter(
+    pilot = _only(db.query(Pilot).filter(
         Pilot.first_name.ilike(first_name),
         Pilot.last_name.ilike(last_name),
         Pilot.status == "active",
-    ).first()
+    ).limit(2).all())
 
     return pilot.id if pilot else None

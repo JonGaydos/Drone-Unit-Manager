@@ -10,6 +10,7 @@ from app.constants import APP_TITLE
 from app.database import SessionLocal
 from app.models.notification_log import NotificationLog
 from app.models.setting import Setting
+from app.services.sync_lock import SyncBusy, sync_guard
 from app.services.sync_manager import SyncManager
 
 logger = logging.getLogger(__name__)
@@ -82,7 +83,8 @@ def _run_scheduled_sync():
             return
 
         logger.info("Starting scheduled Skydio sync")
-        result = SyncManager.sync_all("skydio", db)
+        with sync_guard():
+            result = SyncManager.sync_all("skydio", db)
         logger.info(
             "Scheduled sync complete: %d vehicles, %d new flights, %d errors",
             result.vehicles_synced, result.flights_new, len(result.errors),
@@ -90,6 +92,8 @@ def _run_scheduled_sync():
         if result.errors:
             for err in result.errors:
                 logger.warning("Sync error: %s", err)
+    except SyncBusy:
+        logger.info("Scheduled sync skipped: another sync is running")
     except Exception:
         logger.exception("Scheduled sync failed")
     finally:
@@ -118,9 +122,12 @@ def _run_scheduled_telemetry_sync():
             logger.debug("Scheduled telemetry sync: no telemetry missing, skipping")
             return
 
-        synced = SyncManager.batch_sync_telemetry(db, limit=10)
+        with sync_guard():
+            synced = SyncManager.batch_sync_telemetry(db, limit=10)
         logger.info("Scheduled telemetry sync: fetched telemetry for %d flights (%d were missing)",
                     synced, missing)
+    except SyncBusy:
+        logger.info("Scheduled telemetry sync skipped: another sync is running")
     except Exception:
         logger.exception("Scheduled telemetry sync failed")
     finally:

@@ -182,16 +182,55 @@ class PilotMergeRequest(BaseModel):
     source_id: int
 
 
+def _expires_later(a: PilotCertification, b: PilotCertification) -> bool:
+    """Whether a expires strictly after b; a missing date counts as earliest."""
+    return (a.expiration_date or date.min) > (b.expiration_date or date.min)
+
+
+def _merge_certifications(db, source_id: int, target_id: int) -> int:
+    """Move the source pilot's certifications to the target.
+
+    Where both pilots hold the same certification type, the one that expires
+    later is kept, whichever pilot it came from, and the other's documents and
+    renewal links move onto it before it is deleted. Returns the number of
+    source certifications that ended up on the target.
+    """
+    from app.models.document import Document
+    moved = 0
+    for cert in db.query(PilotCertification).filter(PilotCertification.pilot_id == source_id).all():
+        twin = db.query(PilotCertification).filter(
+            PilotCertification.pilot_id == target_id,
+            PilotCertification.certification_type_id == cert.certification_type_id,
+        ).first()
+        if twin is None:
+            cert.pilot_id = target_id
+            moved += 1
+            continue
+        keep, drop = (cert, twin) if _expires_later(cert, twin) else (twin, cert)
+        keep.pilot_id = target_id
+        if keep.renewed_from_id == drop.id:
+            keep.renewed_from_id = None
+        db.query(Document).filter(Document.certification_id == drop.id).update(
+            {Document.certification_id: keep.id}, synchronize_session=False)
+        db.query(PilotCertification).filter(PilotCertification.renewed_from_id == drop.id).update(
+            {PilotCertification.renewed_from_id: keep.id}, synchronize_session=False)
+        db.delete(drop)
+        if keep is cert:
+            moved += 1
+    db.flush()
+    return moved
+
+
 @router.post("/{target_id}/merge", responses=responses(400, 401, 404))
 def merge_pilots(target_id: int, data: PilotMergeRequest, db: DBSession, admin: SupervisorUser):
     """Merge a duplicate pilot (source) into a keeper (target).
 
     Reassigns every reference (flights, mission/training rosters, certifications,
     equipment quals, checklists, documents, photos, incidents, equipment
-    checkouts, controller assignment, maintenance schedule, linked user) from the
-    source to the target, copies the source email onto the target when it has
-    none (so future email-matched imports find the keeper), then deletes the
-    source. Supervisor or admin only.
+    checkouts, controller assignment, maintenance schedule, linked user, calendar
+    events, vehicle location) from the source to the target, copies the source
+    email onto the target when it has none (so future email-matched imports find
+    the keeper), then deletes the source. Supervisor or admin only.
     """
     from app.services.audit import log_action
     source_id = data.source_id
@@ -204,7 +243,8 @@ def merge_pilots(target_id: int, data: PilotMergeRequest, db: DBSession, admin: 
 
     from app.models.mission_log_pilot import MissionLogPilot
     from app.models.training_log_pilot import TrainingLogPilot
-    from app.models.certification import PilotCertification, PilotEquipmentQual
+    from app.models.certification import PilotEquipmentQual
+    from app.models.calendar_event import CalendarEvent
     from app.models.checklist import ChecklistCompletion
     from app.models.controller import Controller
     from app.models.document import Document
@@ -214,6 +254,7 @@ def merge_pilots(target_id: int, data: PilotMergeRequest, db: DBSession, admin: 
     from app.models.maintenance_schedule import MaintenanceSchedule
     from app.models.photo import PhotoPilot
     from app.models.user import User
+    from app.models.vehicle import Vehicle
 
     def reassign(model, col, conflict_cols=None):
         """Move rows from source to target. With conflict_cols, drop a source row
@@ -236,7 +277,7 @@ def merge_pilots(target_id: int, data: PilotMergeRequest, db: DBSession, admin: 
         reassign(Flight, "pilot_id")
         + reassign(MissionLogPilot, "pilot_id", ["mission_log_id"])
         + reassign(TrainingLogPilot, "pilot_id", ["training_log_id"])
-        + reassign(PilotCertification, "pilot_id", ["certification_type_id"])
+        + _merge_certifications(db, source_id, target_id)
         + reassign(PilotEquipmentQual, "pilot_id")
         + reassign(ChecklistCompletion, "pilot_id")
         + reassign(Controller, "assigned_pilot_id")
@@ -248,6 +289,8 @@ def merge_pilots(target_id: int, data: PilotMergeRequest, db: DBSession, admin: 
         + reassign(MaintenanceSchedule, "assigned_to_id")
         + reassign(PhotoPilot, "pilot_id", ["photo_id"])
         + reassign(User, "pilot_id")
+        + reassign(CalendarEvent, "pilot_id")
+        + reassign(Vehicle, "manual_location_pilot_id")
     )
 
     if not target.email and source.email:

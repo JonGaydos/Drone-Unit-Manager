@@ -10,6 +10,7 @@ traceback.
 import logging
 
 import httpx
+import pytest
 
 from app.integrations.base import ProviderCredentials
 from app.integrations.skydio import (
@@ -171,10 +172,12 @@ def test_paginate_empty_items_stops():
 
 # --- sync_* error hygiene ---------------------------------------------------
 
-def test_sync_media_warns_and_returns_empty_on_api_error(caplog):
+def test_optional_endpoint_the_token_cannot_see_is_empty_with_a_warning(caplog):
+    """A 403 or 404 on an optional endpoint means the account lacks it: one
+    warning line, no traceback, and an empty list rather than a failed sync."""
     provider = SkydioProvider()
     def boom(*a, **k):
-        raise _http_error(500)
+        raise _http_error(403)
     provider._paginate = boom
     with caplog.at_level(logging.DEBUG):
         assert provider.sync_media(CREDS) == []
@@ -184,14 +187,20 @@ def test_sync_media_warns_and_returns_empty_on_api_error(caplog):
     assert recs[0].exc_info is None
 
 
-def test_sync_controllers_logs_error_with_traceback_on_bug(caplog):
+def test_optional_endpoint_server_error_propagates():
+    """A 500 is a failed request, not an empty account: the sync must see it."""
+    provider = SkydioProvider()
+    def boom(*a, **k):
+        raise _http_error(500)
+    provider._paginate = boom
+    with pytest.raises(httpx.HTTPStatusError):
+        provider.sync_media(CREDS)
+
+
+def test_sync_controllers_lets_a_bug_propagate():
     provider = SkydioProvider()
     def boom(*a, **k):
         raise ValueError("unexpected bug")
     provider._paginate = boom
-    with caplog.at_level(logging.DEBUG):
-        assert provider.sync_controllers(CREDS) == []
-    recs = _records(caplog, "sync Skydio controllers")
-    assert recs
-    assert recs[0].levelno == logging.ERROR
-    assert recs[0].exc_info is not None
+    with pytest.raises(ValueError):
+        provider.sync_controllers(CREDS)

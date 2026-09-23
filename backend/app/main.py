@@ -24,6 +24,7 @@ logging.basicConfig(
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, FileResponse
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 logger = logging.getLogger(__name__)
 from fastapi.middleware.cors import CORSMiddleware
@@ -191,6 +192,18 @@ async def add_request_id(request: Request, call_next):
     for header, value in SECURITY_HEADERS.items():
         response.headers.setdefault(header, value)
     return response
+
+
+@app.exception_handler(IntegrityError)
+async def integrity_conflict(request: Request, exc: IntegrityError):
+    """A write the database refused, most often deleting a record that other
+    records still point at. That is a conflict for the caller to resolve, not
+    a server fault, so it is a 409 with a plain message instead of a 500."""
+    logger.warning("Integrity error on %s %s: %s", request.method, request.url.path, exc.orig)
+    return JSONResponse(
+        {"detail": "This change conflicts with other records: it is still in use elsewhere, or duplicates an existing entry."},
+        status_code=409,
+    )
 
 
 # Register routers
