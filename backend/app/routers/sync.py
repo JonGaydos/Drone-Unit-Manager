@@ -9,6 +9,8 @@ from pydantic import BaseModel
 from app.constants import UTC_OFFSET
 from app.deps import DBSession, AdminUser
 from app.models.setting import Setting
+from app.services.flight_delete import delete_flights, purge_flight_telemetry
+from app.services.sync_lock import sync_guard_http
 from app.services.sync_manager import SyncManager, SyncResult
 from app.responses import responses
 
@@ -57,7 +59,7 @@ def test_connection(
     return TestConnectionResponse(ok=ok, message=message, user_info=user_info)
 
 
-@router.post("/now", response_model=SyncResultResponse)
+@router.post("/now", response_model=SyncResultResponse, responses=responses(409))
 def sync_now(
     db: DBSession,
     admin: AdminUser,
@@ -71,30 +73,24 @@ def sync_now(
     """
     from app.services.audit import log_action
     logger.info("Manual sync triggered by admin (full=%s, sync_telemetry=%s)", full, sync_telemetry)
-    result = SyncManager.sync_all("skydio", db, full_sync=full)
+    with sync_guard_http():
+        result = SyncManager.sync_all("skydio", db, full_sync=full)
 
-    if full:
-        # After full sync, clean up any flights with no useful data
-        from app.models.flight import Flight
-        empty = db.query(Flight).filter(
-            Flight.date.is_(None),
-            Flight.duration_seconds.is_(None),
-        ).all()
-        if empty:
-            for f in empty:
-                db.delete(f)
-            db.commit()
-            logger.info("Auto-cleanup: removed %d empty flights", len(empty))
-            result.errors.append(f"Auto-cleaned {len(empty)} flights with no data")
+        if full:
+            # After full sync, clean up any flights with no useful data
+            removed = _delete_empty_flights(db)
+            if removed:
+                logger.info("Auto-cleanup: removed %d empty flights", removed)
+                result.errors.append(f"Auto-cleaned {removed} flights with no data")
 
-    # Auto-fetch telemetry for flights that don't have it yet
-    if sync_telemetry:
-        try:
-            telemetry_result = SyncManager.batch_sync_telemetry(db, limit=10)
-            if telemetry_result > 0:
-                logger.info("Auto-synced telemetry for %d flights", telemetry_result)
-        except Exception as e:
-            logger.warning("Auto telemetry sync failed: %s", e)
+        # Auto-fetch telemetry for flights that don't have it yet
+        if sync_telemetry:
+            try:
+                telemetry_result = SyncManager.batch_sync_telemetry(db, limit=10)
+                if telemetry_result > 0:
+                    logger.info("Auto-synced telemetry for %d flights", telemetry_result)
+            except Exception as e:
+                logger.warning("Auto telemetry sync failed: %s", e)
 
     log_action(db, admin.id, admin.display_name, "sync", "system",
                details=f"{'Full' if full else 'Incremental'} sync: {result.flights_new} new flights, {result.vehicles_synced} vehicles")
@@ -102,13 +98,14 @@ def sync_now(
     return SyncResultResponse(**asdict(result))
 
 
-@router.post("/telemetry", responses=responses(401))
+@router.post("/telemetry", responses=responses(401, 409))
 def sync_telemetry_batch(db: DBSession, user: AdminUser):
     """Fetch telemetry for up to 10 flights that don't have it yet."""
     from sqlalchemy import func
     from app.models.flight import Flight
 
-    synced = SyncManager.batch_sync_telemetry(db, limit=10)
+    with sync_guard_http():
+        synced = SyncManager.batch_sync_telemetry(db, limit=10)
 
     remaining = db.query(func.count(Flight.id)).filter(
         Flight.telemetry_synced.is_(False),
@@ -118,14 +115,15 @@ def sync_telemetry_batch(db: DBSession, user: AdminUser):
     return {"synced": synced, "remaining": max(0, remaining)}
 
 
-@router.post("/deep", response_model=SyncResultResponse)
+@router.post("/deep", response_model=SyncResultResponse, responses=responses(409))
 def sync_deep(
     db: DBSession,
     admin: AdminUser,
 ):
     from app.services.audit import log_action
     logger.info("Deep sync triggered by admin")
-    result = SyncManager.sync_all_deep("skydio", db)
+    with sync_guard_http():
+        result = SyncManager.sync_all_deep("skydio", db)
     log_action(db, admin.id, admin.display_name, "sync_deep", "flight",
                details=f"vehicles={result.vehicles_synced}, flights_new={result.flights_new}, errors={len(result.errors)}")
     db.commit()
@@ -226,7 +224,37 @@ def _apply_enrichment_detail(flight, detail: dict, db):
     _apply_first_present(flight, detail, _EQUIPMENT_FIELDS)
 
 
-@router.post("/enrich", response_model=SyncResultResponse)
+def _enrich_one(provider, creds, flight, db) -> str:
+    """Enrich one flight: "enriched", "empty" (no usable data, or Skydio says it
+    does not exist) or "failed" (the lookup errored; the flight is kept)."""
+    try:
+        detail = provider.get_flight_detail(creds, flight.external_id)
+    except Exception as exc:
+        logger.warning("Enrich lookup failed for %s: %s", flight.external_id, exc)
+        return "failed"
+    if detail is None:
+        return "empty"
+    logger.info("Enriching flight %s with keys: %s", flight.external_id, list(detail.keys()))
+    _apply_enrichment_detail(flight, detail, db)
+    return "enriched" if (flight.date or flight.duration_seconds or flight.pilot_id) else "empty"
+
+
+def _delete_empty_flights(db) -> int:
+    """Delete flights with neither a date nor a duration; returns the count."""
+    from app.models.flight import Flight
+    empty = db.query(Flight).filter(
+        Flight.date.is_(None),
+        Flight.duration_seconds.is_(None),
+    ).all()
+    if not empty:
+        return 0
+    ids = delete_flights(db, empty)
+    db.commit()
+    purge_flight_telemetry(ids)
+    return len(ids)
+
+
+@router.post("/enrich", response_model=SyncResultResponse, responses=responses(409))
 def enrich_flights(
     db: DBSession,
     admin: AdminUser,
@@ -254,61 +282,43 @@ def enrich_flights(
 
     logger.info("Found %d flights needing enrichment", len(empty_flights))
 
-    enriched = 0
-    deleted = 0
-
-    for flight in empty_flights:
-        detail = provider.get_flight_detail(creds, flight.external_id)
-
-        if not detail:
-            db.delete(flight)
-            deleted += 1
-            continue
-
-        logger.info("Enriching flight %s with keys: %s", flight.external_id, list(detail.keys()))
-        _apply_enrichment_detail(flight, detail, db)
-
-        if flight.date or flight.duration_seconds or flight.pilot_id:
-            enriched += 1
-        else:
-            db.delete(flight)
-            deleted += 1
+    with sync_guard_http():
+        outcomes = {flight: _enrich_one(provider, creds, flight, db) for flight in empty_flights}
+    enriched = sum(1 for o in outcomes.values() if o == "enriched")
+    failed = sum(1 for o in outcomes.values() if o == "failed")
+    ids = delete_flights(db, [f for f, o in outcomes.items() if o == "empty"])
 
     from app.services.audit import log_action
     log_action(db, admin.id, admin.display_name, "enrich_flights", "flight",
-               details=f"enriched={enriched}, deleted_with_no_detail={deleted}")
+               details=f"enriched={enriched}, deleted_with_no_detail={len(ids)}, lookup_failed={failed}")
     db.commit()
+    purge_flight_telemetry(ids)
 
     result.flights_new = enriched
-    result.flights_skipped = deleted
-    if deleted > 0:
-        result.errors.append(f"Deleted {deleted} flights with no available data")
+    result.flights_skipped = len(ids)
+    if ids:
+        result.errors.append(f"Deleted {len(ids)} flights with no available data")
+    if failed:
+        result.errors.append(f"Could not reach Skydio for {failed} flights; they were kept")
 
-    logger.info("Enrichment complete: %d enriched, %d deleted", enriched, deleted)
+    logger.info("Enrichment complete: %d enriched, %d deleted, %d failed", enriched, len(ids), failed)
     return SyncResultResponse(**asdict(result))
 
 
-@router.post("/cleanup")
+@router.post("/cleanup", responses=responses(409))
 def cleanup_empty_flights(
     db: DBSession,
     admin: AdminUser,
 ):
-    """Delete all flights that have no date, no duration, and no location."""
+    """Delete all flights that have no date and no duration."""
     from app.services.audit import log_action
-    from app.models.flight import Flight
 
-    empty = db.query(Flight).filter(
-        Flight.date.is_(None),
-        Flight.duration_seconds.is_(None),
-    ).all()
-
-    count = len(empty)
-    for f in empty:
-        db.delete(f)
+    with sync_guard_http():
+        count = _delete_empty_flights(db)
     if count:
         log_action(db, admin.id, admin.display_name, "cleanup", "flight",
                    details=f"deleted {count} empty flight(s) with no date/duration")
-    db.commit()
+        db.commit()
 
     logger.info("Cleanup: deleted %d empty flights", count)
     return {"ok": True, "deleted": count}

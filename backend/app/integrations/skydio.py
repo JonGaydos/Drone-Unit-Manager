@@ -36,6 +36,16 @@ def _retry_after_seconds(header: str | None) -> float:
     return min(wait, MAX_RETRY_AFTER)
 
 
+# A token can lack the scope for an optional endpoint (users, batteries, media
+# and the like). A 403 or 404 there means the feature is unavailable to this
+# account, not that the sync failed; anything else is a failure and propagates.
+UNAVAILABLE_STATUSES = (403, 404)
+
+
+def _is_unavailable(exc: Exception) -> bool:
+    return isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code in UNAVAILABLE_STATUSES
+
+
 def _is_skydio_url(url: str) -> bool:
     """True for an https URL on the Skydio API host. Every request carries the
     API token, so a page link anywhere else must not be followed."""
@@ -392,6 +402,17 @@ class SkydioProvider(DroneProvider):
         logger.info("Paginate complete: %d total items", len(all_data))
         return all_data
 
+    def _fetch_optional(self, url: str, creds: ProviderCredentials, action: str, **kwargs) -> list[dict]:
+        """Paginate an optional endpoint: [] when it is unavailable to this
+        token, otherwise every error propagates to the sync that asked."""
+        try:
+            return self._paginate(url, creds, **kwargs)
+        except httpx.HTTPStatusError as exc:
+            if not _is_unavailable(exc):
+                raise
+            _log_provider_error(action, exc)
+            return []
+
     # ---- Provider interface implementation ----
 
     def validate_credentials(self, creds: ProviderCredentials) -> bool:
@@ -415,46 +436,40 @@ class SkydioProvider(DroneProvider):
             return {}
 
     def sync_vehicles(self, creds: ProviderCredentials) -> list[dict]:
-        """Fetch all vehicles from Skydio Cloud."""
-        try:
-            raw = self._paginate(f"{BASE_URL}/vehicles", creds)
-            logger.info("Skydio vehicles raw response: %d items", len(raw))
-            if raw:
-                logger.info("First vehicle keys: %s", list(raw[0].keys()) if raw else "empty")
-            vehicles = []
-            for v in raw:
-                vehicles.append({
-                    "serial_number": v.get("serial_number", v.get("vehicle_serial", "")),
-                    "manufacturer": "Skydio",
-                    "model": v.get("model", v.get("vehicle_type", "Unknown")),
-                    "provider_serial": v.get("serial_number", v.get("vehicle_serial", "")),
-                    "api_provider": "skydio",
-                    "nickname": v.get("name") or v.get("nickname"),
-                })
-            logger.info("Fetched %d vehicles from Skydio", len(vehicles))
-            return vehicles
-        except Exception as exc:
-            _log_provider_error("sync Skydio vehicles", exc)
-            return []
+        """Fetch all vehicles from Skydio Cloud. Errors propagate: an empty
+        answer must mean no vehicles, never a failed request."""
+        raw = self._paginate(f"{BASE_URL}/vehicles", creds)
+        logger.info("Skydio vehicles raw response: %d items", len(raw))
+        if raw:
+            logger.info("First vehicle keys: %s", list(raw[0].keys()))
+        vehicles = []
+        for v in raw:
+            vehicles.append({
+                "serial_number": v.get("serial_number", v.get("vehicle_serial", "")),
+                "manufacturer": "Skydio",
+                "model": v.get("model", v.get("vehicle_type", "Unknown")),
+                "provider_serial": v.get("serial_number", v.get("vehicle_serial", "")),
+                "api_provider": "skydio",
+                "nickname": v.get("name") or v.get("nickname"),
+            })
+        logger.info("Fetched %d vehicles from Skydio", len(vehicles))
+        return vehicles
 
     def sync_flights(self, creds: ProviderCredentials, since: str | None = None) -> list[dict]:
-        """Fetch flights from Skydio Cloud."""
-        try:
-            params = {}
-            if since:
-                params["date_from"] = since[:10] if len(since) > 10 else since
+        """Fetch flights from Skydio Cloud. Errors propagate, so a failed
+        request cannot pass for a quiet period and advance the sync mark."""
+        params = {}
+        if since:
+            params["date_from"] = since[:10] if len(since) > 10 else since
 
-            raw = self._paginate(f"{BASE_URL}/flights", creds, params=params)
-            if raw:
-                logger.info("First flight raw keys: %s", list(raw[0].keys()))
-                logger.info("First flight raw data: %s", {k: raw[0][k] for k in list(raw[0].keys())[:20]})
+        raw = self._paginate(f"{BASE_URL}/flights", creds, params=params)
+        if raw:
+            logger.info("First flight raw keys: %s", list(raw[0].keys()))
+            logger.info("First flight raw data: %s", {k: raw[0][k] for k in list(raw[0].keys())[:20]})
 
-            flights = [_map_raw_flight(f) for f in raw]
-            logger.info("Fetched %d flights from Skydio", len(flights))
-            return flights
-        except Exception as exc:
-            _log_provider_error("sync Skydio flights", exc)
-            return []
+        flights = [_map_raw_flight(f) for f in raw]
+        logger.info("Fetched %d flights from Skydio", len(flights))
+        return flights
 
     @staticmethod
     def _collect_new_flights(raw: list[dict], seen_ids: set, all_raw: list) -> int:
@@ -509,221 +524,194 @@ class SkydioProvider(DroneProvider):
 
     def sync_batteries(self, creds: ProviderCredentials) -> list[dict]:
         """Fetch batteries from Skydio Cloud."""
-        try:
-            raw = self._paginate(f"{BASE_URL}/batteries", creds)
-            batteries = []
-            for b in raw:
-                # Skydio's `battery_serial` carries a leading-dash artifact
-                # (e.g. "-k01-231117-1-00061"); `battery_name` is the clean
-                # form. Store the clean serial, keep the raw one for API
-                # correlation.
-                raw_serial = b.get("battery_serial") or ""
-                serial = b.get("battery_name") or raw_serial.lstrip("-")
-                batteries.append({
-                    "serial_number": serial,
-                    "manufacturer": "Skydio",
-                    "model": b.get("model") or b.get("battery_type"),
-                    "vehicle_model": b.get("vehicle_model"),
-                    "cycle_count": b.get("cycles", b.get("cycle_count", 0)),
-                    "health_pct": b.get("health_pct") or b.get("state_of_health"),
-                    "skydio_battery_serial": raw_serial or serial,
-                    "api_provider": "skydio",
-                })
-            logger.info("Fetched %d batteries from Skydio", len(batteries))
-            return batteries
-        except Exception as exc:
-            _log_provider_error("sync Skydio batteries", exc)
-            return []
+        raw = self._fetch_optional(f"{BASE_URL}/batteries", creds, "sync Skydio batteries")
+        batteries = []
+        for b in raw:
+            # Skydio's `battery_serial` carries a leading-dash artifact
+            # (e.g. "-k01-231117-1-00061"); `battery_name` is the clean
+            # form. Store the clean serial, keep the raw one for API
+            # correlation.
+            raw_serial = b.get("battery_serial") or ""
+            serial = b.get("battery_name") or raw_serial.lstrip("-")
+            batteries.append({
+                "serial_number": serial,
+                "manufacturer": "Skydio",
+                "model": b.get("model") or b.get("battery_type"),
+                "vehicle_model": b.get("vehicle_model"),
+                "cycle_count": b.get("cycles", b.get("cycle_count", 0)),
+                "health_pct": b.get("health_pct") or b.get("state_of_health"),
+                "skydio_battery_serial": raw_serial or serial,
+                "api_provider": "skydio",
+            })
+        logger.info("Fetched %d batteries from Skydio", len(batteries))
+        return batteries
 
     def sync_controllers(self, creds: ProviderCredentials) -> list[dict]:
         """Fetch controllers from Skydio Cloud."""
-        try:
-            raw = self._paginate(f"{BASE_URL}/controllers", creds)
-            controllers = []
-            for c in raw:
-                controllers.append({
-                    "serial_number": c.get("serial_number", c.get("controller_serial", "")),
-                    "manufacturer": "Skydio",
-                    "model": c.get("model") or c.get("controller_type"),
-                    "skydio_controller_serial": c.get("serial_number", c.get("controller_serial", "")),
-                    "api_provider": "skydio",
-                })
-            logger.info("Fetched %d controllers from Skydio", len(controllers))
-            return controllers
-        except Exception as exc:
-            _log_provider_error("sync Skydio controllers", exc)
-            return []
+        raw = self._fetch_optional(f"{BASE_URL}/controllers", creds, "sync Skydio controllers")
+        controllers = []
+        for c in raw:
+            controllers.append({
+                "serial_number": c.get("serial_number", c.get("controller_serial", "")),
+                "manufacturer": "Skydio",
+                "model": c.get("model") or c.get("controller_type"),
+                "skydio_controller_serial": c.get("serial_number", c.get("controller_serial", "")),
+                "api_provider": "skydio",
+            })
+        logger.info("Fetched %d controllers from Skydio", len(controllers))
+        return controllers
 
     def get_flight_detail(self, creds: ProviderCredentials, flight_id: str) -> dict | None:
-        """Fetch full details for a single flight by ID."""
+        """Fetch full details for a single flight by ID.
+
+        Returns None only when Skydio answers 404, i.e. the flight is gone.
+        Any other failure raises, so a caller never mistakes an outage or a
+        bad token for a deleted flight."""
         try:
             resp = self._request("GET", f"{BASE_URL}/flight/{flight_id}", creds, timeout=15)
-            body = resp.json()
-
-            if not isinstance(body, dict):
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
                 return None
+            raise
+        body = resp.json()
+        if not isinstance(body, dict):
+            raise ValueError(f"Unexpected flight detail response for {flight_id}")
 
-            # Unwrap nested response: {"data": {"flight": {...}}} or {"flight": {...}} or {"data": {...}}
-            flight = body
-            if "data" in flight and isinstance(flight["data"], dict):
-                flight = flight["data"]
-            if "flight" in flight and isinstance(flight["flight"], dict):
-                flight = flight["flight"]
+        # Unwrap nested response: {"data": {"flight": {...}}} or {"flight": {...}} or {"data": {...}}
+        flight = body
+        if "data" in flight and isinstance(flight["data"], dict):
+            flight = flight["data"]
+        if "flight" in flight and isinstance(flight["flight"], dict):
+            flight = flight["flight"]
 
-            logger.info("Flight detail for %s: %d keys: %s", flight_id, len(flight.keys()), list(flight.keys()))
-            return flight
-        except Exception as exc:
-            _log_provider_error(f"get flight detail for {flight_id}", exc)
-            return None
+        logger.info("Flight detail for %s: %d keys: %s", flight_id, len(flight.keys()), list(flight.keys()))
+        return flight
 
     def get_flight_telemetry(self, creds: ProviderCredentials, flight_id: str) -> list[dict]:
-        """Fetch telemetry data for a specific flight."""
-        try:
-            resp = self._request(
-                "GET",
-                f"{TELEMETRY_BASE}/flight/{flight_id}/telemetry",
-                creds,
-                timeout=60.0,
-            )
-            body = resp.json()
+        """Fetch telemetry data for a specific flight. Errors propagate, so a
+        failed fetch is not recorded as a flight with no telemetry."""
+        resp = self._request(
+            "GET",
+            f"{TELEMETRY_BASE}/flight/{flight_id}/telemetry",
+            creds,
+            timeout=60.0,
+        )
+        body = resp.json()
 
-            raw = _unwrap_telemetry_response(body)
-            if not raw:
-                return []
-
-            # Determine takeoff altitude (ground level) from the first point's gps_altitude
-            takeoff_gps_alt = None
-            for p in raw:
-                if isinstance(p, dict) and p.get("gps_altitude") is not None:
-                    takeoff_gps_alt = p["gps_altitude"]
-                    break
-
-            points = []
-            for p in raw:
-                mapped = _map_telemetry_point(p, takeoff_gps_alt)
-                if mapped:
-                    points.append(mapped)
-
-            logger.info("Fetched %d telemetry points for flight %s", len(points), flight_id)
-            return points
-        except Exception as exc:
-            _log_provider_error(f"fetch telemetry for flight {flight_id}", exc)
+        raw = _unwrap_telemetry_response(body)
+        if not raw:
             return []
+
+        # Determine takeoff altitude (ground level) from the first point's gps_altitude
+        takeoff_gps_alt = None
+        for p in raw:
+            if isinstance(p, dict) and p.get("gps_altitude") is not None:
+                takeoff_gps_alt = p["gps_altitude"]
+                break
+
+        points = []
+        for p in raw:
+            mapped = _map_telemetry_point(p, takeoff_gps_alt)
+            if mapped:
+                points.append(mapped)
+
+        logger.info("Fetched %d telemetry points for flight %s", len(points), flight_id)
+        return points
 
     def sync_media(self, creds: ProviderCredentials, since: str | None = None) -> list[dict]:
         """Fetch media files from Skydio Cloud."""
-        try:
-            # Note: Skydio media endpoint returns 400 with per_page, so skip it
-            raw = self._paginate(f"{BASE_URL}/media/files", creds, default_per_page=None)
-            media = []
-            for m in raw:
-                captured_time = None
-                captured_str = m.get("captured_time") or m.get("created_at") or m.get("timestamp")
-                if captured_str:
-                    try:
-                        captured_time = datetime.fromisoformat(captured_str.replace("Z", UTC_OFFSET))
-                    except (ValueError, AttributeError):
-                        pass
+        # Note: Skydio media endpoint returns 400 with per_page, so skip it
+        raw = self._fetch_optional(f"{BASE_URL}/media/files", creds, "sync Skydio media", default_per_page=None)
+        media = []
+        for m in raw:
+            captured_time = None
+            captured_str = m.get("captured_time") or m.get("created_at") or m.get("timestamp")
+            if captured_str:
+                try:
+                    captured_time = datetime.fromisoformat(captured_str.replace("Z", UTC_OFFSET))
+                except (ValueError, AttributeError):
+                    pass
 
-                media.append({
-                    "external_uuid": m.get("uuid") or m.get("id") or m.get("file_id"),
-                    "filename": m.get("filename") or m.get("name", ""),
-                    "kind": m.get("kind") or m.get("type") or m.get("media_type", "photo"),
-                    "captured_time": captured_time,
-                    "size_bytes": m.get("size_bytes") or m.get("size"),
-                    "download_url": m.get("download_url") or m.get("url"),
-                    "api_provider": "skydio",
-                    "flight_external_id": m.get("flight_id") or m.get("flight_uuid"),
-                })
+            media.append({
+                "external_uuid": m.get("uuid") or m.get("id") or m.get("file_id"),
+                "filename": m.get("filename") or m.get("name", ""),
+                "kind": m.get("kind") or m.get("type") or m.get("media_type", "photo"),
+                "captured_time": captured_time,
+                "size_bytes": m.get("size_bytes") or m.get("size"),
+                "download_url": m.get("download_url") or m.get("url"),
+                "api_provider": "skydio",
+                "flight_external_id": m.get("flight_id") or m.get("flight_uuid"),
+            })
 
-            logger.info("Fetched %d media files from Skydio", len(media))
-            return media
-        except Exception as exc:
-            _log_provider_error("sync Skydio media", exc)
-            return []
+        logger.info("Fetched %d media files from Skydio", len(media))
+        return media
 
     def sync_docks(self, creds: ProviderCredentials) -> list[dict]:
         """Fetch docks from Skydio Cloud."""
-        try:
-            raw = self._paginate(f"{BASE_URL}/docks", creds)
-            docks = []
-            for d in raw:
-                docks.append({
-                    "serial_number": d.get("serial_number", d.get("dock_serial", "")),
-                    "name": d.get("name"),
-                    "location_name": d.get("location_name") or d.get("location"),
-                    "lat": d.get("lat") or d.get("latitude"),
-                    "lon": d.get("lon") or d.get("longitude"),
-                    "skydio_dock_serial": d.get("serial_number", d.get("dock_serial", "")),
-                    "api_provider": "skydio",
-                })
-            logger.info("Fetched %d docks from Skydio", len(docks))
-            return docks
-        except Exception as exc:
-            _log_provider_error("sync Skydio docks", exc)
-            return []
+        raw = self._fetch_optional(f"{BASE_URL}/docks", creds, "sync Skydio docks")
+        docks = []
+        for d in raw:
+            docks.append({
+                "serial_number": d.get("serial_number", d.get("dock_serial", "")),
+                "name": d.get("name"),
+                "location_name": d.get("location_name") or d.get("location"),
+                "lat": d.get("lat") or d.get("latitude"),
+                "lon": d.get("lon") or d.get("longitude"),
+                "skydio_dock_serial": d.get("serial_number", d.get("dock_serial", "")),
+                "api_provider": "skydio",
+            })
+        logger.info("Fetched %d docks from Skydio", len(docks))
+        return docks
 
     def sync_sensor_packages(self, creds: ProviderCredentials) -> list[dict]:
         """Fetch sensor packages from Skydio Cloud."""
-        try:
-            raw = self._paginate(f"{BASE_URL}/sensor_packages", creds)
-            sensors = []
-            for s in raw:
-                sensors.append({
-                    "serial_number": s.get("serial_number", ""),
-                    "name": s.get("name"),
-                    "type": s.get("type") or s.get("sensor_type"),
-                    "manufacturer": s.get("manufacturer", "Skydio"),
-                    "model": s.get("model"),
-                    "skydio_serial": s.get("serial_number", ""),
-                    "api_provider": "skydio",
-                })
-            logger.info("Fetched %d sensor packages from Skydio", len(sensors))
-            return sensors
-        except Exception as exc:
-            _log_provider_error("sync Skydio sensor packages", exc)
-            return []
+        raw = self._fetch_optional(f"{BASE_URL}/sensor_packages", creds, "sync Skydio sensor packages")
+        sensors = []
+        for s in raw:
+            sensors.append({
+                "serial_number": s.get("serial_number", ""),
+                "name": s.get("name"),
+                "type": s.get("type") or s.get("sensor_type"),
+                "manufacturer": s.get("manufacturer", "Skydio"),
+                "model": s.get("model"),
+                "skydio_serial": s.get("serial_number", ""),
+                "api_provider": "skydio",
+            })
+        logger.info("Fetched %d sensor packages from Skydio", len(sensors))
+        return sensors
 
     def sync_attachments(self, creds: ProviderCredentials) -> list[dict]:
         """Fetch attachments from Skydio Cloud."""
-        try:
-            raw = self._paginate(f"{BASE_URL}/attachments", creds)
-            attachments = []
-            for a in raw:
-                attachments.append({
-                    "serial_number": a.get("serial_number", ""),
-                    "name": a.get("name"),
-                    "type": a.get("type") or a.get("attachment_type"),
-                    "manufacturer": a.get("manufacturer", "Skydio"),
-                    "model": a.get("model"),
-                    "skydio_serial": a.get("serial_number", ""),
-                    "api_provider": "skydio",
-                })
-            logger.info("Fetched %d attachments from Skydio", len(attachments))
-            return attachments
-        except Exception as exc:
-            _log_provider_error("sync Skydio attachments", exc)
-            return []
+        raw = self._fetch_optional(f"{BASE_URL}/attachments", creds, "sync Skydio attachments")
+        attachments = []
+        for a in raw:
+            attachments.append({
+                "serial_number": a.get("serial_number", ""),
+                "name": a.get("name"),
+                "type": a.get("type") or a.get("attachment_type"),
+                "manufacturer": a.get("manufacturer", "Skydio"),
+                "model": a.get("model"),
+                "skydio_serial": a.get("serial_number", ""),
+                "api_provider": "skydio",
+            })
+        logger.info("Fetched %d attachments from Skydio", len(attachments))
+        return attachments
 
     def sync_users(self, creds: ProviderCredentials) -> list[dict]:
         """Fetch users from Skydio Cloud."""
-        try:
-            raw = self._paginate(f"{BASE_URL}/users", creds)
-            users = []
-            for u in raw:
-                name = u.get("name") or ""
-                email = u.get("email") or ""
-                uuid = u.get("uuid") or u.get("id") or ""
-                users.append({
-                    "name": name,
-                    "email": email,
-                    "uuid": str(uuid),
-                })
-            logger.info("Fetched %d users from Skydio", len(users))
-            return users
-        except Exception as exc:
-            _log_provider_error("sync Skydio users", exc)
-            return []
+        raw = self._fetch_optional(f"{BASE_URL}/users", creds, "sync Skydio users")
+        users = []
+        for u in raw:
+            name = u.get("name") or ""
+            email = u.get("email") or ""
+            uuid = u.get("uuid") or u.get("id") or ""
+            users.append({
+                "name": name,
+                "email": email,
+                "uuid": str(uuid),
+            })
+        logger.info("Fetched %d users from Skydio", len(users))
+        return users
 
 
 # Register the provider with the registry

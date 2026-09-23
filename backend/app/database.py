@@ -16,6 +16,11 @@ class Base(DeclarativeBase):
     pass
 
 
+# How long a writer waits for SQLite's single write lock before giving up with
+# "database is locked". The driver's default of 5 seconds is shorter than a
+# sync step can hold the lock.
+BUSY_TIMEOUT_MS = 30_000
+
 # Primary application database engine (SQLite, WAL mode)
 engine = create_engine(
     settings.DATABASE_URL,
@@ -37,6 +42,7 @@ def set_sqlite_pragma(dbapi_connection, connection_record):
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA journal_mode=WAL")
     cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.execute(f"PRAGMA busy_timeout={BUSY_TIMEOUT_MS}")
     cursor.close()
 
 
@@ -46,6 +52,7 @@ def set_telemetry_pragma(dbapi_connection, connection_record):
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA journal_mode=WAL")
     cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.execute(f"PRAGMA busy_timeout={BUSY_TIMEOUT_MS}")
     cursor.close()
 
 

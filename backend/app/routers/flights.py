@@ -12,6 +12,7 @@ from app.models.flight import Flight, FlightPurpose
 from app.deps import DBSession, CurrentUser, AdminUser, PilotUser, SupervisorUser
 from app.responses import responses
 from app.services.audit import log_action
+from app.services.flight_delete import delete_flights, purge_flight_telemetry
 from app.schemas.flight import (
     FlightCreate, FlightUpdate, FlightOut,
     FlightPurposeCreate, FlightPurposeOut,
@@ -73,32 +74,6 @@ def _flight_to_out(flight: Flight) -> FlightOut:
         "vehicle_name": vehicle_name,
         "can_refresh": can_refresh,
     })
-
-
-def _purge_flight_references(db, ids: list[int]) -> None:
-    if not ids: return
-    from app.models.incident import Incident
-    from app.models.checklist import ChecklistCompletion
-    from app.models.flight_approval import FlightPlan
-    from app.models.media import MediaFile
-    from app.models.photo import PhotoFlight
-    db.query(Incident).filter(Incident.flight_id.in_(ids)).update({Incident.flight_id: None}, synchronize_session=False)
-    db.query(ChecklistCompletion).filter(ChecklistCompletion.flight_id.in_(ids)).update({ChecklistCompletion.flight_id: None}, synchronize_session=False)
-    db.query(FlightPlan).filter(FlightPlan.linked_flight_id.in_(ids)).update({FlightPlan.linked_flight_id: None}, synchronize_session=False)
-    db.query(MediaFile).filter(MediaFile.flight_id.in_(ids)).delete(synchronize_session=False)
-    db.query(PhotoFlight).filter(PhotoFlight.flight_id.in_(ids)).delete(synchronize_session=False)
-
-
-def _purge_flight_telemetry(ids: list[int]) -> None:   # call AFTER main commit
-    if not ids: return
-    from app.models.telemetry import TelemetryPoint
-    from app.database import TelemetrySessionLocal
-    tdb = TelemetrySessionLocal()
-    try:
-        tdb.query(TelemetryPoint).filter(TelemetryPoint.flight_id.in_(ids)).delete(synchronize_session=False)
-        tdb.commit()
-    finally:
-        tdb.close()
 
 
 @router.get("")
@@ -514,7 +489,11 @@ def refresh_flight_from_api(flight_id: int, db: DBSession, admin: AdminUser):
         raise HTTPException(status_code=400, detail=f"{provider_name.title()} API not configured")
 
     provider = registry.get_provider(provider_name)
-    detail = provider.get_flight_detail(creds, flight.external_id)
+    try:
+        detail = provider.get_flight_detail(creds, flight.external_id)
+    except Exception as exc:
+        logger.warning("Flight detail fetch failed for %s: %s", flight.external_id, exc)
+        detail = None
 
     if not detail:
         raise HTTPException(status_code=502, detail="Could not fetch flight data from the provider")
@@ -686,13 +665,10 @@ def bulk_delete_flights(data: FlightBulkDelete, db: DBSession, admin: Supervisor
     flights = db.query(Flight).filter(Flight.id.in_(data.flight_ids)).all()
     if not flights:
         return {"ok": True, "deleted": 0}
-    ids = [f.id for f in flights]
-    _purge_flight_references(db, ids)
     log_action(db, admin.id, admin.display_name, "bulk_delete", "flight", details=f"Deleted {len(flights)} flights")
-    for flight in flights:
-        db.delete(flight)
+    ids = delete_flights(db, flights)
     db.commit()
-    _purge_flight_telemetry(ids)
+    purge_flight_telemetry(ids)
     return {"ok": True, "deleted": len(flights)}
 
 
@@ -756,11 +732,10 @@ def delete_flight(flight_id: int, db: DBSession, admin: PilotUser):
     # Telemetry lives in a separate DB and is not cascaded by the ORM, so purge
     # it explicitly AFTER the main commit; otherwise it orphans and can collide
     # when an id is reused.
-    _purge_flight_references(db, [flight_id])
     log_action(db, admin.id, admin.display_name, "delete", "flight", flight_id, flight_name)
-    db.delete(flight)
+    delete_flights(db, [flight])
     db.commit()
-    _purge_flight_telemetry([flight_id])
+    purge_flight_telemetry([flight_id])
     return {"ok": True}
 
 

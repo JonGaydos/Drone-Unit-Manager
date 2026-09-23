@@ -60,7 +60,8 @@ from app.models.training_log import TrainingLog
 from app.models.training_log_pilot import TrainingLogPilot
 from app.models.vehicle_registration import VehicleRegistration
 from app.models.operating_authority import OperatingAuthority
-from app.models.photo import Photo, PhotoPilot
+from app.models.photo import Photo, PhotoPilot, PhotoFlight, PhotoIncident
+from app.models.calendar_event import CalendarEvent
 from app.models.folder import Folder
 from app.models.audit_log import AuditLog
 from app.models.incident import Incident
@@ -122,6 +123,7 @@ EXPORT_ORDER = [
     ("flight_plans", FlightPlan),
     ("mission_logs", MissionLog),
     ("training_logs", TrainingLog),
+    ("calendar_events", CalendarEvent),
     # Tier 5: FK to flights/logs
     ("checklist_templates", ChecklistTemplate),
     ("checklist_completions", ChecklistCompletion),
@@ -135,6 +137,8 @@ EXPORT_ORDER = [
     ("incidents", Incident),
     ("alerts", Alert),
     ("equipment_checkouts", EquipmentCheckout),
+    ("photo_flights", PhotoFlight),
+    ("photo_incidents", PhotoIncident),
     # Tier 7: FK to logs
     ("mission_log_pilots", MissionLogPilot),
     ("training_log_pilots", TrainingLogPilot),

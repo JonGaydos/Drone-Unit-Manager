@@ -5,7 +5,7 @@ because flight deletion spans the MAIN db and the SEPARATE telemetry db:
 
 * POST ``/api/flights`` creates a flight (pilot or higher) and persists it.
 * POST ``/api/flights/bulk-delete`` (supervisor/admin) purges telemetry from the
-  telemetry db and, in the main db, NULLs the FK refs that ``_purge_flight_references``
+  telemetry db and, in the main db, NULLs the FK refs that ``purge_flight_references``
   nulls (Incident.flight_id, ChecklistCompletion.flight_id, FlightPlan.linked_flight_id)
   and DELETEs the ones it deletes (MediaFile, PhotoFlight), so the delete commits
   with no IntegrityError.
