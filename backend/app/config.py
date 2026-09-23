@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     DATA_DIR: Path = Path(__file__).parent.parent / "data"  # Root data directory
     UPLOAD_DIR: Path = Path("")  # File upload storage path
     MEDIA_CACHE_DIR: Path = Path("")  # Cached media (thumbnails, etc.)
-    SESSION_EXPIRE_MINUTES: int = 1440  # JWT token lifetime (24 hours)
+    SESSION_EXPIRE_MINUTES: int = 720  # JWT token lifetime (12 hours); the browser also locks after 30 min idle
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
     MAX_UPLOAD_SIZE: int = 50 * 1024 * 1024  # 50 MB, one file
     # A bulk archive is a different thing from a single upload. A full

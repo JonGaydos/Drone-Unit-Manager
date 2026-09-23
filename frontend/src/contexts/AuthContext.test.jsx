@@ -2,7 +2,9 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
-import { AuthProvider, useAuth } from '@/contexts/AuthContext'
+import {
+  AuthProvider, useAuth, IDLE_LIMIT_MS, IDLE_NOTICE_KEY, LAST_ACTIVITY_KEY,
+} from '@/contexts/AuthContext'
 
 // resetSessionExpired is module-level state in the api client; AuthContext
 // calls it on login. Re-arm it between tests so the guard stays predictable.
@@ -58,8 +60,11 @@ describe('login', () => {
 
 describe('logout', () => {
   it('clears stored token + user and resets user to null', async () => {
-    server.use(http.post('/api/auth/login', () =>
-      HttpResponse.json({ token: 't', user: { id: 1, username: 'a', role: 'admin' } })))
+    server.use(
+      http.post('/api/auth/login', () =>
+        HttpResponse.json({ token: 't', user: { id: 1, username: 'a', role: 'admin' } })),
+      http.post('/api/auth/logout', () => HttpResponse.json({ ok: true })),
+    )
     localStorage.setItem('user', JSON.stringify({ id: 1 }))
 
     const { result } = renderAuth()
@@ -74,6 +79,62 @@ describe('logout', () => {
     expect(localStorage.getItem('token')).toBeNull()
     expect(localStorage.getItem('user')).toBeNull()
     expect(result.current.user).toBeNull()
+  })
+
+  // Clearing the browser's copy alone would leave a copied token working until
+  // it expired, so logout also revokes on the server, with the old token.
+  it('revokes the session on the server with the token it held', async () => {
+    let authHeader = null
+    server.use(
+      http.post('/api/auth/login', () =>
+        HttpResponse.json({ token: 'tok-to-revoke', user: { id: 1, username: 'a', role: 'admin' } })),
+      http.post('/api/auth/logout', ({ request }) => {
+        authHeader = request.headers.get('Authorization')
+        return HttpResponse.json({ ok: true })
+      }),
+    )
+    const { result } = renderAuth()
+    await act(async () => { await result.current.login('a', 'b') })
+    act(() => { result.current.logout() })
+    await waitFor(() => expect(authHeader).toBe('Bearer tok-to-revoke'))
+  })
+})
+
+describe('idle lock', () => {
+  async function signIn() {
+    server.use(http.post('/api/auth/login', () =>
+      HttpResponse.json({ token: 't', user: { id: 1, username: 'a', role: 'pilot' } })))
+    const view = renderAuth()
+    await act(async () => { await view.result.current.login('a', 'b') })
+    return view
+  }
+
+  it('signs out a browser left idle past the limit and leaves a notice', async () => {
+    const { result } = await signIn()
+    localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now() - IDLE_LIMIT_MS - 1000))
+    act(() => { document.dispatchEvent(new Event('visibilitychange')) })
+    expect(result.current.user).toBeNull()
+    expect(localStorage.getItem('token')).toBeNull()
+    expect(sessionStorage.getItem(IDLE_NOTICE_KEY)).toBe('1')
+  })
+
+  it('keeps a recently active session signed in', async () => {
+    const { result } = await signIn()
+    localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now() - 60 * 1000))
+    act(() => { document.dispatchEvent(new Event('visibilitychange')) })
+    expect(result.current.user).not.toBeNull()
+  })
+
+  it('locks on load when the stored session went idle, without calling /auth/me', async () => {
+    let meCalled = false
+    server.use(http.get('/api/auth/me', () => { meCalled = true; return HttpResponse.json({ id: 1 }) }))
+    localStorage.setItem('token', 'old-token')
+    localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now() - IDLE_LIMIT_MS - 1000))
+    const { result } = renderAuth()
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.user).toBeNull()
+    expect(localStorage.getItem('token')).toBeNull()
+    expect(meCalled).toBe(false)
   })
 })
 

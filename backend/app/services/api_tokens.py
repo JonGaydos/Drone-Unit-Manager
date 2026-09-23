@@ -87,6 +87,9 @@ def authenticate_api_token(db: Session, raw: str, method: str, path: str) -> Use
     token = db.query(ApiToken).filter(ApiToken.token_hash == hash_token(raw)).first()
     if not token or token.revoked_at is not None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    if token.expires_at is not None and now >= token.expires_at:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
     if token.read_only and method.upper() not in READ_METHODS:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token is read-only")
     if not _path_allowed(path, token_scopes(token)):
@@ -94,7 +97,6 @@ def authenticate_api_token(db: Session, raw: str, method: str, path: str) -> Use
     user = db.query(User).filter(User.id == token.user_id, User.is_active.is_(True)).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token owner is inactive")
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
     if token.last_used_at is None or now - token.last_used_at > _LAST_USED_MIN_INTERVAL:
         token.last_used_at = now
         db.commit()

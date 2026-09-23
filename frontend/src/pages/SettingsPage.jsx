@@ -462,7 +462,10 @@ export default function SettingsPage() {
         current_password: pwForm.current_password,
         new_password: pwForm.new_password,
       })
-      setPwMsg({ ok: true, message: result.message })
+      // Changing the password revokes every earlier token, this one included;
+      // the server returns a fresh one so this session carries on.
+      if (result.token) localStorage.setItem('token', result.token)
+      setPwMsg({ ok: true, message: `${result.message}. Other signed-in devices were signed out.` })
       setPwForm({ current_password: '', new_password: '', confirm_password: '' })
     } catch (err) {
       setPwMsg({ ok: false, message: err.message })

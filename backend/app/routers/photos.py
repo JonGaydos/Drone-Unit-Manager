@@ -18,7 +18,6 @@ from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
 from PIL import Image as PILImage
 from sqlalchemy.orm import Session
 
@@ -48,7 +47,6 @@ ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".
 PILImage.MAX_IMAGE_PIXELS = 50_000_000
 
 _security = HTTPBearer(auto_error=False)
-_ALGORITHM = "HS256"
 
 # Signed image URLs replace the old ?token=<JWT> auth path. The JWT was a
 # long-lived bearer credential that landed in browser history, referer
@@ -108,14 +106,8 @@ def _authenticate_image_request(
     if _verify_photo_sig(photo_id, action, sig, exp):
         return
     if credentials:
-        try:
-            payload = jwt.decode(credentials.credentials, settings.SECRET_KEY, algorithms=[_ALGORITHM])
-            user_id = int(payload["sub"])
-        except (JWTError, KeyError, ValueError):
-            raise HTTPException(401, "Invalid token")
-        user = db.query(User).filter(User.id == user_id, User.is_active.is_(True)).first()
-        if not user:
-            raise HTTPException(401, "User not found or inactive")
+        from app.routers.auth import user_from_login_token
+        user_from_login_token(credentials.credentials, db)  # raises 401 if invalid or revoked
         return
     raise HTTPException(401, "Not authenticated")
 

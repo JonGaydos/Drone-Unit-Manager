@@ -22,11 +22,22 @@ const SCOPE_LABELS = {
 
 const fmt = (s) => (s ? new Date(s).toLocaleString() : 'Never')
 
+/** 'revoked', 'expired' or 'active'. The API sends naive UTC timestamps, so a
+ *  bare value is read as UTC before comparing with now. */
+function tokenState(t) {
+  if (t.revoked_at) return 'revoked'
+  if (t.expires_at) {
+    const iso = /[zZ]|[+-]\d\d:?\d\d$/.test(t.expires_at) ? t.expires_at : `${t.expires_at}Z`
+    if (new Date(iso) <= new Date()) return 'expired'
+  }
+  return 'active'
+}
+
 // Own component so typing re-renders only the modal, not the whole section
 // (a section re-render would recreate Modal props and steal focus).
 function CreateTokenModal({ onCreated, onClose }) {
   const toast = useToast()
-  const [form, setForm] = useState({ name: '', read_only: true, allAreas: true, scopes: [] })
+  const [form, setForm] = useState({ name: '', read_only: true, allAreas: true, scopes: [], expiresInDays: '' })
   const [saving, setSaving] = useState(false)
   const [newToken, setNewToken] = useState(null)
 
@@ -49,6 +60,7 @@ function CreateTokenModal({ onCreated, onClose }) {
         name: form.name,
         read_only: form.read_only,
         scopes: form.allAreas ? null : form.scopes,
+        expires_in_days: form.expiresInDays ? Number(form.expiresInDays) : null,
       })
       setNewToken(res.token)
       onCreated()
@@ -100,6 +112,17 @@ function CreateTokenModal({ onCreated, onClose }) {
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
               <option value="read">Read only</option>
               <option value="write">Read & write</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="token-expiry" className="block text-sm font-medium text-foreground mb-1">Expires</label>
+            <select id="token-expiry" value={form.expiresInDays}
+              onChange={e => { const v = e.target.value; setForm(f => ({ ...f, expiresInDays: v })) }}
+              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
+              <option value="">Never</option>
+              <option value="30">In 30 days</option>
+              <option value="90">In 90 days</option>
+              <option value="365">In 1 year</option>
             </select>
           </div>
           <div>
@@ -203,9 +226,12 @@ export default function ApiTokensSection() {
                 </td>
                 <td className="px-3 py-2 text-muted-foreground hidden md:table-cell">{fmt(t.last_used_at)}</td>
                 <td className="px-3 py-2">
-                  {t.revoked_at
-                    ? <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-danger-bg text-danger">revoked</span>
-                    : <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-success-bg text-success">active</span>}
+                  {tokenState(t) === 'active'
+                    ? <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-success-bg text-success">active</span>
+                    : <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-danger-bg text-danger">{tokenState(t)}</span>}
+                  {t.expires_at && !t.revoked_at && (
+                    <div className="text-xs text-muted-foreground mt-0.5">until {fmt(t.expires_at)}</div>
+                  )}
                 </td>
                 <td className="px-3 py-2 text-right">
                   {!t.revoked_at && (

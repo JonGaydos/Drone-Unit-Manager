@@ -39,7 +39,7 @@ function InstallTokenField({ value, onChange }) {
         className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-xs font-mono focus:outline-none focus:ring-2 focus:ring-ring"
       />
       <p className="text-xs text-muted-foreground mt-1">
-        Read <code className="text-foreground">install_token.txt</code> from the container's data directory (<code className="text-foreground">/app/data</code>). It is also printed in <code className="text-foreground">docker logs</code> at startup.
+        Read <code className="text-foreground">install_token.txt</code> from the container's data directory (<code className="text-foreground">/app/data</code>). It is also printed in <code className="text-foreground">docker logs</code> when first generated.
       </p>
     </div>
   )

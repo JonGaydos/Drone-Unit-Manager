@@ -396,9 +396,10 @@ def init_install_token() -> str | None:
             with open(path) as f:
                 token = f.read().strip()
             if token:
-                banner = "=" * 72
-                logger.info("\n%s\nDrone Unit Manager — install token (fresh install):\n  %s\nFile: %s\nUse the X-Install-Token header (or paste into the setup screen) to\nimport a backup before the first admin user is created.\n%s",
-                            banner, token, path, banner)
+                # Printed only when generated. Re-printing on every boot would
+                # leave a usable admin-creation secret scattered through log
+                # history; after the first boot the file is the place to read it.
+                logger.info("Install token still pending (no usable login yet). Read it from %s", path)
                 return token
         except OSError:
             pass
@@ -463,18 +464,12 @@ def _verify_admin_or_install_token(request: Request, db: Session) -> str:
       matching the token file generated at startup.
     """
     if db.query(User).count() > 0:
-        from jose import jwt, JWTError
+        from app.routers.auth import user_from_login_token
         auth_header = request.headers.get("Authorization", "")
         if not auth_header.startswith("Bearer "):
             raise HTTPException(401, "Admin authentication required to import a backup")
-        token = auth_header[len("Bearer "):]
-        try:
-            payload = jwt.decode(token, app_settings.SECRET_KEY, algorithms=["HS256"])
-            user_id = int(payload["sub"])
-        except (JWTError, KeyError, ValueError):
-            raise HTTPException(401, "Invalid token")
-        user = db.query(User).filter(User.id == user_id, User.is_active.is_(True)).first()
-        if not user or user.role != "admin":
+        user = user_from_login_token(auth_header[len("Bearer "):], db)
+        if user.role != "admin":
             raise HTTPException(403, "Backup import requires an admin account")
         return f"admin:{user.username}"
     # Fresh install path: install-token check
@@ -602,12 +597,53 @@ def backup_status(db: DBSession, admin: AdminUser):
     }
 
 
+def _audit_key(row) -> tuple:
+    """Identity of an audit entry for spotting the same event twice."""
+    get = row.get if isinstance(row, dict) else lambda k: getattr(row, k)
+    return (get("created_at"), get("action"), get("entity_type"), get("entity_id"), get("user_name"))
+
+
+def _prepare_restore_rows(db: Session, name: str, rows: list[dict]) -> list[dict]:
+    """Adjust one table's backup rows before they are inserted.
+
+    A backup file is admin-supplied and could be edited by hand, so nothing in
+    it may grant access or rewrite history:
+    - API tokens are never restored; a restored install does not accept
+      credentials minted elsewhere.
+    - Password hashes are blanked (an honest export already blanks them), so a
+      restore can never plant a known password; admins re-claim access with the
+      install token.
+    - Each user gets a fresh random token version. Users are restored by id, so
+      a login token issued before the restore would otherwise sign in as
+      whoever holds that id in the restored data.
+    - Audit entries are appended, not substituted: they lose their ids, and any
+      entry this install already holds is skipped rather than duplicated.
+    """
+    if name == "api_tokens":
+        return []
+    if name == "users":
+        for r in rows:
+            r["password_hash"] = ""
+            r["token_version"] = secrets.randbelow(2**31 - 1) + 1
+    elif name == "audit_logs":
+        cols = (AuditLog.created_at, AuditLog.action, AuditLog.entity_type,
+                AuditLog.entity_id, AuditLog.user_name)
+        existing = {_audit_key(a) for a in db.query(*cols).all()}
+        rows = [r for r in rows if _audit_key(r) not in existing]
+        for r in rows:
+            r.pop("id", None)
+    return rows
+
+
 def _restore_main_tables(db: Session, db_tables: dict) -> tuple[int, int]:
-    """Replace every main-DB table from the backup, in one atomic transaction.
+    """Replace the main-DB tables from the backup, in one atomic transaction.
 
     A restore makes the database match the backup, so each table is wiped and
     reloaded rather than appended to (appending would collide on the backup's
-    explicit ids). PRAGMA defer_foreign_keys holds every FK check until COMMIT
+    explicit ids). The exceptions are in _prepare_restore_rows: the audit trail
+    is appended to, and API tokens are dropped rather than restored.
+
+    PRAGMA defer_foreign_keys holds every FK check until COMMIT
     and, unlike PRAGMA foreign_keys, is honored inside a transaction -- so the
     wipe-and-reload is all-or-nothing, needs no per-row ordering, and never
     leaves a pooled connection with enforcement disabled (the pragma clears
@@ -617,12 +653,17 @@ def _restore_main_tables(db: Session, db_tables: dict) -> tuple[int, int]:
     tables_imported = 0
     rows_imported = 0
     try:
+        # This install's audit trail survives the restore. Its entries are
+        # detached from user ids the restore is about to replace; each keeps the
+        # user's name, so who did what is still recorded.
+        db.execute(AuditLog.__table__.update().values(user_id=None))
         # Clear children-first, reload parents-first. Ordering is not required
         # for correctness here (checks are deferred to commit), only tidy.
-        for _name, model in reversed(EXPORT_ORDER):
-            db.execute(model.__table__.delete())
+        for name, model in reversed(EXPORT_ORDER):
+            if name != "audit_logs":
+                db.execute(model.__table__.delete())
         for name, model in EXPORT_ORDER:
-            rows = _parse_rows(db_tables.get(name, []), model)
+            rows = _prepare_restore_rows(db, name, _parse_rows(db_tables.get(name, []), model))
             if not rows:
                 continue
             db.execute(model.__table__.insert(), rows)
