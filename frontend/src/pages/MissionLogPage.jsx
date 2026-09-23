@@ -5,7 +5,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Modal } from '@/components/ui/Modal'
 import { useConfirm } from '@/hooks/useConfirm'
-import { normalizeDateValue } from '@/lib/utils'
+import { normalizeDateValue, todayLocal } from '@/lib/utils'
 import { MISSION_STATUS_COLORS } from '@/lib/constants'
 import { sortVehicles, formatStatusText, sortPilotsActiveFirst, vehicleDisplayName } from '@/lib/formatters'
 import { Link } from 'react-router-dom'
@@ -17,7 +17,7 @@ const ROLE_OPTIONS = ['PIC', 'Observer', 'Spotter', 'Visual Observer', 'Support'
 
 function MissionModal({ pilots, vehicles, purposes, onSave, onClose, initial }) {
   const [form, setForm] = useState(initial || {
-    date: new Date().toISOString().slice(0, 10),
+    date: todayLocal(),
     title: '', description: '', reason: '', location: '',
     case_number: '', man_hours: '', start_time: '', end_time: '',
     vehicle_id: '', status: 'completed', notes: '',

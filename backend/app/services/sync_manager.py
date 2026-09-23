@@ -23,6 +23,7 @@ from app.models.media import MediaFile
 from app.models.pilot import Pilot
 from app.models.setting import Setting
 from app.services.flight_delete import delete_flights, purge_flight_telemetry
+from app.services.local_time import display_zone, local_flight_date
 
 logger = logging.getLogger(__name__)
 
@@ -239,6 +240,7 @@ def _upsert_flights(flights_data: list[dict], skydio_users: list[dict], db: Sess
     # below cannot see them, and a flight the provider lists twice (paging can
     # repeat a row) would otherwise be inserted twice.
     added: dict[str, Flight] = {}
+    zone = display_zone(db)
     for f_data in flights_data:
         ext_id = str(f_data.get("external_id", "")).upper().replace("-", "")
         if not ext_id:
@@ -260,7 +262,9 @@ def _upsert_flights(flights_data: list[dict], skydio_users: list[dict], db: Sess
         if pilot_name and skydio_users:
             pilot_id = _match_pilot(db, pilot_name)
 
-        flight_date = _parse_flight_date(f_data.get("date"))
+        # The provider's date field is the UTC day; the flight happened on the
+        # local day of its takeoff.
+        flight_date = local_flight_date(f_data.get("takeoff_time"), zone) or _parse_flight_date(f_data.get("date"))
 
         flight = Flight(
             external_id=ext_id,
@@ -435,7 +439,7 @@ def _sync_vehicles(provider, creds, db: Session, result: SyncResult):
     db.flush()
 
 
-def _enrich_flight_timestamps(flight: Flight, detail: dict):
+def _enrich_flight_timestamps(flight: Flight, detail: dict, zone):
     """Fill in takeoff/landing times and duration from flight detail."""
     takeoff_str = detail.get("takeoff") or detail.get("takeoff_time")
     if takeoff_str and not flight.takeoff_time:
@@ -443,7 +447,7 @@ def _enrich_flight_timestamps(flight: Flight, detail: dict):
             takeoff = datetime.fromisoformat(str(takeoff_str).replace("Z", UTC_OFFSET))
             flight.takeoff_time = takeoff
             if not flight.date:
-                flight.date = takeoff.date()
+                flight.date = local_flight_date(takeoff, zone)
         except (ValueError, AttributeError):
             pass
 
@@ -549,7 +553,7 @@ def _enrich_single_flight(flight: Flight, provider, creds, db: Session) -> bool 
     if detail is None:
         return None
 
-    _enrich_flight_timestamps(flight, detail)
+    _enrich_flight_timestamps(flight, detail, display_zone(db))
     _enrich_flight_equipment(flight, detail)
     _enrich_flight_metrics(flight, detail)
     # Geocoding is deferred to after the enrichment loop's flush so the

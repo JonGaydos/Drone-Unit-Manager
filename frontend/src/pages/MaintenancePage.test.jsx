@@ -3,6 +3,7 @@ import { screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { renderWithProviders } from '@/test/render'
+import { addDays, todayLocal } from '@/lib/utils'
 import MaintenancePage from './MaintenancePage'
 
 // Mount endpoints. Entity-list effect:
@@ -54,6 +55,17 @@ function mockMount(overrides = {}) {
 }
 
 describe('MaintenancePage', () => {
+  it('marks a task due today as due today, and one due yesterday as overdue', async () => {
+    mockMount({
+      maintenance: ({ request }) => HttpResponse.json(new URL(request.url).searchParams.get('upcoming')
+        ? [{ ...UPCOMING[0], next_due_date: todayLocal() }] : HISTORY),
+      schedules: () => HttpResponse.json([{ ...SCHEDULES[0], next_due: addDays(todayLocal(), -1) }]),
+    })
+    renderWithProviders(<MaintenancePage />, { role: 'admin' })
+    expect(await screen.findByText('(Due today)')).toBeInTheDocument()
+    expect(await screen.findByText('(Overdue)')).toBeInTheDocument()
+  })
+
   it('renders without crashing', async () => {
     mockMount()
     renderWithProviders(<MaintenancePage />, { role: 'admin' })

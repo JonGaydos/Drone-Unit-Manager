@@ -16,6 +16,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.models.flight import Flight
+from app.services.local_time import display_zone, local_flight_date
 from app.models.telemetry import TelemetryPoint
 
 from app.logsafe import for_log
@@ -681,8 +682,13 @@ def _match_vehicle(db: Session, serial: str):
 def _flight_from_metadata(meta: dict, data_source: str, user_id, db: Session,
                           has_telemetry: bool = True) -> Flight:
     """The Flight row a parsed log describes, not yet added to the session."""
+    flight_date = meta.get("date")
+    # Parsed logs carry naive UTC takeoffs, except Parrot's, which are already
+    # local wall-clock time and so already give the local date.
+    if meta.get("takeoff_time") and data_source != "parrot_gutma":
+        flight_date = local_flight_date(meta["takeoff_time"], display_zone(db))
     flight = Flight(
-        date=meta.get("date"),
+        date=flight_date,
         takeoff_time=meta.get("takeoff_time"),
         landing_time=meta.get("landing_time"),
         duration_seconds=meta.get("duration_seconds"),

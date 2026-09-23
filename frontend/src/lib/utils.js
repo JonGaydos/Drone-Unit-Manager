@@ -102,21 +102,83 @@ export function formatDate(iso) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+// Calendar dates are handled as 'YYYY-MM-DD' strings. `new Date('2026-01-01')`
+// is UTC midnight, which is still December 31 anywhere in the Americas, and
+// `toISOString().slice(0, 10)` is the UTC day, which is tomorrow every evening.
+
+const YMD = /^\d{4}-\d{2}-\d{2}$/
+
+/** 'YYYY-MM-DD' of an instant in the display timezone (browser-local if unset). */
+function zonedYmd(d, tz = getDisplayTimezone()) {
+  return withZoneFallback(tz, zone => {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit',
+    }).formatToParts(d)
+    const g = t => parts.find(p => p.type === t).value
+    return `${g('year')}-${g('month')}-${g('day')}`
+  })
+}
+
 /**
- * Compute the whole-day delta from local midnight today to a date-only string.
- * Parses date-only strings as LOCAL midnight (appends T00:00:00 like formatDate)
- * to avoid UTC-parsing off-by-one errors in US timezones.
+ * Today's date where the unit is, as 'YYYY-MM-DD', for date inputs and ranges.
+ * @returns {string}
+ */
+export function todayLocal() {
+  return zonedYmd(new Date())
+}
+
+/**
+ * The calendar date of a value: a date-only string is already one; a datetime
+ * is an instant, dated in the display timezone.
+ * @param {string} value - 'YYYY-MM-DD' or an ISO 8601 datetime.
+ * @returns {string|null} 'YYYY-MM-DD', or null if empty/invalid.
+ */
+export function localDateOf(value) {
+  if (!value) return null
+  if (!value.includes('T')) return YMD.test(value.slice(0, 10)) ? value.slice(0, 10) : null
+  const d = new Date(value)
+  return Number.isNaN(d.getTime()) ? null : zonedYmd(d)
+}
+
+function dayNumber(ymd) {
+  const [y, m, d] = ymd.split('-').map(Number)
+  return Date.UTC(y, m - 1, d) / 86400000
+}
+
+/**
+ * A calendar date plus a number of days (negative to go back).
+ * @param {string} ymd - 'YYYY-MM-DD'.
+ * @param {number} days
+ * @returns {string} 'YYYY-MM-DD'.
+ */
+export function addDays(ymd, days) {
+  const [y, m, d] = ymd.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10)
+}
+
+/**
+ * A calendar date plus a number of months, kept within the target month
+ * (January 31 plus one month is February 28 or 29, not March).
+ * @param {string} ymd - 'YYYY-MM-DD'.
+ * @param {number} months
+ * @returns {string} 'YYYY-MM-DD'.
+ */
+export function addMonths(ymd, months) {
+  const [y, m, d] = ymd.split('-').map(Number)
+  const lastDay = new Date(Date.UTC(y, m - 1 + months + 1, 0)).getUTCDate()
+  return new Date(Date.UTC(y, m - 1 + months, Math.min(d, lastDay))).toISOString().slice(0, 10)
+}
+
+/**
+ * Whole days from today (where the unit is) to a date. Plain calendar
+ * arithmetic, so a date that is today is 0 at any hour.
  * @param {string} iso - ISO 8601 date or datetime string.
  * @returns {number|null} Whole-day delta (negative if past), or null if empty/invalid.
  */
 export function daysUntil(iso) {
-  if (!iso) return null
-  const d = new Date(iso.includes('T') ? iso : iso + 'T00:00:00')
-  if (Number.isNaN(d.getTime())) return null
-  const target = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  return Math.round((target - today) / 86400000)
+  const ymd = localDateOf(iso)
+  if (!ymd) return null
+  return dayNumber(ymd) - dayNumber(todayLocal())
 }
 
 /**

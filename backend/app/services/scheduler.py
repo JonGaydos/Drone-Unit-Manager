@@ -136,13 +136,16 @@ def _run_scheduled_telemetry_sync():
 
 def _is_pref_due_now(pref, now, current_hour, db) -> bool:
     """Check if a notification preference is due to send right now."""
-    from datetime import datetime, date as date_type
+    from datetime import datetime, date as date_type, timezone
 
     pref_hour = pref.send_time.split(":")[0] if pref.send_time else "07"
     if pref_hour != current_hour:
         return False
 
-    today_start = datetime.combine(date_type.today(), datetime.min.time())
+    # sent_at is stored in UTC; local midnight has to be too, or a digest sent
+    # yesterday evening reads as sent today and today's is skipped.
+    today_start = (datetime.combine(date_type.today(), datetime.min.time())
+                   .astimezone(timezone.utc).replace(tzinfo=None))
     already_sent = db.query(NotificationLog).filter(
         NotificationLog.user_id == pref.user_id,
         NotificationLog.sent_at >= today_start,

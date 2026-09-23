@@ -12,6 +12,7 @@ from starlette.concurrency import run_in_threadpool
 from sqlalchemy.orm import joinedload
 
 from app.models.flight import Flight
+from app.services.local_time import display_zone
 from app.models.pilot import Pilot
 from app.models.vehicle import Vehicle
 from app.models.maintenance import MaintenanceRecord
@@ -83,20 +84,6 @@ SKYDIO_LOCAL_TAKEOFF_COL = "Local Takeoff Time"
 EXCEL_EXTENSIONS = ('.xlsx', '.xls')
 
 
-def _resolve_display_tz(db):
-    """The configured display timezone, falling back to TZ env then Central."""
-    import os
-    from zoneinfo import ZoneInfo
-    from app.models.setting import Setting
-
-    tz_row = db.query(Setting).filter(Setting.key == "display_timezone").first()
-    tz_name = (tz_row.value if tz_row and tz_row.value else None) or os.environ.get("TZ", "America/Chicago")
-    try:
-        return ZoneInfo(tz_name)
-    except Exception:
-        return ZoneInfo("America/Chicago")
-
-
 def _csv_fmt_utc(dt):
     """A stored (already-UTC) datetime rendered as-is, or empty."""
     return dt.strftime("%Y-%m-%d %H:%M") if dt else ""
@@ -158,7 +145,7 @@ def export_flights_csv(
     stored UTC values; Local Takeoff Time is converted to the configured
     display timezone.
     """
-    local_tz = _resolve_display_tz(db)
+    local_tz = display_zone(db)
 
     q = db.query(Flight).options(joinedload(Flight.pilot), joinedload(Flight.vehicle))
     if date_from:

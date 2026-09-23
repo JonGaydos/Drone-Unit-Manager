@@ -6,6 +6,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Modal } from '@/components/ui/Modal'
 import { useConfirm } from '@/hooks/useConfirm'
 import { sortVehicles, sortPilotsActiveFirst, vehicleDisplayName } from '@/lib/formatters'
+import { todayLocal } from '@/lib/utils'
 import { Link } from 'react-router-dom'
 import LinkedPhotos from '@/components/LinkedPhotos'
 import {
@@ -61,7 +62,7 @@ function formatCategory(cat) {
 
 function IncidentModal({ pilots, vehicles, flights, onSave, onClose }) {
   const [form, setForm] = useState({
-    date: new Date().toISOString().slice(0, 10),
+    date: todayLocal(),
     title: '', severity: 'minor', category: 'other', description: '',
     location: '', lat: '', lon: '', flight_id: '', pilot_id: '', vehicle_id: '',
     equipment_grounded: false, damage_description: '', estimated_cost: '', notes: '',
@@ -231,7 +232,7 @@ function ResolveModal({ incident, onSave, onClose }) {
   const [form, setForm] = useState({
     status: 'resolved',
     resolution: incident.resolution || '',
-    resolution_date: new Date().toISOString().slice(0, 10),
+    resolution_date: todayLocal(),
     corrective_actions: incident.corrective_actions || '',
   })
   const [saving, setSaving] = useState(false)

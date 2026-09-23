@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { api } from '@/api/client'
-import { normalizeDateValue } from '@/lib/utils'
+import { addDays, normalizeDateValue, todayLocal } from '@/lib/utils'
 import { sortVehicles, sortPilotsActiveFirst } from '@/lib/formatters'
 import { FileBarChart, Upload, Loader2, Download, FileText, FileDown } from 'lucide-react'
 
@@ -138,18 +138,16 @@ export default function ReportsPage() {
   const clearAllVehicles = () => setSelectedVehicles([])
 
   const applyDatePreset = (preset) => {
-    const fmt = (d) => d.toISOString().slice(0, 10)
-    const today = new Date()
+    const today = todayLocal()
+    const year = Number(today.slice(0, 4))
     if (preset === 'last30') {
-      const from = new Date(); from.setDate(from.getDate() - 30)
-      setDateFrom(fmt(from)); setDateTo(fmt(today))
+      setDateFrom(addDays(today, -30)); setDateTo(today)
     } else if (preset === 'last90') {
-      const from = new Date(); from.setDate(from.getDate() - 90)
-      setDateFrom(fmt(from)); setDateTo(fmt(today))
+      setDateFrom(addDays(today, -90)); setDateTo(today)
     } else if (preset === 'ytd') {
-      setDateFrom(`${today.getFullYear()}-01-01`); setDateTo(fmt(today))
+      setDateFrom(`${year}-01-01`); setDateTo(today)
     } else if (preset === 'lastyear') {
-      const ly = today.getFullYear() - 1
+      const ly = year - 1
       setDateFrom(`${ly}-01-01`); setDateTo(`${ly}-12-31`)
     } else if (preset === 'clear') {
       setDateFrom(''); setDateTo('')
