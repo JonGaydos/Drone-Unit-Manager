@@ -4,7 +4,7 @@ Supports attaching documents to pilots, vehicles, and certifications with
 file-type validation and path-traversal protection.
 """
 
-import os
+import hashlib
 from pathlib import Path
 from typing import Annotated
 
@@ -14,10 +14,13 @@ from pydantic import BaseModel
 
 from app.config import settings
 from app.constants import DOCUMENT_NOT_FOUND, ACCESS_DENIED
-from app.deps import DBSession, CurrentUser, PilotUser
+from app.deps import AdminUser, DBSession, CurrentUser, PilotUser, SupervisorUser
 from app.models.document import Document
+from app.models.user import User
 from app.schemas.document import DocumentOut
 from app.responses import responses
+from app.services import evidence
+from app.services.audit import compute_changes, log_action
 from app.services.file_validation import is_inline_safe, mime_for_filename, user_file_headers
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
@@ -47,6 +50,26 @@ def _doc_to_out(doc: Document) -> DocumentOut:
     out = DocumentOut.model_validate(doc)
     out.view_url = f"/api/documents/{doc.id}/view"
     return out
+
+
+def _live_document(db, doc_id: int) -> Document:
+    """The document, unless it is missing or deleted.
+
+    Raises:
+        HTTPException: 404 either way; a deleted document is out of reach until restored.
+    """
+    doc = db.query(Document).filter(Document.id == doc_id, Document.deleted_at.is_(None)).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail=DOCUMENT_NOT_FOUND)
+    return doc
+
+
+def _document_or_404(db, doc_id: int) -> Document:
+    """The document whether deleted or not, for the restore, hold and purge routes."""
+    doc = db.query(Document).filter(Document.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail=DOCUMENT_NOT_FOUND)
+    return doc
 
 
 def _document_entity_fks(entity_type: str, entity_id):
@@ -159,15 +182,16 @@ async def upload_document(
         file_path=str(dest),
         mime_type=mime_for_filename(dest.name),
         file_size_bytes=len(contents),
+        sha256=hashlib.sha256(contents).hexdigest(),
         notes=notes,
         folder_id=folder_id,
     )
     db.add(doc)
     db.flush()
-    from app.services.audit import log_action
     log_action(db, admin.id, admin.display_name, "upload", "document", doc.id, title,
                details=f"{dest.name}, {len(contents)} bytes, {entity_type}"
-                       + (f" #{entity_id}" if entity_id is not None else ""))
+                       + (f" #{entity_id}" if entity_id is not None else "")
+                       + f", sha256 {doc.sha256}")
     db.commit()
     db.refresh(doc)
     return _doc_to_out(doc)
@@ -188,7 +212,7 @@ def list_documents(
     Returns:
         List of document records, newest first.
     """
-    q = db.query(Document)
+    q = db.query(Document).filter(Document.deleted_at.is_(None))
     if entity_type:
         q = q.filter(Document.entity_type == entity_type)
     if entity_id:
@@ -201,7 +225,7 @@ def list_documents(
 def view_document(
     doc_id: int,
     db: DBSession,
-    _user: CurrentUser,
+    user: CurrentUser,
 ):
     """Serve a document file for viewing or download.
 
@@ -214,9 +238,7 @@ def view_document(
     Returns:
         FileResponse with the document contents.
     """
-    doc = db.query(Document).filter(Document.id == doc_id).first()
-    if not doc:
-        raise HTTPException(status_code=404, detail=DOCUMENT_NOT_FOUND)
+    doc = _live_document(db, doc_id)
 
     # Path traversal prevention
     resolved = Path(doc.file_path).resolve()
@@ -232,6 +254,8 @@ def view_document(
     # type, so a record saved with a spoofed type cannot be served as HTML.
     # PDFs and images display inline; everything else downloads.
     mime = mime_for_filename(doc.filename or str(file_path))
+    log_action(db, user.id, user.display_name, "view", "document", doc.id, doc.title or doc.filename)
+    db.commit()
     return FileResponse(
         path=str(file_path),
         media_type=mime,
@@ -265,11 +289,8 @@ def update_document(
     Returns:
         The updated document record.
     """
-    doc = db.query(Document).filter(Document.id == doc_id).first()
-    if not doc:
-        raise HTTPException(status_code=404, detail=DOCUMENT_NOT_FOUND)
+    doc = _live_document(db, doc_id)
     update_fields = data.model_dump(exclude_unset=True)
-    from app.services.audit import compute_changes, log_action
     changes = compute_changes(doc, update_fields, list(update_fields))
     for key, value in update_fields.items():
         setattr(doc, key, value)
@@ -281,23 +302,64 @@ def update_document(
     return _doc_to_out(doc)
 
 
-@router.delete("/{doc_id}", responses=responses(404))
+@router.delete("/{doc_id}", responses=responses(404, 409))
 def delete_document(
     doc_id: int,
     db: DBSession,
     admin: PilotUser,
 ):
-    """Delete a document record and remove the file from disk."""
-    from app.services.audit import log_action
-    doc = db.query(Document).filter(Document.id == doc_id).first()
-    if not doc:
-        raise HTTPException(status_code=404, detail=DOCUMENT_NOT_FOUND)
-
-    file_path = Path(doc.file_path)
-    if file_path.exists():
-        os.remove(file_path)
-
+    """Move a document to Recently deleted. The file stays, so a supervisor can
+    restore it; only an admin purge removes it for good."""
+    doc = _live_document(db, doc_id)
+    evidence.soft_delete(doc, admin)
     log_action(db, admin.id, admin.display_name, "delete", "document", doc_id, doc.title or doc.filename)
+    db.commit()
+    return {"ok": True}
+
+
+@router.get("/deleted", responses=responses(401, 403))
+def list_deleted_documents(db: DBSession, _user: SupervisorUser):
+    """Deleted documents, newest deletion first."""
+    docs = (db.query(Document).filter(Document.deleted_at.is_not(None))
+            .order_by(Document.deleted_at.desc()).all())
+    user_ids = {d.deleted_by_id for d in docs if d.deleted_by_id}
+    users = {u.id: u for u in db.query(User).filter(User.id.in_(user_ids)).all()} if user_ids else {}
+    return [evidence.deleted_row(d, d.title or d.filename, users) for d in docs]
+
+
+@router.post("/{doc_id}/restore", responses=responses(401, 403, 404, 409))
+def restore_document(doc_id: int, db: DBSession, user: SupervisorUser):
+    """Bring a deleted document back where it was."""
+    doc = _document_or_404(db, doc_id)
+    evidence.restore(doc)
+    log_action(db, user.id, user.display_name, "restore", "document", doc_id, doc.title or doc.filename)
+    db.commit()
+    return {"ok": True}
+
+
+@router.put("/{doc_id}/hold", responses=responses(401, 403, 404))
+def set_document_hold(doc_id: int, data: evidence.HoldUpdate, db: DBSession, user: SupervisorUser):
+    """Place or release a legal hold. A held document cannot be deleted or purged."""
+    doc = _document_or_404(db, doc_id)
+    if doc.legal_hold != data.legal_hold:
+        doc.legal_hold = data.legal_hold
+        log_action(db, user.id, user.display_name, "hold" if data.legal_hold else "release_hold",
+                   "document", doc_id, doc.title or doc.filename)
+        db.commit()
+    return {"ok": True, "legal_hold": doc.legal_hold}
+
+
+@router.delete("/{doc_id}/purge", responses=responses(401, 403, 404, 409))
+def purge_document(doc_id: int, db: DBSession, admin: AdminUser):
+    """Remove a deleted document for good, file and record. Refused unless the
+    document is already deleted and not on legal hold."""
+    doc = _document_or_404(db, doc_id)
+    evidence.check_purgeable(doc)
+    file_path = doc.file_path
+    log_action(db, admin.id, admin.display_name, "purge", "document", doc_id, doc.title or doc.filename,
+               details=f"sha256 {doc.sha256 or 'not recorded'}")
     db.delete(doc)
     db.commit()
+    # The file goes only once the record is gone, so a failed commit leaves both.
+    evidence.remove_file(file_path, settings.UPLOAD_DIR)
     return {"ok": True}

@@ -5,10 +5,11 @@ import { useToast } from '@/contexts/ToastContext'
 import {
   FolderOpen, FolderPlus, FileText, ChevronRight, ChevronDown,
   Trash2, Edit2, X, File, Search, Home,
-  FileImage, FileSpreadsheet, Save, FolderInput, Upload
+  FileImage, FileSpreadsheet, Save, FolderInput, Upload, Lock, History
 } from 'lucide-react'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import DocumentUploadForm from '@/components/DocumentUploadForm'
+import { RecentlyDeletedModal } from '@/components/RecentlyDeletedModal'
 
 export default function DocumentStoragePage() {
   const [folders, setFolders] = useState([])
@@ -29,6 +30,7 @@ export default function DocumentStoragePage() {
   const [search, setSearch] = useState('')
   const [showUpload, setShowUpload] = useState(false)
   const [confirmDeleteFolder, setConfirmDeleteFolder] = useState(null)
+  const [showDeleted, setShowDeleted] = useState(false)
   const { isPilot, isSupervisor } = useAuth()
   const toast = useToast()
 
@@ -211,6 +213,21 @@ export default function DocumentStoragePage() {
     } catch (err) {
       toast.error(err.message || 'An error occurred')
     }
+  }
+
+  const toggleHold = async (doc) => {
+    try {
+      await api.put(`/documents/${doc.id}/hold`, { legal_hold: !doc.legal_hold })
+      setDocuments(prev => prev.map(d => (d.id === doc.id ? { ...d, legal_hold: !doc.legal_hold } : d)))
+    } catch (err) {
+      toast.error(err.message || 'Could not change the legal hold')
+    }
+  }
+
+  const refreshAfterRestore = () => {
+    loadFolders()
+    loadAllDocuments()
+    if (selectedFolder && selectedFolder !== 'unfiled') loadDocuments(selectedFolder)
   }
 
   const formatSize = (bytes) => {
@@ -434,6 +451,14 @@ export default function DocumentStoragePage() {
             )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            {isSupervisor && (
+              <button
+                onClick={() => setShowDeleted(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-xs hover:opacity-90"
+              >
+                <History className="w-3.5 h-3.5" /> Recently deleted
+              </button>
+            )}
             {selectedFolder && (
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
@@ -540,6 +565,9 @@ export default function DocumentStoragePage() {
                             {doc.title && doc.filename && doc.title !== doc.filename && (
                               <p className="text-xs text-muted-foreground truncate">{doc.filename}</p>
                             )}
+                            {doc.legal_hold && (
+                              <p className="flex items-center gap-1 text-xs text-amber-500"><Lock className="w-3 h-3" /> Legal hold</p>
+                            )}
                           </div>
                         )}
                       </div>
@@ -569,6 +597,16 @@ export default function DocumentStoragePage() {
                         >
                           View
                         </button>
+                        {isSupervisor && (
+                          <button
+                            onClick={() => toggleHold(doc)}
+                            className={`p-1 rounded hover:bg-amber-500/10 ${doc.legal_hold ? 'text-amber-500' : 'text-muted-foreground hover:text-amber-500'}`}
+                            title={doc.legal_hold ? 'Release legal hold' : 'Place on legal hold'}
+                            aria-label={doc.legal_hold ? 'Release legal hold' : 'Place on legal hold'}
+                          >
+                            <Lock className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         {isPilot && (
                           <>
                             <button
@@ -621,6 +659,7 @@ export default function DocumentStoragePage() {
         )}
       </div>
 
+      <RecentlyDeletedModal kind="documents" open={showDeleted} onClose={() => setShowDeleted(false)} onChanged={refreshAfterRestore} />
       <ConfirmDialog
         open={!!confirmDeleteFolder}
         onClose={() => setConfirmDeleteFolder(null)}

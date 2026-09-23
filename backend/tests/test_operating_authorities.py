@@ -72,11 +72,14 @@ def test_create_list_update_delete(client, admin_headers):
     assert client.get("/api/operating-authorities", headers=admin_headers).json() == []
 
 
-def test_delete_removes_attached_documents(client, db, admin_headers, tmp_path):
+def test_delete_removes_attached_documents(client, db, admin_headers, tmp_path, monkeypatch):
     """Documents attach by (entity_type, entity_id) and SQLite reuses row ids, so
     a deleted authority must take its paperwork with it."""
+    from app.config import settings
     from app.models.document import Document
 
+    # Files are only removed from inside the upload directory.
+    monkeypatch.setattr(settings, "UPLOAD_DIR", tmp_path)
     a = _seed_authority(db, expiry_date=date.today() + timedelta(days=100))
     stored = tmp_path / "coa.pdf"
     stored.write_bytes(b"%PDF-1.4 test")
