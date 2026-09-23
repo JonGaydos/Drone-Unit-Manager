@@ -291,6 +291,44 @@ describe('download filename parsing', () => {
   })
 })
 
+// A blob: URL document runs on the app's origin, so openFile may only open
+// types that cannot carry script. Anything else must download, even when the
+// server labels it text/html.
+describe('openFile', () => {
+  it.each(['application/pdf', 'image/png', 'image/jpeg'])('opens %s in a new tab', async (type) => {
+    const open = vi.fn()
+    vi.stubGlobal('open', open)
+    const { spy, getAnchor } = spyOnAnchor()
+    server.use(http.get('/api/documents/1/view', () =>
+      new HttpResponse('data', { headers: { 'Content-Type': type } })))
+    await api.openFile('/documents/1/view')
+    expect(open).toHaveBeenCalledTimes(1)
+    expect(getAnchor()).toBeNull()
+    spy.mockRestore()
+  })
+
+  it.each(['text/html', 'text/plain', 'image/svg+xml', 'application/octet-stream'])(
+    'downloads %s instead of opening it', async (type) => {
+      const open = vi.fn()
+      vi.stubGlobal('open', open)
+      const { spy, getAnchor } = spyOnAnchor()
+      server.use(http.get('/api/documents/1/view', () =>
+        new HttpResponse('<script>x</script>', {
+          headers: { 'Content-Type': type, 'Content-Disposition': 'attachment; filename="memo.txt"' },
+        })))
+      await api.openFile('/documents/1/view')
+      expect(open).not.toHaveBeenCalled()
+      expect(getAnchor().download).toBe('memo.txt')
+      expect(getAnchor().click).toHaveBeenCalled()
+      spy.mockRestore()
+    })
+
+  it('throws on a non-OK response', async () => {
+    server.use(http.get('/api/documents/1/view', () => new HttpResponse(null, { status: 404 })))
+    await expect(api.openFile('/documents/1/view')).rejects.toThrow('Could not open file')
+  })
+})
+
 describe('upload', () => {
   it('posts multipart form-data (browser-set Content-Type) and returns JSON', async () => {
     let ct = null

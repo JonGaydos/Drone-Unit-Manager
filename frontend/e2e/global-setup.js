@@ -1,5 +1,7 @@
 import { chromium, request as playwrightRequest } from '@playwright/test'
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import path from 'node:path'
 import {
   apiLogin, createUser, createVehicle, createPilotRecord,
   createFlight, createCertType, createPilotCertification,
@@ -8,6 +10,14 @@ import {
 const APP = 'http://localhost:5173'
 const ADMIN = { username: 'e2eadmin', password: 'E2eAdminPass1', display: 'E2E Admin', org: 'E2E Unit' }
 const PILOT = { username: 'e2epilot', password: 'E2ePilotPass1' }
+
+// start-backend.mjs points the e2e backend's DATA_DIR here; the backend writes
+// install_token.txt into it at startup while no admin exists.
+const E2E_DATA_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '.e2e-data')
+
+function readInstallToken() {
+  return readFileSync(path.join(E2E_DATA_DIR, 'install_token.txt'), 'utf8').trim()
+}
 
 export default async function globalSetup() {
   mkdirSync('e2e/.auth', { recursive: true })
@@ -24,10 +34,12 @@ export default async function globalSetup() {
   await page.getByLabel('Email Address').fill('e2eadmin@example.com')
   await page.getByRole('button', { name: /Continue/ }).click()
 
-  // Step 2: Create Admin Account.
+  // Step 2: Create Admin Account. Creating the first admin needs the install
+  // token, which an operator reads from the data directory; so does this run.
   await page.getByLabel('Username').fill(ADMIN.username)
   await page.getByLabel('Password', { exact: true }).fill(ADMIN.password)
   await page.getByLabel('Confirm Password').fill(ADMIN.password)
+  await page.getByLabel('Install Token').fill(readInstallToken())
   await page.getByRole('button', { name: 'Create Account & Start' }).click()
 
   // Step 3: optional setup ("Account created"). Skip everything and proceed.

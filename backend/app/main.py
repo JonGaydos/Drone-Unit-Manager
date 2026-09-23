@@ -169,7 +169,7 @@ SECURITY_HEADERS = {
     "Content-Security-Policy": (
         "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data: blob: https:; connect-src 'self'; font-src 'self' data:; "
-        "frame-ancestors 'self'; base-uri 'self'; object-src 'none'"
+        "frame-ancestors 'self'; base-uri 'self'; object-src 'none'; form-action 'self'"
     ),
 }
 

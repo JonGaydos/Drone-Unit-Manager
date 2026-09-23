@@ -165,14 +165,7 @@ export default function DocumentUpload({ entityType, entityId, folderId }) {
                 <button
                   onClick={async () => {
                     try {
-                      const res = await fetch(doc.view_url, {
-                        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-                      })
-                      if (!res.ok) throw new Error('Failed to fetch document')
-                      const blob = await res.blob()
-                      const url = URL.createObjectURL(blob)
-                      globalThis.open(url, '_blank')
-                      setTimeout(() => URL.revokeObjectURL(url), 60000)
+                      await api.openFile(`/documents/${doc.id}/view`)
                     } catch (err) {
                       toast.error(err.message || 'Could not open document')
                     }

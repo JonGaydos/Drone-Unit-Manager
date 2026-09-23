@@ -419,10 +419,13 @@ export default function FlightPlansPage() {
                         </button>
                         {isSupervisor && plan.status === 'pending' && (
                           <>
-                            <button onClick={() => handleApprove(plan.id)}
-                              className="p-1.5 text-muted-foreground hover:text-emerald-400 rounded-lg hover:bg-emerald-500/10" title="Approve">
-                              <Check className="w-4 h-4" />
-                            </button>
+                            {/* No self-approval: the server rejects approving a plan you submitted. */}
+                            {plan.submitted_by_id !== user?.id && (
+                              <button onClick={() => handleApprove(plan.id)}
+                                className="p-1.5 text-muted-foreground hover:text-emerald-400 rounded-lg hover:bg-emerald-500/10" title="Approve">
+                                <Check className="w-4 h-4" />
+                              </button>
+                            )}
                             <button onClick={() => setDenyTarget(plan)}
                               className="p-1.5 text-muted-foreground hover:text-red-400 rounded-lg hover:bg-red-500/10" title="Deny">
                               <Ban className="w-4 h-4" />

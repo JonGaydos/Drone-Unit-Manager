@@ -345,7 +345,8 @@ export default function FlightsPage() {
       purpose: flight.purpose || '',
       date: flight.date || '',
       duration_seconds: flight.duration_seconds || '',
-      review_status: flight.review_status || 'needs_review',
+      // Review status is a supervisor decision; a pilot's edit does not carry it.
+      ...(isSupervisor ? { review_status: flight.review_status || 'needs_review' } : {}),
     })
   }
 
@@ -618,7 +619,8 @@ export default function FlightsPage() {
           <tbody>
             {filtered.map(f => editingId === f.id ? (
               <FlightEditRow key={f.id} f={f} editForm={editForm} setEditForm={setEditForm}
-                pilots={pilots} purposes={purposes} onSave={saveEditing} onCancel={cancelEditing} selectable={isSupervisor} />
+                pilots={pilots} purposes={purposes} onSave={saveEditing} onCancel={cancelEditing} selectable={isSupervisor}
+                canReview={isSupervisor} />
             ) : (
               <tr key={f.id} className="border-b border-border/50 hover:bg-accent/30 transition-colors">
                 {isSupervisor && (
@@ -745,7 +747,7 @@ export default function FlightsPage() {
   )
 }
 
-function FlightEditRow({ f, editForm, setEditForm, pilots, purposes, onSave, onCancel, selectable }) {
+function FlightEditRow({ f, editForm, setEditForm, pilots, purposes, onSave, onCancel, selectable, canReview }) {
   return (
     <tr className="border-b border-border/50 bg-accent/20">
       {selectable && <td className="px-4 py-2" />}
@@ -777,12 +779,20 @@ function FlightEditRow({ f, editForm, setEditForm, pilots, purposes, onSave, onC
       <td className="px-4 py-2 hidden lg:table-cell text-foreground">{f.takeoff_address || '—'}</td>
       <td className="px-4 py-2">
         <div className="flex flex-col gap-0.5 items-start">
-          <button type="button" onClick={() => setEditForm({...editForm, review_status: editForm.review_status === 'reviewed' ? 'needs_review' : 'reviewed'})}
-            className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium cursor-pointer ${
-              editForm.review_status === 'needs_review' ? 'bg-amber-500/15 text-amber-400' : 'bg-emerald-500/15 text-emerald-400'
+          {canReview ? (
+            <button type="button" onClick={() => setEditForm({...editForm, review_status: editForm.review_status === 'reviewed' ? 'needs_review' : 'reviewed'})}
+              className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium cursor-pointer ${
+                editForm.review_status === 'needs_review' ? 'bg-amber-500/15 text-amber-400' : 'bg-emerald-500/15 text-emerald-400'
+              }`}>
+              {editForm.review_status === 'needs_review' ? 'Needs Review' : 'Reviewed'}
+            </button>
+          ) : (
+            <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+              f.review_status === 'needs_review' ? 'bg-amber-500/15 text-amber-400' : 'bg-emerald-500/15 text-emerald-400'
             }`}>
-            {editForm.review_status === 'needs_review' ? 'Needs Review' : 'Reviewed'}
-          </button>
+              {f.review_status === 'needs_review' ? 'Needs Review' : 'Reviewed'}
+            </span>
+          )}
           {f.telemetry_synced && <span className="text-[10px] leading-none text-emerald-400">Telemetry ✓</span>}
           {!f.telemetry_synced && f.external_id && <span className="text-[10px] leading-none text-muted-foreground">Telemetry pending</span>}
         </div>

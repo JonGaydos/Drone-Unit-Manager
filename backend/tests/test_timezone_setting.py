@@ -1,10 +1,15 @@
 """display_timezone setting: setup capture, public read, admin write."""
+from app.config import settings as app_settings
 from app.models.setting import Setting
+from app.routers.backup import _install_token_path
 from tests.conftest import ADMIN_PASSWORD
 
 
-def test_setup_persists_display_timezone(client, db):
-    resp = client.post("/api/auth/setup", json={
+def test_setup_persists_display_timezone(client, db, tmp_path, monkeypatch):
+    monkeypatch.setattr(app_settings, "DATA_DIR", tmp_path)
+    with open(_install_token_path(), "w") as f:
+        f.write("tz-install-token")
+    resp = client.post("/api/auth/setup", headers={"X-Install-Token": "tz-install-token"}, json={
         "username": "admin",
         "password": ADMIN_PASSWORD,
         "display_name": "Admin",

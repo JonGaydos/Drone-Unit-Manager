@@ -201,14 +201,53 @@ def get_flight_plan(plan_id: int, db: DBSession, user: CurrentUser):
     return _enrich(plan, db)
 
 
+def _validate_altitude(value: Optional[float]) -> None:
+    """Enforce the FAA Part 107 400 ft AGL ceiling on a planned altitude."""
+    if value is None:
+        return
+    if value < 0:
+        raise HTTPException(status_code=422, detail="Altitude cannot be negative")
+    if value > 400:
+        raise HTTPException(status_code=422, detail="Altitude exceeds 400 ft AGL limit (FAA Part 107)")
+
+
+# What a reviewer's approval or denial covered. Changing any of these after the
+# decision sends the plan back for review; bookkeeping (notes, the linked
+# executed flight) does not.
+REVIEWED_PLAN_FIELDS = frozenset({
+    "title", "date_planned", "pilot_id", "vehicle_id", "location", "lat", "lon",
+    "purpose", "case_number", "description", "max_altitude_planned",
+    "estimated_duration_min", "checklist_completed",
+})
+
+
+def _changes_reviewed_content(plan: FlightPlan, update_data: dict) -> bool:
+    """True when the update alters a field the reviewer's decision covered."""
+    for key, new in update_data.items():
+        if key not in REVIEWED_PLAN_FIELDS:
+            continue
+        if isinstance(new, datetime):
+            new = new.replace(tzinfo=None)  # stored as the naive wall time sent
+        if getattr(plan, key) != new:
+            return True
+    return False
+
+
+def _apply_status_change(plan: FlightPlan, update_data: dict, user) -> None:
+    """Handle ``status`` on a plan edit. Approval only ever happens through the
+    supervisor /approve endpoint, so the one status an edit may set is
+    ``pending``, and only an admin may set it (to reopen a reviewed plan)."""
+    requested = update_data.pop("status", None)
+    if requested is None:
+        return
+    if user.role != "admin" or requested != "pending":
+        raise HTTPException(status_code=403, detail="Only an admin can reopen a plan, and only as pending")
+    plan.status = "pending"
+
+
 @router.post("", response_model=FlightPlanOut, responses=responses(401, 422))
 def create_flight_plan(data: FlightPlanCreate, db: DBSession, user: PilotUser):
-    # Validate altitude (FAA Part 107: max 400ft AGL)
-    if data.max_altitude_planned is not None:
-        if data.max_altitude_planned < 0:
-            raise HTTPException(status_code=422, detail="Altitude cannot be negative")
-        if data.max_altitude_planned > 400:
-            raise HTTPException(status_code=422, detail="Altitude exceeds 400 ft AGL limit (FAA Part 107)")
+    _validate_altitude(data.max_altitude_planned)
 
     plan = FlightPlan(
         title=data.title,
@@ -246,12 +285,23 @@ def update_flight_plan(plan_id: int, data: FlightPlanUpdate, db: DBSession, user
     if plan.status not in ("pending", "denied") and user.role != "admin":
         raise HTTPException(status_code=400, detail="Can only edit pending or denied plans")
     update_data = data.model_dump(exclude_unset=True)
+    _apply_status_change(plan, update_data, user)
+    _validate_altitude(update_data.get("max_altitude_planned"))
     if "date_planned" in update_data and update_data["date_planned"] is not None:
         update_data["date_planned"] = _parse_datetime(update_data["date_planned"])
+    # A decision covered the plan as it was reviewed, so changing what was
+    # reviewed sends it back; an approved plan cannot be edited into a
+    # different one after the fact.
+    reopen = plan.status in ("approved", "denied") and _changes_reviewed_content(plan, update_data)
     for key, value in update_data.items():
         setattr(plan, key, value)
+    if reopen:
+        plan.status = "pending"
+        plan.reviewed_by_id = None
+        plan.review_date = None
+    suffix = "; returned to pending review" if reopen else ""
     log_action(db, user.id, user.display_name, "update", "flight_plan", plan.id, plan.title,
-               details=f"Updated flight plan fields: {', '.join(update_data.keys())}")
+               details=f"Updated flight plan fields: {', '.join(update_data.keys()) or 'status'}{suffix}")
     db.commit()
     db.refresh(plan)
     return _enrich(plan, db)
@@ -264,6 +314,8 @@ def approve_flight_plan(plan_id: int, data: ApproveRequest, db: DBSession, user:
         raise HTTPException(status_code=404, detail=FLIGHT_PLAN_NOT_FOUND)
     if plan.status != "pending":
         raise HTTPException(status_code=400, detail="Only pending plans can be approved")
+    if plan.submitted_by_id == user.id:
+        raise HTTPException(status_code=403, detail="You cannot approve a flight plan you submitted")
     plan.status = "approved"
     plan.reviewed_by_id = user.id
     plan.review_date = datetime.now(timezone.utc)

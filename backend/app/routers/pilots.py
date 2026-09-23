@@ -133,6 +133,12 @@ def create_pilot(data: PilotCreate, db: DBSession, admin: SupervisorUser):
     return PilotOut.model_validate(pilot)
 
 
+# Profile fields a pilot may not change on their own record: reactivating
+# yourself, dropping out of unit totals, or pointing your photo at an outside
+# URL are supervisor decisions.
+SUPERVISOR_ONLY_PILOT_FIELDS = ("status", "counts_toward_totals", "photo_url")
+
+
 @router.patch("/{pilot_id}", response_model=PilotOut, responses=responses(401, 403, 404))
 def update_pilot(pilot_id: int, data: PilotUpdate, db: DBSession, user: PilotUser):
     """Update a pilot's profile. Pilots can only edit their own; supervisors/admins can edit any."""
@@ -144,7 +150,12 @@ def update_pilot(pilot_id: int, data: PilotUpdate, db: DBSession, user: PilotUse
     if user.role == "pilot" and user.pilot_id != pilot_id:
         raise HTTPException(status_code=403, detail="You can only edit your own profile")
     update_data = data.model_dump(exclude_unset=True)
-    changes = compute_changes(pilot, update_data, ["first_name", "last_name", "email", "status", "badge_number"])
+    # Rejected only on an actual change, so a form echoing current values works.
+    if user.role not in ("admin", "supervisor") and any(
+        f in update_data and update_data[f] != getattr(pilot, f) for f in SUPERVISOR_ONLY_PILOT_FIELDS
+    ):
+        raise HTTPException(status_code=403, detail="Only a supervisor can change status, unit totals, or photo URL")
+    changes = compute_changes(pilot, update_data, list(update_data.keys()))
     for key, value in update_data.items():
         setattr(pilot, key, value)
     if changes:

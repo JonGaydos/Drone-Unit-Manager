@@ -10,6 +10,11 @@ const API_BASE = '/api'
  *  backend would leave every spinner stuck forever. */
 const DEFAULT_TIMEOUT_MS = 30000
 
+/** Content types openFile() may show inline from a blob: URL. */
+const INLINE_SAFE_TYPES = new Set([
+  'application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp', 'image/tiff',
+])
+
 /** Module-level guard so several concurrent 401s trigger only one logout +
  *  redirect, instead of each clobbering location.href and stacking toasts. */
 let sessionExpired = false
@@ -275,6 +280,37 @@ export const api = {
     const a = document.createElement('a')
     a.href = url
     a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  },
+  /**
+   * Fetch a stored file and show it: PDFs and raster images open in a new tab,
+   * anything else downloads. A blob: URL document runs on this origin under
+   * the app's CSP, so only types that cannot run script are opened.
+   * @param {string} path - API endpoint path serving the file.
+   * @param {{timeout?: number, signal?: AbortSignal}} [options={}]
+   * @returns {Promise<void>}
+   */
+  openFile: async (path, options = {}) => {
+    const token = localStorage.getItem('token')
+    const res = await fetchWithTimeout(`${API_BASE}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    }, options)
+    if (!res.ok) throw new Error('Could not open file')
+    const type = (res.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase()
+    const data = await res.blob()
+    if (INLINE_SAFE_TYPES.has(type)) {
+      const url = URL.createObjectURL(new Blob([data], { type }))
+      globalThis.open(url, '_blank')
+      setTimeout(() => URL.revokeObjectURL(url), 60000)
+      return
+    }
+    const url = URL.createObjectURL(new Blob([data], { type: 'application/octet-stream' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = parseFilename(res.headers.get('Content-Disposition'), 'download')
     document.body.appendChild(a)
     a.click()
     a.remove()

@@ -123,8 +123,8 @@ def test_setup_required_recovery_when_all_hashes_blank(client, db):
 
 def test_initial_setup_creates_admin_and_seeds_defaults(client, db, tmp_path, monkeypatch):
     # Isolate DATA_DIR so the fresh-install token retirement stays in tmp.
-    monkeypatch.setattr(app_settings, "DATA_DIR", tmp_path)
-    resp = client.post(SETUP_URL, json={
+    headers = _arm_install_token(monkeypatch, tmp_path)
+    resp = client.post(SETUP_URL, headers=headers, json={
         "username": "founder", "password": ADMIN_PASSWORD, "display_name": "Fleet Founder",
     })
     assert resp.status_code == 200, resp.text
@@ -134,6 +134,23 @@ def test_initial_setup_creates_admin_and_seeds_defaults(client, db, tmp_path, mo
     assert db.query(FlightPurpose).count() > 0
     # The new admin can log in.
     assert client.post(LOGIN_URL, json={"username": "founder", "password": ADMIN_PASSWORD}).status_code == 200
+
+
+def test_initial_setup_requires_install_token(client, db, tmp_path, monkeypatch):
+    """Reaching the setup page of a fresh install is not enough to claim it:
+    without the host-only install token no admin is created."""
+    _arm_install_token(monkeypatch, tmp_path)
+    resp = client.post(SETUP_URL, json={"username": "squatter", "password": ADMIN_PASSWORD})
+    assert resp.status_code == 401, resp.text
+    assert db.query(User).count() == 0
+
+
+def test_initial_setup_rejects_wrong_install_token(client, db, tmp_path, monkeypatch):
+    _arm_install_token(monkeypatch, tmp_path)
+    resp = client.post(SETUP_URL, headers={"X-Install-Token": "wrong-token"},
+                       json={"username": "squatter", "password": ADMIN_PASSWORD})
+    assert resp.status_code == 401, resp.text
+    assert db.query(User).count() == 0
 
 
 def test_initial_setup_blocked_when_usable_login_exists(client, admin_user):
