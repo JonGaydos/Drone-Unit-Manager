@@ -5,9 +5,7 @@ already is: issue and expiry dates, a derived status, attached documents, and a
 feed into the compliance score. Admin and Supervisor write; Pilot and Viewer read.
 """
 
-import os
 from datetime import date
-from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
@@ -23,7 +21,9 @@ from app.models.operating_authority import (
     OperatingAuthority,
     authority_status,
 )
+from app.config import settings
 from app.responses import responses
+from app.services import evidence
 from app.services.audit import log_action
 
 router = APIRouter(prefix="/api/operating-authorities", tags=["operating-authorities"])
@@ -69,6 +69,7 @@ def _document_counts(db, authority_ids: list[int]) -> dict[int, int]:
         .filter(
             Document.entity_type == DOCUMENT_ENTITY_TYPE,
             Document.entity_id.in_(authority_ids),
+            Document.deleted_at.is_(None),
         )
         .group_by(Document.entity_id)
         .all()
@@ -150,7 +151,7 @@ def update_authority(authority_id: int, data: AuthorityUpdate, db: DBSession, us
     return _serialize(a, date.today(), counts.get(a.id, 0))
 
 
-@router.delete("/{authority_id}", responses=responses(401, 404))
+@router.delete("/{authority_id}", responses=responses(401, 404, 409))
 def delete_authority(authority_id: int, db: DBSession, user: SupervisorUser):
     a = db.query(OperatingAuthority).filter(OperatingAuthority.id == authority_id).first()
     if not a:
@@ -158,19 +159,23 @@ def delete_authority(authority_id: int, db: DBSession, user: SupervisorUser):
 
     # Documents attach by (entity_type, entity_id) rather than a foreign key, and
     # SQLite reuses row ids, so leaving them behind would hand this authority's
-    # paperwork to whichever record is created next. Delete them with the record.
+    # paperwork to whichever record is created next. Delete them with the record,
+    # which is also why they are purged rather than kept restorable. A document
+    # on legal hold blocks the whole delete.
     docs = db.query(Document).filter(
         Document.entity_type == DOCUMENT_ENTITY_TYPE,
         Document.entity_id == authority_id,
     ).all()
+    if any(doc.legal_hold for doc in docs):
+        raise HTTPException(409, "A document attached to this authority is on legal hold.")
+    files = [doc.file_path for doc in docs]
     for doc in docs:
-        file_path = Path(doc.file_path)
-        if file_path.exists():
-            os.remove(file_path)
         db.delete(doc)
 
     log_action(db, user.id, user.display_name, "delete", "operating_authority", a.id, a.title,
                details=f"Deleted {len(docs)} attached document(s)" if docs else None)
     db.delete(a)
     db.commit()
+    for path in files:
+        evidence.remove_file(path, settings.UPLOAD_DIR)
     return {"ok": True}

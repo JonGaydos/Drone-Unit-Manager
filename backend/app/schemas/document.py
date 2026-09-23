@@ -19,6 +19,8 @@ class DocumentOut(BaseModel):
     uploaded_at: datetime
     notes: Optional[str] = None
     folder_id: Optional[int] = None
+    legal_hold: bool = False
+    sha256: Optional[str] = None
     view_url: Optional[str] = None
 
     model_config = {"from_attributes": True}

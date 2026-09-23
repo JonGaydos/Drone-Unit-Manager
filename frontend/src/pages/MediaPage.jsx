@@ -7,9 +7,10 @@ import { Modal } from '@/components/ui/Modal'
 import { useConfirm } from '@/hooks/useConfirm'
 import {
   Search, Upload, X, ChevronLeft, ChevronRight, Edit2, Trash2,
-  Camera, User, Info, ZoomIn, Image as ImageIcon
+  Camera, User, Info, ZoomIn, Image as ImageIcon, Lock, History
 } from 'lucide-react'
 import { sortPilotsActiveFirst } from '@/lib/formatters'
+import { RecentlyDeletedModal } from '@/components/RecentlyDeletedModal'
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
@@ -39,7 +40,9 @@ export default function MediaPage() {
   const [showUpload, setShowUpload] = useState(false)
   const [showEdit, setShowEdit] = useState(null)
   const [lightbox, setLightbox] = useState(null)
-  const { isPilot } = useAuth()
+  const [showDeleted, setShowDeleted] = useState(false)
+  const { isPilot, isSupervisor } = useAuth()
+  const toast = useToast()
   const [confirmProps, requestConfirm] = useConfirm()
 
   const load = useCallback(() => {
@@ -89,12 +92,21 @@ export default function MediaPage() {
   const handleDelete = (id) => {
     requestConfirm({
       title: 'Delete Photo',
-      message: 'Delete this photo permanently?',
+      message: 'Move this photo to Recently deleted? A supervisor can restore it.',
       onConfirm: async () => {
         await api.delete(`/photos/${id}`)
         load()
       }
     })
+  }
+
+  const toggleHold = async (photo) => {
+    try {
+      await api.put(`/photos/${photo.id}/hold`, { legal_hold: !photo.legal_hold })
+      load()
+    } catch (err) {
+      toast.error(err.message || 'Could not change the legal hold')
+    }
   }
 
   const formatSize = (bytes) => {
@@ -133,6 +145,14 @@ export default function MediaPage() {
               className="pl-9 pr-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring w-64"
             />
           </div>
+          {isSupervisor && (
+            <button
+              onClick={() => setShowDeleted(true)}
+              className="flex items-center gap-2 px-3 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90"
+            >
+              <History className="w-4 h-4" /> Recently deleted
+            </button>
+          )}
           {isPilot && (
             <button
               onClick={() => setShowUpload(true)}
@@ -197,6 +217,9 @@ export default function MediaPage() {
                         </p>
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           {photo.file_size && <span>{formatSize(photo.file_size)}</span>}
+                          {photo.legal_hold && (
+                            <span className="flex items-center gap-1 text-amber-500"><Lock className="w-3 h-3" /> Legal hold</span>
+                          )}
                         </div>
                         {photo.pilot_names && photo.pilot_names.length > 0 && (
                           <div className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -214,14 +237,26 @@ export default function MediaPage() {
                             >
                               <Edit2 className="w-3.5 h-3.5" />
                             </button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleDelete(photo.id) }}
-                              className="p-1.5 text-muted-foreground hover:text-destructive rounded-md hover:bg-destructive/10 transition-colors"
-                              title="Delete"
-                              aria-label="Delete"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            {isSupervisor && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); toggleHold(photo) }}
+                                className={`p-1.5 rounded-md transition-colors hover:bg-amber-500/10 ${photo.legal_hold ? 'text-amber-500' : 'text-muted-foreground hover:text-amber-500'}`}
+                                title={photo.legal_hold ? 'Release legal hold' : 'Place on legal hold'}
+                                aria-label={photo.legal_hold ? 'Release legal hold' : 'Place on legal hold'}
+                              >
+                                <Lock className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            {!photo.legal_hold && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleDelete(photo.id) }}
+                                className="p-1.5 text-muted-foreground hover:text-destructive rounded-md hover:bg-destructive/10 transition-colors"
+                                title="Delete"
+                                aria-label="Delete"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>
@@ -265,6 +300,7 @@ export default function MediaPage() {
           onSuccess={() => { setShowEdit(null); load() }}
         />
       )}
+      <RecentlyDeletedModal kind="photos" open={showDeleted} onClose={() => setShowDeleted(false)} onChanged={load} />
       <ConfirmDialog {...confirmProps} />
     </div>
   )
@@ -334,6 +370,7 @@ function LightboxModal({ photos, index, onClose, onPrev, onNext, formatDate, for
               {photo.file_size && <span>Size: {formatSize(photo.file_size)}</span>}
               {photo.pilot_names?.length > 0 && <span>Pilots: {photo.pilot_names.join(', ')}</span>}
             </div>
+            {photo.sha256 && <div className="text-xs text-white/40 break-all">SHA-256: {photo.sha256}</div>}
             <div className="text-xs text-white/40">{index + 1} / {photos.length}</div>
           </div>
         </div>

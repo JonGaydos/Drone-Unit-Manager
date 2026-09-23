@@ -24,13 +24,14 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.constants import MIME_JPEG, PHOTO_NOT_FOUND, FLIGHT_NOT_FOUND, INCIDENT_NOT_FOUND, UTC_OFFSET
 from app.database import get_db
-from app.deps import DBSession, CurrentUser, PilotUser, SupervisorUser
+from app.deps import AdminUser, DBSession, CurrentUser, PilotUser, SupervisorUser
 from app.models.user import User
 from app.models.photo import Photo, PhotoPilot, PhotoFlight, PhotoIncident
 from app.models.pilot import Pilot
 from app.models.flight import Flight
 from app.models.incident import Incident
 from app.responses import responses
+from app.services import evidence
 from app.services.audit import compute_changes, log_action
 from app.services.file_validation import mime_for_filename, user_file_headers
 
@@ -57,38 +58,48 @@ _security = HTTPBearer(auto_error=False)
 SIGNED_URL_TTL_SECONDS = 600  # 10 minutes
 
 
-def _sign_photo(photo_id: int, action: str, ttl: int = SIGNED_URL_TTL_SECONDS) -> tuple[str, int]:
+def _sig_payload(photo_id: int, action: str, exp: int, viewer: int | None) -> bytes:
+    """What a photo URL signs. The viewer, when present, is bound in so the
+    view can be audited against the user it was issued to."""
+    suffix = f":{viewer}" if viewer is not None else ""
+    return f"{photo_id}:{action}:{exp}{suffix}".encode()
+
+
+def _sign_photo(photo_id: int, action: str, ttl: int = SIGNED_URL_TTL_SECONDS,
+                viewer: int | None = None) -> tuple[str, int]:
     """Create (signature, expires_at_epoch) for a photo URL. Action is
     typically 'view' or 'thumbnail'."""
     exp = int(time.time()) + ttl
-    payload = f"{photo_id}:{action}:{exp}".encode()
+    payload = _sig_payload(photo_id, action, exp, viewer)
     sig = hmac.new(settings.SECRET_KEY.encode(), payload, hashlib.sha256).hexdigest()
     return sig, exp
 
 
-def _verify_photo_sig(photo_id: int, action: str, sig: str | None, exp: int | None) -> bool:
+def _verify_photo_sig(photo_id: int, action: str, sig: str | None, exp: int | None,
+                      viewer: int | None = None) -> bool:
     """Constant-time validation of a photo signature. Returns True iff the
     signature matches AND the URL has not yet expired."""
     if not sig or exp is None:
         return False
     if exp < int(time.time()):
         return False
-    payload = f"{photo_id}:{action}:{exp}".encode()
+    payload = _sig_payload(photo_id, action, exp, viewer)
     expected = hmac.new(settings.SECRET_KEY.encode(), payload, hashlib.sha256).hexdigest()
     return hmac.compare_digest(sig, expected)
 
 
-def _photo_urls(photo_id: int) -> dict:
+def _photo_urls(photo_id: int, viewer: int | None = None) -> dict:
     """Build a fresh pair of signed URLs (view + thumbnail) for a photo.
 
     Returned URLs are relative to the /api base (no leading /api), so the
     frontend's API client (which prepends its own '/api' base) gets the right
     final URL. Previously the leading '/api' produced '/api/api/photos/...'
     and broke every <img> tag on MediaPage."""
-    view_sig, view_exp = _sign_photo(photo_id, "view")
+    view_sig, view_exp = _sign_photo(photo_id, "view", viewer=viewer)
     thumb_sig, thumb_exp = _sign_photo(photo_id, "thumbnail")
+    viewer_param = f"&u={viewer}" if viewer is not None else ""
     return {
-        "view_url": f"/photos/{photo_id}/view?sig={view_sig}&exp={view_exp}",
+        "view_url": f"/photos/{photo_id}/view?sig={view_sig}&exp={view_exp}{viewer_param}",
         "thumbnail_url": f"/photos/{photo_id}/thumbnail?sig={thumb_sig}&exp={thumb_exp}",
         "urls_expire_at": min(view_exp, thumb_exp),
     }
@@ -101,16 +112,39 @@ def _authenticate_image_request(
     sig: str | None,
     exp: int | None,
     db: Session,
-) -> None:
+    viewer: int | None = None,
+) -> int | None:
     """Allow either (a) a valid Bearer JWT (for API clients) or (b) a fresh
-    signed URL for this photo_id+action. Raises 401 on failure."""
-    if _verify_photo_sig(photo_id, action, sig, exp):
-        return
+    signed URL for this photo_id+action. Raises 401 on failure.
+
+    Returns the id of the user the request is for: the bearer's, or the one the
+    signed URL was issued to (None for a URL issued without one)."""
+    if _verify_photo_sig(photo_id, action, sig, exp, viewer):
+        return viewer
     if credentials:
         from app.routers.auth import user_from_login_token
-        user_from_login_token(credentials.credentials, db)  # raises 401 if invalid or revoked
-        return
+        return user_from_login_token(credentials.credentials, db).id  # 401 if invalid or revoked
     raise HTTPException(401, "Not authenticated")
+
+
+def _live_photo(db, photo_id: int) -> Photo:
+    """The photo, unless it is missing or deleted.
+
+    Raises:
+        HTTPException: 404 either way; a deleted photo is out of reach until restored.
+    """
+    photo = db.query(Photo).filter(Photo.id == photo_id, Photo.deleted_at.is_(None)).first()
+    if not photo:
+        raise HTTPException(404, PHOTO_NOT_FOUND)
+    return photo
+
+
+def _photo_or_404(db, photo_id: int) -> Photo:
+    """The photo whether deleted or not, for the restore, hold and purge routes."""
+    photo = db.query(Photo).filter(Photo.id == photo_id).first()
+    if not photo:
+        raise HTTPException(404, PHOTO_NOT_FOUND)
+    return photo
 
 
 def _ensure_dir(path: str):
@@ -155,11 +189,12 @@ def _parse_date_taken(date_taken: Optional[str]):
         raise HTTPException(400, "Invalid date format. Use ISO 8601 (e.g., 2026-04-02).")
 
 
-def _stream_to_disk(file_obj, file_path: str, first_chunk: bytes, chunk_size: int, max_size: int) -> int:
+def _stream_to_disk(file_obj, file_path: str, first_chunk: bytes, chunk_size: int, max_size: int) -> tuple[int, str]:
     """Write an already-started upload stream to disk, enforcing the size cap.
-    Returns total bytes written; removes the partial file and raises 413 on
-    overflow."""
+    Returns (bytes written, SHA-256 hex digest); removes the partial file and
+    raises 413 on overflow."""
     total = 0
+    digest = hashlib.sha256()
     with open(file_path, "wb") as f:
         chunk = first_chunk
         while chunk:
@@ -169,8 +204,9 @@ def _stream_to_disk(file_obj, file_path: str, first_chunk: bytes, chunk_size: in
                 os.remove(file_path)
                 raise HTTPException(413, f"File too large. Maximum size is {max_size // (1024*1024)}MB")
             f.write(chunk)
+            digest.update(chunk)
             chunk = file_obj.read(chunk_size)
-    return total
+    return total, digest.hexdigest()
 
 
 def _attach_photo_pilots(db, photo_id: int, pilot_ids: Optional[str]) -> None:
@@ -257,7 +293,7 @@ def upload_photo(
     first = file.file.read(chunk_size)
     if not is_image(first):
         raise HTTPException(400, "File content is not a recognized image")
-    photo.file_size = _stream_to_disk(file.file, file_path, first, chunk_size, settings.MAX_UPLOAD_SIZE)
+    photo.file_size, photo.sha256 = _stream_to_disk(file.file, file_path, first, chunk_size, settings.MAX_UPLOAD_SIZE)
 
     # Generate thumbnail
     photo.thumbnail_path = _generate_thumbnail(file_path, photo_dir, stored_name)
@@ -266,13 +302,13 @@ def upload_photo(
     _attach_photo_pilots(db, photo.id, pilot_ids)
 
     log_action(db, user.id, user.display_name, "upload", "photo", photo.id, photo.original_filename,
-               details=f"{relative_path}, {photo.file_size} bytes")
+               details=f"{relative_path}, {photo.file_size} bytes, sha256 {photo.sha256}")
     db.commit()
     db.refresh(photo)
     return {"id": photo.id, "message": "Photo uploaded successfully"}
 
 
-def _photo_list_item(p, pilot_ids_for_photo, pilots_map) -> dict:
+def _photo_list_item(p, pilot_ids_for_photo, pilots_map, viewer: int | None = None) -> dict:
     """Serialize one photo (with its resolved pilot names/ids and signed URLs)
     for the list endpoint."""
     pilot_names = []
@@ -282,7 +318,7 @@ def _photo_list_item(p, pilot_ids_for_photo, pilots_map) -> dict:
         if pilot:
             pilot_names.append(f"{pilot.first_name} {pilot.last_name}".strip())
             pilot_ids_list.append(pilot.id)
-    urls = _photo_urls(p.id)
+    urls = _photo_urls(p.id, viewer)
     return {
         "id": p.id,
         "filename": p.original_filename,
@@ -292,6 +328,8 @@ def _photo_list_item(p, pilot_ids_for_photo, pilots_map) -> dict:
         "file_size": p.file_size,
         "mime_type": p.mime_type,
         "has_thumbnail": p.thumbnail_path is not None,
+        "legal_hold": p.legal_hold,
+        "sha256": p.sha256,
         "pilot_names": pilot_names,
         "pilot_ids": pilot_ids_list,
         "created_at": p.created_at.isoformat() if p.created_at else None,
@@ -300,7 +338,7 @@ def _photo_list_item(p, pilot_ids_for_photo, pilots_map) -> dict:
 
 
 @router.get("", responses=responses(401))
-def list_photos(db: DBSession, _user: CurrentUser, flight_id: int | None = None, incident_id: int | None = None):
+def list_photos(db: DBSession, user: CurrentUser, flight_id: int | None = None, incident_id: int | None = None):
     """List photos with their tagged pilot names.
 
     Optionally filter to photos linked to a given flight or incident. Uses
@@ -309,7 +347,7 @@ def list_photos(db: DBSession, _user: CurrentUser, flight_id: int | None = None,
     Returns:
         List of photo metadata dicts ordered by date taken (newest first).
     """
-    photos_q = db.query(Photo)
+    photos_q = db.query(Photo).filter(Photo.deleted_at.is_(None))
     if flight_id is not None:
         photos_q = photos_q.join(PhotoFlight, PhotoFlight.photo_id == Photo.id).filter(PhotoFlight.flight_id == flight_id)
     if incident_id is not None:
@@ -334,7 +372,7 @@ def list_photos(db: DBSession, _user: CurrentUser, flight_id: int | None = None,
         photo_assoc.setdefault(a.photo_id, []).append(a.pilot_id)
 
     result = [
-        _photo_list_item(p, photo_assoc.get(p.id, []), pilots_map)
+        _photo_list_item(p, photo_assoc.get(p.id, []), pilots_map, user.id)
         for p in photos
     ]
     return result
@@ -364,18 +402,22 @@ def view_photo(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_security)] = None,
     sig: Annotated[str | None, Query()] = None,
     exp: Annotated[int | None, Query()] = None,
+    u: Annotated[int | None, Query()] = None,
 ):
     """Serve the full-resolution photo file.
 
     Accepts EITHER a Bearer JWT (for API clients) OR a signed URL with
-    sig+exp query params (for <img src='...'> tags from the SPA)."""
-    _authenticate_image_request(photo_id, "view", credentials, sig, exp, db)
-    photo = db.query(Photo).filter(Photo.id == photo_id).first()
-    if not photo:
-        raise HTTPException(404, PHOTO_NOT_FOUND)
+    sig+exp query params (for <img src='...'> tags from the SPA). Every view
+    of the full image is audited; thumbnails are not."""
+    viewer_id = _authenticate_image_request(photo_id, "view", credentials, sig, exp, db, u)
+    photo = _live_photo(db, photo_id)
     resolved = _resolve_photo_path(photo)
     if not resolved:
         raise HTTPException(404, "File not found on disk")
+    viewer = db.get(User, viewer_id) if viewer_id is not None else None
+    log_action(db, viewer_id, viewer.display_name if viewer else "Signed link", "view", "photo",
+               photo.id, photo.original_filename)
+    db.commit()
     return _serve_image(resolved)
 
 
@@ -389,9 +431,7 @@ def view_thumbnail(
 ):
     """Serve the photo thumbnail. Same auth options as view_photo."""
     _authenticate_image_request(photo_id, "thumbnail", credentials, sig, exp, db)
-    photo = db.query(Photo).filter(Photo.id == photo_id).first()
-    if not photo:
-        raise HTTPException(404, PHOTO_NOT_FOUND)
+    photo = _live_photo(db, photo_id)
     if photo.thumbnail_path:
         thumb_resolved = _validate_path(photo.thumbnail_path)
         if thumb_resolved.exists():
@@ -404,13 +444,11 @@ def view_thumbnail(
 
 
 @router.get("/{photo_id}/signed-urls", responses=responses(401, 404))
-def get_signed_urls(photo_id: int, db: DBSession, _user: CurrentUser):
+def get_signed_urls(photo_id: int, db: DBSession, user: CurrentUser):
     """Issue a fresh pair of short-lived signed URLs for one photo. Used
     when an existing URL has expired (e.g. user idle past TTL)."""
-    photo = db.query(Photo).filter(Photo.id == photo_id).first()
-    if not photo:
-        raise HTTPException(404, PHOTO_NOT_FOUND)
-    return _photo_urls(photo_id)
+    _live_photo(db, photo_id)
+    return _photo_urls(photo_id, user.id)
 
 
 @router.patch("/{photo_id}", responses=responses(404))
@@ -442,9 +480,7 @@ def update_photo(
     Returns:
         Success message dict.
     """
-    photo = db.query(Photo).filter(Photo.id == photo_id).first()
-    if not photo:
-        raise HTTPException(404, PHOTO_NOT_FOUND)
+    photo = _live_photo(db, photo_id)
 
     updates = {k: v for k, v in (("title", title), ("description", description)) if v is not None}
     if date_taken is not None:
@@ -472,8 +508,7 @@ def update_photo(
 @router.post("/{photo_id}/flight/{flight_id}", responses=responses(401, 404))
 def link_photo_flight(photo_id: int, flight_id: int, db: DBSession, user: SupervisorUser):
     """Link a photo to a flight (idempotent)."""
-    if not db.query(Photo).filter(Photo.id == photo_id).first():
-        raise HTTPException(404, PHOTO_NOT_FOUND)
+    _live_photo(db, photo_id)
     if not db.query(Flight).filter(Flight.id == flight_id).first():
         raise HTTPException(404, FLIGHT_NOT_FOUND)
     exists = db.query(PhotoFlight).filter(PhotoFlight.photo_id == photo_id, PhotoFlight.flight_id == flight_id).first()
@@ -496,8 +531,7 @@ def unlink_photo_flight(photo_id: int, flight_id: int, db: DBSession, user: Supe
 @router.post("/{photo_id}/incident/{incident_id}", responses=responses(401, 404))
 def link_photo_incident(photo_id: int, incident_id: int, db: DBSession, user: SupervisorUser):
     """Link a photo to an incident (idempotent)."""
-    if not db.query(Photo).filter(Photo.id == photo_id).first():
-        raise HTTPException(404, PHOTO_NOT_FOUND)
+    _live_photo(db, photo_id)
     if not db.query(Incident).filter(Incident.id == incident_id).first():
         raise HTTPException(404, INCIDENT_NOT_FOUND)
     exists = db.query(PhotoIncident).filter(PhotoIncident.photo_id == photo_id, PhotoIncident.incident_id == incident_id).first()
@@ -517,29 +551,65 @@ def unlink_photo_incident(photo_id: int, incident_id: int, db: DBSession, user: 
     return {"ok": True}
 
 
-@router.delete("/{photo_id}", responses=responses(401, 404))
+@router.delete("/{photo_id}", responses=responses(401, 404, 409))
 def delete_photo(photo_id: int, db: DBSession, user: PilotUser):
-    """Delete a photo, its thumbnail, all associations, and on-disk files."""
-    from app.services.audit import log_action
-    photo = db.query(Photo).filter(Photo.id == photo_id).first()
-    if not photo:
-        raise HTTPException(404, PHOTO_NOT_FOUND)
+    """Move a photo to Recently deleted. The file and its links stay, so a
+    supervisor can restore it; only an admin purge removes it for good."""
+    photo = _live_photo(db, photo_id)
+    evidence.soft_delete(photo, user)
+    log_action(db, user.id, user.display_name, "delete", "photo", photo_id, photo.original_filename)
+    db.commit()
+    return {"message": "Photo deleted"}
 
-    # Delete associations (pilot, flight, incident)
+
+@router.get("/deleted", responses=responses(401, 403))
+def list_deleted_photos(db: DBSession, _user: SupervisorUser):
+    """Deleted photos, newest deletion first."""
+    photos = (db.query(Photo).filter(Photo.deleted_at.is_not(None))
+              .order_by(Photo.deleted_at.desc()).all())
+    user_ids = {p.deleted_by_id for p in photos if p.deleted_by_id}
+    users = {u.id: u for u in db.query(User).filter(User.id.in_(user_ids)).all()} if user_ids else {}
+    return [evidence.deleted_row(p, p.title or p.original_filename, users) for p in photos]
+
+
+@router.post("/{photo_id}/restore", responses=responses(401, 403, 404, 409))
+def restore_photo(photo_id: int, db: DBSession, user: SupervisorUser):
+    """Bring a deleted photo back, with the links it had."""
+    photo = _photo_or_404(db, photo_id)
+    evidence.restore(photo)
+    log_action(db, user.id, user.display_name, "restore", "photo", photo_id, photo.original_filename)
+    db.commit()
+    return {"ok": True}
+
+
+@router.put("/{photo_id}/hold", responses=responses(401, 403, 404))
+def set_photo_hold(photo_id: int, data: evidence.HoldUpdate, db: DBSession, user: SupervisorUser):
+    """Place or release a legal hold. A held photo cannot be deleted or purged."""
+    photo = _photo_or_404(db, photo_id)
+    if photo.legal_hold != data.legal_hold:
+        photo.legal_hold = data.legal_hold
+        log_action(db, user.id, user.display_name, "hold" if data.legal_hold else "release_hold",
+                   "photo", photo_id, photo.original_filename)
+        db.commit()
+    return {"ok": True, "legal_hold": photo.legal_hold}
+
+
+@router.delete("/{photo_id}/purge", responses=responses(401, 403, 404, 409))
+def purge_photo(photo_id: int, db: DBSession, admin: AdminUser):
+    """Remove a deleted photo for good: its links, its files, and its record.
+    Refused unless the photo is already deleted and not on legal hold."""
+    photo = _photo_or_404(db, photo_id)
+    evidence.check_purgeable(photo)
+
     db.query(PhotoPilot).filter(PhotoPilot.photo_id == photo_id).delete()
     db.query(PhotoFlight).filter(PhotoFlight.photo_id == photo_id).delete()
     db.query(PhotoIncident).filter(PhotoIncident.photo_id == photo_id).delete()
-
-    # Delete files from disk
-    photo_path = _resolve_photo_path(photo)
-    if photo_path and photo_path.exists():
-        photo_path.unlink()
-    if photo.thumbnail_path:
-        thumb = Path(photo.thumbnail_path)
-        if thumb.exists():
-            thumb.unlink()
-
-    log_action(db, user.id, user.display_name, "delete", "photo", photo_id, photo.original_filename)
+    files = [os.path.join(UPLOAD_DIR, photo.filename), photo.thumbnail_path]
+    log_action(db, admin.id, admin.display_name, "purge", "photo", photo_id, photo.original_filename,
+               details=f"sha256 {photo.sha256 or 'not recorded'}")
     db.delete(photo)
     db.commit()
-    return {"message": "Photo deleted"}
+    # Files go only once the record is gone, so a failed commit leaves both.
+    for path in files:
+        evidence.remove_file(path, UPLOAD_DIR)
+    return {"ok": True}

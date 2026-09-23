@@ -1,4 +1,5 @@
 """Folder management router for document storage."""
+from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException
@@ -25,12 +26,25 @@ class FolderUpdate(BaseModel):
     description: Optional[str] = None
 
 
+def _live_folder(db, folder_id: int) -> Folder:
+    """The folder, unless it is missing or deleted.
+
+    Raises:
+        HTTPException: 404 either way.
+    """
+    folder = db.query(Folder).filter(Folder.id == folder_id, Folder.deleted_at.is_(None)).first()
+    if not folder:
+        raise HTTPException(404, FOLDER_NOT_FOUND)
+    return folder
+
+
 @router.get("", responses=responses(401))
 def list_folders(db: DBSession, _user: CurrentUser):
-    folders = db.query(Folder).order_by(Folder.name).all()
+    folders = db.query(Folder).filter(Folder.deleted_at.is_(None)).order_by(Folder.name).all()
     result = []
     for f in folders:
-        doc_count = db.query(func.count(Document.id)).filter(Document.folder_id == f.id).scalar() or 0
+        doc_count = db.query(func.count(Document.id)).filter(
+            Document.folder_id == f.id, Document.deleted_at.is_(None)).scalar() or 0
         result.append({
             "id": f.id,
             "name": f.name,
@@ -45,10 +59,10 @@ def list_folders(db: DBSession, _user: CurrentUser):
 
 @router.get("/{folder_id}/documents", responses=responses(401, 404))
 def get_folder_documents(folder_id: int, db: DBSession, _user: CurrentUser):
-    folder = db.query(Folder).filter(Folder.id == folder_id).first()
-    if not folder:
-        raise HTTPException(404, FOLDER_NOT_FOUND)
-    docs = db.query(Document).filter(Document.folder_id == folder_id).order_by(Document.uploaded_at.desc()).all()
+    _live_folder(db, folder_id)
+    docs = (db.query(Document)
+            .filter(Document.folder_id == folder_id, Document.deleted_at.is_(None))
+            .order_by(Document.uploaded_at.desc()).all())
     return [{
         "id": d.id,
         "title": d.title,
@@ -60,6 +74,8 @@ def get_folder_documents(folder_id: int, db: DBSession, _user: CurrentUser):
         "entity_type": d.entity_type,
         "notes": d.notes,
         "folder_id": d.folder_id,
+        "legal_hold": d.legal_hold,
+        "sha256": d.sha256,
     } for d in docs]
 
 
@@ -80,9 +96,7 @@ def create_folder(data: FolderCreate, db: DBSession, user: PilotUser):
 
 @router.patch("/{folder_id}", responses=responses(400, 401, 404))
 def update_folder(folder_id: int, data: FolderUpdate, db: DBSession, user: PilotUser):
-    folder = db.query(Folder).filter(Folder.id == folder_id).first()
-    if not folder:
-        raise HTTPException(404, FOLDER_NOT_FOUND)
+    folder = _live_folder(db, folder_id)
     if folder.is_system:
         raise HTTPException(400, "Cannot rename system folders")
     updates = {k: v for k, v in (("name", data.name), ("description", data.description)) if v is not None}
@@ -97,19 +111,19 @@ def update_folder(folder_id: int, data: FolderUpdate, db: DBSession, user: Pilot
 
 @router.delete("/{folder_id}", responses=responses(400, 401, 404))
 def delete_folder(folder_id: int, db: DBSession, user: PilotUser):
-    folder = db.query(Folder).filter(Folder.id == folder_id).first()
-    if not folder:
-        raise HTTPException(404, FOLDER_NOT_FOUND)
+    folder = _live_folder(db, folder_id)
     if folder.is_system:
         raise HTTPException(400, "Cannot delete system folders")
 
     # Move documents to no folder
-    db.query(Document).filter(Document.folder_id == folder_id).update({"folder_id": None})
+    moved = db.query(Document).filter(Document.folder_id == folder_id).update({"folder_id": None})
 
     # Move child folders to parent
     db.query(Folder).filter(Folder.parent_id == folder_id).update({"parent_id": folder.parent_id})
 
-    log_action(db, user.id, user.display_name, "delete", "folder", folder.id, folder.name)
-    db.delete(folder)
+    # The record stays, marked deleted, so the trail can still name it.
+    folder.deleted_at = datetime.utcnow()
+    log_action(db, user.id, user.display_name, "delete", "folder", folder.id, folder.name,
+               details=f"{moved} document(s) moved to Unfiled" if moved else None)
     db.commit()
     return {"message": "Folder deleted"}

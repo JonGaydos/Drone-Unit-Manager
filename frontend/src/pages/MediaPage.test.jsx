@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { screen } from '@testing-library/react'
+import { describe, it, expect, vi } from 'vitest'
+import { screen, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { renderWithProviders } from '@/test/render'
@@ -83,5 +83,33 @@ describe('MediaPage', () => {
 
     await user.click(chip)
     expect(chip.className).toContain('bg-muted')
+  })
+
+  it('hides Delete on a photo under legal hold and lets a supervisor release it', async () => {
+    let body = null
+    mockMount({ photos: () => HttpResponse.json([{ ...PHOTOS[0], legal_hold: true }, PHOTOS[1]]) })
+    server.use(
+      http.get('/api/auth/me', () => HttpResponse.json({ id: 1, username: 's', display_name: 's', role: 'supervisor' })),
+      http.put('/api/photos/1/hold', async ({ request }) => { body = await request.json(); return HttpResponse.json({ ok: true }) }),
+    )
+    const { user } = renderWithProviders(<MediaPage />, { role: 'supervisor' })
+
+    const held = (await screen.findByText('Tower inspection')).closest('.group')
+    const free = screen.getByText('Crash site').closest('.group')
+    expect(within(held).queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    expect(within(free).getByRole('button', { name: 'Delete' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Recently deleted/ })).toBeInTheDocument()
+
+    await user.click(within(held).getByRole('button', { name: 'Release legal hold' }))
+    await vi.waitFor(() => expect(body).toEqual({ legal_hold: false }))
+  })
+
+  it('shows neither hold controls nor the deleted list to a pilot', async () => {
+    mockMount()
+    server.use(http.get('/api/auth/me', () => HttpResponse.json({ id: 1, username: 'p', display_name: 'p', role: 'pilot' })))
+    renderWithProviders(<MediaPage />, { role: 'pilot' })
+    await screen.findByText('Tower inspection')
+    expect(screen.queryByRole('button', { name: /legal hold/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Recently deleted/ })).not.toBeInTheDocument()
   })
 })

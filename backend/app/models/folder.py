@@ -12,3 +12,4 @@ class Folder(Base):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_system: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)

@@ -10,7 +10,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { useConfirm } from '@/hooks/useConfirm'
 import DocumentUploadForm from '@/components/DocumentUploadForm'
 import { DOC_TYPES } from '@/lib/constants'
-import { FileText, Upload, Trash2, ExternalLink, Edit, Save, X } from 'lucide-react'
+import { FileText, Upload, Trash2, ExternalLink, Edit, Save, X, Lock } from 'lucide-react'
 
 /**
  * Renders a document list with upload, edit, view, and delete capabilities.
@@ -43,7 +43,7 @@ export default function DocumentUpload({ entityType, entityId, folderId }) {
   const handleDelete = (docId) => {
     requestConfirm({
       title: 'Delete Document',
-      message: 'Delete this document?',
+      message: 'Move this document to Recently deleted? A supervisor can restore it from Document Storage.',
       onConfirm: async () => {
         try {
           await api.delete(`/documents/${docId}`)
@@ -157,6 +157,7 @@ export default function DocumentUpload({ entityType, entityId, folderId }) {
                 <p className="text-xs text-muted-foreground">
                   {doc.document_type === 'general' ? '' : doc.document_type.replaceAll('_', ' ') + ' | '}
                   {doc.mime_type}
+                  {doc.legal_hold && <span className="ml-2 inline-flex items-center gap-1 text-amber-500"><Lock className="w-3 h-3" /> Legal hold</span>}
                 </p>
               </div>
             )}
@@ -184,13 +185,15 @@ export default function DocumentUpload({ entityType, entityId, folderId }) {
                     >
                       <Edit className="w-3.5 h-3.5" />
                     </button>
-                    <button
-                      onClick={() => handleDelete(doc.id)}
-                      className="p-1.5 text-muted-foreground hover:text-destructive rounded hover:bg-destructive/10"
-                      title="Delete"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    {!doc.legal_hold && (
+                      <button
+                        onClick={() => handleDelete(doc.id)}
+                        className="p-1.5 text-muted-foreground hover:text-destructive rounded hover:bg-destructive/10"
+                        title="Delete"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </>
                 )}
               </div>

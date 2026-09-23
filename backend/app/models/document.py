@@ -28,6 +28,11 @@ class Document(Base):
     uploaded_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     folder_id: Mapped[Optional[int]] = mapped_column(ForeignKey("folders.id"), nullable=True)
+    # Evidence handling, as on photos: soft delete, legal hold, upload digest.
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    deleted_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    legal_hold: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    sha256: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
     pilot = relationship("Pilot", back_populates="documents", foreign_keys=[pilot_id])
     vehicle = relationship("Vehicle", back_populates="documents", foreign_keys=[vehicle_id])
