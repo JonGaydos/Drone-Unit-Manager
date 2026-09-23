@@ -1,12 +1,20 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAuth } from '@/contexts/AuthContext'
+import { useAuth, IDLE_NOTICE_KEY } from '@/contexts/AuthContext'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
+
+/** Read and clear the one-shot "signed out for inactivity" flag. */
+function takeIdleNotice() {
+  const idle = sessionStorage.getItem(IDLE_NOTICE_KEY) === '1'
+  sessionStorage.removeItem(IDLE_NOTICE_KEY)
+  return idle
+}
 
 export default function LoginPage() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [idleNotice] = useState(takeIdleNotice)
   const [loading, setLoading] = useState(false)
   const { login } = useAuth()
   const navigate = useNavigate()
@@ -37,6 +45,11 @@ export default function LoginPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="bg-card border border-border rounded-xl p-6 shadow-lg">
+          {idleNotice && !error && (
+            <div role="status" className="bg-secondary border border-border text-foreground text-sm rounded-lg p-3 mb-4">
+              You were signed out after 30 minutes of inactivity.
+            </div>
+          )}
           {error && (
             <div className="bg-destructive/10 border border-destructive/30 text-destructive text-sm rounded-lg p-3 mb-4">
               {error}

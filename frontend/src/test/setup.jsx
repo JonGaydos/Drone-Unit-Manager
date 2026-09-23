@@ -61,5 +61,5 @@ vi.mock('recharts', async (orig) => {
 })
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }))
-afterEach(() => { server.resetHandlers(); cleanup(); localStorage.clear() })
+afterEach(() => { server.resetHandlers(); cleanup(); localStorage.clear(); sessionStorage.clear() })
 afterAll(() => server.close())

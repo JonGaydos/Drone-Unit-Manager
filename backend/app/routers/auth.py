@@ -65,22 +65,52 @@ def verify_password(password: str, hashed: str) -> bool:
     return bcrypt.checkpw(password.encode(), hashed.encode())
 
 
-def create_token(user_id: int) -> str:
+def create_token(user_id: int, token_version: int = 0) -> str:
     """Create a signed JWT access token for the given user.
 
     Args:
         user_id: The database ID of the authenticated user.
+        token_version: The user's current ``token_version``. A token is only
+            accepted while it matches, so bumping the version revokes it.
 
     Returns:
-        An encoded JWT string with the user ID and expiration claim.
+        An encoded JWT string with the user ID, version and expiration claim.
     """
     now = datetime.now(timezone.utc)
     expire = now + timedelta(minutes=settings.SESSION_EXPIRE_MINUTES)
     return jwt.encode(
-        {"sub": str(user_id), "iat": now, "exp": expire},
+        {"sub": str(user_id), "tv": token_version, "iat": now, "exp": expire},
         settings.SECRET_KEY,
         algorithm=ALGORITHM,
     )
+
+
+def revoke_sessions(user: User) -> None:
+    """Invalidate every login token issued to ``user`` so far. The caller
+    commits. Used on password change or reset, role change, deactivation and
+    logout, so a stolen token stops working when the account changes hands."""
+    user.token_version = (user.token_version or 0) + 1
+
+
+def user_from_login_token(token: str, db: Session) -> User:
+    """Resolve a login JWT to its active user, or raise 401.
+
+    The one place a login token is checked: signature, subject, active account
+    and token version. Anything that authenticates a JWT goes through here, so
+    a revoked token is refused everywhere, not just by the main dependency.
+    """
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = int(payload["sub"])
+        token_version = int(payload.get("tv", 0))  # tokens from before versioning read as 0
+    except (JWTError, KeyError, ValueError, TypeError):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    user = db.query(User).filter(User.id == user_id, User.is_active.is_(True)).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=USER_NOT_FOUND)
+    if token_version != (user.token_version or 0):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired. Please log in again.")
+    return user
 
 
 def get_current_user(
@@ -112,15 +142,7 @@ def get_current_user(
         return api_tokens_service.authenticate_api_token(
             db, credentials.credentials, request.method, request.url.path
         )
-    try:
-        payload = jwt.decode(credentials.credentials, settings.SECRET_KEY, algorithms=[ALGORITHM])
-        user_id = int(payload["sub"])
-    except (JWTError, KeyError, ValueError):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-    user = db.query(User).filter(User.id == user_id, User.is_active.is_(True)).first()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=USER_NOT_FOUND)
-    return user
+    return user_from_login_token(credentials.credentials, db)
 
 
 def require_admin(user: Annotated[User, Depends(get_current_user)]) -> User:
@@ -295,6 +317,11 @@ def _validate_password(password: str):
         raise HTTPException(400, "Password must contain at least one uppercase letter")
     if not any(c.isdigit() for c in password):
         raise HTTPException(400, "Password must contain at least one number")
+    # bcrypt reads only the first 72 bytes and silently ignores the rest, so a
+    # longer password would be weaker than it looks. Checked when a password is
+    # set, never at login, so an existing longer password still signs in.
+    if len(password.encode("utf-8")) > 72:
+        raise HTTPException(400, "Password must be 72 bytes or fewer")
 
 
 def _has_usable_login(db) -> bool:
@@ -358,11 +385,12 @@ def _reactivate_admin(request, db, username: str, password: str) -> dict:
     if not verify_install_token(request.headers.get("X-Install-Token", "")):
         raise HTTPException(401, "Install token required to reactivate an administrator. Read it from the container logs or install_token.txt.")
     admin = _reclaim_admin(db, username, password)
+    revoke_sessions(admin)
     db.commit()
     db.refresh(admin)
     retire_install_token()
     return {
-        "token": create_token(admin.id),
+        "token": create_token(admin.id, admin.token_version),
         "user": {"id": admin.id, "username": admin.username,
                  "display_name": admin.display_name, "role": admin.role},
     }
@@ -468,7 +496,7 @@ def initial_setup(data: SetupRequest, request: Request, db: DBSession):
     retire_install_token()
 
     # Generate token so they're logged in immediately
-    token = create_token(admin.id)
+    token = create_token(admin.id, admin.token_version)
     return {
         "token": token,
         "user": {"id": admin.id, "username": admin.username, "display_name": admin.display_name, "role": admin.role}
@@ -507,13 +535,30 @@ def login(req: LoginRequest, request: Request, db: DBSession):
         db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     if not user.is_active:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled")
+        # Same answer as a wrong password: a distinct message would confirm the
+        # password was right. The attempt is still recorded for the audit trail.
+        log_action(db, user.id, user.display_name, "login_blocked", "auth",
+                   ip_address=client_ip, details="Login attempt to a disabled account")
+        db.commit()
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     _failed_by_user.pop(req.username.strip().lower(), None)
-    token = create_token(user.id)
+    token = create_token(user.id, user.token_version)
     log_action(db, user.id, user.display_name, "login", "auth",
                ip_address=client_ip, details="Successful login")
     db.commit()
     return LoginResponse(token=token, user=UserOut.model_validate(user))
+
+
+@router.post("/logout", responses=responses(401))
+def logout(user: Annotated[User, Depends(get_current_user)], db: DBSession):
+    """Sign out by revoking every login token issued to this user. Clearing
+    the token in the browser alone would leave a copied token valid until it
+    expired."""
+    from app.services.audit import log_action
+    revoke_sessions(user)
+    log_action(db, user.id, user.display_name, "logout", "auth", details="Signed out; sessions revoked")
+    db.commit()
+    return {"ok": True}
 
 
 @router.get("/me", response_model=UserOut)
@@ -590,9 +635,13 @@ def change_password(req: ChangePasswordRequest, user: Annotated[User, Depends(ge
         raise HTTPException(status_code=400, detail="Current password is incorrect")
     _validate_password(req.new_password)
     user.password_hash = hash_password(req.new_password)
+    # Signs out every other session (including any stolen token); this one
+    # continues on the fresh token returned below.
+    revoke_sessions(user)
     log_action(db, user.id, user.display_name, "password_change", "user", user.id, user.display_name)
     db.commit()
-    return {"ok": True, "message": "Password changed successfully"}
+    return {"ok": True, "message": "Password changed successfully",
+            "token": create_token(user.id, user.token_version)}
 
 
 def _apply_user_change(target, changes: dict, field: str, new) -> None:
@@ -657,6 +706,10 @@ def update_user(user_id: int, data: UserUpdate, admin: Annotated[User, Depends(r
     _apply_user_change(target, changes, "is_active", data.is_active)
     _apply_pilot_link(target, changes, data, db)
     _apply_user_change(target, changes, "email", data.email)
+    # A role change or deactivation must take effect now, not when the user's
+    # current token expires.
+    if "role" in changes or "is_active" in changes:
+        revoke_sessions(target)
     if changes:
         log_action(db, admin.id, admin.display_name, "update", "user", target.id,
                    target.username, changes=changes)
@@ -674,6 +727,7 @@ def admin_reset_password(user_id: int, req: AdminResetPasswordRequest, admin: An
         raise HTTPException(status_code=404, detail=USER_NOT_FOUND)
     _validate_password(req.new_password)
     target.password_hash = hash_password(req.new_password)
+    revoke_sessions(target)
     log_action(db, admin.id, admin.display_name, "password_reset", "user", target.id,
                target.username, details=f"Password reset by {admin.username} for {target.username}")
     db.commit()

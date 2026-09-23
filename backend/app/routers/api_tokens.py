@@ -1,6 +1,6 @@
 """Admin management of long-lived API tokens for external integrations."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
@@ -20,6 +20,7 @@ class ApiTokenCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     read_only: bool = True
     scopes: Optional[list[str]] = None  # null = all areas
+    expires_in_days: Optional[int] = Field(default=None, ge=1, le=3650)  # null = never expires
 
 
 class ApiTokenOut(BaseModel):
@@ -31,13 +32,14 @@ class ApiTokenOut(BaseModel):
     created_at: Optional[datetime] = None
     last_used_at: Optional[datetime] = None
     revoked_at: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
 
 
 def _to_out(t: ApiToken) -> ApiTokenOut:
     return ApiTokenOut(
         id=t.id, name=t.name, token_prefix=t.token_prefix, read_only=t.read_only,
         scopes=token_scopes(t), created_at=t.created_at,
-        last_used_at=t.last_used_at, revoked_at=t.revoked_at,
+        last_used_at=t.last_used_at, revoked_at=t.revoked_at, expires_at=t.expires_at,
     )
 
 
@@ -67,6 +69,9 @@ def create_api_token(data: ApiTokenCreate, db: DBSession, admin: AdminUser):
             raise HTTPException(400, "Select at least one scope, or omit scopes for all areas")
 
     raw = generate_token()
+    expires_at = None
+    if data.expires_in_days is not None:
+        expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=data.expires_in_days)
     t = ApiToken(
         name=data.name,
         token_hash=hash_token(raw),
@@ -74,11 +79,13 @@ def create_api_token(data: ApiTokenCreate, db: DBSession, admin: AdminUser):
         user_id=admin.id,
         read_only=data.read_only,
         scopes=json.dumps(data.scopes) if data.scopes is not None else None,
+        expires_at=expires_at,
     )
     db.add(t)
     db.flush()
     log_action(db, admin.id, admin.display_name, "create", "api_token", t.id, t.name,
-               details=f"read_only={t.read_only}, scopes={data.scopes or 'all'}")
+               details=f"read_only={t.read_only}, scopes={data.scopes or 'all'}, "
+                       f"expires={expires_at.date().isoformat() if expires_at else 'never'}")
     db.commit()
     db.refresh(t)
     return {"token": raw, **_to_out(t).model_dump()}

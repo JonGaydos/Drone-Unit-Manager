@@ -51,6 +51,31 @@ describe('ApiTokensSection', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Create Token' }))
 
     expect(await screen.findByDisplayValue('dum_brand-new-secret')).toBeInTheDocument()
-    expect(captured).toMatchObject({ name: 'Home Assistant', read_only: true, scopes: ['fleet'] })
+    expect(captured).toMatchObject({ name: 'Home Assistant', read_only: true, scopes: ['fleet'], expires_in_days: null })
+  })
+
+  it('sends the chosen expiry when creating a token', async () => {
+    let captured = null
+    mockMount([])
+    server.use(http.post('/api/api-tokens', async ({ request }) => {
+      captured = await request.json()
+      return HttpResponse.json({ token: 'dum_x', id: 9, name: 'n', token_prefix: 'dum_x', read_only: true, scopes: null })
+    }))
+    const { user } = renderWithProviders(<ApiTokensSection />, { role: 'admin' })
+    await screen.findByText('No API tokens yet')
+    await user.click(screen.getByRole('button', { name: /Create Token/ }))
+    const dialog = await screen.findByRole('dialog')
+    await user.type(within(dialog).getByLabelText('Name'), 'Temp')
+    await user.selectOptions(within(dialog).getByLabelText('Expires'), '90')
+    await user.click(within(dialog).getByRole('button', { name: 'Create Token' }))
+    await screen.findByDisplayValue('dum_x')
+    expect(captured.expires_in_days).toBe(90)
+  })
+
+  it('shows a lapsed token as expired and offers no status of active', async () => {
+    mockMount([{ ...TOKENS[0], expires_at: '2020-01-01T00:00:00' }])
+    renderWithProviders(<ApiTokensSection />, { role: 'admin' })
+    expect(await screen.findByText('expired')).toBeInTheDocument()
+    expect(screen.queryByText('active')).toBeNull()
   })
 })

@@ -4,12 +4,23 @@ import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { renderWithProviders } from '@/test/render'
 import LoginPage from './LoginPage'
+import { IDLE_NOTICE_KEY } from '@/contexts/AuthContext'
 
 afterEach(() => {
   vi.unstubAllGlobals()
 })
 
 describe('LoginPage', () => {
+  it('explains an idle sign-out once, then drops the notice', () => {
+    sessionStorage.setItem(IDLE_NOTICE_KEY, '1')
+    const first = renderWithProviders(<LoginPage />, { route: '/login' })
+    expect(screen.getByRole('status')).toHaveTextContent('signed out after 30 minutes of inactivity')
+    first.unmount()
+
+    renderWithProviders(<LoginPage />, { route: '/login' })
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
   it('renders the sign-in form without crashing', () => {
     renderWithProviders(<LoginPage />, { route: '/login' })
     expect(screen.getByRole('heading', { name: 'Drone Unit Manager' })).toBeInTheDocument()

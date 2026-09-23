@@ -19,6 +19,9 @@ class User(Base):
     theme: Mapped[str] = mapped_column(String(30), default="dark")
     email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     pilot_id: Mapped[Optional[int]] = mapped_column(ForeignKey("pilots.id"), nullable=True)
+    # Carried in every login token. Bumping it (password change or reset, role
+    # change, deactivation, logout) invalidates every token issued before.
+    token_version: Mapped[int] = mapped_column(default=0, server_default="0")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
