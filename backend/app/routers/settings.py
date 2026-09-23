@@ -155,6 +155,8 @@ async def upload_logo(file: UploadFile, db: DBSession, user: AdminUser):
         setting.value = LOGO_VIEW_PATH
     else:
         db.add(Setting(key="org_logo", value=LOGO_VIEW_PATH))
+    from app.services.audit import log_action
+    log_action(db, user.id, user.display_name, "update", "setting", details="Replaced the organization logo")
     db.commit()
     return {"ok": True, "logo_url": LOGO_VIEW_PATH}
 
@@ -170,9 +172,11 @@ def view_logo():
     raise HTTPException(404, "No logo found")
 
 
-def _upsert_settings(db, data) -> None:
+def _upsert_settings(db, data) -> list[str]:
     """Write each allowed setting, skipping unknown keys and never overwriting a
-    stored secret with an empty or redacted placeholder value."""
+    stored secret with an empty or redacted placeholder value. Returns the keys
+    whose value actually changed."""
+    changed = []
     for item in data:
         if item.key not in ALLOWED_SETTING_KEYS:
             continue
@@ -180,9 +184,13 @@ def _upsert_settings(db, data) -> None:
             continue
         setting = db.query(Setting).filter(Setting.key == item.key).first()
         if setting:
+            if setting.value != item.value:
+                changed.append(item.key)
             setting.value = item.value
         else:
+            changed.append(item.key)
             db.add(Setting(key=item.key, value=item.value))
+    return changed
 
 
 def _interval_from(data, key) -> int | None:
@@ -205,7 +213,12 @@ def set_settings_bulk(data: list[SettingValue], db: DBSession, admin: AdminUser)
     Skips keys not in ALLOWED_SETTING_KEYS and ignores masked placeholder
     values to avoid overwriting real secrets with redacted strings.
     """
-    _upsert_settings(db, data)
+    changed = _upsert_settings(db, data)
+    if changed:
+        # Key names only: several of these hold credentials.
+        from app.services.audit import log_action
+        log_action(db, admin.id, admin.display_name, "update", "setting",
+                   details=f"Updated settings: {', '.join(sorted(set(changed)))}")
     db.commit()
 
     # Reschedule the sync/telemetry jobs only when their interval was in the request.

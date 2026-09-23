@@ -28,6 +28,7 @@ from sqlalchemy import text
 logger = logging.getLogger(__name__)
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.body_limit import BodySizeLimitMiddleware
 from app.constants import APP_TITLE, APP_VERSION
 from app.config import settings
 from app.responses import responses
@@ -154,6 +155,10 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
 )
+
+# Added before the request-id middleware below so it sits inside it: a 413
+# refusal still carries the request id and the security headers.
+app.add_middleware(BodySizeLimitMiddleware)
 
 
 # The app is served by uvicorn directly -- there is no nginx in the container --

@@ -4,6 +4,7 @@ import os
 from datetime import date
 from types import SimpleNamespace
 from typing import Optional
+from xml.sax.saxutils import escape as xml_escape
 
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
@@ -31,6 +32,14 @@ from app.models.mission_log_pilot import MissionLogPilot
 from app.models.training_log import TrainingLog
 from app.models.training_log_pilot import TrainingLogPilot
 from app.responses import responses
+
+from reportlab import rl_config
+
+# Report images are local files only. A non-empty trustedHosts turns on
+# ReportLab's URL check, and with trustedSchemes limited to file and data it
+# refuses every network URL whatever the host (.invalid never resolves).
+rl_config.trustedHosts = ["none.invalid"]
+rl_config.trustedSchemes = ["file", "data"]
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
@@ -91,6 +100,13 @@ def generate_report(config: ReportConfig, db: DBSession, user: PilotUser):
     return _dispatch_report(config, db)
 
 
+def _esc(value) -> str:
+    """A value as Paragraph text. Paragraph parses its input as markup, so a
+    pilot name or flight purpose holding '<' or '&' would break the PDF, and a
+    tag such as <img src=...> would make ReportLab read a file or fetch a URL."""
+    return xml_escape(str(value))
+
+
 def _find_org_logo() -> str | None:
     """Find the organization logo file path, if any."""
     for ext in ["png", "jpg", "jpeg", "gif", "webp"]:
@@ -135,8 +151,8 @@ def _build_pdf_summary_table(summary: dict, styles, primary_light, avail_width) 
                                  leading=14, textColor=HexColor("#1e293b"))
 
     items = [
-        (Paragraph(f"<b>{key.replace('_', ' ').title()}</b>", label_style),
-         Paragraph(f"<b>{value}</b>", value_style))
+        (Paragraph(f"<b>{_esc(key.replace('_', ' ').title())}</b>", label_style),
+         Paragraph(f"<b>{_esc(value)}</b>", value_style))
         for key, value in summary.items()
     ]
 
@@ -177,12 +193,12 @@ def _build_pdf_data_table(rows: list, columns: list, header_bg, alt_row, white, 
     from reportlab.lib.colors import HexColor
     from reportlab.platypus import Table, TableStyle, Paragraph
 
-    table_header = [Paragraph(f"<b>{c}</b>", header_cell_style) for c in columns]
+    table_header = [Paragraph(f"<b>{_esc(c)}</b>", header_cell_style) for c in columns]
     table_data = [table_header]
 
     for row in rows[:200]:
         vals = list(row.values())
-        table_row = [Paragraph(str(v) if v is not None else "-", cell_style) for v in vals]
+        table_row = [Paragraph(_esc(v) if v is not None else "-", cell_style) for v in vals]
         table_data.append(table_row)
 
     col_w = avail_width / max(len(columns), 1)
@@ -265,9 +281,9 @@ def _pdf_masthead(data: dict, config: ReportConfig, org_name: str, logo_path: st
 
     date_range = data.get("summary", {}).get("date_range") or f"{config.date_from or 'All'} to {config.date_to or 'Present'}"
     masthead_text = [
-        Paragraph(org_name, theme.title_style),
-        Paragraph(data.get("title", "Report"), theme.title_h1_style),
-        Paragraph(f"Date Range: {date_range}  |  Generated: {date.today()}", theme.subtitle_style),
+        Paragraph(_esc(org_name), theme.title_style),
+        Paragraph(_esc(data.get("title", "Report")), theme.title_h1_style),
+        Paragraph(f"Date Range: {_esc(date_range)}  |  Generated: {date.today()}", theme.subtitle_style),
     ]
 
     if not logo_flowable:
@@ -296,9 +312,9 @@ def _pdf_render_sections(sections: list, theme: SimpleNamespace) -> list:
 
     elements = []
     for sec in sections:
-        elements.append(Paragraph(sec.get("title", "Section"), theme.heading_style))
+        elements.append(Paragraph(_esc(sec.get("title", "Section")), theme.heading_style))
         if sec.get("narrative"):
-            elements.append(Paragraph(sec["narrative"], theme.narrative_style))
+            elements.append(Paragraph(_esc(sec["narrative"]), theme.narrative_style))
         if sec.get("summary"):
             elements.extend(_build_pdf_summary_table(sec["summary"], theme.styles, theme.primary_light, theme.avail_width))
         sec_rows = sec.get("rows") or []

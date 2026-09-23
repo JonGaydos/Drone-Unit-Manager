@@ -26,9 +26,11 @@ fi
 # Generate secret key if not provided
 if [[ -z "${SECRET_KEY}" || "${SECRET_KEY}" = "change-me-in-production" ]]; then
     if [[ ! -f "$DATA_DIR/.secret_key" ]]; then
-        python -c "import secrets; print(secrets.token_hex(32))" > "$DATA_DIR/.secret_key"
+        # Owner-only from the moment it exists: this key signs every login token.
+        (umask 077 && python -c "import secrets; print(secrets.token_hex(32))" > "$DATA_DIR/.secret_key")
         echo "Generated new secret key"
     fi
+    chmod 600 "$DATA_DIR/.secret_key" 2>/dev/null || true
     SECRET_KEY="$(cat "$DATA_DIR/.secret_key")"
     export SECRET_KEY
 fi

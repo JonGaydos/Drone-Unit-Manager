@@ -1,8 +1,10 @@
 """Skydio Cloud API provider implementation."""
 
 import logging
+import math
 import time
 from datetime import datetime
+from urllib.parse import urlparse
 
 import httpx
 
@@ -15,6 +17,30 @@ logger = logging.getLogger(__name__)
 BASE_URL = "https://api.skydio.com/api/v0"
 TELEMETRY_BASE = "https://api.skydio.com/api/v1"
 MAX_RETRIES = 3
+SKYDIO_HOST = "api.skydio.com"
+# Longest wait a 429 can ask for. A sync runs on the scheduler thread, so an
+# unbounded Retry-After could stall it for as long as the header said.
+MAX_RETRY_AFTER = 60.0
+DEFAULT_RETRY_AFTER = 5.0
+
+
+def _retry_after_seconds(header: str | None) -> float:
+    """Seconds to wait before retrying, from a Retry-After header. Bounded by
+    MAX_RETRY_AFTER; a missing, date-form or junk value waits the default."""
+    try:
+        wait = float(header) if header is not None else DEFAULT_RETRY_AFTER
+    except ValueError:
+        wait = DEFAULT_RETRY_AFTER
+    if not math.isfinite(wait) or wait < 0:
+        wait = DEFAULT_RETRY_AFTER
+    return min(wait, MAX_RETRY_AFTER)
+
+
+def _is_skydio_url(url: str) -> bool:
+    """True for an https URL on the Skydio API host. Every request carries the
+    API token, so a page link anywhere else must not be followed."""
+    parsed = urlparse(url)
+    return parsed.scheme == "https" and parsed.hostname == SKYDIO_HOST
 
 
 def _log_provider_error(action: str, exc: Exception) -> None:
@@ -236,7 +262,7 @@ class SkydioProvider(DroneProvider):
                     resp = client.request(method, url, headers=headers, params=params)
 
                 if resp.status_code == 429:
-                    retry_after = float(resp.headers.get("Retry-After", "5"))
+                    retry_after = _retry_after_seconds(resp.headers.get("Retry-After"))
                     if attempt < MAX_RETRIES:
                         logger.warning(
                             "Rate limited by Skydio API, retrying after %.1fs (attempt %d/%d)",
@@ -286,6 +312,9 @@ class SkydioProvider(DroneProvider):
         next_cursor = body.get("next") or body.get("next_cursor")
         if next_cursor:
             if isinstance(next_cursor, str) and next_cursor.startswith("http"):
+                if not _is_skydio_url(next_cursor):
+                    logger.warning("Not following a pagination link off %s: %s", SKYDIO_HOST, next_cursor)
+                    return "STOP", params
                 return next_cursor, {}
             params["cursor"] = next_cursor
             return None, params

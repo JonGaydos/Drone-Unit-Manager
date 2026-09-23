@@ -7,6 +7,8 @@ overdue maintenance, etc.) and sends formatted HTML digest emails via SMTP.
 import json
 import logging
 import smtplib
+import ssl
+from html import escape
 from datetime import datetime, date, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -193,7 +195,7 @@ def _render_section_items(cat_key: str, items: list, count: int) -> str:
     html = ""
     for item in items:
         detail_parts = [
-            f"{k.replace('_', ' ').title()}: {v}" for k, v in item.items() if k != "id"
+            escape(f"{k.replace('_', ' ').title()}: {v}") for k, v in item.items() if k != "id"
         ]
         html += f'<p style="margin:4px 0;padding:4px 8px;background:#f5f5f5;border-radius:4px;font-size:13px;">{" | ".join(detail_parts)}</p>'
     return html
@@ -230,7 +232,7 @@ def render_digest_html(sections: dict, user: User, org_name: str) -> str:
         sections_html += f"""
         <div style="margin-bottom:20px;">
             <h3 style="margin:0 0 8px;font-size:15px;color:#333;border-bottom:1px solid #eee;padding-bottom:4px;">
-                {label} ({display_count})
+                {escape(label)} ({display_count})
             </h3>
             {items_html}
         </div>
@@ -243,11 +245,11 @@ def render_digest_html(sections: dict, user: User, org_name: str) -> str:
 <head><meta charset="utf-8"></head>
 <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:600px;margin:0 auto;padding:20px;color:#333;">
     <div style="background:#1a1a2e;color:white;padding:20px;border-radius:8px 8px 0 0;text-align:center;">
-        <h1 style="margin:0;font-size:20px;">{org_name}</h1>
+        <h1 style="margin:0;font-size:20px;">{escape(org_name)}</h1>
         <p style="margin:4px 0 0;opacity:0.8;font-size:13px;">Daily Digest — {today_str}</p>
     </div>
     <div style="border:1px solid #e0e0e0;border-top:none;padding:20px;border-radius:0 0 8px 8px;">
-        <p style="margin:0 0 16px;">Hi {user.display_name},</p>
+        <p style="margin:0 0 16px;">Hi {escape(user.display_name or '')},</p>
         <p style="margin:0 0 20px;color:#666;">Here's your summary of items that need attention:</p>
         {sections_html}
         <hr style="border:none;border-top:1px solid #eee;margin:20px 0;">
@@ -259,6 +261,9 @@ def render_digest_html(sections: dict, user: User, org_name: str) -> str:
 </body>
 </html>"""
     return html
+
+
+SMTP_TIMEOUT = 30  # seconds
 
 
 def send_email(to_address: str, subject: str, html_body: str, db: Session) -> bool:
@@ -295,16 +300,20 @@ def send_email(to_address: str, subject: str, html_body: str, db: Session) -> bo
     msg.attach(MIMEText(plain, "plain"))
     msg.attach(MIMEText(html_body, "html"))
 
+    # A default context verifies the server's certificate and hostname; the
+    # bare calls did neither, so anyone on the path could read the password.
+    # The timeout keeps a dead server from hanging the scheduler thread.
+    tls = ssl.create_default_context()
     try:
         if smtp_port == 465:
             # Port 465 = implicit SSL (Gmail, Yahoo, etc.)
-            server = smtplib.SMTP_SSL(smtp_host, smtp_port)
+            server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=SMTP_TIMEOUT, context=tls)
         elif smtp_tls:
             # Port 587 = STARTTLS
-            server = smtplib.SMTP(smtp_host, smtp_port)
-            server.starttls()
+            server = smtplib.SMTP(smtp_host, smtp_port, timeout=SMTP_TIMEOUT)
+            server.starttls(context=tls)
         else:
-            server = smtplib.SMTP(smtp_host, smtp_port)
+            server = smtplib.SMTP(smtp_host, smtp_port, timeout=SMTP_TIMEOUT)
 
         if smtp_user and smtp_pass:
             server.login(smtp_user, smtp_pass)

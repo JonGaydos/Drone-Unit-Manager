@@ -163,6 +163,11 @@ async def upload_document(
         folder_id=folder_id,
     )
     db.add(doc)
+    db.flush()
+    from app.services.audit import log_action
+    log_action(db, admin.id, admin.display_name, "upload", "document", doc.id, title,
+               details=f"{dest.name}, {len(contents)} bytes, {entity_type}"
+                       + (f" #{entity_id}" if entity_id is not None else ""))
     db.commit()
     db.refresh(doc)
     return _doc_to_out(doc)
@@ -264,8 +269,13 @@ def update_document(
     if not doc:
         raise HTTPException(status_code=404, detail=DOCUMENT_NOT_FOUND)
     update_fields = data.model_dump(exclude_unset=True)
+    from app.services.audit import compute_changes, log_action
+    changes = compute_changes(doc, update_fields, list(update_fields))
     for key, value in update_fields.items():
         setattr(doc, key, value)
+    if changes:
+        log_action(db, user.id, user.display_name, "update", "document", doc.id,
+                   doc.title or doc.filename, changes=changes)
     db.commit()
     db.refresh(doc)
     return _doc_to_out(doc)

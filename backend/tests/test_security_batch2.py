@@ -6,7 +6,7 @@ import logging
 from datetime import datetime, timedelta
 
 import pytest
-from jose import jwt
+import jwt
 
 from app.config import settings
 from app.models.api_token import ApiToken
@@ -94,7 +94,7 @@ def test_token_from_before_versioning_still_works(client, pilot_user):
 
 
 def test_login_token_lasts_twelve_hours():
-    claims = jwt.get_unverified_claims(create_token(1))
+    claims = jwt.decode(create_token(1), options={"verify_signature": False})
     assert claims["exp"] - claims["iat"] == 12 * 3600
 
 

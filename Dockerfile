@@ -25,15 +25,10 @@ LABEL org.opencontainers.image.source="https://github.com/JonGaydos/Drone-Unit-M
 
 WORKDIR /app
 
-# Install system dependencies for WeasyPrint (PDF generation)
+# curl is for the HEALTHCHECK below. Reports are drawn with ReportLab and
+# matplotlib's Agg backend, which need no system graphics libraries.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
-    libcairo2 \
-    libffi-dev \
-    libgdk-pixbuf-2.0-0 \
-    libglib2.0-0 \
-    libpango-1.0-0 \
-    libpangocairo-1.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
