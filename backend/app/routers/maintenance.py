@@ -112,10 +112,14 @@ def list_maintenance(
     if entity_id:
         q = q.filter(MaintenanceRecord.entity_id == entity_id)
     if upcoming:
+        # A due date a later record for the same task replaced is not upcoming.
+        from app.services.maintenance_due import superseded_record_ids
+        superseded = superseded_record_ids(db)
         q = q.filter(MaintenanceRecord.next_due_date.isnot(None)).order_by(MaintenanceRecord.next_due_date)
+        rows = [m for m in q.all() if m.id not in superseded][:200]
     else:
-        q = q.order_by(MaintenanceRecord.performed_date.desc())
-    return [MaintenanceOut.model_validate(m) for m in q.limit(200).all()]
+        rows = q.order_by(MaintenanceRecord.performed_date.desc()).limit(200).all()
+    return [MaintenanceOut.model_validate(m) for m in rows]
 
 
 @router.get("/{record_id}", response_model=MaintenanceOut, responses=responses(401, 404))

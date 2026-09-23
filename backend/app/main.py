@@ -7,6 +7,7 @@ the React SPA in production.
 import logging
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -249,13 +250,58 @@ app.include_router(import_router.router)
 app.include_router(calendar.router)
 
 
+# How old the last backup or clean sync may be before the health check warns.
+STALE_AFTER = timedelta(hours=26)
+
+
+def _older_than(stamp: str | None, age: timedelta) -> bool:
+    """Whether an ISO timestamp setting is missing, unreadable or older than age."""
+    try:
+        when = datetime.fromisoformat(stamp) if stamp else None
+    except ValueError:
+        return True
+    if when is None:
+        return True
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) - when > age
+
+
+def _health_warnings(db) -> list[str]:
+    """Things an operator should look at that do not make the app unusable."""
+    from app.models.setting import Setting
+    from app.services.backup_jobs import get_backup_enabled
+    from app.services.scheduler import scheduler_running
+    values = {row.key: row.value for row in db.query(Setting).filter(
+        Setting.key.in_(["last_backup_at", "last_sync_timestamp", "skydio_api_token"])).all()}
+    warnings = []
+    if not scheduler_running():
+        warnings.append("The background scheduler is not running")
+    if get_backup_enabled(db) and _older_than(values.get("last_backup_at"), STALE_AFTER):
+        warnings.append("No backup in the last 26 hours")
+    if values.get("skydio_api_token") and _older_than(values.get("last_sync_timestamp"), STALE_AFTER):
+        warnings.append("No successful Skydio sync in the last 26 hours")
+    return warnings
+
+
 @app.get("/api/health")
 def health_check():
-    """Health check that verifies database connectivity."""
-    db = SessionLocal()
+    """Both databases, plus warnings for a stopped scheduler or a stale backup
+    or sync.
+
+    503 only when a database is unreachable: the container's HEALTHCHECK
+    restarts on failure, and an old backup is a reason to look, not to
+    restart. Warnings keep the status "ok" and are listed instead.
+    """
+    # Resolved per call, like the backup routes, so a test's engines are used.
+    from app import database
+    db = database.SessionLocal()
+    tdb = database.TelemetrySessionLocal()
     try:
         db.execute(text("SELECT 1"))
-        return {"status": "ok", "app": APP_TITLE, "version": APP_VERSION, "database": "connected"}
+        tdb.execute(text("SELECT 1"))
+        return {"status": "ok", "app": APP_TITLE, "version": APP_VERSION, "database": "connected",
+                "telemetry_database": "connected", "warnings": _health_warnings(db)}
     except Exception:
         logger.exception("Health check failed")
         return JSONResponse(
@@ -264,6 +310,7 @@ def health_check():
         )
     finally:
         db.close()
+        tdb.close()
 
 
 # Serve frontend static files in production (Docker)

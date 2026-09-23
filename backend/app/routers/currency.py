@@ -144,12 +144,27 @@ def _evaluate_currency(rules: list[CurrencyRule], flights: list[Flight]):
     return [_evaluate_rule(rule, flights, today) for rule in rules]
 
 
+def flights_by_pilot(db: Session, pilot_ids: list[int], rules: list[CurrencyRule]) -> dict[int, list[Flight]]:
+    """Each pilot's flights that any rule can see, in one query.
+
+    Only flights inside the longest rule period can count, so older ones are
+    not loaded: without the bound every currency check read a pilot's whole
+    history, and the dashboard and reminders did so once per pilot.
+    """
+    if not pilot_ids or not rules:
+        return {}
+    since = date.today() - timedelta(days=max(rule.period_days for rule in rules))
+    grouped: dict[int, list[Flight]] = {}
+    for f in db.query(Flight).options(joinedload(Flight.vehicle)).filter(
+        Flight.pilot_id.in_(pilot_ids), Flight.date >= since,
+    ).all():
+        grouped.setdefault(f.pilot_id, []).append(f)
+    return grouped
+
+
 def _pilot_currency(pilot: Pilot, rules: list[CurrencyRule], db: Session):
     """Evaluate currency for a single pilot against all active rules."""
-    flights = db.query(Flight).options(joinedload(Flight.vehicle)).filter(
-        Flight.pilot_id == pilot.id
-    ).all()
-    return _evaluate_currency(rules, flights)
+    return _evaluate_currency(rules, flights_by_pilot(db, [pilot.id], rules).get(pilot.id, []))
 
 
 @router.get("/status", responses=responses(401))
@@ -158,21 +173,13 @@ def get_all_currency_status(db: DBSession, user: CurrentUser):
     rules = db.query(CurrencyRule).filter(CurrencyRule.is_active.is_(True)).all()
     pilots = db.query(Pilot).filter(Pilot.status == "active").order_by(Pilot.last_name).all()
 
-    # Load every active pilot's flights in one query (with vehicle, for
-    # model-specific rules) and group by pilot, instead of a query per pilot
-    # per rule.
-    flights_by_pilot: dict[int, list[Flight]] = {}
-    pilot_ids = [p.id for p in pilots]
-    if pilot_ids:
-        all_flights = db.query(Flight).options(joinedload(Flight.vehicle)).filter(
-            Flight.pilot_id.in_(pilot_ids)
-        ).all()
-        for f in all_flights:
-            flights_by_pilot.setdefault(f.pilot_id, []).append(f)
+    # Every active pilot's flights in one query (with vehicle, for
+    # model-specific rules), instead of a query per pilot per rule.
+    flights = flights_by_pilot(db, [p.id for p in pilots], rules)
 
     results = []
     for pilot in pilots:
-        rule_results = _evaluate_currency(rules, flights_by_pilot.get(pilot.id, []))
+        rule_results = _evaluate_currency(rules, flights.get(pilot.id, []))
         overall_current = all(r["is_current"] for r in rule_results) if rule_results else True
         results.append({
             "pilot_id": pilot.id,
@@ -224,12 +231,12 @@ def _reminder_html(pilot, lapsed_rules, org_name: str, intro: str) -> str:
 </body></html>"""
 
 
-def _send_one_reminder(pilot, rules, org_name: str, intro: str, db) -> tuple:
+def _send_one_reminder(pilot, rules, flights, org_name: str, intro: str, db) -> tuple:
     """Evaluate one pilot and send a reminder when lapsed with an email on file.
     Returns (status, recipient_label); status is one of sent / failed /
     skipped_current / skipped_no_email, and recipient_label is set only on sent."""
     from app.services.email_digest import send_email
-    rule_results = _pilot_currency(pilot, rules, db)
+    rule_results = _evaluate_currency(rules, flights)
     lapsed_rules = [r for r in rule_results if not r["is_current"]]
     if not lapsed_rules:
         return "skipped_current", None
@@ -278,8 +285,9 @@ def send_currency_reminders(
     recipients_logged: list[str] = []
     intro = (data.custom_message or "").strip()
 
+    flights = flights_by_pilot(db, [p.id for p in pilots], rules)
     for pilot in pilots:
-        status, recipient = _send_one_reminder(pilot, rules, org_name, intro, db)
+        status, recipient = _send_one_reminder(pilot, rules, flights.get(pilot.id, []), org_name, intro, db)
         counts[status] += 1
         if recipient:
             recipients_logged.append(recipient)

@@ -21,6 +21,9 @@ _scheduler: BackgroundScheduler | None = None
 SYNC_JOB_ID = "skydio_sync"
 DIGEST_JOB_ID = "email_digest"
 BACKUP_JOB_ID = "daily_backup"
+MAINTENANCE_ALERT_JOB_ID = "maintenance_alerts"
+# Local hour the daily overdue-maintenance alerts are raised.
+MAINTENANCE_ALERT_HOUR = 6
 TELEMETRY_SYNC_JOB_ID = "skydio_telemetry_sync"
 
 
@@ -37,10 +40,13 @@ def check_maintenance_schedules(db):
     ).all()
 
     for schedule in overdue:
-        # Check if an alert already exists for this schedule today
+        # One open alert per schedule. Keyed on the equipment as well as the
+        # name: two aircraft each with a "Monthly check" are two alerts.
         existing = db.query(Alert).filter(
             Alert.type == "maintenance_due",
             Alert.title == f"Maintenance Due: {schedule.name}",
+            Alert.entity_type == schedule.entity_type,
+            Alert.entity_id == schedule.entity_id,
             Alert.is_dismissed == False,
         ).first()
         if existing:
@@ -75,9 +81,6 @@ def _run_scheduled_sync():
     """Execute a sync inside a fresh DB session (called by APScheduler)."""
     db = SessionLocal()
     try:
-        # Check maintenance schedules for overdue items
-        check_maintenance_schedules(db)
-
         # Check if sync is configured
         token_setting = db.query(Setting).filter(Setting.key == "skydio_api_token").first()
         if not token_setting or not token_setting.value:
@@ -98,6 +101,18 @@ def _run_scheduled_sync():
         logger.info("Scheduled sync skipped: another sync is running")
     except Exception:
         logger.exception("Scheduled sync failed")
+    finally:
+        db.close()
+
+
+def _run_maintenance_alerts():
+    """Raise alerts for overdue maintenance (scheduled daily). Its own job, not
+    a step of the sync, so alerts do not depend on a sync being configured."""
+    db = SessionLocal()
+    try:
+        check_maintenance_schedules(db)
+    except Exception:
+        logger.exception("Maintenance alert check failed")
     finally:
         db.close()
 
@@ -319,6 +334,16 @@ def start_scheduler():
     _scheduler = BackgroundScheduler()
     _scheduler.start()
 
+    _scheduler.add_job(
+        _run_maintenance_alerts,
+        trigger=CronTrigger(hour=MAINTENANCE_ALERT_HOUR, minute=0),
+        id=MAINTENANCE_ALERT_JOB_ID,
+        replace_existing=True,
+        max_instances=1,
+        # Also shortly after boot, so a restart does not wait until tomorrow.
+        next_run_time=datetime.now() + timedelta(minutes=2),
+    )
+
     if interval_minutes:
         next_run = _first_sync_run_time(interval_minutes)
         _scheduler.add_job(
@@ -386,6 +411,11 @@ def start_scheduler():
         )
     else:
         logger.info("Daily backup disabled by setting (backup_enabled=false)")
+
+
+def scheduler_running() -> bool:
+    """Whether the background scheduler is up (for the health check)."""
+    return _scheduler is not None and _scheduler.running
 
 
 def stop_scheduler():

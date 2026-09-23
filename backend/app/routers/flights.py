@@ -286,7 +286,7 @@ def _refresh_location_and_metrics(flight: Flight, detail: dict, updated_fields: 
         ("max_altitude_m", "max_altitude_m"), ("max_speed_mps", "max_speed_mps"),
         ("distance_m", "distance_m"),
     ]:
-        val = detail.get(api_key) or detail.get(fld.replace("_m", "").replace("_mps", ""))
+        val = detail.get(api_key) or detail.get(fld.removesuffix("_mps").removesuffix("_m"))
         if val is not None:
             setattr(flight, fld, val)
             updated_fields.append(fld)
