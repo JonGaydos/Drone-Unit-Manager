@@ -118,6 +118,12 @@ export function ImportMappingModal({ entity, onClose, onComplete }) {
                 <span><span className="font-medium text-foreground">{file?.name}</span> · {preview.row_count} row{preview.row_count === 1 ? '' : 's'} · {preview.headers.length} column{preview.headers.length === 1 ? '' : 's'}</span>
                 <button onClick={reset} className="hover:text-foreground">Choose different file</button>
               </div>
+              {preview.truncated && (
+                <p className="flex items-center gap-1.5 text-xs text-amber-400">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  Only the first {preview.row_count} rows can be imported at once. Split the file to import the rest.
+                </p>
+              )}
 
               <div className="border border-border rounded-lg overflow-hidden">
                 <table className="w-full text-sm">
@@ -185,6 +191,9 @@ export function ImportMappingModal({ entity, onClose, onComplete }) {
                 <span className="font-medium">{result.created} record{result.created === 1 ? '' : 's'} created</span>
                 {result.skipped > 0 && (
                   <span className="text-xs text-muted-foreground">· {result.skipped} skipped (missing date)</span>
+                )}
+                {result.duplicates > 0 && (
+                  <span className="text-xs text-muted-foreground">· {result.duplicates} already imported</span>
                 )}
               </div>
               {result.unmatched_names && Object.keys(result.unmatched_names).length > 0 && (

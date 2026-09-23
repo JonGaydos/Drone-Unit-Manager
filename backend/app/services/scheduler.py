@@ -1,10 +1,12 @@
 """Background sync scheduler using APScheduler."""
 
 import logging
+from datetime import datetime, timedelta
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.date import DateTrigger
 
 from app.constants import APP_TITLE
 from app.database import SessionLocal
@@ -356,7 +358,7 @@ def start_scheduler():
 
     # Daily full-backup job (DB + uploads), unless explicitly disabled.
     from app.services.backup_jobs import (
-        get_backup_enabled, get_backup_hour, run_scheduled_backup,
+        get_backup_enabled, get_backup_hour, run_catch_up_backup, run_scheduled_backup,
     )
     db = SessionLocal()
     try:
@@ -374,6 +376,14 @@ def start_scheduler():
             max_instances=1,
         )
         logger.info("Daily backup scheduler started (runs at %02d:00)", backup_hour)
+        # A few minutes after boot, not during it: startup stays quick, and a
+        # container that was down at backup time still gets its daily backup.
+        _scheduler.add_job(
+            run_catch_up_backup,
+            trigger=DateTrigger(run_date=datetime.now() + timedelta(minutes=5)),
+            id="catch_up_backup",
+            replace_existing=True,
+        )
     else:
         logger.info("Daily backup disabled by setting (backup_enabled=false)")
 

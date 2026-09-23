@@ -171,6 +171,37 @@ describe('IntegrationsPage', () => {
     expect(tested).toBe(true)
   })
 
+  it('runs Sync Now as a background job and reports its result', async () => {
+    let started = null
+    mockMount()
+    server.use(
+      http.post('/api/sync/now/start', ({ request }) => {
+        started = new URL(request.url).search
+        return HttpResponse.json({ job_id: 'job-1' })
+      }),
+      http.get('/api/sync/jobs/job-1', () => HttpResponse.json({
+        id: 'job-1', status: 'done', result: { flights_new: 3, flights_skipped: 0, vehicles_synced: 1, errors: [] },
+      })),
+    )
+    const { user } = renderWithProviders(<IntegrationsPage />, { role: 'admin' })
+    await user.click(await screen.findByText('Skydio'))
+    await user.click(await screen.findByRole('button', { name: /Sync Now/ }))
+    expect(await screen.findByText(/Synced: 3 new flights/)).toBeInTheDocument()
+    expect(started).toBe('?full=false')
+  })
+
+  it('shows the reason when the sync job fails', async () => {
+    mockMount()
+    server.use(
+      http.post('/api/sync/now/start', () => HttpResponse.json({ job_id: 'job-2' })),
+      http.get('/api/sync/jobs/job-2', () => HttpResponse.json({ id: 'job-2', status: 'failed', error: 'Skydio said 503' })),
+    )
+    const { user } = renderWithProviders(<IntegrationsPage />, { role: 'admin' })
+    await user.click(await screen.findByText('Skydio'))
+    await user.click(await screen.findByRole('button', { name: /Sync Now/ }))
+    expect(await screen.findByText('Skydio said 503')).toBeInTheDocument()
+  })
+
   // What an import chose NOT to do is the part that goes wrong quietly. A BRINC
   // export whose drone is missing from the fleet skips every row belonging to
   // it, and the success line alone would report only the rows that worked.

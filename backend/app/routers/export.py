@@ -687,18 +687,9 @@ def _parse_csv_flight_row(row: dict, db) -> Flight:
     return flight
 
 
-@router.post("/flights/import", responses=responses(400, 413))
-async def import_flights_csv(
-    db: DBSession,
-    admin: AdminUser,
-    file: Annotated[UploadFile, File()],
-):
-    if not file.filename.endswith('.csv'):
-        raise HTTPException(400, "Only CSV files are supported")
-
-    content = await file.read()
-    if len(content) > settings.MAX_UPLOAD_SIZE:
-        raise HTTPException(413, f"File too large. Maximum size is {settings.MAX_UPLOAD_SIZE // (1024*1024)}MB")
+def _import_flights_csv_content(db, content: bytes) -> dict:
+    """Import a flights CSV: a Skydio flight-list export, or the app's own
+    exported flights CSV. Synchronous; the route runs it off the event loop."""
     text = content.decode('utf-8-sig')
     reader = csv.DictReader(io.StringIO(text))
     headers = set(reader.fieldnames or [])
@@ -726,6 +717,21 @@ async def import_flights_csv(
     return {"imported": imported, "errors": errors}
 
 
+@router.post("/flights/import", responses=responses(400, 413))
+async def import_flights_csv(
+    db: DBSession,
+    admin: AdminUser,
+    file: Annotated[UploadFile, File()],
+):
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(400, "Only CSV files are supported")
+
+    content = await file.read()
+    if len(content) > settings.MAX_UPLOAD_SIZE:
+        raise HTTPException(413, f"File too large. Maximum size is {settings.MAX_UPLOAD_SIZE // (1024*1024)}MB")
+    return await run_in_threadpool(_import_flights_csv_content, db, content)
+
+
 @router.post("/excel/import", responses=responses(400, 413))
 async def import_excel_file(
     db: DBSession,
@@ -746,9 +752,8 @@ async def import_excel_file(
     finally:
         spooled.close()
     from app.services.excel_import import import_excel, import_skydio_csv
-    if file.filename.endswith('.csv'):
-        return import_skydio_csv(db, content)
-    return import_excel(db, content)
+    importer = import_skydio_csv if file.filename.endswith('.csv') else import_excel
+    return await run_in_threadpool(importer, db, content)
 
 
 # Below this the upload stays in memory; above it, the spool writes to disk.
@@ -862,9 +867,14 @@ async def import_flight_log(
         content = spooled.read()
     finally:
         spooled.close()
+    return await run_in_threadpool(_import_single_log, db, file.filename, content, format, admin.id)
 
+
+def _import_single_log(db, filename: str, content: bytes, format: str, user_id: int) -> dict:
+    """Import one uploaded log or flight list, routed by file type and header.
+    Synchronous; the route runs it off the event loop."""
     # Handle Excel files — route to Excel import
-    if file.filename.endswith(EXCEL_EXTENSIONS):
+    if filename.endswith(EXCEL_EXTENSIONS):
         from app.services.excel_import import import_excel
         result = import_excel(db, content)
         result["format_detected"] = "excel"
@@ -873,7 +883,7 @@ async def import_flight_log(
     # Skydio flight-list CSV (multi-row export) — route to the bulk Skydio
     # importer, which creates pilots/vehicles/equipment. Without this, auto-detect
     # mistakes it for single-flight Litchi telemetry.
-    if file.filename.endswith('.csv'):
+    if filename.endswith('.csv'):
         try:
             first_line = content.decode('utf-8-sig').splitlines()[0]
         except (UnicodeDecodeError, IndexError):
@@ -901,7 +911,7 @@ async def import_flight_log(
 
     telemetry_db = next(get_telemetry_db())
     try:
-        result = do_import(content, db, telemetry_db, format_hint=format, user_id=admin.id)
+        result = do_import(content, db, telemetry_db, format_hint=format, user_id=user_id)
     finally:
         telemetry_db.close()
 

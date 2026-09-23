@@ -27,6 +27,27 @@ function relativeTime(iso) {
   return `${diffDay} day${diffDay === 1 ? '' : 's'} ago`
 }
 
+// How often a running sync is checked on.
+const JOB_POLL_MS = 2000
+
+/**
+ * Start a sync job on the server and wait for it to finish.
+ * The work runs as a background job because a long sync outlasts the 100
+ * seconds Cloudflare allows a request, which used to show a failure while the
+ * sync carried on.
+ * @param {string} startPath - The job's start route, e.g. '/sync/now/start?full=false'.
+ * @returns {Promise<Object>} The job's result.
+ */
+async function runSyncJob(startPath) {
+  const { job_id: jobId } = await api.post(startPath)
+  for (;;) {
+    const job = await api.get(`/sync/jobs/${jobId}`)
+    if (job.status === 'done') return job.result
+    if (job.status === 'failed') throw new Error(job.error || 'Sync failed')
+    await new Promise(resolve => setTimeout(resolve, JOB_POLL_MS))
+  }
+}
+
 /** Provider definitions with their status and required settings keys. */
 const PROVIDERS = [
   {
@@ -99,7 +120,7 @@ function ProviderCard({ provider, settings, onSave, onTest, onSync }) {
   const handleSync = async (full = false) => {
     setSyncType(full ? 'full' : 'sync')
     try {
-      const res = await api.post(`/sync/now?full=${full}`, undefined, { timeout: 0 })
+      const res = await runSyncJob(`/sync/now/start?full=${full}`)
       setLastResult(res)
       const parts = [`${res.flights_new} new flights`]
       if (res.flights_skipped) parts.push(`${res.flights_skipped} existing`)
@@ -120,7 +141,7 @@ function ProviderCard({ provider, settings, onSave, onTest, onSync }) {
   const handleSyncTelemetry = async () => {
     setSyncingTelemetry(true)
     try {
-      const res = await api.post('/sync/telemetry', undefined, { timeout: 0 })
+      const res = await runSyncJob('/sync/telemetry/start')
       toast.success(`Telemetry synced for ${res.synced} flights (${res.remaining} remaining)`)
     } catch (err) {
       toast.error(err.message)

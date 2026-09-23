@@ -4,7 +4,6 @@ Export creates a ZIP with manifest, JSON database dump, and uploaded files.
 Import requires a fresh install (no users) and restores everything.
 """
 
-import asyncio
 import io
 import json
 import logging
@@ -16,6 +15,7 @@ from datetime import date, datetime
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
+from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile as StarletteUploadFile
 from sqlalchemy import func, inspect as sa_inspect, text
 from sqlalchemy.orm import Session
@@ -34,6 +34,7 @@ def _telemetry_session():
     """
     return database.TelemetrySessionLocal()
 from app.deps import DBSession, AdminUser
+from app.services.sync_lock import restoring, sync_guard_http
 from app.models.user import User
 from app.models.pilot import Pilot
 from app.models.vehicle import Vehicle
@@ -511,8 +512,8 @@ def _safe_zip_member_path(upload_dir: str, relative: str) -> str:
 def _restore_uploads(zf: zipfile.ZipFile, upload_dir: str) -> int:
     """Extract every 'uploads/...' entry in the backup ZIP into upload_dir on
     disk. Rejects entries that try to escape upload_dir via absolute paths,
-    '..' segments, or symlinks. Called from import_backup via
-    asyncio.to_thread so blocking file I/O doesn't stall the event loop."""
+    '..' segments, or symlinks. Runs inside _restore_archive, which import_backup
+    keeps off the event loop."""
     files_restored = 0
     files_rejected = 0
     upload_prefix = "uploads/"
@@ -776,6 +777,70 @@ async def _read_backup_upload(request: Request) -> bytes:
         await form.close()
 
 
+def _restore_archive(db, content: bytes, principal: str) -> dict:
+    """Restore a backup ZIP: main tables, telemetry, then uploaded files.
+    Synchronous and slow (minutes for a large install); the route runs it
+    off the event loop so the rest of the app keeps answering meanwhile."""
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(content))
+    except zipfile.BadZipFile:
+        raise HTTPException(400, "Invalid ZIP file")
+
+    if MANIFEST_FILE not in zf.namelist():
+        raise HTTPException(400, f"Invalid backup: missing {MANIFEST_FILE}")
+    if DATABASE_FILE not in zf.namelist():
+        raise HTTPException(400, f"Invalid backup: missing {DATABASE_FILE}")
+
+    manifest = json.loads(zf.read(MANIFEST_FILE))
+    logger.info("Importing backup from %s (version %s), principal=%s",
+                manifest.get("export_date"), manifest.get("app_version"), principal)
+
+    db_tables = json.loads(zf.read(DATABASE_FILE))
+    tables_imported, rows_imported = _restore_main_tables(db, db_tables)
+
+    # Telemetry lives in a separate database, so it cannot share the main
+    # transaction. A failure is surfaced rather than swallowed: the operator
+    # can retry, which is safe because the whole restore is idempotent
+    # (every table is replaced, not appended).
+    try:
+        telemetry_imported, telemetry_count = _restore_telemetry(zf)
+    except Exception as exc:
+        logger.exception("Backup telemetry import failed")
+        raise HTTPException(500, f"Backup telemetry import failed: {exc}")
+    rows_imported += telemetry_count
+
+    files_restored = _restore_uploads(zf, str(app_settings.UPLOAD_DIR))
+
+    logger.info("Backup import complete: %d tables, %d rows, %d files (principal=%s)",
+                tables_imported, rows_imported, files_restored, principal)
+
+    # A restore blanks every password hash, so the install is left with no
+    # usable login. Keep the SAME install token available (and logged) so the
+    # operator can reactivate an admin on the setup screen; /auth/setup
+    # retires it once that succeeds. init_install_token reuses the existing
+    # token file untouched -- it never replaces a token -- and only mints one
+    # when none is on disk (an admin restoring in-app, where no token existed
+    # at boot). No-ops if a usable login somehow remains.
+    init_install_token()
+
+    # Audit log entry (best-effort — table may not have existed pre-import).
+    try:
+        from app.services.audit import log_action
+        log_action(db, None, principal, "import", "backup",
+                   details=f"tables={tables_imported}, rows={rows_imported}, files={files_restored}")
+        db.commit()
+    except Exception as exc:
+        logger.warning("Could not write audit log for backup import: %s", exc)
+
+    return {
+        "ok": True,
+        "tables_imported": tables_imported,
+        "rows_imported": rows_imported,
+        "telemetry_imported": telemetry_imported,
+        "files_restored": files_restored,
+    }
+
+
 @router.post("/import", responses=responses(400, 401, 403, 413))
 async def import_backup(request: Request):
     """Import a full backup from a ZIP file (multipart field ``file``).
@@ -796,68 +861,8 @@ async def import_backup(request: Request):
         if len(content) > 500 * 1024 * 1024:
             raise HTTPException(413, "Backup file too large (max 500MB)")
 
-        try:
-            zf = zipfile.ZipFile(io.BytesIO(content))
-        except zipfile.BadZipFile:
-            raise HTTPException(400, "Invalid ZIP file")
-
-        if MANIFEST_FILE not in zf.namelist():
-            raise HTTPException(400, f"Invalid backup: missing {MANIFEST_FILE}")
-        if DATABASE_FILE not in zf.namelist():
-            raise HTTPException(400, f"Invalid backup: missing {DATABASE_FILE}")
-
-        manifest = json.loads(zf.read(MANIFEST_FILE))
-        logger.info("Importing backup from %s (version %s), principal=%s",
-                    manifest.get("export_date"), manifest.get("app_version"), principal)
-
-        db_tables = json.loads(zf.read(DATABASE_FILE))
-        tables_imported, rows_imported = _restore_main_tables(db, db_tables)
-
-        # Telemetry lives in a separate database, so it cannot share the main
-        # transaction. A failure is surfaced rather than swallowed: the operator
-        # can retry, which is safe because the whole restore is idempotent
-        # (every table is replaced, not appended).
-        try:
-            telemetry_imported, telemetry_count = _restore_telemetry(zf)
-        except Exception as exc:
-            logger.exception("Backup telemetry import failed")
-            raise HTTPException(500, f"Backup telemetry import failed: {exc}")
-        rows_imported += telemetry_count
-
-        # Extract uploaded files on a worker thread; blocking I/O doesn't
-        # belong on the event loop.
-        files_restored = await asyncio.to_thread(
-            _restore_uploads, zf, str(app_settings.UPLOAD_DIR)
-        )
-
-        logger.info("Backup import complete: %d tables, %d rows, %d files (principal=%s)",
-                    tables_imported, rows_imported, files_restored, principal)
-
-        # A restore blanks every password hash, so the install is left with no
-        # usable login. Keep the SAME install token available (and logged) so the
-        # operator can reactivate an admin on the setup screen; /auth/setup
-        # retires it once that succeeds. init_install_token reuses the existing
-        # token file untouched -- it never replaces a token -- and only mints one
-        # when none is on disk (an admin restoring in-app, where no token existed
-        # at boot). No-ops if a usable login somehow remains.
-        init_install_token()
-
-        # Audit log entry (best-effort — table may not have existed pre-import).
-        try:
-            from app.services.audit import log_action
-            log_action(db, None, principal, "import", "backup",
-                       details=f"tables={tables_imported}, rows={rows_imported}, files={files_restored}")
-            db.commit()
-        except Exception as exc:
-            logger.warning("Could not write audit log for backup import: %s", exc)
-
-        return {
-            "ok": True,
-            "tables_imported": tables_imported,
-            "rows_imported": rows_imported,
-            "telemetry_imported": telemetry_imported,
-            "files_restored": files_restored,
-        }
-
+        # No sync or scheduled backup may run while tables are being replaced.
+        with sync_guard_http(), restoring():
+            return await run_in_threadpool(_restore_archive, db, content, principal)
     finally:
         db.close()

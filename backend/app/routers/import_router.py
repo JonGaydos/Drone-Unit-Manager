@@ -9,6 +9,7 @@ import re
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, UploadFile, File
+from starlette.concurrency import run_in_threadpool
 
 from app.deps import DBSession, AdminUser
 from app.responses import responses
@@ -117,7 +118,9 @@ async def preview_import(
         raise HTTPException(400, f"Unknown entity '{entity}'. Must be one of: {', '.join(SCHEMAS)}")
     content = await file.read()
     try:
-        headers, rows = parse_file(content, file.filename or "")
+        # Off the event loop: a large workbook takes seconds to parse, and on
+        # the loop every other request would wait for it.
+        headers, rows, truncated = await run_in_threadpool(parse_file, content, file.filename or "")
     except Exception as e:
         raise HTTPException(400, f"Could not parse file: {e}") from e
     if not headers:
@@ -127,6 +130,7 @@ async def preview_import(
         "entity": entity,
         "headers": [h for h in headers if h],
         "row_count": len(rows),
+        "truncated": truncated,
         "sample_rows": rows[:10],
         "suggested_mapping": suggest_mapping(schema, headers),
         "target_schema": schema,
@@ -151,14 +155,13 @@ async def commit_import(
         raise HTTPException(400, "Invalid mapping JSON")
     content = await file.read()
     try:
-        _, rows = parse_file(content, file.filename or "")
+        _, rows, truncated = await run_in_threadpool(parse_file, content, file.filename or "")
     except Exception as e:
         raise HTTPException(400, f"Could not parse file: {e}") from e
-    if entity == "missions":
-        return _commit_missions(db, rows, mapping_dict, admin.id)
-    if entity == "training":
-        return _commit_training(db, rows, mapping_dict, admin.id)
-    return _commit_maintenance(db, rows, mapping_dict, admin.id)
+    commit = {"missions": _commit_missions, "training": _commit_training}.get(entity, _commit_maintenance)
+    result = await run_in_threadpool(commit, db, rows, mapping_dict, admin.id)
+    result["truncated"] = truncated
+    return result
 
 
 def _clean(mapping: dict, key: str, row: dict):
@@ -288,78 +291,78 @@ def _maintenance_records_for_row(db, row: dict, mapping: dict, user_id,
     return records
 
 
-def _commit_missions(db, rows, mapping, user_id):
+def _log_exists(db, model, log) -> bool:
+    """Whether a mission or training log with this date and title is already
+    stored, so importing the same file twice does not double the hours."""
+    return db.query(model.id).filter(model.date == log.date, model.title == log.title).first() is not None
+
+
+def _commit_logs(db, rows, mapping, user_id, build, model, link_model, link_col):
+    """Create mission or training logs from rows, each in its own savepoint:
+    a row that fails is rolled back alone instead of taking the import with it."""
     unknown_id = find_unknown_pilot(db)
-    created = 0
-    skipped = 0
+    counts = {"created": 0, "skipped": 0, "duplicates": 0}
     unmatched_names: dict[str, int] = {}
     errors: list[str] = []
     for i, row in enumerate(rows, start=2):
         try:
-            mission, members_str = _build_mission_from_row(row, mapping, user_id)
-            if mission is None:
-                skipped += 1
-                continue
-            db.add(mission)
-            db.flush()
-            per_pilot = parse_float_safe(_get(mapping, "per_pilot_hours", row)) or 0.0
-            _attach_pilots(db, MissionLogPilot, "mission_log_id", mission.id,
-                           members_str, per_pilot, unknown_id, unmatched_names)
-            created += 1
+            with db.begin_nested():
+                log, members_str = build(row, mapping, user_id)
+                if log is None:
+                    counts["skipped"] += 1
+                    continue
+                if _log_exists(db, model, log):
+                    counts["duplicates"] += 1
+                    continue
+                db.add(log)
+                db.flush()
+                per_pilot = parse_float_safe(_get(mapping, "per_pilot_hours", row)) or 0.0
+                _attach_pilots(db, link_model, link_col, log.id,
+                               members_str, per_pilot, unknown_id, unmatched_names)
+            counts["created"] += 1
         except Exception as e:
             errors.append(f"Row {i}: {e}")
     db.commit()
-    return {
-        "created": created, "skipped": skipped,
-        "unmatched_names": unmatched_names, "errors": errors[:20],
-    }
+    return {**counts, "unmatched_names": unmatched_names, "errors": errors[:20]}
+
+
+def _commit_missions(db, rows, mapping, user_id):
+    return _commit_logs(db, rows, mapping, user_id, _build_mission_from_row,
+                        MissionLog, MissionLogPilot, "mission_log_id")
 
 
 def _commit_training(db, rows, mapping, user_id):
-    unknown_id = find_unknown_pilot(db)
-    created = 0
-    skipped = 0
-    unmatched_names: dict[str, int] = {}
-    errors: list[str] = []
-    for i, row in enumerate(rows, start=2):
-        try:
-            tr, members_str = _build_training_from_row(row, mapping, user_id)
-            if tr is None:
-                skipped += 1
-                continue
-            db.add(tr)
-            db.flush()
-            per_pilot = parse_float_safe(_get(mapping, "per_pilot_hours", row)) or 0.0
-            _attach_pilots(db, TrainingLogPilot, "training_log_id", tr.id,
-                           members_str, per_pilot, unknown_id, unmatched_names)
-            created += 1
-        except Exception as e:
-            errors.append(f"Row {i}: {e}")
-    db.commit()
-    return {
-        "created": created, "skipped": skipped,
-        "unmatched_names": unmatched_names, "errors": errors[:20],
-    }
+    return _commit_logs(db, rows, mapping, user_id, _build_training_from_row,
+                        TrainingLog, TrainingLogPilot, "training_log_id")
+
+
+def _maintenance_exists(db, rec) -> bool:
+    """Whether the same work on the same aircraft on the same day is stored."""
+    return db.query(MaintenanceRecord.id).filter(
+        MaintenanceRecord.entity_type == rec.entity_type,
+        MaintenanceRecord.entity_id == rec.entity_id,
+        MaintenanceRecord.performed_date == rec.performed_date,
+        MaintenanceRecord.description == rec.description,
+    ).first() is not None
 
 
 def _commit_maintenance(db, rows, mapping, user_id):
-    created = 0
-    skipped = 0
+    counts = {"created": 0, "skipped": 0, "duplicates": 0}
     unmatched_drones: dict[str, int] = {}
     errors: list[str] = []
     for i, row in enumerate(rows, start=2):
         try:
-            records = _maintenance_records_for_row(db, row, mapping, user_id, unmatched_drones)
-            if records is None:
-                skipped += 1
-                continue
-            for rec in records:
-                db.add(rec)
-                created += 1
+            with db.begin_nested():
+                records = _maintenance_records_for_row(db, row, mapping, user_id, unmatched_drones)
+                if records is None:
+                    counts["skipped"] += 1
+                    continue
+                fresh = [rec for rec in records if not _maintenance_exists(db, rec)]
+                counts["duplicates"] += len(records) - len(fresh)
+                db.add_all(fresh)
+                db.flush()
+            counts["created"] += len(fresh)
         except Exception as e:
             errors.append(f"Row {i}: {e}")
     db.commit()
-    return {
-        "created": created, "skipped": skipped,
-        "unmatched_drones": unmatched_drones, "errors": errors[:20],
-    }
+    return {**counts, "unmatched_drones": unmatched_drones, "errors": errors[:20]}

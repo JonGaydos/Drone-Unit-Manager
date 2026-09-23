@@ -12,6 +12,9 @@ from contextlib import contextmanager
 from fastapi import HTTPException
 
 _lock = threading.Lock()
+# Set while a backup restore replaces the tables. The scheduled backup checks
+# it: a backup taken mid-restore would capture half of each version.
+restore_active = threading.Event()
 
 BUSY = "A sync is already running. Try again when it finishes."
 
@@ -35,6 +38,21 @@ def sync_guard():
         _lock.release()
 
 
+def acquire_or_409() -> None:
+    """Take the lock for work that finishes on another thread, which calls
+    release() when done.
+
+    Raises:
+        HTTPException: 409 when another sync holds the lock.
+    """
+    if not _lock.acquire(blocking=False):
+        raise HTTPException(409, BUSY)
+
+
+def release() -> None:
+    _lock.release()
+
+
 @contextmanager
 def sync_guard_http():
     """sync_guard for a request handler: a busy lock is a 409."""
@@ -43,3 +61,13 @@ def sync_guard_http():
             yield
     except SyncBusy:
         raise HTTPException(409, BUSY)
+
+
+@contextmanager
+def restoring():
+    """Mark a restore as running for the duration of the block."""
+    restore_active.set()
+    try:
+        yield
+    finally:
+        restore_active.clear()

@@ -3,7 +3,7 @@ import logging
 from dataclasses import asdict
 from datetime import datetime
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.constants import UTC_OFFSET
@@ -11,7 +11,8 @@ from app.deps import DBSession, AdminUser
 from app.models.setting import Setting
 from app.services.flight_delete import delete_flights, purge_flight_telemetry
 from app.services.local_time import display_zone, local_flight_date
-from app.services.sync_lock import sync_guard_http
+from app.services import jobs
+from app.services.sync_lock import acquire_or_409, release, sync_guard_http
 from app.services.sync_manager import SyncManager, SyncResult
 from app.responses import responses
 
@@ -60,6 +61,67 @@ def test_connection(
     return TestConnectionResponse(ok=ok, message=message, user_info=user_info)
 
 
+def _run_sync(db, full: bool, sync_telemetry: bool, admin_id: int, admin_name: str) -> dict:
+    """A manual sync, optionally followed by a telemetry batch. The caller
+    holds the sync lock."""
+    from app.services.audit import log_action
+    result = SyncManager.sync_all("skydio", db, full_sync=full)
+
+    if full:
+        # After full sync, clean up any flights with no useful data
+        removed = _delete_empty_flights(db)
+        if removed:
+            logger.info("Auto-cleanup: removed %d empty flights", removed)
+            result.errors.append(f"Auto-cleaned {removed} flights with no data")
+
+    # Auto-fetch telemetry for flights that don't have it yet
+    if sync_telemetry:
+        try:
+            telemetry_result = SyncManager.batch_sync_telemetry(db, limit=10)
+            if telemetry_result > 0:
+                logger.info("Auto-synced telemetry for %d flights", telemetry_result)
+        except Exception as e:
+            logger.warning("Auto telemetry sync failed: %s", e)
+
+    log_action(db, admin_id, admin_name, "sync", "system",
+               details=f"{'Full' if full else 'Incremental'} sync: {result.flights_new} new flights, {result.vehicles_synced} vehicles")
+    db.commit()
+    return asdict(result)
+
+
+def _run_telemetry(db) -> dict:
+    """A telemetry batch and what is left. The caller holds the sync lock."""
+    from sqlalchemy import func
+    from app.models.flight import Flight
+
+    synced = SyncManager.batch_sync_telemetry(db, limit=10)
+    remaining = db.query(func.count(Flight.id)).filter(
+        Flight.telemetry_synced.is_(False),
+        Flight.external_id.isnot(None),
+    ).scalar()
+    return {"synced": synced, "remaining": max(0, remaining)}
+
+
+def _start_job(kind: str, work) -> dict:
+    """Take the sync lock here, so a busy lock is a 409 on this request, and
+    run work(db) as a job on its own session; the job releases the lock."""
+    from app import database
+    acquire_or_409()
+
+    def run():
+        db = database.SessionLocal()
+        try:
+            return work(db)
+        finally:
+            db.close()
+
+    try:
+        return {"job_id": jobs.start(kind, run, on_finish=release)}
+    except Exception:
+        release()
+        raise
+
+
 @router.post("/now", response_model=SyncResultResponse, responses=responses(409))
 def sync_now(
     db: DBSession,
@@ -72,48 +134,43 @@ def sync_now(
         full: If True, fetch all flights and clean up empties.
         sync_telemetry: If True (default), auto-fetch telemetry for up to 10 un-synced flights after sync.
     """
-    from app.services.audit import log_action
     logger.info("Manual sync triggered by admin (full=%s, sync_telemetry=%s)", full, sync_telemetry)
     with sync_guard_http():
-        result = SyncManager.sync_all("skydio", db, full_sync=full)
+        return SyncResultResponse(**_run_sync(db, full, sync_telemetry, admin.id, admin.display_name))
 
-        if full:
-            # After full sync, clean up any flights with no useful data
-            removed = _delete_empty_flights(db)
-            if removed:
-                logger.info("Auto-cleanup: removed %d empty flights", removed)
-                result.errors.append(f"Auto-cleaned {removed} flights with no data")
 
-        # Auto-fetch telemetry for flights that don't have it yet
-        if sync_telemetry:
-            try:
-                telemetry_result = SyncManager.batch_sync_telemetry(db, limit=10)
-                if telemetry_result > 0:
-                    logger.info("Auto-synced telemetry for %d flights", telemetry_result)
-            except Exception as e:
-                logger.warning("Auto telemetry sync failed: %s", e)
-
-    log_action(db, admin.id, admin.display_name, "sync", "system",
-               details=f"{'Full' if full else 'Incremental'} sync: {result.flights_new} new flights, {result.vehicles_synced} vehicles")
-    db.commit()
-    return SyncResultResponse(**asdict(result))
+@router.post("/now/start", responses=responses(401, 409))
+def start_sync(
+    admin: AdminUser,
+    full: bool = False,
+    sync_telemetry: bool = True):
+    """Start a sync as a background job and return its id; poll /jobs/{id}."""
+    logger.info("Background sync started by admin (full=%s, sync_telemetry=%s)", full, sync_telemetry)
+    # Plain values, not the ORM user: the job outlives this request's session.
+    admin_id, admin_name = admin.id, admin.display_name
+    return _start_job("sync", lambda db: _run_sync(db, full, sync_telemetry, admin_id, admin_name))
 
 
 @router.post("/telemetry", responses=responses(401, 409))
 def sync_telemetry_batch(db: DBSession, user: AdminUser):
     """Fetch telemetry for up to 10 flights that don't have it yet."""
-    from sqlalchemy import func
-    from app.models.flight import Flight
-
     with sync_guard_http():
-        synced = SyncManager.batch_sync_telemetry(db, limit=10)
+        return _run_telemetry(db)
 
-    remaining = db.query(func.count(Flight.id)).filter(
-        Flight.telemetry_synced.is_(False),
-        Flight.external_id.isnot(None),
-    ).scalar()
 
-    return {"synced": synced, "remaining": max(0, remaining)}
+@router.post("/telemetry/start", responses=responses(401, 409))
+def start_telemetry(user: AdminUser):
+    """Start a telemetry batch as a background job; poll /jobs/{id}."""
+    return _start_job("telemetry", _run_telemetry)
+
+
+@router.get("/jobs/{job_id}", responses=responses(401, 404))
+def get_job(job_id: str, user: AdminUser):
+    """A background job's status: running, done (with result) or failed."""
+    job = jobs.get(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    return job
 
 
 @router.post("/deep", response_model=SyncResultResponse, responses=responses(409))
