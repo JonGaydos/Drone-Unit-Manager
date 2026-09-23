@@ -17,6 +17,7 @@ from app.models.pilot import Pilot
 from app.models.sensor import SensorPackage
 from app.models.vehicle import Vehicle
 from app.responses import responses
+from app.services.audit import compute_changes, log_action
 
 router = APIRouter(prefix="/api/maintenance/schedules", tags=["maintenance-schedules"])
 
@@ -171,6 +172,9 @@ def create_schedule(
         is_active=True,
     )
     db.add(schedule)
+    db.flush()
+    log_action(db, user.id, user.display_name, "create", "maintenance_schedule", schedule.id, schedule.name,
+               details=f"{schedule.entity_type} #{schedule.entity_id}, {schedule.frequency}")
     db.commit()
     db.refresh(schedule)
     return {"ok": True, "id": schedule.id}
@@ -198,8 +202,12 @@ def update_schedule(
         and update_data.get("next_due", schedule.next_due) is None
     ):
         raise HTTPException(400, "next_due (due date) is required for one-time tasks")
+    changes = compute_changes(schedule, update_data, list(update_data))
     for key, value in update_data.items():
         setattr(schedule, key, value)
+    if changes:
+        log_action(db, user.id, user.display_name, "update", "maintenance_schedule", schedule.id, schedule.name,
+                   changes=changes)
     db.commit()
     return {"ok": True}
 
@@ -213,6 +221,7 @@ def delete_schedule(
     schedule = db.query(MaintenanceSchedule).filter(MaintenanceSchedule.id == schedule_id).first()
     if not schedule:
         raise HTTPException(404, SCHEDULE_NOT_FOUND)
+    log_action(db, user.id, user.display_name, "delete", "maintenance_schedule", schedule.id, schedule.name)
     db.delete(schedule)
     db.commit()
     return {"ok": True}
@@ -249,6 +258,7 @@ def complete_schedule(
         performed_by=user.display_name if user.display_name else user.username,
     )
     db.add(record)
+    log_action(db, user.id, user.display_name, "complete", "maintenance_schedule", schedule.id, schedule.name)
     db.commit()
     return {
         "ok": True,

@@ -3,6 +3,8 @@
 import json
 import logging
 import re
+from collections import defaultdict
+from time import time
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
@@ -14,6 +16,7 @@ from app.deps import CurrentUser, DBSession
 from app.models.notification_preference import NotificationPreference
 from app.models.notification_log import NotificationLog
 from app.responses import responses
+from app.services.audit import log_action
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +32,13 @@ DEFAULT_CATEGORIES = [
 # Not RFC-complete; just rejects newlines/control chars and obvious non-emails.
 _CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f]")
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s.]+(?:\.[^@\s.]+)+\Z")
+
+# Test sends allowed per user in the window. The digest carries unit data and
+# the override address can be anywhere, so the test button must not become a
+# way to mail it out in bulk.
+_TEST_SEND_LIMIT = 3
+_TEST_SEND_WINDOW = 600  # seconds
+_test_sends: dict[int, list[float]] = defaultdict(list)
 
 
 class NotificationPrefUpdate(BaseModel):
@@ -51,6 +61,19 @@ class NotificationPrefOut(BaseModel):
     email_override: Optional[str] = None
 
     model_config = {"from_attributes": True}
+
+
+def _check_test_send_rate(user_id: int) -> None:
+    """Count a test send for ``user_id``, refusing it past the limit.
+
+    Raises:
+        HTTPException: 429 when the user has used up the window's sends.
+    """
+    now = time()
+    recent = [t for t in _test_sends[user_id] if now - t < _TEST_SEND_WINDOW]
+    if len(recent) >= _TEST_SEND_LIMIT:
+        raise HTTPException(429, "Too many test emails. Try again in a few minutes.")
+    _test_sends[user_id] = recent + [now]
 
 
 def _get_or_create_pref(db: Session, user_id: int) -> NotificationPreference:
@@ -115,6 +138,9 @@ def update_preferences(
             raise HTTPException(400, "email_override must be a valid email address")
         else:
             pref.email_override = override
+        # Where a user's digest goes is worth a trail: it can point off-site.
+        log_action(db, user.id, user.display_name, "update", "notification_preference",
+                   entity_id=pref.id, details=f"email_override={pref.email_override or '(cleared)'}")
     db.commit()
     return {"ok": True, "message": "Notification preferences updated"}
 
@@ -132,7 +158,7 @@ def preview_digest(
     return {"empty": False, "sections": digest}
 
 
-@router.post("/send-test", responses=responses(400))
+@router.post("/send-test", responses=responses(400, 429))
 def send_test_digest(
     db: DBSession,
     user: CurrentUser,
@@ -162,7 +188,11 @@ def send_test_digest(
     html = render_digest_html(digest, user, org_name)
     subject = f"{org_name} — Daily Digest"
 
+    _check_test_send_rate(user.id)
     success = send_email(to_email, subject, html, db)
+    log_action(db, user.id, user.display_name, "send_test", "notification",
+               details=f"to={to_email}, sent={success}")
+    db.commit()
     if success:
         # Log the send
         log = NotificationLog(

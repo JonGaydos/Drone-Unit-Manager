@@ -28,7 +28,8 @@ from app.models.attachment import Attachment
 from app.models.other_equipment import OtherEquipment
 from app.config import settings
 from app.constants import APP_TITLE, FILE_TOO_LARGE
-from app.deps import DBSession, CurrentUser, AdminUser
+from app.deps import DBSession, CurrentUser, AdminUser, SupervisorUser
+from app.services.audit import log_action
 from app.responses import responses
 
 router = APIRouter(prefix="/api/export", tags=["export"])
@@ -186,9 +187,13 @@ def export_flights_csv(
     )
 
 
-@router.get("/pilots/csv", responses=responses(401))
-def export_pilots_csv(db: DBSession, user: CurrentUser):
+# Contact details for the whole roster in one file: supervisors only, and on
+# the record.
+@router.get("/pilots/csv", responses=responses(401, 403))
+def export_pilots_csv(db: DBSession, user: SupervisorUser):
     pilots = _cap_rows(db.query(Pilot).order_by(Pilot.last_name).all(), "pilots")
+    log_action(db, user.id, user.display_name, "export", "pilot", details=f"pilots.csv, {len(pilots)} rows")
+    db.commit()
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(["First Name", "Last Name", "Email", "Phone", "Badge Number", "Status", "Notes"])

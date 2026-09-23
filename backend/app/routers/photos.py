@@ -31,6 +31,7 @@ from app.models.pilot import Pilot
 from app.models.flight import Flight
 from app.models.incident import Incident
 from app.responses import responses
+from app.services.audit import compute_changes, log_action
 from app.services.file_validation import mime_for_filename, user_file_headers
 
 logger = logging.getLogger(__name__)
@@ -264,6 +265,8 @@ def upload_photo(
     # Create pilot associations
     _attach_photo_pilots(db, photo.id, pilot_ids)
 
+    log_action(db, user.id, user.display_name, "upload", "photo", photo.id, photo.original_filename,
+               details=f"{relative_path}, {photo.file_size} bytes")
     db.commit()
     db.refresh(photo)
     return {"id": photo.id, "message": "Photo uploaded successfully"}
@@ -443,15 +446,15 @@ def update_photo(
     if not photo:
         raise HTTPException(404, PHOTO_NOT_FOUND)
 
-    if title is not None:
-        photo.title = title
-    if description is not None:
-        photo.description = description
+    updates = {k: v for k, v in (("title", title), ("description", description)) if v is not None}
     if date_taken is not None:
         try:
-            photo.date_taken = datetime.fromisoformat(date_taken.replace("Z", UTC_OFFSET).replace(UTC_OFFSET, ""))
+            updates["date_taken"] = datetime.fromisoformat(date_taken.replace("Z", UTC_OFFSET).replace(UTC_OFFSET, ""))
         except (ValueError, AttributeError):
             raise HTTPException(400, "Invalid date format. Use ISO 8601 (e.g., 2026-04-02).")
+    changes = compute_changes(photo, updates, list(updates))
+    for key, value in updates.items():
+        setattr(photo, key, value)
 
     if pilot_ids is not None:
         # Replace pilot associations
@@ -461,6 +464,10 @@ def update_photo(
             if pid_str.isdigit():
                 db.add(PhotoPilot(photo_id=photo_id, pilot_id=int(pid_str)))
 
+    if changes or pilot_ids is not None:
+        log_action(db, user.id, user.display_name, "update", "photo", photo.id, photo.original_filename,
+                   changes=changes or None,
+                   details=f"Pilots set to [{pilot_ids}]" if pilot_ids is not None else None)
     db.commit()
     return {"message": "Photo updated"}
 
@@ -475,6 +482,7 @@ def link_photo_flight(photo_id: int, flight_id: int, db: DBSession, user: Superv
     exists = db.query(PhotoFlight).filter(PhotoFlight.photo_id == photo_id, PhotoFlight.flight_id == flight_id).first()
     if not exists:
         db.add(PhotoFlight(photo_id=photo_id, flight_id=flight_id))
+        log_action(db, user.id, user.display_name, "link", "photo", photo_id, details=f"Linked to flight {flight_id}")
         db.commit()
     return {"ok": True}
 
@@ -482,7 +490,8 @@ def link_photo_flight(photo_id: int, flight_id: int, db: DBSession, user: Superv
 @router.delete("/{photo_id}/flight/{flight_id}", responses=responses(401, 404))
 def unlink_photo_flight(photo_id: int, flight_id: int, db: DBSession, user: SupervisorUser):
     """Unlink a photo from a flight."""
-    db.query(PhotoFlight).filter(PhotoFlight.photo_id == photo_id, PhotoFlight.flight_id == flight_id).delete()
+    if db.query(PhotoFlight).filter(PhotoFlight.photo_id == photo_id, PhotoFlight.flight_id == flight_id).delete():
+        log_action(db, user.id, user.display_name, "unlink", "photo", photo_id, details=f"Unlinked from flight {flight_id}")
     db.commit()
     return {"ok": True}
 
@@ -497,6 +506,7 @@ def link_photo_incident(photo_id: int, incident_id: int, db: DBSession, user: Su
     exists = db.query(PhotoIncident).filter(PhotoIncident.photo_id == photo_id, PhotoIncident.incident_id == incident_id).first()
     if not exists:
         db.add(PhotoIncident(photo_id=photo_id, incident_id=incident_id))
+        log_action(db, user.id, user.display_name, "link", "photo", photo_id, details=f"Linked to incident {incident_id}")
         db.commit()
     return {"ok": True}
 
@@ -504,7 +514,8 @@ def link_photo_incident(photo_id: int, incident_id: int, db: DBSession, user: Su
 @router.delete("/{photo_id}/incident/{incident_id}", responses=responses(401, 404))
 def unlink_photo_incident(photo_id: int, incident_id: int, db: DBSession, user: SupervisorUser):
     """Unlink a photo from an incident."""
-    db.query(PhotoIncident).filter(PhotoIncident.photo_id == photo_id, PhotoIncident.incident_id == incident_id).delete()
+    if db.query(PhotoIncident).filter(PhotoIncident.photo_id == photo_id, PhotoIncident.incident_id == incident_id).delete():
+        log_action(db, user.id, user.display_name, "unlink", "photo", photo_id, details=f"Unlinked from incident {incident_id}")
     db.commit()
     return {"ok": True}
 

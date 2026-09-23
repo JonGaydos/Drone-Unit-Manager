@@ -14,7 +14,8 @@ from typing import Annotated
 
 import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from jose import jwt, JWTError
+import jwt
+from jwt import PyJWTError
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
@@ -103,7 +104,7 @@ def user_from_login_token(token: str, db: Session) -> User:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
         user_id = int(payload["sub"])
         token_version = int(payload.get("tv", 0))  # tokens from before versioning read as 0
-    except (JWTError, KeyError, ValueError, TypeError):
+    except (PyJWTError, KeyError, ValueError, TypeError):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     user = db.query(User).filter(User.id == user_id, User.is_active.is_(True)).first()
     if not user:
@@ -386,6 +387,9 @@ def _reactivate_admin(request, db, username: str, password: str) -> dict:
         raise HTTPException(401, "Install token required to reactivate an administrator. Read it from the container logs or install_token.txt.")
     admin = _reclaim_admin(db, username, password)
     revoke_sessions(admin)
+    from app.services.audit import log_action
+    log_action(db, admin.id, admin.display_name, "reactivate", "user", admin.id, admin.display_name,
+               ip_address=_client_ip(request), details="Administrator reclaimed with the install token after a restore")
     db.commit()
     db.refresh(admin)
     retire_install_token()
@@ -489,6 +493,10 @@ def initial_setup(data: SetupRequest, request: Request, db: DBSession):
     for i, name in enumerate(DEFAULT_PURPOSES):
         db.add(FlightPurpose(name=name, sort_order=i))
 
+    db.flush()
+    from app.services.audit import log_action
+    log_action(db, admin.id, admin.display_name, "setup", "user", admin.id, admin.display_name,
+               ip_address=_client_ip(request), details=f"Initial setup created administrator '{admin.username}'")
     db.commit()
     db.refresh(admin)
     # A usable login now exists, so the fresh-install token is no longer needed.
@@ -570,12 +578,15 @@ def get_me(user: Annotated[User, Depends(get_current_user)]):
 @router.patch("/me", response_model=UserOut)
 def update_me(data: UserUpdate, user: Annotated[User, Depends(get_current_user)], db: DBSession):
     """Update the current user's own profile (theme, display name)."""
-    if data.theme is not None:
-        user.theme = data.theme
-    if data.display_name is not None:
-        user.display_name = data.display_name
-    if data.email is not None:
-        user.email = data.email
+    from app.services.audit import compute_changes, log_action
+    updates = {k: v for k, v in (("theme", data.theme), ("display_name", data.display_name),
+                                 ("email", data.email)) if v is not None}
+    # Theme is a display preference, not worth a trail entry.
+    changes = compute_changes(user, updates, ["display_name", "email"])
+    for key, value in updates.items():
+        setattr(user, key, value)
+    if changes:
+        log_action(db, user.id, user.display_name, "update", "user", user.id, user.display_name, changes=changes)
     db.commit()
     db.refresh(user)
     return UserOut.model_validate(user)

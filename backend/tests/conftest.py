@@ -188,11 +188,12 @@ def _reset_login_rate_limiter():
     timestamp). TestClient sends every request from the same host, so without
     a reset the 6th login POST suite-wide would 429 and poison later modules.
     """
-    from app.routers import auth
+    from app.routers import auth, notifications
 
     auth._login_attempts.clear()
     auth._failed_by_user.clear()
     auth._last_sweep = 0.0
+    notifications._test_sends.clear()
 
 
 @pytest.fixture

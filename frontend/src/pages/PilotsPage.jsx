@@ -290,12 +290,14 @@ export default function PilotsPage() {
             className="w-full pl-9 pr-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
-        <button
-          onClick={() => api.download('/export/pilots/csv')}
-          className="flex items-center justify-center gap-1.5 px-3 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90"
-        >
-          <Download className="w-4 h-4" /> Export CSV
-        </button>
+        {isSupervisor && (
+          <button
+            onClick={() => api.download('/export/pilots/csv')}
+            className="flex items-center justify-center gap-1.5 px-3 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90"
+          >
+            <Download className="w-4 h-4" /> Export CSV
+          </button>
+        )}
         {isSupervisor && (
           <button
             onClick={() => setModal('add')}

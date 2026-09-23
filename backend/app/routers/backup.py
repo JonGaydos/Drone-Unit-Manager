@@ -12,11 +12,11 @@ import os
 import secrets
 import tempfile
 import zipfile
-from typing import Annotated
 from datetime import date, datetime
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
+from starlette.datastructures import UploadFile as StarletteUploadFile
 from sqlalchemy import func, inspect as sa_inspect, text
 from sqlalchemy.orm import Session
 from sqlalchemy.types import Date, DateTime
@@ -758,12 +758,23 @@ def _restore_telemetry(zf: zipfile.ZipFile) -> tuple[bool, int]:
     return count > 0, count
 
 
+async def _read_backup_upload(request: Request) -> bytes:
+    """The uploaded ZIP from the multipart body. Read by hand, after the caller
+    is authorized: as a declared File() parameter FastAPI would spool the whole
+    body (up to the archive cap) before this route could refuse the caller."""
+    form = await request.form(max_files=1, max_fields=5)
+    try:
+        file = form.get("file")
+        if not isinstance(file, StarletteUploadFile):
+            raise HTTPException(400, "No backup file in the request")
+        return await file.read()
+    finally:
+        await form.close()
+
+
 @router.post("/import", responses=responses(400, 401, 403, 413))
-async def import_backup(
-    request: Request,
-    file: Annotated[UploadFile, File()],
-):
-    """Import a full backup from a ZIP file.
+async def import_backup(request: Request):
+    """Import a full backup from a ZIP file (multipart field ``file``).
 
     Authorization:
     - Existing install (any user present): requires Admin JWT.
@@ -777,7 +788,7 @@ async def import_backup(
     try:
         principal = _verify_admin_or_install_token(request, db)
 
-        content = await file.read()
+        content = await _read_backup_upload(request)
         if len(content) > 500 * 1024 * 1024:
             raise HTTPException(413, "Backup file too large (max 500MB)")
 
