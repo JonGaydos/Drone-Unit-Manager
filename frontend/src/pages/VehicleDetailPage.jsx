@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { useConfirm } from '@/hooks/useConfirm'
-import { formatHours, formatDuration, normalizeDateValue } from '@/lib/utils'
+import { addDays, daysUntil, formatHours, formatDuration, normalizeDateValue } from '@/lib/utils'
 import { STATUS_COLORS } from '@/lib/constants'
 import { ArrowLeft, Clock, Calendar, Battery, Edit, Gamepad2, Cpu, Paperclip, Camera, ShieldCheck, Plus, Trash2, AlertTriangle, Cog, X, Save } from 'lucide-react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
@@ -455,12 +455,10 @@ export default function VehicleDetailPage() {
         {(() => {
           const current = [...registrations].sort((a, b) => (b.registration_date || '').localeCompare(a.registration_date || ''))[0]
           if (current) {
-            const today = new Date()
-            const expiry = current.expiry_date ? new Date(current.expiry_date) : null
-            const daysUntil = expiry ? Math.ceil((expiry - today) / (1000 * 60 * 60 * 24)) : null
-            const isExpired = daysUntil !== null && daysUntil < 0
-            const isUrgent = daysUntil !== null && daysUntil >= 0 && daysUntil < 30
-            const isWarning = daysUntil !== null && daysUntil >= 30 && daysUntil <= 90
+            const daysLeft = daysUntil(current.expiry_date)
+            const isExpired = daysLeft !== null && daysLeft < 0
+            const isUrgent = daysLeft !== null && daysLeft >= 0 && daysLeft < 30
+            const isWarning = daysLeft !== null && daysLeft >= 30 && daysLeft <= 90
             const rowBg = (() => {
               if (isExpired) return 'bg-red-900/10'
               if (isUrgent) return 'bg-red-500/5'
@@ -484,12 +482,12 @@ export default function VehicleDetailPage() {
                   </p>
                 </div>
                 <div className="text-right">
-                  {daysUntil !== null && (
+                  {daysLeft !== null && (
                     <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold ${badgeStyle}`}>
                       {isExpired && <AlertTriangle className="w-3.5 h-3.5" />}
                       {isUrgent && <AlertTriangle className="w-3.5 h-3.5" />}
-                      {isExpired ? `Overdue ${Math.abs(daysUntil)}d` :
-                       `${daysUntil} days remaining`}
+                      {isExpired ? `Overdue ${Math.abs(daysLeft)}d` :
+                       `${daysLeft} days remaining`}
                     </span>
                   )}
                 </div>
@@ -521,9 +519,7 @@ export default function VehicleDetailPage() {
                 <label htmlFor="expiry-auto-3-years" className="block text-xs font-medium text-foreground mb-1">Expiry (auto: +3 years)</label>
                 <input id="expiry-auto-3-years" type="text" readOnly
                   value={regForm.registration_date ? (() => {
-                    const d = new Date(regForm.registration_date)
-                    d.setDate(d.getDate() + 1095)
-                    return d.toISOString().split('T')[0]
+                    return addDays(regForm.registration_date, 1095)
                   })() : '--'}
                   className="w-full px-3 py-1.5 bg-muted border border-border rounded-lg text-muted-foreground text-sm cursor-not-allowed" />
               </div>
@@ -577,7 +573,7 @@ export default function VehicleDetailPage() {
               </thead>
               <tbody>
                 {registrations.map(r => {
-                  const isExpired = r.expiry_date && new Date(r.expiry_date) < new Date()
+                  const isExpired = r.expiry_date && daysUntil(r.expiry_date) < 0
                   const statusLabel = (() => {
                     if (isExpired) return 'Expired'
                     if (r.is_current) return 'Current'

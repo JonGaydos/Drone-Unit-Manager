@@ -19,7 +19,6 @@ import io
 import logging
 import re
 import time
-import os
 from datetime import date, datetime, timezone
 from typing import NamedTuple, Optional
 from zoneinfo import ZoneInfo
@@ -31,6 +30,7 @@ from sqlalchemy.orm import Session
 from app.models.flight import Flight
 from app.models.pilot import Pilot
 from app.models.vehicle import Vehicle
+from app.services.local_time import display_zone, local_flight_date
 
 logger = logging.getLogger(__name__)
 
@@ -77,18 +77,6 @@ def _header_offset_hours(column: Optional[str]) -> Optional[int]:
     """The offset a local export's heading claims, as in "(CDT / UTC-5)"."""
     match = re.search(r"UTC\s*([+-]\d{1,2})", column or "", re.IGNORECASE)
     return int(match.group(1)) if match else None
-
-
-def _local_zone(db: Session) -> ZoneInfo:
-    """The organization's configured display timezone, for local-time exports."""
-    from app.models.setting import Setting
-
-    row = db.query(Setting).filter(Setting.key == "display_timezone").first()
-    name = (row.value if row and row.value else None) or os.environ.get("TZ", "America/Chicago")
-    try:
-        return ZoneInfo(name)
-    except Exception:
-        return ZoneInfo("America/Chicago")
 
 
 def _to_utc(value: Optional[datetime], already_utc: bool, zone: ZoneInfo) -> Optional[datetime]:
@@ -335,7 +323,7 @@ def _time_spec(db: Session, fieldnames) -> _TimeSpec:
         start_col=start_col,
         end_col=_find_time_column(fieldnames, "End Time"),
         header_is_utc=_header_declares_utc(start_col),
-        zone=_local_zone(db),
+        zone=display_zone(db),
     )
 
 
@@ -413,7 +401,7 @@ def _accept_row(db: Session, row: dict, line_no: int, spec: _TimeSpec,
     return external_id, vehicle, duration, takeoff, _read_time(row, spec.end_col, spec)
 
 
-def _build_flight(db: Session, row: dict, accepted, coords: dict, result: dict) -> Flight:
+def _build_flight(db: Session, row: dict, accepted, coords: dict, result: dict, zone: ZoneInfo) -> Flight:
     external_id, vehicle, duration, takeoff, landing = accepted
 
     pilot, created = _find_or_create_pilot(db, row.get("User"))
@@ -434,7 +422,7 @@ def _build_flight(db: Session, row: dict, accepted, coords: dict, result: dict) 
         data_source="brinc_csv",
         pilot_id=pilot.id if pilot else None,
         vehicle_id=vehicle.id,
-        date=takeoff.date(),
+        date=local_flight_date(takeoff, zone),
         takeoff_time=takeoff,
         landing_time=landing,
         duration_seconds=duration,
@@ -490,7 +478,7 @@ def import_brinc_csv(db: Session, file_bytes: bytes, geocode: bool = True) -> di
             accepted = _accept_row(db, row, line_no, spec, seen, result)
             if not accepted:
                 continue
-            flight = _build_flight(db, row, accepted, coords, result)
+            flight = _build_flight(db, row, accepted, coords, result, spec.zone)
             db.add(flight)
             result["flights_imported"] += 1
             if newest is None or flight.takeoff_time > newest:

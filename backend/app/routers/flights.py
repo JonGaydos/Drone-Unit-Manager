@@ -13,6 +13,7 @@ from app.deps import DBSession, CurrentUser, AdminUser, PilotUser, SupervisorUse
 from app.responses import responses
 from app.services.audit import log_action
 from app.services.flight_delete import delete_flights, purge_flight_telemetry
+from app.services.local_time import display_zone, local_flight_date
 from app.schemas.flight import (
     FlightCreate, FlightUpdate, FlightOut,
     FlightPurposeCreate, FlightPurposeOut,
@@ -234,7 +235,7 @@ def get_flight(flight_id: int, db: DBSession, user: CurrentUser):
     return _flight_to_out(flight)
 
 
-def _refresh_timestamps(flight: Flight, detail: dict, updated_fields: list):
+def _refresh_timestamps(flight: Flight, detail: dict, updated_fields: list, zone):
     """Apply timestamp fields from API detail to flight."""
     from datetime import datetime
 
@@ -243,7 +244,7 @@ def _refresh_timestamps(flight: Flight, detail: dict, updated_fields: list):
         try:
             takeoff = datetime.fromisoformat(str(takeoff_str).replace("Z", UTC_OFFSET))
             flight.takeoff_time = takeoff
-            flight.date = takeoff.date()
+            flight.date = local_flight_date(takeoff, zone)
             updated_fields.append("date")
         except (ValueError, AttributeError):
             pass
@@ -500,7 +501,7 @@ def refresh_flight_from_api(flight_id: int, db: DBSession, admin: AdminUser):
 
     updated_fields = []
 
-    _refresh_timestamps(flight, detail, updated_fields)
+    _refresh_timestamps(flight, detail, updated_fields, display_zone(db))
     _refresh_location_and_metrics(flight, detail, updated_fields)
     _refresh_pilot(flight, detail, db, updated_fields)
     _refresh_equipment(flight, detail, updated_fields)

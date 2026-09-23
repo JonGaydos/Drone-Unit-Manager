@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import {
   cn,
   formatDuration,
@@ -15,6 +15,10 @@ import {
   utcIsoToZonedInput,
   zonedInputToUtcIso,
   TIMEZONES,
+  todayLocal,
+  localDateOf,
+  addDays,
+  addMonths,
 } from '@/lib/utils'
 
 describe('cn', () => {
@@ -237,5 +241,47 @@ describe('invalid configured timezone falls back to browser-local', () => {
     setDisplayTimezone('Not/AZone')
     expect(() => zonedInputToUtcIso('2026-06-24T11:26')).not.toThrow()
     expect(zonedInputToUtcIso('2026-06-24T11:26')).toMatch(/Z$/)
+  })
+})
+
+describe('calendar dates', () => {
+  afterEach(() => {
+    setDisplayTimezone(null)
+    vi.useRealTimers()
+  })
+
+  it('takes today from the unit timezone, not UTC', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-01T03:30:00Z'))  // 21:30 Dec 31 in Chicago
+    setDisplayTimezone('America/Chicago')
+    expect(todayLocal()).toBe('2025-12-31')
+    setDisplayTimezone('UTC')
+    expect(todayLocal()).toBe('2026-01-01')
+  })
+
+  it('reads a date-only value as that calendar day', () => {
+    setDisplayTimezone('America/Chicago')
+    expect(localDateOf('2026-01-01')).toBe('2026-01-01')
+    expect(localDateOf('2026-01-01T03:30:00Z')).toBe('2025-12-31')
+    expect(localDateOf('nonsense')).toBeNull()
+    expect(localDateOf(null)).toBeNull()
+  })
+
+  it('adds days and months without drifting across DST or month ends', () => {
+    expect(addDays('2026-03-07', 1)).toBe('2026-03-08')
+    expect(addDays('2026-01-01', -1)).toBe('2025-12-31')
+    expect(addMonths('2026-01-10', 6)).toBe('2026-07-10')
+    expect(addMonths('2026-01-31', 1)).toBe('2026-02-28')
+    expect(addMonths('2028-02-29', 12)).toBe('2029-02-28')
+  })
+
+  it('counts a date due today as 0 at any hour', () => {
+    vi.useFakeTimers()
+    setDisplayTimezone('America/Chicago')
+    vi.setSystemTime(new Date('2026-06-10T04:59:00Z'))  // 23:59 June 9 local
+    expect(daysUntil('2026-06-09')).toBe(0)
+    expect(daysUntil('2026-06-08')).toBe(-1)
+    vi.setSystemTime(new Date('2026-06-10T05:01:00Z'))  // 00:01 June 10 local
+    expect(daysUntil('2026-06-10')).toBe(0)
   })
 })

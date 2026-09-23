@@ -10,6 +10,7 @@ from app.constants import UTC_OFFSET
 from app.deps import DBSession, AdminUser
 from app.models.setting import Setting
 from app.services.flight_delete import delete_flights, purge_flight_telemetry
+from app.services.local_time import display_zone, local_flight_date
 from app.services.sync_lock import sync_guard_http
 from app.services.sync_manager import SyncManager, SyncResult
 from app.responses import responses
@@ -167,7 +168,7 @@ def _apply_first_present(flight, detail: dict, field_map: dict) -> None:
                 break
 
 
-def _enrich_timestamps(flight, detail: dict) -> None:
+def _enrich_timestamps(flight, detail: dict, zone) -> None:
     """Set takeoff/landing time and date from the API detail, tolerating bad values."""
     takeoff_str = detail.get("takeoff_time") or detail.get("start_time") or detail.get("created_at")
     landing_str = detail.get("landing_time") or detail.get("end_time")
@@ -175,7 +176,7 @@ def _enrich_timestamps(flight, detail: dict) -> None:
         try:
             takeoff = datetime.fromisoformat(takeoff_str.replace("Z", UTC_OFFSET))
             flight.takeoff_time = takeoff
-            flight.date = takeoff.date()
+            flight.date = local_flight_date(takeoff, zone)
         except (ValueError, AttributeError):
             pass
     if landing_str:
@@ -216,7 +217,7 @@ def _enrich_vehicle(flight, detail: dict, db) -> None:
 
 def _apply_enrichment_detail(flight, detail: dict, db):
     """Apply all enrichment data from an API detail response to a flight."""
-    _enrich_timestamps(flight, detail)
+    _enrich_timestamps(flight, detail, display_zone(db))
     _enrich_duration(flight, detail)
     _apply_first_present(flight, detail, _ENRICHMENT_FIELDS)
     _enrich_pilot(flight, detail, db)

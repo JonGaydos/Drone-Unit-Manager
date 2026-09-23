@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { api } from '@/api/client'
 import { X, Filter } from 'lucide-react'
 import { FlightLocationsMap } from '@/components/FlightMap'
+import { localDateOf } from '@/lib/utils'
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -180,10 +181,9 @@ export default function AnalyticsPage() {
     return allFlights.filter(f => {
       if (filters.pilot != null && f.pilot_id !== filters.pilot) return false
       if (filters.year) {
-        const flightDate = f.date || f.takeoff_time
+        const flightDate = localDateOf(f.date || f.takeoff_time)
         if (!flightDate) return false
-        const yr = new Date(flightDate).getFullYear()
-        if (yr !== filters.year) return false
+        if (Number(flightDate.slice(0, 4)) !== filters.year) return false
       }
       if (filters.purpose && f.purpose !== filters.purpose) return false
       return true
@@ -204,9 +204,9 @@ export default function AnalyticsPage() {
     if (!hasActiveFilter) return null
     const counts = {}
     filteredFlights.forEach(f => {
-      const flightDate = f.date || f.takeoff_time
+      const flightDate = localDateOf(f.date || f.takeoff_time)
       if (!flightDate) return
-      const yr = new Date(flightDate).getFullYear()
+      const yr = Number(flightDate.slice(0, 4))
       counts[yr] = (counts[yr] || 0) + 1
     })
     return counts
@@ -225,9 +225,9 @@ export default function AnalyticsPage() {
     if (!hasActiveFilter) return null
     const groups = {}
     filteredFlights.forEach(f => {
-      const flightDate = f.date || f.takeoff_time
+      const flightDate = localDateOf(f.date || f.takeoff_time)
       if (!flightDate) return
-      const yr = new Date(flightDate).getFullYear()
+      const yr = Number(flightDate.slice(0, 4))
       if (!groups[yr]) groups[yr] = []
       const dur = f.duration_seconds || f.duration || 0
       groups[yr].push(dur)
@@ -243,10 +243,9 @@ export default function AnalyticsPage() {
     if (!hasActiveFilter) return null
     const counts = {}
     filteredFlights.forEach(f => {
-      const flightDate = f.date || f.takeoff_time
+      const flightDate = localDateOf(f.date || f.takeoff_time)
       if (!flightDate) return
-      const d = new Date(flightDate)
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      const key = flightDate.slice(0, 7)
       counts[key] = (counts[key] || 0) + 1
     })
     return counts

@@ -6,7 +6,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Modal } from '@/components/ui/Modal'
 import { useConfirm } from '@/hooks/useConfirm'
-import { normalizeDateValue } from '@/lib/utils'
+import { addMonths, normalizeDateValue, todayLocal } from '@/lib/utils'
 import { CERT_STATUS_COLORS } from '@/lib/constants'
 import { sortByName, sortPilotsActiveFirst } from '@/lib/formatters'
 import { Plus, Edit, Trash2, ShieldCheck, Search, Filter, Download, ChevronLeft, ChevronRight, Loader2, Eye, EyeOff } from 'lucide-react'
@@ -117,9 +117,8 @@ function AssignCertModal({ pilots, certTypes, existingCert, defaults, onSave, on
   // Auto-calculate expiry when renewal issue_date changes
   useEffect(() => {
     if (showRenew && renewForm.issue_date && certType?.renewal_period_months) {
-      const d = new Date(renewForm.issue_date)
-      d.setMonth(d.getMonth() + certType.renewal_period_months)
-      setRenewForm(prev => ({ ...prev, expiration_date: d.toISOString().split('T')[0] }))
+      const expiration = addMonths(renewForm.issue_date, certType.renewal_period_months)
+      setRenewForm(prev => ({ ...prev, expiration_date: expiration }))
     }
   }, [renewForm.issue_date, showRenew])
 
@@ -595,7 +594,7 @@ export default function CertificationsPage() {
             <div className="flex items-center gap-3 bg-primary/10 border border-primary/30 rounded-lg px-4 py-2">
               <span className="text-sm font-medium text-foreground">{selectedCerts.size} selected</span>
               <button
-                onClick={() => { setBulkIssueDate(new Date().toISOString().split('T')[0]); setBulkRenewOpen(true) }}
+                onClick={() => { setBulkIssueDate(todayLocal()); setBulkRenewOpen(true) }}
                 className="px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90"
               >
                 Renew selected

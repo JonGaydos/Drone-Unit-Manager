@@ -338,11 +338,14 @@ def test_update_one_time_schedule_cannot_clear_next_due(client, db, admin_header
 
 
 def test_create_multi_year_schedule_auto_calcs_next_due(client, db, admin_headers):
-    """two_years / three_years frequencies auto-calculate next_due from today
-    (not the unknown-frequency 30-day fallback)."""
-    from datetime import date, timedelta
+    """two_years / three_years frequencies auto-calculate next_due from today:
+    the same calendar day that many years on (not a day count, which leap years
+    pull a day early)."""
+    import calendar
+    from datetime import date
 
-    for frequency, days in (("two_years", 730), ("three_years", 1095)):
+    today = date.today()
+    for frequency, years in (("two_years", 2), ("three_years", 3)):
         resp = client.post(
             "/api/maintenance/schedules",
             headers=admin_headers,
@@ -357,4 +360,6 @@ def test_create_multi_year_schedule_auto_calcs_next_due(client, db, admin_header
 
         db.expire_all()
         row = db.query(MaintenanceSchedule).filter(MaintenanceSchedule.id == schedule_id).first()
-        assert row.next_due == date.today() + timedelta(days=days)
+        year = today.year + years
+        expected = date(year, today.month, min(today.day, calendar.monthrange(year, today.month)[1]))
+        assert row.next_due == expected

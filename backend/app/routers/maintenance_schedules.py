@@ -1,5 +1,6 @@
-from datetime import date, timedelta
-from typing import Optional
+import calendar
+from datetime import date
+from typing import Literal, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -53,11 +54,14 @@ def _validate_entity(db, entity_type: str, entity_id: int | None) -> None:
 
 
 
+Frequency = Literal["monthly", "quarterly", "yearly", "two_years", "three_years", "one_time"]
+
+
 class ScheduleCreate(BaseModel):
     name: str
     entity_type: str
     entity_id: Optional[int] = None
-    frequency: str  # monthly, quarterly, yearly, two_years, three_years, one_time
+    frequency: Frequency
     description: Optional[str] = None
     assigned_to_id: Optional[int] = None
     next_due: Optional[date] = None  # required for one_time; optional override otherwise
@@ -66,19 +70,22 @@ class ScheduleUpdate(BaseModel):
     name: Optional[str] = None
     entity_type: Optional[str] = None
     entity_id: Optional[int] = None
-    frequency: Optional[str] = None
+    frequency: Optional[Frequency] = None
     description: Optional[str] = None
     assigned_to_id: Optional[int] = None
     is_active: Optional[bool] = None
     next_due: Optional[date] = None
 
 
-FREQUENCY_DAYS = {
-    "monthly": 30,
-    "quarterly": 90,
-    "yearly": 365,
-    "two_years": 730,
-    "three_years": 1095,
+# Calendar months, not a day count: 365 days drifts a yearly task a day
+# earlier after every leap year, and 30 days runs a monthly one a week early
+# by summer.
+FREQUENCY_MONTHS = {
+    "monthly": 1,
+    "quarterly": 3,
+    "yearly": 12,
+    "two_years": 24,
+    "three_years": 36,
 }
 
 # One-time tasks have no recurrence interval: the due date is user-supplied
@@ -86,10 +93,17 @@ FREQUENCY_DAYS = {
 ONE_TIME = "one_time"
 
 
+def _add_months(base: date, months: int) -> date:
+    """``base`` plus whole months, kept inside the target month (January 31
+    plus one month is the last day of February)."""
+    month_index = base.month - 1 + months
+    year, month = base.year + month_index // 12, month_index % 12 + 1
+    return date(year, month, min(base.day, calendar.monthrange(year, month)[1]))
+
+
 def _calc_next_due(frequency: str, from_date: date | None = None) -> date:
     base = from_date or date.today()
-    days = FREQUENCY_DAYS.get(frequency, 30)
-    return base + timedelta(days=days)
+    return _add_months(base, FREQUENCY_MONTHS.get(frequency, 1))
 
 
 

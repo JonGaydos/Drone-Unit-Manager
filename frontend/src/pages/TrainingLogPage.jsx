@@ -5,7 +5,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Modal } from '@/components/ui/Modal'
 import { useConfirm } from '@/hooks/useConfirm'
-import { normalizeDateValue } from '@/lib/utils'
+import { normalizeDateValue, todayLocal } from '@/lib/utils'
 import { OUTCOME_COLORS } from '@/lib/constants'
 import { sortVehicles, sortPilotsActiveFirst, vehicleDisplayName } from '@/lib/formatters'
 import { Link } from 'react-router-dom'
@@ -18,7 +18,7 @@ const ROLE_OPTIONS = ['PIC', 'Observer', 'Spotter', 'Visual Observer', 'Student'
 
 function TrainingModal({ pilots, vehicles, onSave, onClose, initial }) {
   const [form, setForm] = useState(initial || {
-    date: new Date().toISOString().slice(0, 10),
+    date: todayLocal(),
     title: '', training_type: 'Recurrent', description: '', location: '',
     man_hours: '', start_time: '', end_time: '', vehicle_id: '',
     instructor: '', objectives: '', outcome: 'completed', notes: '',

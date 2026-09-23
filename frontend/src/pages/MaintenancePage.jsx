@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { useConfirm } from '@/hooks/useConfirm'
-import { normalizeDateValue } from '@/lib/utils'
+import { daysUntil, normalizeDateValue } from '@/lib/utils'
 import { FREQUENCY_COLORS, FREQUENCY_LABELS } from '@/lib/constants'
 import { sortPilotsActiveFirst, vehicleDisplayName, equipmentDisplayName } from '@/lib/formatters'
 import { Plus, Trash2, Search, Wrench, CalendarClock, History, Download, Edit, CheckCircle, Clock, Upload, Paperclip } from 'lucide-react'
@@ -22,6 +22,13 @@ const ENTITY_ENDPOINTS = {
 }
 
 // Get display name for an entity from its data
+/** Short note beside a due date: overdue, due today, or days left. */
+function dueLabel(days) {
+  if (days < 0) return 'Overdue'
+  if (days === 0) return 'Due today'
+  return `${days}d`
+}
+
 function getEntityName(entity, entityType) {
   if (!entity) return '—'
   if (entityType === 'vehicle') return vehicleDisplayName(entity)
@@ -605,13 +612,11 @@ export default function MaintenancePage() {
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
               {displayedUpcoming.map(r => {
-                const dueDate = r.next_due_date ? new Date(r.next_due_date) : null
-                const now = new Date()
-                const daysUntil = dueDate ? Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24)) : null
+                const days = daysUntil(r.next_due_date)
                 const urgencyColor = (() => {
-                  if (daysUntil === null) return 'text-muted-foreground'
-                  if (daysUntil <= 0) return 'text-red-400'
-                  if (daysUntil <= 7) return 'text-amber-400'
+                  if (days === null) return 'text-muted-foreground'
+                  if (days < 0) return 'text-red-400'
+                  if (days <= 7) return 'text-amber-400'
                   return 'text-emerald-400'
                 })()
 
@@ -632,7 +637,7 @@ export default function MaintenancePage() {
                       <p>Entity: <EntityRef entityType={r.entity_type} entityId={r.entity_id} entityLists={entityLists} /></p>
                       <p>Type: <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${TYPE_COLORS[r.maintenance_type] || 'bg-zinc-500/15 text-zinc-400'}`}>{r.maintenance_type}</span></p>
                       <p>Next Due: <span className={`font-medium ${urgencyColor}`}>{r.next_due_date || 'N/A'}</span>
-                        {daysUntil !== null && <span className={`ml-1 ${urgencyColor}`}>({daysUntil <= 0 ? 'Overdue' : `${daysUntil}d`})</span>}
+                        {days !== null && <span className={`ml-1 ${urgencyColor}`}>({dueLabel(days)})</span>}
                       </p>
                       {r.performed_by && <p>By: <span className="text-foreground">{r.performed_by}</span></p>}
                     </div>
@@ -685,13 +690,11 @@ export default function MaintenancePage() {
             </thead>
             <tbody>
               {filteredSchedules.map(s => {
-                const dueDate = s.next_due ? new Date(s.next_due) : null
-                const now = new Date()
-                const daysUntil = dueDate ? Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24)) : null
+                const days = daysUntil(s.next_due)
                 const urgencyColor = (() => {
-                  if (daysUntil === null) return 'text-muted-foreground'
-                  if (daysUntil <= 0) return 'text-red-400'
-                  if (daysUntil <= 7) return 'text-amber-400'
+                  if (days === null) return 'text-muted-foreground'
+                  if (days < 0) return 'text-red-400'
+                  if (days <= 7) return 'text-amber-400'
                   return 'text-emerald-400'
                 })()
 
@@ -710,9 +713,9 @@ export default function MaintenancePage() {
                     <td className="px-4 py-3 text-foreground hidden md:table-cell">{s.last_completed || '\u2014'}</td>
                     <td className="px-4 py-3">
                       <span className={urgencyColor}>{s.next_due || '\u2014'}</span>
-                      {daysUntil !== null && (
+                      {days !== null && (
                         <span className={`ml-1 text-xs ${urgencyColor}`}>
-                          ({daysUntil <= 0 ? 'Overdue' : `${daysUntil}d`})
+                          ({dueLabel(days)})
                         </span>
                       )}
                     </td>
