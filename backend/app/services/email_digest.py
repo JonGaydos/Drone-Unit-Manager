@@ -304,6 +304,7 @@ def send_email(to_address: str, subject: str, html_body: str, db: Session) -> bo
     # bare calls did neither, so anyone on the path could read the password.
     # The timeout keeps a dead server from hanging the scheduler thread.
     tls = ssl.create_default_context()
+    tls.minimum_version = ssl.TLSVersion.TLSv1_2
     try:
         if smtp_port == 465:
             # Port 465 = implicit SSL (Gmail, Yahoo, etc.)

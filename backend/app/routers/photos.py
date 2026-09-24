@@ -459,10 +459,7 @@ def update_photo(
     if pilot_ids is not None:
         # Replace pilot associations
         db.query(PhotoPilot).filter(PhotoPilot.photo_id == photo_id).delete()
-        for pid_str in pilot_ids.split(","):
-            pid_str = pid_str.strip()
-            if pid_str.isdigit():
-                db.add(PhotoPilot(photo_id=photo_id, pilot_id=int(pid_str)))
+        _attach_photo_pilots(db, photo_id, pilot_ids)
 
     if changes or pilot_ids is not None:
         log_action(db, user.id, user.display_name, "update", "photo", photo.id, photo.original_filename,
