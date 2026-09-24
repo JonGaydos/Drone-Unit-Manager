@@ -163,8 +163,9 @@ def test_document_purge_removes_the_file(client, db, document, pilot_user, admin
     assert not path.exists()
 
 
-def test_purge_never_removes_a_file_outside_the_upload_directory(client, db, admin_user, upload_dir, tmp_path_factory):
-    outside = tmp_path_factory.mktemp("elsewhere") / "system.cfg"
+def test_purge_never_removes_a_file_outside_the_upload_directory(client, db, admin_user, tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "UPLOAD_DIR", tmp_path / "uploads")
+    outside = tmp_path / "system.cfg"
     outside.write_text("keep me")
     doc = Document(entity_type="general", document_type="other", title="planted", filename="system.cfg",
                    file_path=str(outside), mime_type="text/plain", file_size_bytes=7)
