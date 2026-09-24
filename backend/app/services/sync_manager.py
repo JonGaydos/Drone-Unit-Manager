@@ -633,7 +633,7 @@ def _delete_ghosts(db: Session, missing: list[Flight]) -> None:
     logger.info("Deleted %d ghost flights that Skydio no longer has", len(ghost_ids))
 
 
-def _enrich_flights(provider, creds, db: Session, result: SyncResult):
+def _enrich_flights(provider, creds, db: Session):
     """Enrich flights with full details and clean up ghost flights."""
     unenriched = _flights_to_enrich(db)
     enriched_count, missing = _enrich_each(unenriched, provider, creds, db)
@@ -978,7 +978,7 @@ class SyncManager:
 
         # --- Enrich flights with full details ---
         try:
-            _enrich_flights(provider, creds, db, result)
+            _enrich_flights(provider, creds, db)
             db.commit()
         except Exception as exc:
             result.errors.append(f"Flight enrichment error: {exc}")

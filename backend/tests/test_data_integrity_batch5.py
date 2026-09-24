@@ -195,7 +195,8 @@ def test_enrich_keeps_flights_it_could_not_look_up(client, db, admin_headers, mo
     assert any("kept" in e for e in resp.json()["errors"])
 
 
-def test_ghost_cleanup_deletes_only_confirmed_missing_flights(db):
+def test_ghost_cleanup_deletes_only_confirmed_missing_flights(db, monkeypatch):
+    _configure_skydio(db)
     gone, unreachable = _dateless_flight(db, "GONE"), _dateless_flight(db, "DOWN")
     gone_id, down_id = gone.id, unreachable.id
 
@@ -204,12 +205,14 @@ def test_ghost_cleanup_deletes_only_confirmed_missing_flights(db):
             raise _http_error(503)
         return None
 
-    result = SyncResult()
-    sync_manager._enrich_flights(FakeProvider(get_flight_detail=detail), CREDS, db, result)
+    monkeypatch.setattr(sync_manager, "get_provider", lambda name: FakeProvider(get_flight_detail=detail))
+    result = SyncManager.sync_all("skydio", db)
     db.expire_all()
     assert db.get(Flight, gone_id) is None
     assert db.get(Flight, down_id) is not None
-    assert result.errors == []  # housekeeping, not a failure
+    # Housekeeping, not a failure: the run is clean and the sync mark moves.
+    assert result.errors == []
+    assert _setting(db, "last_sync_timestamp") != LAST_SYNC
 
 
 def test_cleanup_detaches_incidents_instead_of_failing(client, db, admin_headers):
