@@ -30,7 +30,7 @@ import { test, expect } from '@playwright/test'
 async function goto(page, linkName, urlRe) {
   await page.goto('/')
   await expect(page.getByRole('link', { name: 'Dashboard', exact: true })).toBeVisible({ timeout: 15_000 })
-  await page.getByRole('link', { name: linkName, exact: true }).click()
+  await page.getByRole('navigation').getByRole('link', { name: linkName, exact: true }).click()
   await expect(page).toHaveURL(urlRe)
 }
 
