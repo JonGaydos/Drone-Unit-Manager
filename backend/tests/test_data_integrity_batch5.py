@@ -221,7 +221,8 @@ def test_cleanup_detaches_incidents_instead_of_failing(client, db, admin_headers
     db.add(incident)
     db.commit()
     resp = client.post("/api/sync/cleanup", headers=admin_headers)
-    assert resp.status_code == 200 and resp.json()["deleted"] == 1
+    assert resp.status_code == 200
+    assert resp.json()["deleted"] == 1
     db.expire_all()
     assert db.get(Incident, incident.id).flight_id is None
 
