@@ -51,8 +51,10 @@ def test_job_reports_its_result_and_its_failure():
     deadline = time.monotonic() + 5
     while time.monotonic() < deadline and "running" in (jobs.get(ok)["status"], jobs.get(bad)["status"]):
         time.sleep(0.01)
-    assert jobs.get(ok)["status"] == "done" and jobs.get(ok)["result"] == {"n": 1}
-    assert jobs.get(bad)["status"] == "failed" and "division" in jobs.get(bad)["error"]
+    assert jobs.get(ok)["status"] == "done"
+    assert jobs.get(ok)["result"] == {"n": 1}
+    assert jobs.get(bad)["status"] == "failed"
+    assert "division" in jobs.get(bad)["error"]
     assert jobs.get("nope") is None
 
 
@@ -107,7 +109,8 @@ def backup_env(db, tmp_path, monkeypatch):
 def test_scheduled_backup_includes_telemetry_and_leaves_no_partial_file(db, backup_env):
     backup_jobs.run_scheduled_backup()
     files = sorted(p.name for p in backup_env.iterdir())
-    assert len(files) == 1 and files[0].endswith(".zip")
+    assert len(files) == 1
+    assert files[0].endswith(".zip")
     with zipfile.ZipFile(backup_env / files[0]) as zf:
         assert json.loads(zf.read("manifest.json"))["include_telemetry"] is True
 
@@ -175,7 +178,8 @@ def test_a_row_that_fails_does_not_take_the_import_with_it(client, db, admin_hea
     monkeypatch.setattr(import_router, "_build_mission_from_row", build)
     csv_text = "Date,Title\n2026-09-01,Good A\n2026-09-02,Bad\n2026-09-03,Good B\n"
     result = _import_url(client, admin_headers, csv_text).json()
-    assert result["created"] == 2 and len(result["errors"]) == 1
+    assert result["created"] == 2
+    assert len(result["errors"]) == 1
     assert db.query(MissionLog).count() == 2
 
 
