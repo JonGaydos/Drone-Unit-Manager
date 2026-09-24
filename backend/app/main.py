@@ -284,6 +284,17 @@ def _health_warnings(db) -> list[str]:
     return warnings
 
 
+def _safe_health_warnings(db) -> list[str]:
+    """The warnings, or one saying they could not be read. Reading them must
+    never fail the health check itself: the databases answered, so the app is
+    up, whatever its settings table holds."""
+    try:
+        return _health_warnings(db)
+    except Exception:
+        logger.warning("Health check could not read the backup and sync status", exc_info=True)
+        return ["Could not read the backup and sync status"]
+
+
 @app.get("/api/health")
 def health_check():
     """Both databases, plus warnings for a stopped scheduler or a stale backup
@@ -301,7 +312,7 @@ def health_check():
         db.execute(text("SELECT 1"))
         tdb.execute(text("SELECT 1"))
         return {"status": "ok", "app": APP_TITLE, "version": APP_VERSION, "database": "connected",
-                "telemetry_database": "connected", "warnings": _health_warnings(db)}
+                "telemetry_database": "connected", "warnings": _safe_health_warnings(db)}
     except Exception:
         logger.exception("Health check failed")
         return JSONResponse(
