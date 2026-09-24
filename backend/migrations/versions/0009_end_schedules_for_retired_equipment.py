@@ -54,4 +54,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Nothing to undo safely: the schedules this switched off cannot be told
+    # apart from ones switched off by hand, so they stay inactive.
     pass
