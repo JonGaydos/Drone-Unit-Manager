@@ -27,8 +27,9 @@ async function gotoFlights(page) {
   await page.goto('/')
   await expect(page.getByRole('link', { name: 'Dashboard', exact: true })).toBeVisible({ timeout: 15_000 })
   // The Flights nav link's accessible name can carry a review badge ("Flights N"),
-  // so match by route prefix rather than exact text.
-  await page.getByRole('link', { name: /^Flights/ }).click()
+  // so match by route prefix rather than exact text. Scoped to the sidebar: the
+  // dashboard's "Flights (30d)" tile also matches once its data has loaded.
+  await page.getByRole('navigation').getByRole('link', { name: /^Flights/ }).click()
   await expect(page).toHaveURL(/\/flights(?:$|[/?])/)
 }
 
