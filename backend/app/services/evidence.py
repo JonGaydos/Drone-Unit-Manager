@@ -6,7 +6,7 @@ so held material cannot leave the system by any route.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import HTTPException
@@ -30,7 +30,8 @@ def soft_delete(item, user) -> None:
     """
     if item.legal_hold:
         raise HTTPException(409, ON_HOLD)
-    item.deleted_at = datetime.utcnow()
+    # Naive UTC, as every timestamp column here stores.
+    item.deleted_at = datetime.now(timezone.utc).replace(tzinfo=None)
     item.deleted_by_id = user.id
 
 
