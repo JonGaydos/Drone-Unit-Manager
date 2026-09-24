@@ -161,7 +161,8 @@ def test_smtp_verifies_the_certificate_and_times_out(db, monkeypatch, port, attr
     assert server.timeout == 30
     context = getattr(server, attr)
     assert isinstance(context, ssl.SSLContext)
-    assert context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname
+    assert context.verify_mode == ssl.CERT_REQUIRED
+    assert context.check_hostname
 
 
 # 4. Changes leave a trail ------------------------------------------------------
@@ -174,7 +175,8 @@ def test_bulk_settings_audit_names_keys_but_never_values(client, db, admin_user)
     assert resp.status_code == 200
     entries = _audit(db, "setting", "update")
     assert len(entries) == 1
-    assert "smtp_password" in entries[0].details and "org_name" in entries[0].details
+    assert "smtp_password" in entries[0].details
+    assert "org_name" in entries[0].details
     assert "hunter2-secret" not in entries[0].details
 
 
@@ -277,7 +279,8 @@ def test_digest_redirect_address_is_audited(client, db, pilot_user):
     client.put("/api/notifications/preferences", headers=_bearer(pilot_user),
                json={"email_override": "someone@elsewhere.example"})
     entries = _audit(db, "notification_preference", "update")
-    assert entries and "someone@elsewhere.example" in entries[0].details
+    assert entries
+    assert "someone@elsewhere.example" in entries[0].details
 
 
 # 6. Skydio client ---------------------------------------------------------------

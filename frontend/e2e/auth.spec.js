@@ -40,21 +40,29 @@ test.describe('auth + role gating', () => {
     })
   })
 
-  test('logout clears the session and returns to login', async ({ page }) => {
-    // Default admin storageState.
-    await page.goto('/')
-    await expectAuthenticated(page)
+  test.describe('own account', () => {
+    test.use({ storageState: { cookies: [], origins: [] } })
 
-    // Real control: the sidebar user section has a button aria-label="Log out".
-    await page.getByRole('button', { name: 'Log out' }).click()
+    test('logout clears the session and returns to login', async ({ page }) => {
+      // Its own account: logging out revokes every session of the user, so
+      // doing it as the shared admin would sign out every later test.
+      await page.goto('/login')
+      await page.getByLabel('Username').fill('e2elogout')
+      await page.getByLabel('Password', { exact: true }).fill('E2eLogoutPass1')
+      await page.getByRole('button', { name: 'Sign In' }).click()
+      await expectAuthenticated(page)
 
-    // Route guard redirects unauthenticated users to /login.
-    await expect(page).toHaveURL(/\/login/, { timeout: 15_000 })
-    await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible()
+      // Real control: the sidebar user section has a button aria-label="Log out".
+      await page.getByRole('button', { name: 'Log out' }).click()
 
-    // Token is gone from localStorage.
-    const token = await page.evaluate(() => localStorage.getItem('token'))
-    expect(token).toBeNull()
+      // Route guard redirects unauthenticated users to /login.
+      await expect(page).toHaveURL(/\/login/, { timeout: 15_000 })
+      await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible()
+
+      // Token is gone from localStorage.
+      const token = await page.evaluate(() => localStorage.getItem('token'))
+      expect(token).toBeNull()
+    })
   })
 
   test('admin sees the Audit Log nav item', async ({ page }) => {

@@ -10,6 +10,10 @@ import {
 const APP = 'http://localhost:5173'
 const ADMIN = { username: 'e2eadmin', password: 'E2eAdminPass1', display: 'E2E Admin', org: 'E2E Unit' }
 const PILOT = { username: 'e2epilot', password: 'E2ePilotPass1' }
+// Signing out revokes every session the user has, so the logout test uses its
+// own account: signing out as the shared admin would revoke the saved admin
+// login every later test runs with.
+const LOGOUT_USER = { username: 'e2elogout', password: 'E2eLogoutPass1' }
 
 // start-backend.mjs points the e2e backend's DATA_DIR here; the backend writes
 // install_token.txt into it at startup while no admin exists.
@@ -57,6 +61,9 @@ export default async function globalSetup() {
 
   await createUser(reqCtx, adminToken, {
     username: PILOT.username, password: PILOT.password, role: 'pilot', display_name: 'E2E Pilot',
+  })
+  await createUser(reqCtx, adminToken, {
+    username: LOGOUT_USER.username, password: LOGOUT_USER.password, role: 'viewer', display_name: 'E2E Logout',
   })
 
   const vehicle = await createVehicle(reqCtx, adminToken, {

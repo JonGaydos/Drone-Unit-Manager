@@ -307,7 +307,8 @@ def test_every_changed_flight_field_is_audited(client, db, pilot_headers):
     client.patch(f"/api/flights/{flight.id}", headers=pilot_headers,
                  json={"takeoff_address": "1 Main St", "case_number": "2026-001"})
     entry = db.query(AuditLog).filter(AuditLog.entity_type == "flight").order_by(AuditLog.id.desc()).first()
-    assert "takeoff_address" in entry.changes and "case_number" in entry.changes
+    assert "takeoff_address" in entry.changes
+    assert "case_number" in entry.changes
 
 
 # 5. Pilots cannot grant themselves supervisor-controlled profile fields -------

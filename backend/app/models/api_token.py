@@ -29,4 +29,5 @@ class ApiToken(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)  # null = never
+    # Empty means the token never expires.
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)

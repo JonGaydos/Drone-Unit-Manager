@@ -27,7 +27,7 @@ const fmt = (s) => (s ? new Date(s).toLocaleString() : 'Never')
 function tokenState(t) {
   if (t.revoked_at) return 'revoked'
   if (t.expires_at) {
-    const iso = /[zZ]|[+-]\d\d:?\d\d$/.test(t.expires_at) ? t.expires_at : `${t.expires_at}Z`
+    const iso = /(?:[zZ]|[+-]\d\d:?\d\d)$/.test(t.expires_at) ? t.expires_at : `${t.expires_at}Z`
     if (new Date(iso) <= new Date()) return 'expired'
   }
   return 'active'

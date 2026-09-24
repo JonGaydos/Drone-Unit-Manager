@@ -148,6 +148,10 @@ if "*" in settings.CORS_ORIGINS:
         "List explicit origins instead."
     )
 
+# Added first, so it sits inside CORS and the request-id middleware below: a
+# 413 refusal still carries the CORS, request-id and security headers.
+app.add_middleware(BodySizeLimitMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
@@ -155,10 +159,6 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
 )
-
-# Added before the request-id middleware below so it sits inside it: a 413
-# refusal still carries the request id and the security headers.
-app.add_middleware(BodySizeLimitMiddleware)
 
 
 # The app is served by uvicorn directly -- there is no nginx in the container --

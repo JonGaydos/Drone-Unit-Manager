@@ -46,9 +46,9 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit} className="bg-card border border-border rounded-xl p-6 shadow-lg">
           {idleNotice && !error && (
-            <div role="status" className="bg-secondary border border-border text-foreground text-sm rounded-lg p-3 mb-4">
+            <output className="block bg-secondary border border-border text-foreground text-sm rounded-lg p-3 mb-4">
               You were signed out after 30 minutes of inactivity.
-            </div>
+            </output>
           )}
           {error && (
             <div className="bg-destructive/10 border border-destructive/30 text-destructive text-sm rounded-lg p-3 mb-4">

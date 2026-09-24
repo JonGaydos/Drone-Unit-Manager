@@ -13,11 +13,12 @@ EXECUTABLE_TYPES = frozenset({"exe", "elf"})
 # Content types the server assigns from a file's allowlisted extension. The
 # browser-supplied Content-Type is never stored or served: an uploader could
 # label any bytes text/html and have them render as a page on this origin.
+PDF = "application/pdf"
 _MIME_BY_EXT = {
     ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
     ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp",
     ".tiff": "image/tiff", ".tif": "image/tiff",
-    ".pdf": "application/pdf",
+    ".pdf": PDF,
     ".doc": "application/msword",
     ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ".xls": "application/vnd.ms-excel",
@@ -46,13 +47,13 @@ def mime_for_filename(name: str) -> str:
 
 def is_inline_safe(mime: str) -> bool:
     """True for types that may be shown inline: PDFs and raster images."""
-    return mime == "application/pdf" or mime.startswith("image/")
+    return mime == PDF or mime.startswith("image/")
 
 
 def user_file_headers(mime: str) -> dict[str, str]:
     """Response headers for serving a user-uploaded file of this type."""
     headers = {"X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer"}
-    if mime != "application/pdf":
+    if mime != PDF:
         headers["Content-Security-Policy"] = USER_FILE_CSP
     return headers
 
