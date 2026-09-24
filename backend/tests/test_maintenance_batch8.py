@@ -60,7 +60,8 @@ def test_completing_a_schedule_twice_leaves_one_current_due_date(client, db, adm
     due = client.get("/api/dashboard/maintenance-due", headers=admin_headers).json()
     assert all(item["days_remaining"] >= 0 for item in due)
     upcoming = client.get("/api/maintenance?upcoming=true", headers=admin_headers).json()
-    assert len(upcoming) == 1 and upcoming[0]["next_due_date"] >= date.today().isoformat()
+    assert len(upcoming) == 1
+    assert upcoming[0]["next_due_date"] >= date.today().isoformat()
 
 
 def test_an_ad_hoc_due_date_for_a_different_task_still_shows(client, db, admin_headers):
