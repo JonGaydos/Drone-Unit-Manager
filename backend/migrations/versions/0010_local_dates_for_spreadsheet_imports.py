@@ -19,7 +19,7 @@ Create Date: 2026-10-05 15:00:00.000000
 import importlib.util
 import logging
 from pathlib import Path
-from typing import Sequence, Union
+from typing import Sequence
 
 from alembic import op
 import sqlalchemy as sa
@@ -27,9 +27,9 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = '0010_local_dates_for_spreadsheet_imports'
-down_revision: Union[str, None] = '0009_end_schedules_for_retired_equipment'
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = '0009_end_schedules_for_retired_equipment'
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 logger = logging.getLogger(__name__)
 

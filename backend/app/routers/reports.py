@@ -363,9 +363,11 @@ def _render_report_pdf(data: dict, config: ReportConfig, org_name: str, logo_pat
 
     chart_buf = _generate_chart(config.report_type, data)
     if chart_buf:
-        elements.append(Paragraph("Chart", theme.heading_style))
-        elements.append(RLImage(chart_buf, width=6.5 * inch, height=3 * inch))
-        elements.append(Spacer(1, 12))
+        elements.extend([
+            Paragraph("Chart", theme.heading_style),
+            RLImage(chart_buf, width=6.5 * inch, height=3 * inch),
+            Spacer(1, 12),
+        ])
 
     # If the report uses multi-section layout, render each section; skip the
     # legacy top-level rows table (the YoY table is duplicated in the last section).
