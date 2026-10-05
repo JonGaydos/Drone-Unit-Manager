@@ -79,7 +79,7 @@ export default function DocumentStoragePage() {
   const focusOnMount = useCallback((el) => { el?.focus() }, [])
 
   useEffect(() => {
-    Promise.all([loadFolders(), loadAllDocuments()]).finally(() => setLoading(false))
+    void Promise.all([loadFolders(), loadAllDocuments()]).finally(() => setLoading(false))
   }, [loadFolders, loadAllDocuments])
 
   useEffect(() => {
@@ -389,7 +389,7 @@ export default function DocumentStoragePage() {
               ref={focusOnMount}
               value={newFolderName}
               onChange={(e) => setNewFolderName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') { handleCreateFolder() } if (e.key === 'Escape') { setShowCreateFolder(false) } }}
+              onKeyDown={(e) => { if (e.key === 'Enter') { void handleCreateFolder() } if (e.key === 'Escape') { setShowCreateFolder(false) } }}
               placeholder="Folder name"
               className="w-full px-2 py-1.5 bg-secondary border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             />
@@ -418,7 +418,7 @@ export default function DocumentStoragePage() {
               ref={focusOnMount}
               value={editName}
               onChange={(e) => setEditName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') { handleRenameFolder() } if (e.key === 'Escape') { setEditingFolder(null) } }}
+              onKeyDown={(e) => { if (e.key === 'Enter') { void handleRenameFolder() } if (e.key === 'Escape') { setEditingFolder(null) } }}
               className="w-full px-2 py-1.5 bg-secondary border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             />
             <div className="flex gap-1">
@@ -567,7 +567,7 @@ export default function DocumentStoragePage() {
                               type="text"
                               value={editDocTitle}
                               onChange={(e) => setEditDocTitle(e.target.value)}
-                              onKeyDown={(e) => { if (e.key === 'Enter') { handleRenameDocument(doc.id) } if (e.key === 'Escape') { setEditingDoc(null) } }}
+                              onKeyDown={(e) => { if (e.key === 'Enter') { void handleRenameDocument(doc.id) } if (e.key === 'Escape') { setEditingDoc(null) } }}
                               className="flex-1 px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                             />
                             <button onClick={() => handleRenameDocument(doc.id)} className="p-1 text-primary hover:opacity-80"><Save className="w-3.5 h-3.5" /></button>
