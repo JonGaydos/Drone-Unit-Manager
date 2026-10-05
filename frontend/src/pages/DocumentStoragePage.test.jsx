@@ -188,4 +188,28 @@ describe('DocumentStoragePage', () => {
       expect(screen.queryByRole('group')).toBeNull()
     })
   })
+
+  it('moves a document to Recently deleted from its row', async () => {
+    let deleted = null
+    mockMount()
+    server.use(http.delete('/api/documents/:id', ({ params }) => { deleted = params.id; return HttpResponse.json({ ok: true }) }))
+    const { user } = renderWithProviders(<DocumentStoragePage />, { role: 'admin' })
+    await user.click(await screen.findByText('Certifications'))
+    await screen.findByText('Part 107.pdf')
+
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => expect(deleted).toBe('11'))
+    await waitFor(() => expect(screen.queryByText('Part 107.pdf')).toBeNull())
+  })
+
+  it('offers no Delete on a document under legal hold', async () => {
+    mockMount({ folderDocs: () => HttpResponse.json([{ ...FOLDER1_DOCS[0], legal_hold: true }]) })
+    const { user } = renderWithProviders(<DocumentStoragePage />, { role: 'admin' })
+    await user.click(await screen.findByText('Certifications'))
+    await screen.findByText('Part 107.pdf')
+    expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull()
+  })
 })

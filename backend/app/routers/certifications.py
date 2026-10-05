@@ -89,7 +89,7 @@ def update_certification_type(
     return CertificationTypeOut.model_validate(ct)
 
 
-@router.delete("/api/certification-types/{ct_id}", responses=responses(404))
+@router.delete("/api/certification-types/{ct_id}", responses=responses(404, 409))
 def delete_certification_type(
     ct_id: int,
     db: DBSession,
@@ -99,6 +99,11 @@ def delete_certification_type(
     ct = db.query(CertificationType).filter(CertificationType.id == ct_id).first()
     if not ct:
         raise HTTPException(status_code=404, detail=CERTIFICATION_TYPE_NOT_FOUND)
+    in_use = db.query(PilotCertification).filter(PilotCertification.certification_type_id == ct_id).count()
+    if in_use:
+        raise HTTPException(status_code=409, detail=(
+            f"In use by {in_use} pilot certification record(s). Hide it instead to take it off the matrix "
+            "and keep the records."))
     ct_name = ct.name
     log_action(db, admin.id, admin.display_name, "delete", "certification_type", ct_id, ct_name)
     db.delete(ct)

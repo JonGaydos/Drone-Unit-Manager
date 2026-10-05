@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -13,6 +13,12 @@ import { Plus, Search, X, ChevronDown, ChevronUp, Trash2, Download, Loader2, Upl
 import { ImportMappingModal } from '@/components/ImportMappingModal'
 
 const STATUS_OPTIONS = ['planned', 'in_progress', 'completed', 'cancelled']
+// The list endpoint's default page size.
+const MISSION_LIMIT = 200
+
+// A date the user has finished typing. A date input reports every keystroke,
+// so the year 2020 arrives as 0002, 0020 and 0202 first.
+const fullDate = (d) => /^(19|20)\d{2}-\d{2}-\d{2}$/.test(d)
 const ROLE_OPTIONS = ['PIC', 'Observer', 'Spotter', 'Visual Observer', 'Support']
 
 function MissionModal({ pilots, vehicles, purposes, onSave, onClose, initial }) {
@@ -204,6 +210,8 @@ export default function MissionLogPage() {
   const [vehicles, setVehicles] = useState([])
   const [missionPurposes, setMissionPurposes] = useState([])
   const [search, setSearch] = useState('')
+  const [query, setQuery] = useState('')
+  const latestLoad = useRef(0)
   const [modal, setModal] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [editMission, setEditMission] = useState(null)
@@ -217,12 +225,24 @@ export default function MissionLogPage() {
   const toast = useToast()
   const [confirmProps, requestConfirm] = useConfirm()
 
+  const fromParam = fullDate(dateFrom) ? dateFrom : ''
+  const toParam = fullDate(dateTo) ? dateTo : ''
+
+  // Search once typing pauses, not on every keystroke.
+  useEffect(() => {
+    const timer = setTimeout(() => setQuery(search.trim()), 300)
+    return () => clearTimeout(timer)
+  }, [search])
+
   const load = () => {
     const params = new URLSearchParams()
-    if (dateFrom) params.set('date_from', dateFrom)
-    if (dateTo) params.set('date_to', dateTo)
+    if (fromParam) params.set('date_from', fromParam)
+    if (toParam) params.set('date_to', toParam)
     if (filterPilot) params.set('pilot_id', filterPilot)
+    if (query) params.set('search', query)
     const qs = params.toString() ? `?${params.toString()}` : ''
+    // Responses can arrive out of order; only the newest request's may land.
+    const thisLoad = ++latestLoad.current
     Promise.all([
       api.get(`/mission-logs${qs}`),
       api.get('/pilots'),
@@ -232,12 +252,13 @@ export default function MissionLogPage() {
       // editing one never affected the other.
       api.get('/flights/purposes/list').catch(() => []),
     ]).then(([m, p, v, purposes]) => {
+      if (thisLoad !== latestLoad.current) return
       setMissions(m); setPilots(p); setVehicles(v)
       if (Array.isArray(purposes)) setMissionPurposes(purposes.map(x => x.name))
     }).catch(err => setError(err.message)).finally(() => setLoading(false))
   }
 
-  useEffect(() => { load() }, [dateFrom, dateTo, filterPilot])
+  useEffect(() => { load() }, [fromParam, toParam, filterPilot, query])
 
   const handleSave = async (data) => {
     try {
@@ -270,10 +291,8 @@ export default function MissionLogPage() {
     setModal(true)
   }
 
-  const filtered = missions.filter(m =>
-    `${m.title} ${m.reason || ''} ${m.location || ''} ${m.case_number || ''} ${m.pilots?.map(p => p.pilot_name).join(' ') || ''}`
-      .toLowerCase().includes(search.toLowerCase())
-  )
+  const activePilots = sortPilotsActiveFirst(pilots).filter(p => p.status === 'active')
+  const inactivePilots = sortPilotsActiveFirst(pilots).filter(p => p.status !== 'active')
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>
 
@@ -296,7 +315,12 @@ export default function MissionLogPage() {
           <select value={filterPilot} onChange={e => setFilterPilot(e.target.value)}
             className="px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
             <option value="">All Pilots</option>
-            {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+            {activePilots.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+            {inactivePilots.length > 0 && (
+              <optgroup label="Inactive">
+                {inactivePilots.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+              </optgroup>
+            )}
           </select>
           <button
             onClick={() => api.download('/export/mission-logs/csv')}
@@ -335,7 +359,7 @@ export default function MissionLogPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(m => (
+            {missions.map(m => (
               <React.Fragment key={m.id}>
                 <tr className="border-b border-border/50 hover:bg-accent/30 transition-colors cursor-pointer"
                   onClick={() => setExpanded(expanded === m.id ? null : m.id)}>
@@ -398,10 +422,15 @@ export default function MissionLogPage() {
                 )}
               </React.Fragment>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={isPilot ? 10 : 9} className="px-4 py-12 text-center text-muted-foreground">No mission logs found</td></tr>}
+            {missions.length === 0 && <tr><td colSpan={isPilot ? 10 : 9} className="px-4 py-12 text-center text-muted-foreground">No mission logs found</td></tr>}
           </tbody>
         </table>
         </div>
+        {missions.length >= MISSION_LIMIT && (
+          <p className="px-4 py-2 border-t border-border text-xs text-muted-foreground">
+            Showing the {MISSION_LIMIT} most recent matches. Narrow the dates or search to reach older missions.
+          </p>
+        )}
       </div>
 
       {modal && (

@@ -207,6 +207,19 @@ async def integrity_conflict(request: Request, exc: IntegrityError):
     )
 
 
+@app.exception_handler(PermissionError)
+async def data_folder_not_writable(request: Request, exc: PermissionError):
+    """A file the app could not write, almost always a data folder still owned
+    by another user (a copy made as root, say). Named in the log and in the
+    reply, so it is not mistaken for a bug in the request."""
+    logger.error("Permission denied on %s %s: %s", request.method, request.url.path, exc.filename or exc)
+    return JSONResponse(
+        {"detail": "The server could not save this file: its data folder is not writable. "
+                   "An administrator needs to fix the folder's ownership."},
+        status_code=500,
+    )
+
+
 # Register routers
 app.include_router(auth.router)
 app.include_router(api_tokens_router.router)
@@ -267,6 +280,12 @@ def _older_than(stamp: str | None, age: timedelta) -> bool:
     return datetime.now(timezone.utc) - when > age
 
 
+def _unwritable_upload_folders() -> int:
+    """How many folders under the upload root the app cannot write into. A
+    folder copied in as root leaves every upload into it failing."""
+    return sum(1 for folder, _, _ in os.walk(settings.UPLOAD_DIR) if not os.access(folder, os.W_OK))
+
+
 def _health_warnings(db) -> list[str]:
     """Things an operator should look at that do not make the app unusable."""
     from app.models.setting import Setting
@@ -281,6 +300,9 @@ def _health_warnings(db) -> list[str]:
         warnings.append("No backup in the last 26 hours")
     if values.get("skydio_api_token") and _older_than(values.get("last_sync_timestamp"), STALE_AFTER):
         warnings.append("No successful Skydio sync in the last 26 hours")
+    unwritable = _unwritable_upload_folders()
+    if unwritable:
+        warnings.append(f"{unwritable} upload folder(s) are not writable by the app; uploads into them will fail")
     return warnings
 
 
@@ -297,8 +319,8 @@ def _safe_health_warnings(db) -> list[str]:
 
 @app.get("/api/health")
 def health_check():
-    """Both databases, plus warnings for a stopped scheduler or a stale backup
-    or sync.
+    """Both databases, plus warnings for a stopped scheduler, a stale backup
+    or sync, or upload folders the app cannot write into.
 
     503 only when a database is unreachable: the container's HEALTHCHECK
     restarts on failure, and an old backup is a reason to look, not to

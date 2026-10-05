@@ -30,6 +30,7 @@ export default function DocumentStoragePage() {
   const [search, setSearch] = useState('')
   const [showUpload, setShowUpload] = useState(false)
   const [confirmDeleteFolder, setConfirmDeleteFolder] = useState(null)
+  const [confirmDeleteDoc, setConfirmDeleteDoc] = useState(null)
   const [showDeleted, setShowDeleted] = useState(false)
   const { isPilot, isSupervisor } = useAuth()
   const toast = useToast()
@@ -163,6 +164,8 @@ export default function DocumentStoragePage() {
       await api.delete(`/folders/${id}`)
       if (selectedFolder === id) setSelectedFolder(null)
       loadFolders()
+      // Its documents are now unfiled, so the Unfiled count changes too.
+      loadAllDocuments()
     } catch (err) {
       toast.error(err.message || 'An error occurred')
     }
@@ -212,6 +215,17 @@ export default function DocumentStoragePage() {
       loadAllDocuments()
     } catch (err) {
       toast.error(err.message || 'An error occurred')
+    }
+  }
+
+  const handleDeleteDocument = async (doc) => {
+    try {
+      await api.delete(`/documents/${doc.id}`)
+      setDocuments(prev => prev.filter(d => d.id !== doc.id))
+      loadFolders()
+      loadAllDocuments()
+    } catch (err) {
+      toast.error(err.message || 'Could not delete the document')
     }
   }
 
@@ -639,6 +653,16 @@ export default function DocumentStoragePage() {
                                 </div>
                               )}
                             </div>
+                            {!doc.legal_hold && (
+                              <button
+                                onClick={() => setConfirmDeleteDoc(doc)}
+                                className="p-1 text-muted-foreground hover:text-destructive rounded hover:bg-destructive/10"
+                                title="Delete"
+                                aria-label="Delete"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </>
                         )}
                       </div>
@@ -666,6 +690,14 @@ export default function DocumentStoragePage() {
         onConfirm={() => handleDeleteFolder(confirmDeleteFolder)}
         title="Delete Folder"
         message='Delete this folder? Documents will be moved to "Unfiled".'
+        confirmLabel="Delete"
+      />
+      <ConfirmDialog
+        open={!!confirmDeleteDoc}
+        onClose={() => setConfirmDeleteDoc(null)}
+        onConfirm={() => handleDeleteDocument(confirmDeleteDoc)}
+        title="Delete Document"
+        message="Move this document to Recently deleted? A supervisor can restore it."
         confirmLabel="Delete"
       />
     </div>

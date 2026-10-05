@@ -19,6 +19,7 @@ from app.models.certification import PilotCertification, CertificationType
 from app.routers.currency import _pilot_currency
 from app.schemas.pilot import PilotCreate, PilotUpdate, PilotOut, PilotStats
 from app.responses import responses
+from app.services.pilot_contacts import pilot_out
 
 router = APIRouter(prefix="/api/pilots", tags=["pilots"])
 
@@ -39,7 +40,7 @@ def list_pilots(
     q = db.query(Pilot)
     if status:
         q = q.filter(Pilot.status == status)
-    return [PilotOut.model_validate(p) for p in q.order_by(Pilot.first_name, Pilot.last_name).all()]
+    return [pilot_out(p, user) for p in q.order_by(Pilot.first_name, Pilot.last_name).all()]
 
 
 @router.get("/{pilot_id}", response_model=PilotOut, responses=responses(401, 404))
@@ -48,7 +49,7 @@ def get_pilot(pilot_id: int, db: DBSession, user: CurrentUser):
     pilot = db.query(Pilot).filter(Pilot.id == pilot_id).first()
     if not pilot:
         raise HTTPException(status_code=404, detail=PILOT_NOT_FOUND)
-    return PilotOut.model_validate(pilot)
+    return pilot_out(pilot, user)
 
 
 @router.get("/{pilot_id}/stats", response_model=PilotStats, responses=responses(401, 404))

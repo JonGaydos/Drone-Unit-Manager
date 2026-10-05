@@ -8,6 +8,7 @@ from app.responses import responses
 from app.models.flight import Flight
 from app.models.pilot import Pilot
 from app.services.flight_scope import counted_flight_clause
+from app.services.pilot_contacts import hides_contacts
 from app.models.vehicle import Vehicle
 from app.models.certification import PilotCertification, CertificationType
 from app.models.maintenance import MaintenanceRecord
@@ -531,7 +532,7 @@ def fleet_health(db: DBSession, user: CurrentUser):
     }
 
 
-def _currency_status(db, total_pilots):
+def _currency_status(db, total_pilots, with_email: bool = True):
     """Evaluate active pilots against active currency rules. Returns
     (active_rule_count, per_pilot_status, pilots_current, pilots_lapsed). With no
     rules defined, every pilot is implicitly current."""
@@ -546,7 +547,7 @@ def _currency_status(db, total_pilots):
     pilots = db.query(Pilot).filter(Pilot.status == "active").all()
     flights = flights_by_pilot(db, [p.id for p in pilots], rules)
     for p in pilots:
-        entry = _pilot_currency_entry(p, _evaluate_currency(rules, flights.get(p.id, [])))
+        entry = _pilot_currency_entry(p, _evaluate_currency(rules, flights.get(p.id, [])), with_email)
         status.append(entry)
         if entry["is_current"]:
             pilots_current += 1
@@ -555,15 +556,16 @@ def _currency_status(db, total_pilots):
     return len(rules), status, pilots_current, pilots_lapsed
 
 
-def _pilot_currency_entry(pilot, rule_results: list[dict]) -> dict:
-    """One pilot's line in the compliance currency list."""
+def _pilot_currency_entry(pilot, rule_results: list[dict], with_email: bool = True) -> dict:
+    """One pilot's line in the compliance currency list; the email only when
+    the caller may see it."""
     is_current = all(r["is_current"] for r in rule_results) if rule_results else True
     # Earliest expiry across current-passing rules; null when any rule lapsed.
     expiries = [r["expires_date"] for r in rule_results if r.get("expires_date")]
     return {
         "pilot_id": pilot.id,
         "pilot_name": pilot.full_name,
-        "email": pilot.email,
+        "email": pilot.email if with_email else None,
         "is_current": is_current,
         "earliest_expires_date": min(expiries) if (expiries and is_current) else None,
         "rules": rule_results,
@@ -663,7 +665,8 @@ def compliance_dashboard(db: DBSession, user: CurrentUser):
 
     # Pilot currency: reuses currency.py's evaluator so the rule semantics stay
     # identical to PilotDetailPage.
-    currency_rules_active, pilot_currency_status, pilots_current, pilots_lapsed = _currency_status(db, total_pilots)
+    currency_rules_active, pilot_currency_status, pilots_current, pilots_lapsed = _currency_status(
+        db, total_pilots, with_email=not hides_contacts(user))
 
     # Operating authority (org-level COAs / Part 107 waivers).
     authorities, expired_authorities, expiring_authorities, grounding_expired, advisory_expired, score_cap_reason = _authority_summary(db, today)

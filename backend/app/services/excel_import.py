@@ -1,12 +1,13 @@
 import csv
 import io
 import logging
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from typing import Optional
 
 import openpyxl
 from sqlalchemy.orm import Session
 
+from app.services.local_time import display_zone, local_flight_date
 from app.models.pilot import Pilot
 from app.models.vehicle import Vehicle
 from app.models.flight import Flight, FlightPurpose
@@ -189,6 +190,18 @@ def _parse_dt(val) -> Optional[datetime]:
     return None
 
 
+def _takeoff_utc(row: dict, zone) -> Optional[datetime]:
+    """Takeoff as naive UTC, the way every other source stores it. Skydio's
+    "Takeoff" column is UTC; "Local Takeoff Time" is the unit's wall clock."""
+    takeoff = _parse_dt(row.get("Takeoff"))
+    if takeoff:
+        return takeoff
+    local = _parse_dt(row.get("Local Takeoff Time"))
+    if local is None:
+        return None
+    return local.replace(tzinfo=zone).astimezone(timezone.utc).replace(tzinfo=None)
+
+
 def _clean(val) -> Optional[str]:
     """Normalize a cell to a non-empty string, treating blank / N/A as None."""
     if val is None:
@@ -239,9 +252,10 @@ def _build_flight_from_row(row: dict, flight_id: str, pilot, vehicle, db: Sessio
 
     Returns None if the flight is a duplicate.
     """
-    takeoff_dt = _parse_dt(row.get("Takeoff") or row.get("Local Takeoff Time"))
+    zone = display_zone(db)
+    takeoff_dt = _takeoff_utc(row, zone)
     landing_dt = _parse_dt(row.get("Land"))
-    flight_date = takeoff_dt.date() if takeoff_dt else None
+    flight_date = local_flight_date(takeoff_dt, zone)
     duration_f = _parse_safe_float(row.get("Duration (seconds)"))
     duration = int(duration_f) if duration_f is not None else None
 

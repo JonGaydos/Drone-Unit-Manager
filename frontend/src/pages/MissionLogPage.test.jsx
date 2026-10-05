@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { screen } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { renderWithProviders } from '@/test/render'
@@ -53,14 +53,39 @@ describe('MissionLogPage', () => {
     expect(await screen.findByText('missions boom')).toBeInTheDocument()
   })
 
-  it('narrows the visible rows with the search box', async () => {
-    mockMount()
+  it('searches on the server so older missions are reachable', async () => {
+    mockMount({
+      missions: ({ request }) => {
+        const q = (new URL(request.url).searchParams.get('search') || '').toLowerCase()
+        return HttpResponse.json(MISSIONS.filter(m => m.title.toLowerCase().includes(q)))
+      },
+    })
     const { user } = renderWithProviders(<MissionLogPage />, { role: 'admin' })
 
     await screen.findByText('River Search')
     await user.type(screen.getByPlaceholderText('Search missions...'), 'Night')
 
-    expect(screen.queryByText('River Search')).toBeNull()
+    await waitFor(() => expect(screen.queryByText('River Search')).toBeNull())
     expect(screen.getByText('Night Patrol')).toBeInTheDocument()
+  })
+
+  it('says when the list is cut off at the page size', async () => {
+    const many = Array.from({ length: 200 }, (_, i) => ({ ...MISSIONS[1], id: i + 1, title: `Mission ${i}` }))
+    mockMount({ missions: () => HttpResponse.json(many) })
+    renderWithProviders(<MissionLogPage />, { role: 'admin' })
+    expect(await screen.findByText(/Showing the 200 most recent matches/)).toBeInTheDocument()
+  }, 15000)
+
+  it('lists inactive pilots under their own heading in the filter', async () => {
+    mockMount()
+    server.use(http.get('/api/pilots', () => HttpResponse.json([
+      { id: 5, full_name: 'Jane Doe', first_name: 'Jane', status: 'active' },
+      { id: 6, full_name: 'Old Timer', first_name: 'Old', status: 'inactive' },
+    ])))
+    const { container } = renderWithProviders(<MissionLogPage />, { role: 'admin' })
+    await screen.findByText('River Search')
+    const group = container.querySelector('optgroup[label="Inactive"]')
+    expect(within(group).getByText('Old Timer')).toBeInTheDocument()
+    expect(within(group).queryByText('Jane Doe')).toBeNull()
   })
 })

@@ -2,6 +2,7 @@ from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.constants import MISSION_LOG_NOT_FOUND
@@ -64,6 +65,32 @@ def _sync_pilots(db: Session, mission: MissionLog, pilots_data: list[MissionLogP
         ))
 
 
+def _matches(text: str):
+    """Missions whose title, reason, location, case number or a pilot's name
+    contains ``text``. Run in the database so a search reaches every mission,
+    not just the page the list returned."""
+    by_pilot = (select(MissionLogPilot.mission_log_id)
+                .join(Pilot, Pilot.id == MissionLogPilot.pilot_id)
+                .where((Pilot.first_name + " " + Pilot.last_name).icontains(text, autoescape=True)))
+    return or_(
+        MissionLog.title.icontains(text, autoescape=True),
+        MissionLog.reason.icontains(text, autoescape=True),
+        MissionLog.location.icontains(text, autoescape=True),
+        MissionLog.case_number.icontains(text, autoescape=True),
+        MissionLog.id.in_(by_pilot),
+    )
+
+
+def _narrowed(q, pilot_id: int | None, search: str | None):
+    """The mission query limited to one pilot's missions and to a text search."""
+    if pilot_id:
+        q = q.filter(MissionLog.id.in_(
+            select(MissionLogPilot.mission_log_id).where(MissionLogPilot.pilot_id == pilot_id)))
+    if search:
+        q = q.filter(_matches(search.strip()))
+    return q
+
+
 @router.get("", response_model=list[MissionLogOut])
 def list_mission_logs(
 
@@ -79,6 +106,8 @@ def list_mission_logs(
 
     status: str | None = None,
 
+    search: str | None = None,
+
     limit: Annotated[int, Query(le=1000)] = 200,
 
     offset: int = 0,
@@ -90,12 +119,7 @@ def list_mission_logs(
         q = q.filter(MissionLog.date <= date_to)
     if status:
         q = q.filter(MissionLog.status == status)
-    if pilot_id:
-        mission_ids = [
-            mp.mission_log_id
-            for mp in db.query(MissionLogPilot).filter(MissionLogPilot.pilot_id == pilot_id).all()
-        ]
-        q = q.filter(MissionLog.id.in_(mission_ids))
+    q = _narrowed(q, pilot_id, search)
     missions = q.options(selectinload(MissionLog.pilots)).order_by(
         MissionLog.date.desc()
     ).offset(offset).limit(limit).all()

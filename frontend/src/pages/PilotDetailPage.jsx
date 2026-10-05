@@ -59,6 +59,9 @@ export default function PilotDetailPage() {
     }).catch(() => {}).finally(() => setLoading(false))
   }, [id])
 
+  // A pilot edits and attaches documents to their own record; supervisors to anyone's.
+  const canEdit = isSupervisor || (isPilot && user?.pilot_id === Number.parseInt(id, 10))
+
   const startEditing = () => {
     setEditForm({
       first_name: pilot.first_name || '',
@@ -190,14 +193,15 @@ export default function PilotDetailPage() {
                     <input id="badge-number" type="text" value={editForm.badge_number} onChange={e => setEditForm({...editForm, badge_number: e.target.value})}
                       className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                   </div>
-                  <div>
+                  {/* Status is a supervisor's decision; the API refuses it from a pilot. */}
+                  {isSupervisor && <div>
                     <label htmlFor="status" className="block text-xs font-medium text-muted-foreground mb-1">Status</label>
                     <select id="status" value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})}
                       className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
                       <option value="active">Active</option>
                       <option value="inactive">Inactive</option>
                     </select>
-                  </div>
+                  </div>}
                 </div>
                 <div>
                   <label htmlFor="notes" className="block text-xs font-medium text-muted-foreground mb-1">Notes</label>
@@ -219,8 +223,8 @@ export default function PilotDetailPage() {
               <>
                 <div className="flex items-center gap-3">
                   <h2 className="text-xl font-bold text-foreground">{pilot.full_name}</h2>
-                  {(isSupervisor || (isPilot && user?.pilot_id === Number.parseInt(id, 10))) && (
-                    <button onClick={startEditing}
+                  {canEdit && (
+                    <button onClick={startEditing} aria-label="Edit profile" title="Edit profile"
                       className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent transition-colors">
                       <Edit className="w-4 h-4" />
                     </button>
@@ -522,7 +526,7 @@ export default function PilotDetailPage() {
       )}
 
       {/* Documents */}
-      <DocumentUpload entityType="pilot" entityId={id} folderId={generalFolderId} />
+      <DocumentUpload entityType="pilot" entityId={id} folderId={generalFolderId} canUpload={canEdit} />
     </div>
   )
 }

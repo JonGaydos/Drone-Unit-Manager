@@ -13,6 +13,7 @@ from sqlalchemy.orm import joinedload
 
 from app.models.flight import Flight
 from app.services.local_time import display_zone
+from app.services.pilot_contacts import hides_contacts
 from app.models.pilot import Pilot
 from app.models.vehicle import Vehicle
 from app.models.maintenance import MaintenanceRecord
@@ -102,12 +103,13 @@ def _csv_eq(v):
     return v if v else "N/A"
 
 
-def _flight_csv_row(f, local_tz):
-    """One flights-export row in the Skydio column order."""
+def _flight_csv_row(f, local_tz, with_email: bool = True):
+    """One flights-export row in the Skydio column order. The pilot column is
+    the email (what the importer matches on) unless the caller may not see it."""
     pilot_str = ""
     if f.pilot:
         name = f"{f.pilot.first_name or ''} {f.pilot.last_name or ''}".strip()
-        pilot_str = f.pilot.email or name
+        pilot_str = (f.pilot.email if with_email else None) or name
     vehicle_str = f.vehicle.serial_number if f.vehicle and f.vehicle.serial_number else ""
     return [
         _csv_safe(f.external_id or ""),
@@ -146,6 +148,7 @@ def export_flights_csv(
     display timezone.
     """
     local_tz = display_zone(db)
+    with_email = not hides_contacts(user)
 
     q = db.query(Flight).options(joinedload(Flight.pilot), joinedload(Flight.vehicle))
     if date_from:
@@ -164,7 +167,7 @@ def export_flights_csv(
         "Attachment (RIGHT)", "Carrier(s)", "Purpose",
     ])
     for f in flights:
-        writer.writerow(_flight_csv_row(f, local_tz))
+        writer.writerow(_flight_csv_row(f, local_tz, with_email))
 
     output.seek(0)
     return StreamingResponse(
