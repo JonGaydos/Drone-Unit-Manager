@@ -19,8 +19,10 @@ import { FileText, Upload, Trash2, ExternalLink, Edit, Save, X, Lock } from 'luc
  * @param {string} props.entityType - Parent entity type (e.g. "pilot", "vehicle").
  * @param {number|string} props.entityId - Parent entity ID.
  * @param {number|string} [props.folderId] - Optional folder ID for organization.
+ * @param {boolean} [props.canUpload=true] - False hides Upload where the API
+ *   would refuse it (a pilot on another pilot's record).
  */
-export default function DocumentUpload({ entityType, entityId, folderId }) {
+export default function DocumentUpload({ entityType, entityId, folderId, canUpload = true }) {
   const toast = useToast()
   const [documents, setDocuments] = useState([])
   const [showUpload, setShowUpload] = useState(false)
@@ -90,7 +92,7 @@ export default function DocumentUpload({ entityType, entityId, folderId }) {
           <h3 className="font-semibold text-foreground">Documents</h3>
           <span className="text-xs text-muted-foreground">({documents.length})</span>
         </div>
-        {isPilot && (
+        {isPilot && canUpload && (
           <button
             onClick={() => setShowUpload(!showUpload)}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:opacity-90"
@@ -100,7 +102,7 @@ export default function DocumentUpload({ entityType, entityId, folderId }) {
         )}
       </div>
 
-      {showUpload && isPilot && (
+      {showUpload && isPilot && canUpload && (
         <div className="px-4 py-3 border-b border-border bg-muted/20">
           <DocumentUploadForm
             entityType={entityType}

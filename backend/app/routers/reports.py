@@ -126,6 +126,8 @@ def _find_org_logo() -> str | None:
 # or four lines; capping the row width keeps each label on one or two.
 # Masthead logo width. Named because it is a starting point to tune by eye.
 LOGO_WIDTH_INCHES = 2.0
+# Pixels across the logo is scaled to: 300 dpi at that width.
+LOGO_PIXELS = int(LOGO_WIDTH_INCHES * 300)
 
 SUMMARY_COLUMNS = 4
 
@@ -260,22 +262,34 @@ def _pdf_theme() -> SimpleNamespace:
     )
 
 
+def _logo_image(logo_path: str, width: float):
+    """The logo as a flowable, scaled down to print resolution first. Embedded
+    at full size, a photographed badge made every report several megabytes."""
+    from PIL import Image as PILImage
+    from reportlab.platypus import Image as RLImage
+    buf = io.BytesIO()
+    with PILImage.open(logo_path) as img:
+        img.thumbnail((LOGO_PIXELS, LOGO_PIXELS * 4))
+        if img.mode not in ("RGB", "RGBA", "L", "LA", "P"):
+            img = img.convert("RGBA")
+        img.save(buf, format="PNG", optimize=True)
+        img_w, img_h = img.size
+    buf.seek(0)
+    flowable = RLImage(buf, width=width, height=width * img_h / img_w)
+    flowable.hAlign = "LEFT"
+    return flowable
+
+
 def _pdf_masthead(data: dict, config: ReportConfig, org_name: str, logo_path: str | None, theme: SimpleNamespace) -> list:
     """The masthead flowables: logo on the left with organization over report
     title to its right, or the text stacked when there is no logo."""
-    from reportlab.platypus import Paragraph, Image as RLImage, Table, TableStyle
+    from reportlab.platypus import Paragraph, Table, TableStyle
 
     inch = theme.inch
     logo_flowable = None
     if logo_path:
         try:
-            from PIL import Image as PILImage
-            with PILImage.open(logo_path) as pil_img:
-                img_w, img_h = pil_img.size
-            aspect = (img_h / img_w) if img_w else 1
-            logo_w = LOGO_WIDTH_INCHES * inch
-            logo_flowable = RLImage(logo_path, width=logo_w, height=logo_w * aspect)
-            logo_flowable.hAlign = "LEFT"
+            logo_flowable = _logo_image(logo_path, LOGO_WIDTH_INCHES * inch)
         except Exception:
             logo_flowable = None
 

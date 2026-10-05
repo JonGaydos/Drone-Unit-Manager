@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from app.config import settings
 from app.constants import DOCUMENT_NOT_FOUND, ACCESS_DENIED
 from app.deps import AdminUser, DBSession, CurrentUser, PilotUser, SupervisorUser
+from app.models.certification import PilotCertification
 from app.models.document import Document
 from app.models.user import User
 from app.schemas.document import DocumentOut
@@ -96,7 +97,20 @@ def _validate_document_request(entity_type: str, entity_id, ext: str) -> None:
         raise HTTPException(400, f"File type '{ext or '(none)'}' not allowed.")
 
 
-@router.post("/upload", response_model=DocumentOut, responses=responses(400, 413))
+def _check_own_record(db, user, entity_type: str, entity_id) -> None:
+    """A pilot attaches documents to their own pilot record and certifications
+    only; supervisors and admins attach to anyone's. Raises 403 otherwise."""
+    if user.role != "pilot" or entity_type not in ("pilot", "certification"):
+        return
+    owner = entity_id
+    if entity_type == "certification":
+        cert = db.get(PilotCertification, entity_id)
+        owner = cert.pilot_id if cert else None
+    if owner is None or owner != user.pilot_id:
+        raise HTTPException(403, "Pilots can only attach documents to their own record")
+
+
+@router.post("/upload", response_model=DocumentOut, responses=responses(400, 403, 413))
 async def upload_document(
     db: DBSession,
     admin: PilotUser,
@@ -132,6 +146,7 @@ async def upload_document(
     safe_filename = Path(file.filename or "upload").name or "upload"
     ext = Path(safe_filename).suffix.lower()
     _validate_document_request(entity_type, entity_id, ext)
+    _check_own_record(db, admin, entity_type, entity_id)
 
     # Path build + realpath containment stays inline: the resolved.relative_to
     # check is the taint sanitizer for the write below, and moving it into a

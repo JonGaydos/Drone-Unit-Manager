@@ -94,4 +94,26 @@ describe('PilotDetailPage', () => {
     render()
     expect(await screen.findByText('Pilot not found')).toBeInTheDocument()
   })
+
+  it('lets a pilot edit and attach documents to their own record, without Status', async () => {
+    mockMount()
+    const me = { id: 3, username: 'ada', role: 'pilot', pilot_id: 7 }
+    server.use(http.get('/api/auth/me', () => HttpResponse.json(me)))
+    const { user } = renderRoute(<PilotDetailPage />, { path: '/pilots/:id', route: '/pilots/7', user: me })
+    await screen.findByRole('heading', { name: 'Ada Lovelace' })
+    expect(screen.getByRole('button', { name: 'Upload' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Edit profile' }))
+    expect(screen.getByLabelText('Email')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Status')).toBeNull()
+  })
+
+  it("does not offer a pilot Upload or Edit on another pilot's record", async () => {
+    mockMount()
+    const me = { id: 4, username: 'sam', role: 'pilot', pilot_id: 9 }
+    server.use(http.get('/api/auth/me', () => HttpResponse.json(me)))
+    renderRoute(<PilotDetailPage />, { path: '/pilots/:id', route: '/pilots/7', user: me })
+    await screen.findByRole('heading', { name: 'Ada Lovelace' })
+    expect(screen.queryByRole('button', { name: 'Upload' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Edit profile' })).toBeNull()
+  })
 })
