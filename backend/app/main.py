@@ -350,6 +350,11 @@ def health_check():
 
 _static_dir = str(Path(__file__).parent.parent / "static")
 
+# index.html names the current build's scripts, so the browser must check it on
+# every visit. Without this it reused a cached copy per page after an update and
+# kept loading the previous release's interface until a hard refresh.
+INDEX_HEADERS = {"Cache-Control": "no-cache"}
+
 @app.get("/{full_path:path}", include_in_schema=False, responses=responses(403, 404))
 def serve_spa(full_path: str):
     """Serve the React SPA and its static assets in production (Docker).
@@ -369,9 +374,9 @@ def serve_spa(full_path: str):
     resolved = os.path.realpath(file_path)
     if not resolved.startswith(os.path.realpath(_static_dir)):
         raise HTTPException(403, "Forbidden")
-    if os.path.isfile(resolved):
-        return FileResponse(resolved)
     index = os.path.join(_static_dir, "index.html")
+    if os.path.isfile(resolved) and resolved != os.path.realpath(index):
+        return FileResponse(resolved)
     if os.path.isfile(index):
-        return FileResponse(index)
+        return FileResponse(index, headers=INDEX_HEADERS)
     raise HTTPException(404)
