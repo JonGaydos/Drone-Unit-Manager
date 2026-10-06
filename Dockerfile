@@ -51,21 +51,16 @@ COPY entrypoint.sh ./
 # Everything the app writes lives under /app/data, so root buys nothing at
 # runtime and costs a container escape being an escape as root.
 #
-# /app/data is a bind mount on every real deployment, and a bind mount keeps the
-# host's ownership, so the host directory has to be writable by this uid. On
-# Unraid that means running with `--user 99:100` (nobody:users, which is what
-# appdata is owned by) or chowning the directory to 1000:1000. Either works:
-# --user overrides the USER below, and nothing outside /app/data is written.
-# The entrypoint says so explicitly when the directory is not writable.
-#
-# One layer: the chown has to see the finished tree, so splitting these would
-# only add a copy of /app to the image.
+# The container starts as root only so the entrypoint can give /app/data (a
+# bind mount, which keeps the host's ownership) to the app's user, PUID:PGID
+# (default 99:100, Unraid's nobody:users), and then drops to that user with
+# setpriv before the app starts. A recreated or root-copied appdata folder
+# therefore needs no manual chown. Started with --user, the entrypoint skips
+# that and runs as given. setpriv comes with util-linux, in every Debian image;
+# the check fails the build if that ever changes.
 RUN chmod +x entrypoint.sh \
     && mkdir -p /app/data/uploads/documents /app/data/media_cache \
-    && groupadd --gid 1000 app \
-    && useradd --uid 1000 --gid app --home-dir /app --no-create-home app \
-    && chown -R app:app /app
-USER app
+    && command -v setpriv
 
 ENV DATA_DIR=/app/data
 ENV DATABASE_URL=sqlite:////app/data/drone_unit_manager.db

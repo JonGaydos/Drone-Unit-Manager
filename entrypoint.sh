@@ -5,6 +5,23 @@ set -e
 # every path below follows it rather than hardcoding the default in five places.
 DATA_DIR="${DATA_DIR:-/app/data}"
 
+# Started as root (no --user): give the data directory to the app's user, then
+# drop to that user before anything else runs, so the app itself never runs as
+# root. This is what lets a deleted, recreated or root-copied appdata folder
+# start without a manual chown. PUID/PGID choose the user; the default 99:100 is
+# Unraid's nobody:users, the owner of everything else in appdata. Started with
+# --user, none of this runs and the checks below apply as before. PUID=0 keeps
+# root deliberately (and must skip this, or the re-exec below would loop).
+PUID="${PUID:-99}"
+PGID="${PGID:-100}"
+if [[ "$(id -u)" = "0" && "$PUID" != "0" ]]; then
+    mkdir -p "$DATA_DIR/uploads/documents" "$DATA_DIR/media_cache"
+    # Only what is not already theirs, so a large data folder is not rewritten
+    # on every start.
+    find "$DATA_DIR" \( ! -user "$PUID" -o ! -group "$PGID" \) -exec chown -h "$PUID:$PGID" {} +
+    exec setpriv --reuid="$PUID" --regid="$PGID" --clear-groups --inh-caps=-all "$0" "$@"
+fi
+
 echo "========================================="
 echo "  Drone Unit Manager"
 echo "  Starting up..."
@@ -17,9 +34,9 @@ echo "========================================="
 if ! mkdir -p "$DATA_DIR/uploads/documents" "$DATA_DIR/media_cache" 2>/dev/null; then
     echo "ERROR: cannot write to $DATA_DIR." >&2
     echo "This container runs as uid $(id -u), gid $(id -g)." >&2
-    echo "The mapped host directory must be writable by that user. On Unraid," >&2
-    echo "add '--user 99:100' to Extra Parameters (appdata is nobody:users)," >&2
-    echo "or chown the directory to 1000:1000. See docs/upgrading.md." >&2
+    echo "The mapped host directory must be writable by that user. Remove --user" >&2
+    echo "from the container's settings and it fixes the ownership itself, or chown" >&2
+    echo "the directory to $(id -u):$(id -g). See docs/upgrading.md." >&2
     exit 1
 fi
 
