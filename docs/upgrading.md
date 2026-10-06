@@ -1,5 +1,21 @@
 # Upgrading
 
+## 3.1.10: the container fixes its data folder's ownership
+
+From 3.1.10 the container starts as root only long enough to give the data
+directory to the app's user, then drops to that user before the app starts. The
+app itself still never runs as root. A data folder that is deleted and recreated,
+or copied in as root, no longer stops the container: there is no manual `chown`.
+
+The user is chosen with two variables, `PUID` and `PGID`, defaulting to `99` and
+`100` (Unraid's `nobody:users`). Only files not already owned by that user are
+changed, so a start does not rewrite a large data folder.
+
+To use it, **remove `--user 99:100` from Extra Parameters** (the templates in the
+repository no longer carry it). Leaving `--user` in place keeps the behaviour
+described below: the container runs as that user from the start and the folder
+must already be writable by it. `PUID=0` keeps root deliberately.
+
 ## To v3: the container no longer runs as root
 
 Every version up to and including 2.2.0 ran the application as `root` inside the
