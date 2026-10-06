@@ -16,7 +16,10 @@ RUN npm run build
 # python:3.12-slim, pinned by digest alone, matching the frontend stage above:
 # the digest is what resolves, so carrying the tag as well only invites the two
 # to disagree. Bump: re-resolve the library/python 3.12-slim digest.
-FROM python@sha256:090ba77e2958f6af52a5341f788b50b032dd4ca28377d2893dcf1ecbdfdfe203
+# Root is the default user on purpose: the entrypoint uses it only to fix
+# /app/data ownership, then drops to PUID:PGID before the app starts (see the
+# RUN step below the entrypoint copy, and the image smoke test that checks it).
+FROM python@sha256:090ba77e2958f6af52a5341f788b50b032dd4ca28377d2893dcf1ecbdfdfe203 # NOSONAR
 
 LABEL maintainer="JonGaydos"
 LABEL org.opencontainers.image.title="Drone Unit Manager"
