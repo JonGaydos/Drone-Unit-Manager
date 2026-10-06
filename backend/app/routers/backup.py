@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.types import Date, DateTime
 
 from app.config import settings as app_settings
+from app.constants import APP_VERSION
 from app import database
 
 
@@ -81,8 +82,6 @@ from app.routers.settings import SECRET_KEYS
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/backup", tags=["backup"])
-
-APP_VERSION = "2.2.0"
 
 # Component filenames inside a DUM backup ZIP.
 MANIFEST_FILE = "manifest.json"
