@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { api } from '@/api/client'
+import { inSequence } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
@@ -239,7 +240,7 @@ export default function MediaPage() {
                             </button>
                             {isSupervisor && (
                               <button
-                                onClick={(e) => { e.stopPropagation(); toggleHold(photo) }}
+                                onClick={(e) => { e.stopPropagation(); void toggleHold(photo) }}
                                 className={`p-1.5 rounded-md transition-colors hover:bg-amber-500/10 ${photo.legal_hold ? 'text-amber-500' : 'text-muted-foreground hover:text-amber-500'}`}
                                 title={photo.legal_hold ? 'Release legal hold' : 'Place on legal hold'}
                                 aria-label={photo.legal_hold ? 'Release legal hold' : 'Place on legal hold'}
@@ -407,16 +408,16 @@ function UploadModal({ pilots, onClose, onSuccess }) {
     if (files.length === 0) return
     setUploading(true)
     try {
-      for (let i = 0; i < files.length; i++) {
+      await inSequence(files, async (file, i) => {
         setUploadProgress(`Uploading ${i + 1} of ${files.length}...`)
         const fd = new FormData()
-        fd.append('file', files[i])
-        fd.append('title', title || files[i].name)
+        fd.append('file', file)
+        fd.append('title', title || file.name)
         if (description) fd.append('description', description)
         if (dateTaken) fd.append('date_taken', dateTaken)
         if (selectedPilots.length > 0) fd.append('pilot_ids', selectedPilots.join(','))
         await api.upload('/photos/upload', fd)
-      }
+      })
       onSuccess()
     } catch (err) {
       toast.error('Error uploading: ' + (err.message || 'Unknown error'))

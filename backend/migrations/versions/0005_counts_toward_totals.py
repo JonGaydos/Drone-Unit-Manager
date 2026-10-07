@@ -12,7 +12,7 @@ Revises: 0004_operating_authority
 Create Date: 2026-09-04 22:05:00.000000
 
 """
-from typing import Sequence, Union
+from typing import Sequence
 
 from alembic import op
 import sqlalchemy as sa
@@ -20,9 +20,9 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = '0005_counts_toward_totals'
-down_revision: Union[str, None] = '0004_operating_authority'
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = '0004_operating_authority'
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:

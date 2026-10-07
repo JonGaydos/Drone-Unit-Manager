@@ -19,7 +19,7 @@ Create Date: 2026-09-22 23:40:00.000000
 import logging
 import os
 from datetime import datetime, timezone
-from typing import Sequence, Union
+from typing import Sequence
 from zoneinfo import ZoneInfo
 
 from alembic import op
@@ -28,9 +28,9 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = '0008_local_flight_dates'
-down_revision: Union[str, None] = '0007_evidence_soft_delete'
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = '0007_evidence_soft_delete'
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 logger = logging.getLogger(__name__)
 

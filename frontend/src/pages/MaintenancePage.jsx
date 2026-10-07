@@ -424,7 +424,7 @@ export default function MaintenancePage() {
 
   // Load entity lists and pilots on mount
   useEffect(() => {
-    Promise.all([
+    void Promise.all([
       api.get('/vehicles').catch(() => []),
       api.get('/batteries').catch(() => []),
       api.get('/controllers').catch(() => []),
@@ -448,7 +448,7 @@ export default function MaintenancePage() {
   // save/delete update in place so the scroll position is preserved.
   const loadAll = (initial = false) => {
     if (initial) setLoading(true)
-    Promise.all([
+    void Promise.all([
       api.get('/maintenance?upcoming=true').catch(() => []),
       api.get('/maintenance').catch(() => []),
       api.get('/maintenance/schedules?all=true').catch(() => []),

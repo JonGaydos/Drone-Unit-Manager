@@ -4,6 +4,7 @@
  */
 import { useState, useEffect } from 'react'
 import { api } from '@/api/client'
+import { inSequence } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useConfirm } from '@/hooks/useConfirm'
@@ -40,12 +41,14 @@ const JOB_POLL_MS = 2000
  */
 async function runSyncJob(startPath) {
   const { job_id: jobId } = await api.post(startPath)
-  for (;;) {
+  const poll = async () => {
     const job = await api.get(`/sync/jobs/${jobId}`)
     if (job.status === 'done') return job.result
     if (job.status === 'failed') throw new Error(job.error || 'Sync failed')
     await new Promise(resolve => setTimeout(resolve, JOB_POLL_MS))
+    return poll()
   }
+  return poll()
 }
 
 /** Provider definitions with their status and required settings keys. */
@@ -716,15 +719,16 @@ function FlightLogImport() {
         toastImportResult(res)
       } else {
         const batch = { total: files.length, imported: 0, skipped: 0, errors: [] }
-        for (let i = 0; i < files.length; i++) {
-          setProgress(`Processing ${i + 1} of ${files.length}: ${files[i].name}`)
+        // One at a time: each import holds the sync lock.
+        await inSequence(files, async (file, i) => {
+          setProgress(`Processing ${i + 1} of ${files.length}: ${file.name}`)
           try {
-            const res = await importSingleFile(files[i])
-            processBatchResult(batch, res, files[i].name)
+            const res = await importSingleFile(file)
+            processBatchResult(batch, res, file.name)
           } catch (err) {
-            batch.errors.push(`${files[i].name}: ${err.message}`)
+            batch.errors.push(`${file.name}: ${err.message}`)
           }
-        }
+        })
         setResult(batch)
         setProgress(null)
         toast.success(`Batch import: ${batch.imported} imported, ${batch.skipped} skipped out of ${batch.total}`)

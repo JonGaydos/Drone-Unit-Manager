@@ -382,7 +382,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     let alive = true
-    Promise.all([
+    void Promise.all([
       api.get('/dashboard/stats').catch(() => null),
       api.get('/dashboard/trends').catch(() => null),
       api.get('/flights?per_page=10').catch(() => []),
