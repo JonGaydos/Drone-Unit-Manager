@@ -11,7 +11,7 @@ from app.services.local_time import display_zone, local_flight_date
 from app.models.pilot import Pilot
 from app.models.vehicle import Vehicle
 from app.models.flight import Flight, FlightPurpose
-from app.models.certification import CertificationType, PilotCertification, PilotEquipmentQual
+from app.models.certification import CertificationType, PilotCertification
 
 logger = logging.getLogger(__name__)
 

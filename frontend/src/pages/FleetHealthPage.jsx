@@ -14,13 +14,6 @@ function getHealthColor(pct) {
   return '#ef4444'
 }
 
-function getHealthBadge(pct) {
-  if (pct == null) return 'bg-zinc-500/15 text-zinc-400'
-  if (pct > 80) return 'bg-emerald-500/15 text-emerald-400'
-  if (pct >= 50) return 'bg-amber-500/15 text-amber-400'
-  return 'bg-red-500/15 text-red-400'
-}
-
 export default function FleetHealthPage() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -174,7 +167,7 @@ export default function FleetHealthPage() {
                 formatter={(val) => [`${val}%`, 'Health']}
               />
               <Bar dataKey="health" radius={[0, 4, 4, 0]} name="Health %">
-                {batteryChartData.map((entry, i) => (
+                {batteryChartData.map((entry) => (
                   <Cell key={entry.name} fill={entry.fill} />
                 ))}
               </Bar>

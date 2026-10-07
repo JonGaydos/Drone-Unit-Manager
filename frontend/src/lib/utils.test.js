@@ -11,7 +11,6 @@ import {
   formatDateTime,
   normalizeDateValue,
   setDisplayTimezone,
-  getDisplayTimezone,
   formatTime,
   utcIsoToZonedInput,
   zonedInputToUtcIso,

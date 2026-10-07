@@ -72,7 +72,7 @@ const PROVIDERS = [
   },
 ]
 
-function ProviderCard({ provider, settings, onSave, onTest, onSync }) {
+function ProviderCard({ provider, settings }) {
   const [expanded, setExpanded] = useState(false)
   const [token, setToken] = useState('')
   const [tokenId, setTokenId] = useState('')
