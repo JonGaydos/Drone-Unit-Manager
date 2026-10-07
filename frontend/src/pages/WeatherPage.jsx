@@ -73,17 +73,22 @@ export default function WeatherPage() {
   useEffect(() => {
     let alive = true
     if (coords.lat || coords.lon) return
-    api.get('/settings').then(settings => {
+    const seed = async () => {
+      const settings = await api.get('/settings')
       if (!alive) return
       const { lat, lon, name } = resolveOrgLocation(settings)
       setCoords({ lat: String(lat), lon: String(lon) })
       setAddressInput(name)
       setLoading(true)
-      api.get(`/weather/briefing?lat=${lat}&lon=${lon}`)
-        .then(data => { if (alive) setBriefing(data) })
-        .catch(() => {})
-        .finally(() => { if (alive) setLoading(false) })
-    }).catch(() => {})
+      try {
+        const data = await api.get(`/weather/briefing?lat=${lat}&lon=${lon}`)
+        if (alive) setBriefing(data)
+      } finally {
+        if (alive) setLoading(false)
+      }
+    }
+    // A failed lookup leaves the form empty for the user to fill in.
+    seed().catch(() => {})
     return () => { alive = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -96,7 +101,7 @@ export default function WeatherPage() {
         const lon = pos.coords.longitude.toFixed(6)
         setCoords({ lat, lon })
         setAddressInput('Current Location')
-        fetchBriefing(lat, lon)
+        void fetchBriefing(lat, lon)
       },
       (err) => toast.error('Location access denied: ' + err.message),
       { enableHighAccuracy: true }
@@ -112,7 +117,7 @@ export default function WeatherPage() {
       const lon = Number.parseFloat(parts[1])
       if (!Number.isNaN(lat) && !Number.isNaN(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
         setCoords({ lat: lat.toString(), lon: lon.toString() })
-        fetchBriefing(lat, lon)
+        void fetchBriefing(lat, lon)
         return
       }
     }
@@ -133,7 +138,7 @@ export default function WeatherPage() {
     }
     // Nothing usable typed: fall back to the explicit coordinate fields.
     if (coords.lat && coords.lon) {
-      fetchBriefing(coords.lat, coords.lon)
+      void fetchBriefing(coords.lat, coords.lon)
     } else {
       toast.error('Enter an address, or coordinates as "lat, lon" (e.g. 40.7128, -74.0060)')
     }
@@ -249,7 +254,7 @@ export default function WeatherPage() {
                   onClick={() => {
                     setCoords({ lat: loc.lat.toString(), lon: loc.lon.toString() })
                     setAddressInput(loc.label || '')
-                    fetchBriefing(loc.lat, loc.lon)
+                    void fetchBriefing(loc.lat, loc.lon)
                   }}
                   className="w-full text-left px-3 py-2 bg-secondary/50 hover:bg-secondary rounded-lg text-sm text-foreground transition-colors flex items-center gap-2"
                 >

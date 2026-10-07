@@ -283,3 +283,15 @@ export function zonedInputToUtcIso(wall, tz = getDisplayTimezone()) {
     return toLocal()
   }
 }
+
+/**
+ * Run `fn` over `items` one at a time, in order: each call starts when the
+ * previous one has settled. For work the server must see sequentially, such
+ * as imports that hold the sync lock or uploads reported as "n of m".
+ * @param {Array} items
+ * @param {(item: *, index: number) => Promise<*>} fn
+ * @returns {Promise<void>} Rejects with the first error `fn` throws.
+ */
+export function inSequence(items, fn) {
+  return items.reduce((prev, item, i) => prev.then(() => fn(item, i)), Promise.resolve())
+}

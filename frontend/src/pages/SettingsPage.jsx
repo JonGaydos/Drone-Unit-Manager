@@ -268,7 +268,7 @@ export default function SettingsPage() {
   const handlePurposeKeyDown = (e) => {
     if (e.key === 'Enter') {
       e.preventDefault()
-      addPurpose()
+      void addPurpose()
     }
   }
 
@@ -955,7 +955,7 @@ export default function SettingsPage() {
               type="text"
               value={addressQuery}
               onChange={e => setAddressQuery(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleGeocodeSearch() } }}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void handleGeocodeSearch() } }}
               placeholder="Enter an address or place..."
               className="flex-1 px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />

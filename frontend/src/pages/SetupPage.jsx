@@ -2,7 +2,7 @@ import { useState, useRef } from 'react'
 import { api } from '@/api/client'
 import { Shield, ArrowRight, Upload, Loader2, Image as ImageIcon, Mail, Plug, FileUp, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
-import { TIMEZONES } from '@/lib/utils'
+import { TIMEZONES, inSequence } from '@/lib/utils'
 
 // Recovery-only pieces are their own components so their render guards live here
 // rather than adding branches to the main SetupPage function.
@@ -180,7 +180,8 @@ export default function SetupPage({ recovery = false }) {
     setImporting(true); setError('')
     const results = []
     try {
-      for (const f of importFiles) {
+      // One at a time: each import holds the sync lock.
+      await inSequence(importFiles, async (f) => {
         const fd = new FormData()
         fd.append('file', f)
         try {
@@ -189,7 +190,7 @@ export default function SetupPage({ recovery = false }) {
         } catch (err) {
           results.push({ filename: f.name, ok: false, error: err.message })
         }
-      }
+      })
       setImportResult(results)
     } finally { setImporting(false) }
   }

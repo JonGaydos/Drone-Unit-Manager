@@ -111,7 +111,7 @@ export default function CheckoutsPage() {
     setCoType('vehicle')
     setCoForm({ entity_id: '', checked_out_by_id: user?.pilot_id ? String(user.pilot_id) : '', condition_out: 'good', expected_return: '', notes_out: '' })
     setCoOpen(true)
-    loadItems('vehicle')
+    void loadItems('vehicle')
   }
 
   const loadItems = async (type) => {
@@ -120,7 +120,7 @@ export default function CheckoutsPage() {
     setCoItems(Array.isArray(data) ? data : (data.vehicles || data.items || []))
   }
 
-  const onTypeChange = (type) => { setCoType(type); setCoForm(f => ({ ...f, entity_id: '' })); loadItems(type) }
+  const onTypeChange = (type) => { setCoType(type); setCoForm(f => ({ ...f, entity_id: '' })); void loadItems(type) }
 
   const submitCheckout = async (e) => {
     e.preventDefault()

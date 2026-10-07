@@ -331,7 +331,7 @@ export default function CompliancePage() {
     }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { void load() }, [])
 
   const handleSendReminders = async () => {
     if (!data || data.pilots_lapsed === 0) return

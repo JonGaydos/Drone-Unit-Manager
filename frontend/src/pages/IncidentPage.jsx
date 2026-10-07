@@ -328,14 +328,14 @@ export default function IncidentPage() {
     }
   }
 
-  useEffect(() => { load() }, [filters.status, filters.severity, filters.category, filters.report_type])
+  useEffect(() => { void load() }, [filters.status, filters.severity, filters.category, filters.report_type])
 
   const handleCreate = async (data) => {
     try {
       await api.post('/incidents', data)
       toast.success('Incident reported')
       setShowAdd(false)
-      load()
+      void load()
     } catch (err) {
       toast.error(err.message)
     }
@@ -346,7 +346,7 @@ export default function IncidentPage() {
       await api.patch(`/incidents/${id}`, data)
       toast.success('Incident updated')
       setResolveTarget(null)
-      load()
+      void load()
     } catch (err) {
       toast.error(err.message)
     }
@@ -360,7 +360,7 @@ export default function IncidentPage() {
         try {
           await api.delete(`/incidents/${id}`)
           toast.success('Incident deleted')
-          load()
+          void load()
         } catch (err) {
           toast.error(err.message)
         }

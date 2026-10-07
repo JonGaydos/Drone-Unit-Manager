@@ -472,7 +472,7 @@ export default function ChecklistPage() {
     }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { void load() }, [])
 
   const handleSaveTemplate = async (data) => {
     try {
@@ -499,7 +499,7 @@ export default function ChecklistPage() {
         try {
           await api.delete(`/checklists/templates/${id}`)
           toast.success('Template deleted')
-          load()
+          void load()
         } catch (err) {
           toast.error(err.message)
         }

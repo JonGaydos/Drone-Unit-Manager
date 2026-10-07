@@ -511,7 +511,7 @@ export default function FleetPage() {
     setModal(null)
     setSortKey('name')
     setSortDir('asc')
-    load()
+    void load()
   }, [activeTab])
 
   const handleSave = async (data) => {
@@ -522,7 +522,7 @@ export default function FleetPage() {
         await api.post(config.endpoint, data)
       }
       setModal(null)
-      load()
+      void load()
     } catch (err) {
       toast.error(err.message)
     }
@@ -540,7 +540,7 @@ export default function FleetPage() {
       toast.success(res.message || 'Merged successfully')
       setMergeTarget(null)
       setMergeFromId('')
-      load()
+      void load()
     } catch (err) {
       toast.error(err.message)
     } finally {
@@ -555,7 +555,7 @@ export default function FleetPage() {
       onConfirm: async () => {
         try {
           await api.delete(`${config.endpoint}/${id}`)
-          load()
+          void load()
         } catch (err) {
           toast.error(err.message)
         }

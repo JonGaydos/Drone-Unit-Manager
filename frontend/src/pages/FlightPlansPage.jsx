@@ -237,14 +237,14 @@ export default function FlightPlansPage() {
     }
   }
 
-  useEffect(() => { load() }, [viewMode, statusFilter])
+  useEffect(() => { void load() }, [viewMode, statusFilter])
 
   const handleCreate = async (data) => {
     try {
       await api.post('/flight-plans', data)
       toast.success('Flight plan submitted')
       setShowAdd(false)
-      load()
+      void load()
     } catch (err) {
       toast.error(err.message)
     }
@@ -260,7 +260,7 @@ export default function FlightPlansPage() {
         try {
           await api.post(`/flight-plans/${id}/approve`, {})
           toast.success('Flight plan approved')
-          load()
+          void load()
         } catch (err) {
           toast.error(err.message)
         }
@@ -273,7 +273,7 @@ export default function FlightPlansPage() {
       await api.post(`/flight-plans/${id}/deny`, data)
       toast.success('Flight plan denied')
       setDenyTarget(null)
-      load()
+      void load()
     } catch (err) {
       toast.error(err.message)
     }
@@ -287,7 +287,7 @@ export default function FlightPlansPage() {
         try {
           await api.post(`/flight-plans/${id}/cancel`, {})
           toast.success('Flight plan cancelled')
-          load()
+          void load()
         } catch (err) {
           toast.error(err.message)
         }
@@ -299,7 +299,7 @@ export default function FlightPlansPage() {
     try {
       await api.patch(`/flight-plans/${id}`, { status: 'pending' })
       toast.success('Plan reopened as pending for editing')
-      load()
+      void load()
     } catch (err) {
       toast.error(err.message)
     }
@@ -313,7 +313,7 @@ export default function FlightPlansPage() {
         try {
           await api.delete(`/flight-plans/${id}`)
           toast.success('Flight plan deleted')
-          load()
+          void load()
         } catch (err) {
           toast.error(err.message)
         }
@@ -439,7 +439,7 @@ export default function FlightPlansPage() {
                           </button>
                         )}
                         {isAdmin && (plan.status === 'cancelled' || plan.status === 'denied') && (
-                          <button onClick={() => { /* Admin override edit - reopen plan */ handleAdminEdit(plan.id) }}
+                          <button onClick={() => { /* Admin override edit - reopen plan */ void handleAdminEdit(plan.id) }}
                             className="p-1.5 text-muted-foreground hover:text-primary rounded-lg hover:bg-primary/10" title="Edit (Admin Override)">
                             <ClipboardCheck className="w-4 h-4" />
                           </button>

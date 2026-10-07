@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import {
   cn,
+  inSequence,
   formatDuration,
   formatHours,
   metersToFeet,
@@ -283,5 +284,20 @@ describe('calendar dates', () => {
     expect(daysUntil('2026-06-08')).toBe(-1)
     vi.setSystemTime(new Date('2026-06-10T05:01:00Z'))  // 00:01 June 10 local
     expect(daysUntil('2026-06-10')).toBe(0)
+  })
+})
+
+describe('inSequence', () => {
+  it('runs each call after the previous one has finished, in order', async () => {
+    const log = []
+    await inSequence([30, 0, 10], (ms, i) => new Promise(resolve => setTimeout(() => { log.push(i); resolve() }, ms)))
+    expect(log).toEqual([0, 1, 2])
+  })
+
+  it('stops at the first failure', async () => {
+    const seen = []
+    await expect(inSequence([1, 2, 3], async n => { seen.push(n); if (n === 2) throw new Error('boom') }))
+      .rejects.toThrow('boom')
+    expect(seen).toEqual([1, 2])
   })
 })
