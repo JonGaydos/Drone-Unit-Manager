@@ -27,9 +27,23 @@ export function ToastProvider({ children }) {
   const timeoutRef = useRef({})
 
   useEffect(() => {
+    // The timer map is one object for the provider's lifetime (entries are
+    // added and removed, the object is never replaced), so this is the map the
+    // cleanup will see.
+    const timers = timeoutRef.current
     return () => {
-      Object.values(timeoutRef.current).forEach(clearTimeout)
+      Object.values(timers).forEach(clearTimeout)
     }
+  }, [])
+
+  /**
+   * Remove a toast by its ID and clear its timeout.
+   * @param {number} id - Toast identifier.
+   */
+  const removeToast = useCallback((id) => {
+    clearTimeout(timeoutRef.current[id])
+    delete timeoutRef.current[id]
+    setToasts(prev => prev.filter(t => t.id !== id))
   }, [])
 
   /**
@@ -44,17 +58,7 @@ export function ToastProvider({ children }) {
     if (duration > 0) {
       timeoutRef.current[id] = setTimeout(() => removeToast(id), duration)
     }
-  }, [])
-
-  /**
-   * Remove a toast by its ID and clear its timeout.
-   * @param {number} id - Toast identifier.
-   */
-  const removeToast = useCallback((id) => {
-    clearTimeout(timeoutRef.current[id])
-    delete timeoutRef.current[id]
-    setToasts(prev => prev.filter(t => t.id !== id))
-  }, [])
+  }, [removeToast])
 
   const toast = useMemo(() => ({
     success: (msg) => addToast(msg, 'success'),

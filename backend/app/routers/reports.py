@@ -631,7 +631,7 @@ def _flight_summary(config: ReportConfig, db: Session):
 
 
 def _pilot_hours(config: ReportConfig, db: Session):
-    from sqlalchemy import outerjoin, and_
+    from sqlalchemy import and_
 
     # Build the flight filter conditions for the outer join. These belong in the
     # join, not a WHERE clause: the outer join is what keeps pilots with no
@@ -1419,7 +1419,6 @@ def _annual_pilot_hours_map(db: Session, flights, missions, trainings) -> dict:
 
 def _annual_yoy_rows(db: Session, period_year: int, include_all: bool = False) -> list[dict]:
     """Year-over-year totals for the last 5 calendar years up to period_year."""
-    from sqlalchemy import extract
     rows = []
     for y in range(period_year - 4, period_year + 1):
         y_start, y_end = date(y, 1, 1), date(y, 12, 31)

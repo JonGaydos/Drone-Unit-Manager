@@ -44,7 +44,7 @@ export default function DocumentStoragePage() {
     } catch (err) {
       toast.error(err.message || 'An error occurred')
     }
-  }, [])
+  }, [toast])
 
   const loadDocuments = useCallback(async (folderId) => {
     setDocsLoading(true)
@@ -60,7 +60,7 @@ export default function DocumentStoragePage() {
     } finally {
       setDocsLoading(false)
     }
-  }, [])
+  }, [toast])
 
   const loadAllDocuments = useCallback(async () => {
     try {
@@ -105,7 +105,7 @@ export default function DocumentStoragePage() {
     }
 
     return () => controller.abort()
-  }, [selectedFolder, loadDocuments])
+  }, [selectedFolder, loadDocuments, toast])
 
   // Build folder tree
   const buildTree = (parentId = null) => {

@@ -5,7 +5,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.constants import CERTIFICATION_TYPE_NOT_FOUND, PILOT_CERTIFICATION_NOT_FOUND, EQUIPMENT_QUAL_NOT_FOUND, PILOT_NOT_FOUND
+from app.constants import CERTIFICATION_TYPE_NOT_FOUND, PILOT_CERTIFICATION_NOT_FOUND, EQUIPMENT_QUAL_NOT_FOUND
 from app.deps import DBSession, CurrentUser, SupervisorUser
 from app.responses import responses
 from app.models.certification import CertificationType, PilotCertification, PilotEquipmentQual
@@ -215,7 +215,6 @@ def renew_pilot_certification(
 ):
     """Renew a certification: mark old as renewed, create new with history link."""
     from app.services.audit import log_action
-    from datetime import date as date_type
 
     old = db.query(PilotCertification).filter(PilotCertification.id == pc_id).first()
     if not old:
