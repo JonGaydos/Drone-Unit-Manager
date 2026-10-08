@@ -1,8 +1,9 @@
 from datetime import datetime, date
 from typing import Optional
-from sqlalchemy import String, Text, Integer, Float, ForeignKey, DateTime, Date, Boolean, Index, func
+from sqlalchemy import String, Text, Integer, Float, ForeignKey, Date, Boolean, Index, func
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
+from app.models.types import UTCDateTime
 
 
 class Incident(Base):
@@ -36,5 +37,5 @@ class Incident(Base):
     report_type: Mapped[str] = mapped_column(String(30), default="incident")  # "incident" or "success"
     impact_level: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # For successes: lives_saved, arrest, evidence, community
     outcome_description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

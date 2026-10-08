@@ -11,6 +11,7 @@ import { sortPilotsActiveFirst, vehicleDisplayName, equipmentDisplayName } from 
 import { Plus, Trash2, Search, Wrench, CalendarClock, History, Download, Edit, CheckCircle, Clock, Upload, Paperclip } from 'lucide-react'
 import { ImportMappingModal } from '@/components/ImportMappingModal'
 import { DocumentsModal } from '@/components/DocumentsModal'
+import { useEscapeToClose } from '@/hooks/useEscapeToClose'
 
 // Map entity_type to API endpoint
 const ENTITY_ENDPOINTS = {
@@ -95,10 +96,12 @@ function MaintenanceModal({ record, onSave, onClose, entityLists, pilots }) {
     }
   }
 
+  useEscapeToClose(onClose)
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <button className="absolute inset-0 bg-transparent cursor-default" onClick={onClose} aria-label="Close dialog" />
-      <div className="relative bg-popover border border-border rounded-xl p-6 w-full max-w-lg shadow-xl">
+      <div role="dialog" aria-modal="true" aria-label={record ? 'Edit Maintenance' : 'Add Maintenance'} className="relative bg-popover border border-border rounded-xl p-6 w-full max-w-lg shadow-xl">
         <h2 className="text-lg font-semibold text-foreground mb-4">{record ? 'Edit Maintenance' : 'Add Maintenance'}</h2>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
@@ -267,10 +270,12 @@ function ScheduleModal({ schedule, onSave, onClose }) {
     return entity.serial_number || `#${entity.id}`
   }
 
+  useEscapeToClose(onClose)
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <button className="absolute inset-0 bg-transparent cursor-default" onClick={onClose} aria-label="Close dialog" />
-      <div className="relative bg-popover border border-border rounded-xl p-6 w-full max-w-lg shadow-xl">
+      <div role="dialog" aria-modal="true" aria-label={schedule ? 'Edit Schedule / Task' : 'Add Schedule / Task'} className="relative bg-popover border border-border rounded-xl p-6 w-full max-w-lg shadow-xl">
         <h2 className="text-lg font-semibold text-foreground mb-4">{schedule ? 'Edit Schedule / Task' : 'Add Schedule / Task'}</h2>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
@@ -465,8 +470,10 @@ export default function MaintenancePage() {
     try {
       if (data.id) {
         await api.patch(`/maintenance/${data.id}`, data)
+        toast.success('Maintenance record updated')
       } else {
         await api.post('/maintenance', data)
+        toast.success('Maintenance record added')
       }
       setModal(null)
       loadAll()
@@ -483,6 +490,7 @@ export default function MaintenancePage() {
       onConfirm: async () => {
         try {
           await api.delete(`/maintenance/${id}`)
+          toast.success('Maintenance record deleted')
           loadAll()
         } catch (err) {
           toast.error(err.message)
@@ -495,8 +503,10 @@ export default function MaintenancePage() {
     try {
       if (data.id) {
         await api.patch(`/maintenance/schedules/${data.id}`, data)
+        toast.success('Schedule updated')
       } else {
         await api.post('/maintenance/schedules', data)
+        toast.success('Schedule added')
       }
       setScheduleModal(null)
       loadAll()
@@ -513,6 +523,7 @@ export default function MaintenancePage() {
       onConfirm: async () => {
         try {
           await api.delete(`/maintenance/schedules/${id}`)
+          toast.success('Schedule deleted')
           loadAll()
         } catch (err) {
           toast.error(err.message)
@@ -530,6 +541,7 @@ export default function MaintenancePage() {
       onConfirm: async () => {
         try {
           await api.post(`/maintenance/schedules/${id}/complete`)
+          toast.success('Marked complete')
           loadAll()
         } catch (err) {
           toast.error(err.message)

@@ -5,6 +5,7 @@ from sqlalchemy import String, Text, DateTime, Date, Float, Integer, Boolean, Fo
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+from app.models.types import UTCDateTime
 
 
 class FlightPurpose(Base):
@@ -67,8 +68,8 @@ class Flight(Base):
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     modified_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now(), onupdate=func.now())
 
     pilot = relationship("Pilot", back_populates="flights")
     vehicle = relationship("Vehicle", back_populates="flights")

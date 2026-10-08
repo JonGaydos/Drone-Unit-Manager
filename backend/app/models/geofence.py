@@ -1,8 +1,9 @@
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import String, Text, Float, Boolean, JSON, DateTime, func
+from sqlalchemy import String, Text, Float, Boolean, JSON, func
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
+from app.models.types import UTCDateTime
 
 
 class Geofence(Base):
@@ -20,4 +21,4 @@ class Geofence(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     source: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # manual, faa, airmap
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow)

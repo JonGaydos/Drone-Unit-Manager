@@ -223,8 +223,10 @@ export default function TrainingLogPage() {
     try {
       if (editTraining) {
         await api.patch(`/training-logs/${editTraining.id}`, data)
+        toast.success('Training updated')
       } else {
         await api.post('/training-logs', data)
+        toast.success('Training added')
       }
       setModal(false)
       setEditTraining(null)
@@ -239,6 +241,7 @@ export default function TrainingLogPage() {
       onConfirm: async () => {
         try {
           await api.delete(`/training-logs/${id}`)
+          toast.success('Training deleted')
           load()
         } catch (err) { toast.error(err.message) }
       }

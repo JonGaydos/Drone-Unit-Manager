@@ -441,6 +441,8 @@ export default function DocumentStoragePage() {
             <button
               onClick={() => setSelectedFolder(null)}
               className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+              aria-label="All folders"
+              title="All folders"
             >
               <Home className="w-4 h-4" />
             </button>

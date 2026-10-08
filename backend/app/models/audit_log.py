@@ -1,8 +1,9 @@
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import String, Text, Integer, ForeignKey, DateTime, JSON, func
+from sqlalchemy import String, Text, Integer, ForeignKey, JSON, func
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
+from app.models.types import UTCDateTime
 
 
 class AuditLog(Base):
@@ -17,4 +18,4 @@ class AuditLog(Base):
     changes: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # {"field": {"old": x, "new": y}}
     ip_address: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)
     details: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow)

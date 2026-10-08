@@ -3,6 +3,7 @@ from typing import Optional
 from sqlalchemy import Boolean, String, Text, DateTime, Integer, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
+from app.models.types import UTCDateTime
 
 # Repeated across the three tables that hang off a photo.
 PHOTOS_ID = "photos.id"
@@ -19,11 +20,11 @@ class Photo(Base):
     mime_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     thumbnail_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     uploaded_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow)
     # Evidence handling: a delete only sets deleted_at (the file stays until an
     # admin purges it), a legal hold blocks delete and purge, and sha256 is the
     # digest taken at upload.
-    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)
     deleted_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     legal_hold: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     sha256: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)

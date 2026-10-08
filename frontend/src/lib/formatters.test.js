@@ -5,6 +5,7 @@ import {
   sortVehicles,
   sortByField,
   sortPilotsActiveFirst,
+  telemetryLabel,
   vehicleDisplayName,
   equipmentDisplayName,
   formatStatusText,
@@ -141,5 +142,17 @@ describe('formatStatusText', () => {
     expect(formatStatusText('')).toBe('')
     expect(formatStatusText(null)).toBe('')
     expect(formatStatusText(undefined)).toBe('')
+  })
+})
+
+describe('telemetryLabel', () => {
+  it('reports what a flight has, not only the sync flag', () => {
+    expect(telemetryLabel({ has_telemetry: true, telemetry_synced: true })).toBe('Telemetry ✓')
+    expect(telemetryLabel({ has_telemetry: false, telemetry_synced: true })).toBe('No telemetry')
+    expect(telemetryLabel({ has_telemetry: false, telemetry_synced: false, can_refresh: true })).toBe('Telemetry pending')
+  })
+
+  it('shows nothing for a flight no provider can refresh', () => {
+    expect(telemetryLabel({ has_telemetry: false, telemetry_synced: false, can_refresh: false })).toBeNull()
   })
 })

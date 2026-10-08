@@ -20,10 +20,16 @@ If you have a backup ZIP from another instance, choose "Restore from a backup in
         title: 'User Roles',
         body: `The application has four roles with increasing permissions:
 
-• **Viewer** — Read-only access to all data.
-• **Pilot** — Can view data and submit flight plans. Pilots can edit their own profile.
+• **Viewer** — Read-only access. Pilot email addresses and phone numbers are hidden from viewers.
+• **Pilot** — Can view data and submit flight plans. Pilots can edit their own profile (contact details, not status) and attach documents to their own record and certifications.
 • **Supervisor** — Can approve flights, manage pilots, create/edit most records, and generate reports.
 • **Admin** — Full access including user management, system settings, and audit log.`
+      },
+      {
+        title: 'Dates, Times and Sign-in',
+        body: `Times are shown in the unit's time zone, set in Settings → General. A flight is dated by the local day it took off, so an evening flight stays on that day even though it is already the next day in UTC.
+
+You stay signed in for up to 12 hours. After 30 minutes with no activity in any open tab, the app signs you out of this browser and asks you to sign in again. Signing out from the menu signs you out on every device.`
       },
       {
         title: 'Navigating the App',
@@ -102,7 +108,7 @@ Any signed-in user, including pilots, can add their own events and leave. You ca
     content: [
       {
         title: 'Viewing Flights',
-        body: 'The Flights page shows all recorded flights with filtering by date range, pilot, vehicle, purpose, and review status. Use the text search to find flights by pilot name, vehicle, purpose, or location.'
+        body: 'The Flights page shows all recorded flights with filtering by date range, pilot, vehicle, purpose, and review status. Use the text search to find flights by pilot name, vehicle, purpose, location, case number, or flight ID. Search and column sorting cover every flight, not just the page on screen.'
       },
       {
         title: 'Adding Flights Manually',
@@ -114,7 +120,7 @@ Any signed-in user, including pilots, can add their own events and leave. You ca
       },
       {
         title: 'Flight Detail',
-        body: 'Click a flight ID to see the full detail page. If telemetry data was synced, you\'ll see an interactive map with the flight path and charts for altitude, speed, and battery level over time.'
+        body: 'Click a flight ID to see the full detail page. If telemetry data was synced, you\'ll see an interactive map with the flight path and charts for altitude, speed, and battery level over time. The telemetry label reads "Telemetry ✓" when the flight path is stored, "Telemetry pending" while sync can still fetch it, and "No telemetry" when there is none to fetch. Flights entered by hand show no label.'
       },
     ]
   },
@@ -306,7 +312,7 @@ When nothing is outstanding, the card shows an "All clear" message. The count of
       },
       {
         title: 'Pre-Flight Checklists',
-        body: 'Create custom pre-flight checklist templates from the Checklists page. Pilots complete checklists before each flight, and completed checklists are stored for compliance records.'
+        body: 'Create custom pre-flight checklist templates from the Checklists page. Pilots complete checklists before each flight, and completed checklists are stored for compliance records. A checklist submitted with required items unticked is saved as not passed; the Submit button says so. A template that has been used cannot be deleted, because submitted checklists keep a link to it: edit it and untick Active to stop offering it. Supervisors can delete a submitted checklist entered by mistake from its detail view.'
       },
     ]
   },
@@ -317,6 +323,12 @@ When nothing is outstanding, the card shows an "All clear" message. The count of
       {
         title: 'Document Storage',
         body: 'Upload and organize documents in folders. Use the Upload button on the Documents page to add standalone files (FAA authorizations, forms, etc.) directly into the selected folder. System folders (General, Certifications, Insurance, Maintenance, Reports) are created automatically. Create custom folders for additional organization. Documents uploaded from pilot profiles and certifications are auto-filed.'
+      },
+      {
+        title: 'Deleting, Recently Deleted and Legal Hold',
+        body: `Deleting a document or photo moves it to Recently deleted rather than removing it. Supervisors can restore it from there, and admins can delete it permanently. Deleting a folder moves its documents to Unfiled.
+
+Supervisors can place a document or photo on legal hold. A held item shows a lock and cannot be deleted or permanently removed until the hold is released. Viewing and downloading documents and photos is recorded in the audit log.`
       },
       {
         title: 'Photo Gallery',

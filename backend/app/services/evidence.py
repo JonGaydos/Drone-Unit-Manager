@@ -31,7 +31,7 @@ def soft_delete(item, user) -> None:
     if item.legal_hold:
         raise HTTPException(409, ON_HOLD)
     # Naive UTC, as every timestamp column here stores.
-    item.deleted_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    item.deleted_at = datetime.now(timezone.utc)
     item.deleted_by_id = user.id
 
 

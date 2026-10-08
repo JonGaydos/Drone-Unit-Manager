@@ -135,15 +135,15 @@ export default function MediaPage() {
           <h1 className="text-xl font-semibold text-foreground">Photo Gallery</h1>
           <span className="text-sm text-muted-foreground">({photos.length} photos)</span>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="relative">
+        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+          <div className="relative flex-1 sm:flex-none min-w-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
               type="text"
               placeholder="Search photos..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 pr-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring w-64"
+              className="pl-9 pr-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring w-full sm:w-64"
             />
           </div>
           {isSupervisor && (

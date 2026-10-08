@@ -264,8 +264,10 @@ export default function MissionLogPage() {
     try {
       if (editMission) {
         await api.patch(`/mission-logs/${editMission.id}`, data)
+        toast.success('Mission updated')
       } else {
         await api.post('/mission-logs', data)
+        toast.success('Mission added')
       }
       setModal(false)
       setEditMission(null)
@@ -280,6 +282,7 @@ export default function MissionLogPage() {
       onConfirm: async () => {
         try {
           await api.delete(`/mission-logs/${id}`)
+          toast.success('Mission deleted')
           load()
         } catch (err) { toast.error(err.message) }
       }

@@ -1,10 +1,11 @@
 from datetime import datetime, date
 from typing import Optional
 
-from sqlalchemy import String, Text, DateTime, Date, Float, Integer, ForeignKey, Index, func
+from sqlalchemy import String, Text, Date, Float, Integer, ForeignKey, Index, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
+from app.models.types import UTCDateTime
 
 
 class MaintenanceRecord(Base):
@@ -26,5 +27,5 @@ class MaintenanceRecord(Base):
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     modified_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now(), onupdate=func.now())

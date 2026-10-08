@@ -3,10 +3,11 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import String, Text, DateTime, Boolean, Integer, ForeignKey, func
+from sqlalchemy import String, Text, Boolean, Integer, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
+from app.models.types import UTCDateTime
 
 
 class NotificationPreference(Base):
@@ -25,5 +26,5 @@ class NotificationPreference(Base):
     send_day: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # 0=Mon..6=Sun (weekly only)
     categories: Mapped[str] = mapped_column(Text, default='["pending_approvals","needs_review","expiring_certs","expiring_registrations","overdue_maintenance","assigned_missions","overdue_checkouts","recent_incidents"]')
     email_override: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # Override user's default email
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now(), onupdate=func.now())

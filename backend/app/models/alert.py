@@ -1,10 +1,11 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import String, Text, DateTime, Integer, Boolean, Index, func
+from sqlalchemy import String, Text, Integer, Boolean, Index, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
+from app.models.types import UTCDateTime
 
 
 class Alert(Base):
@@ -22,4 +23,4 @@ class Alert(Base):
     entity_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
     is_dismissed: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now())

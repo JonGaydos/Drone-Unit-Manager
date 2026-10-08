@@ -1,10 +1,11 @@
 from datetime import datetime, date
 from typing import Optional
 
-from sqlalchemy import String, Text, DateTime, Date, Integer, Boolean, ForeignKey, Index, func
+from sqlalchemy import String, Text, Date, Integer, Boolean, ForeignKey, Index, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+from app.models.types import UTCDateTime
 
 
 class CertificationType(Base):
@@ -18,7 +19,7 @@ class CertificationType(Base):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now())
 
     pilot_certifications = relationship("PilotCertification", back_populates="certification_type")
 
@@ -40,8 +41,8 @@ class PilotCertification(Base):
     nist_level: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # 1-5 for NIST certs
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     renewed_from_id: Mapped[Optional[int]] = mapped_column(ForeignKey("pilot_certifications.id"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now(), onupdate=func.now())
 
     pilot = relationship("Pilot", back_populates="certifications")
     certification_type = relationship("CertificationType", back_populates="pilot_certifications")
@@ -58,7 +59,7 @@ class PilotEquipmentQual(Base):
     qualification_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="in_training")  # qualified, in_training, expired
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now(), onupdate=func.now())
 
     pilot = relationship("Pilot", back_populates="equipment_quals")

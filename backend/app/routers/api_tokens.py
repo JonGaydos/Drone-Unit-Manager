@@ -71,7 +71,7 @@ def create_api_token(data: ApiTokenCreate, db: DBSession, admin: AdminUser):
     raw = generate_token()
     expires_at = None
     if data.expires_in_days is not None:
-        expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=data.expires_in_days)
+        expires_at = datetime.now(timezone.utc) + timedelta(days=data.expires_in_days)
     t = ApiToken(
         name=data.name,
         token_hash=hash_token(raw),
@@ -100,7 +100,7 @@ def revoke_api_token(token_id: int, db: DBSession, admin: AdminUser):
     if not t:
         raise HTTPException(404, TOKEN_NOT_FOUND)
     if t.revoked_at is None:
-        t.revoked_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        t.revoked_at = datetime.now(timezone.utc)
         log_action(db, admin.id, admin.display_name, "delete", "api_token", t.id, t.name, details="revoked")
         db.commit()
     return {"ok": True}

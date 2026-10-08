@@ -1,8 +1,9 @@
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import String, Text, Integer, ForeignKey, DateTime, Boolean, JSON, func
+from sqlalchemy import String, Text, Integer, ForeignKey, Boolean, JSON, func
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
+from app.models.types import UTCDateTime
 
 
 class ChecklistTemplate(Base):
@@ -13,7 +14,7 @@ class ChecklistTemplate(Base):
     vehicle_model: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     items: Mapped[dict] = mapped_column(JSON)  # [{"label": "Check propellers", "required": true}, ...]
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow)
 
 
 class ChecklistCompletion(Base):
@@ -27,5 +28,5 @@ class ChecklistCompletion(Base):
     completed_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     responses: Mapped[dict] = mapped_column(JSON)  # [{"label": "Check propellers", "checked": true, "notes": ""}, ...]
     all_passed: Mapped[bool] = mapped_column(Boolean, default=False)
-    completed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    completed_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

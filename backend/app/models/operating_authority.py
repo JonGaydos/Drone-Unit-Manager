@@ -1,10 +1,11 @@
 from datetime import date, datetime, timedelta
 from typing import Optional
 
-from sqlalchemy import String, Text, Date, DateTime, Boolean, func
+from sqlalchemy import String, Text, Date, Boolean, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
+from app.models.types import UTCDateTime
 
 # Warning window before expiry. Matches the certification window the compliance
 # dashboard already uses, so "expiring" means the same thing everywhere.
@@ -52,8 +53,8 @@ class OperatingAuthority(Base):
     # waiver, say) rather than grounding the unit outright.
     grounds_unit: Mapped[bool] = mapped_column(Boolean, default=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now(), onupdate=func.now())
 
 
 def authority_status(authority: OperatingAuthority, today: Optional[date] = None) -> str:

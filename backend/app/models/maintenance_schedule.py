@@ -1,8 +1,9 @@
-from sqlalchemy import ForeignKey, String, Text, Date, Boolean, Integer, DateTime, func
+from sqlalchemy import ForeignKey, String, Text, Date, Boolean, Integer, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import date, datetime
 from typing import Optional
 from app.database import Base
+from app.models.types import UTCDateTime
 
 
 class MaintenanceSchedule(Base):
@@ -18,7 +19,7 @@ class MaintenanceSchedule(Base):
     last_completed: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     next_due: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now(), onupdate=func.now())
 
     assigned_to = relationship("Pilot", foreign_keys=[assigned_to_id])

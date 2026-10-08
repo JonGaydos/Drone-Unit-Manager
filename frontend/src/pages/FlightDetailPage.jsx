@@ -4,7 +4,7 @@ import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { formatDuration, normalizeDateValue, metersToFeet, mpsToMph, formatTime, utcIsoToZonedInput, zonedInputToUtcIso } from '@/lib/utils'
-import { sortByName, sortVehicles, sortPilotsActiveFirst, vehicleDisplayName } from '@/lib/formatters'
+import { sortByName, sortVehicles, sortPilotsActiveFirst, vehicleDisplayName, telemetryLabel } from '@/lib/formatters'
 import { ArrowLeft, MapPin, Save, RefreshCw, Loader2, Download } from 'lucide-react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 import { FlightPathMap } from '@/components/FlightMap'
@@ -278,28 +278,28 @@ function FlightActionBar({ flight, editing, isAdmin, refreshing, onApprove, onRe
 function FlightInfoHeader({ flight, isSupervisor, onToggleTelemetry }) {
   return (
     <div className="flex items-center gap-3 mb-4">
-      <div className="w-12 h-12 rounded-xl bg-primary/15 flex items-center justify-center text-primary">
+      <div className="w-12 h-12 shrink-0 rounded-xl bg-primary/15 flex items-center justify-center text-primary">
         <QuadcopterIcon className="w-6 h-6" />
       </div>
-      <div>
+      <div className="min-w-0">
         <h2 className="text-xl font-bold text-foreground">Flight on {flight.date || 'Unknown Date'}</h2>
-        <div className="flex items-center gap-3 text-sm text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm text-muted-foreground">
           {flight.external_id && <span className="font-mono text-xs bg-secondary px-2 py-0.5 rounded" title={flight.external_id}>ID: {flight.external_id.slice(0, 12)}{flight.external_id.length > 12 ? '...' : ''}</span>}
           <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
             flight.review_status === 'needs_review' ? 'bg-amber-500/15 text-amber-400' : 'bg-emerald-500/15 text-emerald-400'
           }`}>{flight.review_status === 'needs_review' ? 'Needs Review' : 'Reviewed'}</span>
-          {isSupervisor && (
+          {isSupervisor && telemetryLabel(flight) && (
             <button
               onClick={onToggleTelemetry}
               className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium cursor-pointer transition-colors ${
-                flight.telemetry_synced
+                flight.has_telemetry
                   ? 'bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25'
                   : 'bg-zinc-500/15 text-zinc-400 hover:bg-zinc-500/25'
               }`}
-              title={flight.telemetry_synced ? 'Click to mark telemetry as pending' : 'Click to mark telemetry as synced'}
+              title={flight.telemetry_synced ? 'Click to let sync look for telemetry again' : 'Click to stop sync looking for telemetry'}
             >
-              <span className={`w-2 h-2 rounded-full ${flight.telemetry_synced ? 'bg-emerald-400' : 'bg-zinc-500'}`} />
-              {flight.telemetry_synced ? 'Telemetry Synced' : 'Telemetry Pending'}
+              <span className={`w-2 h-2 rounded-full ${flight.has_telemetry ? 'bg-emerald-400' : 'bg-zinc-500'}`} />
+              {telemetryLabel(flight)}
             </button>
           )}
           {flight.data_source && (
@@ -550,6 +550,7 @@ export default function FlightDetailPage() {
   const handleSave = async () => {
     try {
       const updated = await api.patch(`/flights/${id}`, buildFlightPayload(editForm))
+      toast.success('Flight updated')
       setFlight(updated)
       setEditing(false)
     } catch (err) { toast.error(err.message) }
@@ -558,6 +559,7 @@ export default function FlightDetailPage() {
   const handleApprove = async () => {
     try {
       const updated = await api.patch(`/flights/${id}`, { review_status: 'reviewed', pilot_confirmed: true })
+      toast.success('Flight approved')
       setFlight(updated)
     } catch (err) { toast.error(err.message) }
   }
@@ -636,7 +638,9 @@ export default function FlightDetailPage() {
           <div className="bg-card border border-border rounded-xl p-8 text-center text-muted-foreground">
             <MapPin className="w-8 h-8 mx-auto mb-2 opacity-50" />
             <p>No telemetry data available for this flight.</p>
-            <p className="text-xs mt-1">Click "Refresh from API" to fetch telemetry data.</p>
+            <p className="text-xs mt-1">{flight.can_refresh
+              ? 'Click "Refresh from API" to fetch telemetry data.'
+              : 'This flight was entered by hand or imported without a flight path.'}</p>
           </div>
         </>
       )}

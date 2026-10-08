@@ -608,7 +608,7 @@ export default function VehicleDetailPage() {
                               } catch (err) { toast.error(err.message) }
                             }
                           })
-                        }} className="p-1.5 text-muted-foreground hover:text-destructive rounded hover:bg-destructive/10">
+                        }} aria-label="Delete registration" title="Delete registration" className="p-1.5 text-muted-foreground hover:text-destructive rounded hover:bg-destructive/10">
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </td>
@@ -828,7 +828,7 @@ export default function VehicleDetailPage() {
                                 } catch (err) { toast.error(err.message) }
                               }
                             })
-                          }} className="p-1.5 text-muted-foreground hover:text-destructive rounded hover:bg-destructive/10">
+                          }} aria-label="Delete component" title="Delete component" className="p-1.5 text-muted-foreground hover:text-destructive rounded hover:bg-destructive/10">
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </td>

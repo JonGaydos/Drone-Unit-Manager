@@ -3,6 +3,7 @@ from typing import Optional
 from sqlalchemy import String, Integer, ForeignKey, DateTime, Text, Index, func
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
+from app.models.types import UTCDateTime
 
 
 class EquipmentCheckout(Base):
@@ -15,12 +16,12 @@ class EquipmentCheckout(Base):
     entity_id: Mapped[int] = mapped_column(Integer)
     entity_name: Mapped[Optional[str]] = mapped_column(String(300), nullable=True)
     checked_out_by_id: Mapped[int] = mapped_column(ForeignKey("pilots.id"))
-    checked_out_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    checked_out_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow)
     expected_return: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    checked_in_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    checked_in_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)
     checked_in_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("pilots.id"), nullable=True)
     condition_out: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)  # good, fair, needs_attention
     condition_in: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     notes_out: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     notes_in: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow)
