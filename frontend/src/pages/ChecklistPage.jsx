@@ -18,6 +18,7 @@ function TemplateModal({ template, vehicles, onSave, onClose }) {
     name: template?.name || '',
     description: template?.description || '',
     vehicle_model: template?.vehicle_model || '',
+    is_active: template?.is_active ?? true,
     items: template?.items?.length > 0
       ? template.items.map(i => ({ label: i.label, required: i.required ?? true }))
       : [{ label: '', required: true }],
@@ -57,6 +58,7 @@ function TemplateModal({ template, vehicles, onSave, onClose }) {
         description: form.description || null,
         vehicle_model: form.vehicle_model || null,
         items: validItems,
+        ...(template ? { is_active: form.is_active } : {}),
       })
     } finally {
       setSaving(false)
@@ -106,6 +108,13 @@ function TemplateModal({ template, vehicles, onSave, onClose }) {
               {models.map(m => <option key={m} value={m}>{m}</option>)}
             </select>
           </div>
+          {template && (
+            <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
+              <input type="checkbox" checked={form.is_active}
+                onChange={e => setForm({ ...form, is_active: e.target.checked })} className="rounded border-border" />
+              Active (inactive templates are kept with their history but not offered for new checklists)
+            </label>
+          )}
 
           {/* Checklist Items Builder */}
           <div>
@@ -116,10 +125,10 @@ function TemplateModal({ template, vehicles, onSave, onClose }) {
               {form.items.map((item, idx) => (
                 <div key={`checklist-item-${idx}-${item}`} className="flex items-center gap-2 bg-secondary/50 border border-border rounded-lg p-2">
                   <div className="flex flex-col gap-0.5">
-                    <button type="button" onClick={() => moveItem(idx, -1)} className="text-muted-foreground hover:text-foreground" disabled={idx === 0}>
+                    <button type="button" onClick={() => moveItem(idx, -1)} aria-label="Move item up" className="text-muted-foreground hover:text-foreground" disabled={idx === 0}>
                       <ChevronDown className="w-3 h-3 rotate-180" />
                     </button>
-                    <button type="button" onClick={() => moveItem(idx, 1)} className="text-muted-foreground hover:text-foreground" disabled={idx === form.items.length - 1}>
+                    <button type="button" onClick={() => moveItem(idx, 1)} aria-label="Move item down" className="text-muted-foreground hover:text-foreground" disabled={idx === form.items.length - 1}>
                       <ChevronDown className="w-3 h-3" />
                     </button>
                   </div>
@@ -139,7 +148,7 @@ function TemplateModal({ template, vehicles, onSave, onClose }) {
                     />{' '}
                     Required
                   </label>
-                  <button type="button" onClick={() => removeItem(idx)} className="text-muted-foreground hover:text-red-400 p-1">
+                  <button type="button" onClick={() => removeItem(idx)} aria-label="Remove item" className="text-muted-foreground hover:text-red-400 p-1">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -296,6 +305,8 @@ function CompleteModal({ templates, pilots, vehicles, onSave, onClose }) {
                       <button
                         type="button"
                         onClick={() => toggleResponse(idx)}
+                        aria-pressed={resp.checked}
+                        aria-label={`${resp.checked ? 'Untick' : 'Tick'} ${resp.label}`}
                         className={`mt-0.5 shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
                           resp.checked
                             ? 'bg-emerald-500 border-emerald-500 text-white'
@@ -352,7 +363,7 @@ function CompleteModal({ templates, pilots, vehicles, onSave, onClose }) {
               className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2"
             >
               {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-              Submit Checklist
+              {allRequiredChecked ? 'Submit Checklist' : 'Submit as not passed'}
             </button>
           </div>
         </form>
@@ -362,7 +373,7 @@ function CompleteModal({ templates, pilots, vehicles, onSave, onClose }) {
 
 // ─── View Completion Modal ───────────────────────────────────────
 
-function ViewCompletionModal({ completion, onClose }) {
+function ViewCompletionModal({ completion, onClose, onDelete }) {
   if (!completion) return null
 
   return (
@@ -426,7 +437,12 @@ function ViewCompletionModal({ completion, onClose }) {
           )}
         </div>
 
-        <div className="flex justify-end mt-4">
+        <div className="flex justify-end gap-2 mt-4">
+          {onDelete && (
+            <button onClick={() => onDelete(completion.id)} className="px-4 py-2 text-sm border border-red-500/30 rounded-lg text-red-400 hover:bg-red-500/10">
+              Delete
+            </button>
+          )}
           <button onClick={onClose} className="px-4 py-2 text-sm border border-border rounded-lg text-muted-foreground hover:text-foreground">
             Close
           </button>
@@ -499,6 +515,23 @@ export default function ChecklistPage() {
         try {
           await api.delete(`/checklists/templates/${id}`)
           toast.success('Template deleted')
+          void load()
+        } catch (err) {
+          toast.error(err.message)
+        }
+      }
+    })
+  }
+
+  const handleDeleteCompletion = (id) => {
+    requestConfirm({
+      title: 'Delete Checklist',
+      message: 'Delete this submitted checklist? This cannot be undone.',
+      onConfirm: async () => {
+        try {
+          await api.delete(`/checklists/completions/${id}`)
+          toast.success('Checklist deleted')
+          setViewCompletion(null)
           void load()
         } catch (err) {
           toast.error(err.message)
@@ -683,6 +716,8 @@ export default function ChecklistPage() {
                         <button
                           onClick={() => setViewCompletion(c)}
                           className="p-1.5 text-muted-foreground hover:text-primary"
+                          aria-label="View checklist"
+                          title="View checklist"
                         >
                           <Eye className="w-4 h-4" />
                         </button>
@@ -718,6 +753,7 @@ export default function ChecklistPage() {
         <ViewCompletionModal
           completion={viewCompletion}
           onClose={() => setViewCompletion(null)}
+          onDelete={isSupervisor ? handleDeleteCompletion : null}
         />
       )}
       <ConfirmDialog {...confirmProps} />

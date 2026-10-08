@@ -95,6 +95,7 @@ export default function CalendarPage() {
     try {
       if (editId) await api.patch(`/calendar/events/${editId}`, body)
       else await api.post('/calendar/events', body)
+      toast.success(editId ? 'Entry updated' : 'Entry added')
       setModalOpen(false)
       const { start, end } = rangeRef.current
       if (start) fetchRange(start, end)
@@ -108,6 +109,7 @@ export default function CalendarPage() {
       onConfirm: async () => {
         try {
           await api.delete(`/calendar/events/${editId}`)
+          toast.success('Entry deleted')
           setModalOpen(false)
           const { start, end } = rangeRef.current
           if (start) fetchRange(start, end)

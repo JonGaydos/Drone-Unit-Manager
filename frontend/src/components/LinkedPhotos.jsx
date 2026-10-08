@@ -3,6 +3,7 @@ import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { Image as ImageIcon, Plus, X, Loader2 } from 'lucide-react'
+import { useEscapeToClose } from '@/hooks/useEscapeToClose'
 
 const API_BASE = '/api'
 
@@ -159,10 +160,12 @@ function PhotoPicker({ entityType, entityId, linkedIds, onClose, onAttached }) {
     }
   }
 
+  useEscapeToClose(onClose)
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <button className="absolute inset-0 bg-transparent cursor-default" onClick={onClose} aria-label="Close dialog" />
-      <div className="relative bg-popover border border-border rounded-xl p-6 w-full max-w-2xl shadow-xl max-h-[80vh] flex flex-col">
+      <div role="dialog" aria-modal="true" aria-label="Attach photos" className="relative bg-popover border border-border rounded-xl p-6 w-full max-w-2xl shadow-xl max-h-[80vh] flex flex-col">
         <h2 className="text-lg font-semibold text-foreground mb-3">Attach photos</h2>
         <div className="flex-1 overflow-y-auto">
           {pickerBody({ loading, available, selected, toggle })}

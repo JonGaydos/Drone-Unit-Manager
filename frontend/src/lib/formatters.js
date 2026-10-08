@@ -87,3 +87,17 @@ export function formatStatusText(status) {
   if (!status) return ''
   return status.replaceAll('_', ' ').replaceAll(/\b\w/g, l => l.toUpperCase())
 }
+
+/**
+ * The telemetry label for a flight: what it actually has, not only the sync
+ * flag. A flight marked synced with no points has no telemetry to show, and a
+ * flight no provider can refresh (entered by hand, most imports) is never
+ * pending.
+ * @param {{has_telemetry?: boolean, telemetry_synced?: boolean, can_refresh?: boolean}} f
+ * @returns {string|null} 'Telemetry ✓', 'No telemetry', 'Telemetry pending', or null for none.
+ */
+export function telemetryLabel(f) {
+  if (f.has_telemetry) return 'Telemetry ✓'
+  if (f.telemetry_synced) return 'No telemetry'
+  return f.can_refresh ? 'Telemetry pending' : null
+}

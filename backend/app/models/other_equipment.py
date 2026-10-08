@@ -1,10 +1,11 @@
 from datetime import datetime, date
 from typing import Optional
 
-from sqlalchemy import String, Text, DateTime, Date, func
+from sqlalchemy import String, Text, Date, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
+from app.models.types import UTCDateTime
 
 
 class OtherEquipment(Base):
@@ -24,5 +25,5 @@ class OtherEquipment(Base):
     acquired_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     decommissioned_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now(), onupdate=func.now())

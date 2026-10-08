@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { renderWithProviders } from '@/test/render'
@@ -92,15 +92,42 @@ describe('FlightsPage', () => {
     expect(await screen.findByText('flights boom')).toBeInTheDocument()
   })
 
-  it('narrows the visible rows with the search box', async () => {
-    mockMount()
+  it('searches on the server so every flight is covered, not just this page', async () => {
+    let lastUrl = null
+    mockMount({
+      flights: ({ request }) => {
+        lastUrl = new URL(request.url)
+        const q = (lastUrl.searchParams.get('search') || '').toLowerCase()
+        const rows = FLIGHTS.filter(f => f.pilot_name.toLowerCase().includes(q))
+        return HttpResponse.json({ flights: rows, total: rows.length, total_pages: 1 })
+      },
+    })
     const { user } = renderWithProviders(<FlightsPage />, { role: 'admin' })
 
     await screen.findByRole('link', { name: 'Jane Doe' })
     await user.type(screen.getByPlaceholderText('Search flights...'), 'Bob')
 
-    expect(screen.queryByRole('link', { name: 'Jane Doe' })).toBeNull()
+    await waitFor(() => expect(screen.queryByRole('link', { name: 'Jane Doe' })).toBeNull())
     expect(screen.getByRole('link', { name: 'Bob Roy' })).toBeInTheDocument()
+    expect(lastUrl.searchParams.get('search')).toBe('Bob')
+    expect(lastUrl.searchParams.get('page')).toBe('1')
+  })
+
+  it('sorts on the server when a column header is clicked', async () => {
+    let lastUrl = null
+    mockMount({
+      flights: ({ request }) => {
+        lastUrl = new URL(request.url)
+        return HttpResponse.json({ flights: FLIGHTS, total: FLIGHTS.length, total_pages: 1 })
+      },
+    })
+    const { user } = renderWithProviders(<FlightsPage />, { role: 'admin' })
+    await screen.findByRole('link', { name: 'Jane Doe' })
+
+    await user.click(screen.getByText('Duration'))
+
+    await waitFor(() => expect(lastUrl.searchParams.get('sort')).toBe('duration_seconds'))
+    expect(lastUrl.searchParams.get('order')).toBe('asc')
   })
 
   it('fires the filtered request with the right query when the status filter changes', async () => {

@@ -1,10 +1,11 @@
 from datetime import datetime, date
 from typing import Optional
 
-from sqlalchemy import String, Text, DateTime, Date, Float, Integer, ForeignKey, func
+from sqlalchemy import String, Text, Date, Float, Integer, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+from app.models.types import UTCDateTime
 
 # Repeated by the three audit columns below.
 USERS_ID = "users.id"
@@ -30,12 +31,12 @@ class Vehicle(Base):
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     manual_location_place: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     manual_location_pilot_id: Mapped[Optional[int]] = mapped_column(ForeignKey("pilots.id"), nullable=True)
-    location_set_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    location_set_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)
     location_set_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey(USERS_ID), nullable=True)
     created_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey(USERS_ID), nullable=True)
     modified_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey(USERS_ID), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now(), onupdate=func.now())
 
     flights = relationship("Flight", back_populates="vehicle")
     documents = relationship("Document", back_populates="vehicle", foreign_keys="Document.vehicle_id")

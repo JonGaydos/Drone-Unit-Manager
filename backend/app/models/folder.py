@@ -1,8 +1,9 @@
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import String, Integer, ForeignKey, Text, Boolean, DateTime, func
+from sqlalchemy import String, Integer, ForeignKey, Text, Boolean, func
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
+from app.models.types import UTCDateTime
 
 class Folder(Base):
     __tablename__ = "folders"
@@ -11,5 +12,5 @@ class Folder(Base):
     parent_id: Mapped[Optional[int]] = mapped_column(ForeignKey("folders.id"), nullable=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_system: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow)
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)

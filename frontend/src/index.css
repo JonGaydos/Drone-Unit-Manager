@@ -684,3 +684,10 @@ body {
   --danger-bg: rgba(176, 58, 46, 0.16);
   color-scheme: light;
 }
+
+/* Calendar toolbar: wrap onto a second line on a phone instead of pushing the
+   page wider than the screen. */
+.fc .fc-toolbar {
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}

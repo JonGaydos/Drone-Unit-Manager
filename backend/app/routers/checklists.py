@@ -118,7 +118,7 @@ def update_template(
     return _template_out(t)
 
 
-@router.delete("/templates/{template_id}", responses=responses(404))
+@router.delete("/templates/{template_id}", responses=responses(404, 409))
 def delete_template(
     template_id: int,
     db: DBSession,
@@ -127,7 +127,32 @@ def delete_template(
     t = db.query(ChecklistTemplate).filter(ChecklistTemplate.id == template_id).first()
     if not t:
         raise HTTPException(status_code=404, detail=TEMPLATE_NOT_FOUND)
+    used = db.query(ChecklistCompletion).filter(ChecklistCompletion.template_id == template_id).count()
+    if used:
+        raise HTTPException(status_code=409, detail=(
+            f"Used by {used} submitted checklist(s), which keep a link to it. Edit it and untick "
+            "Active to stop offering it instead."))
     db.delete(t)
+    log_action(db, user.id, user.display_name, "delete", "checklist_template", template_id, t.name)
+    db.commit()
+    return {"ok": True}
+
+
+@router.delete("/completions/{completion_id}", responses=responses(404))
+def delete_completion(
+    completion_id: int,
+    db: DBSession,
+    user: SupervisorUser,
+):
+    """Remove a submitted checklist, for one entered by mistake. Supervisors
+    only, and on the record."""
+    c = db.query(ChecklistCompletion).filter(ChecklistCompletion.id == completion_id).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Checklist not found")
+    template = db.get(ChecklistTemplate, c.template_id)
+    log_action(db, user.id, user.display_name, "delete", "checklist_completion", completion_id,
+               f"{template.name if template else 'Checklist'} by pilot #{c.pilot_id}")
+    db.delete(c)
     db.commit()
     return {"ok": True}
 

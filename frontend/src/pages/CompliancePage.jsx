@@ -387,17 +387,18 @@ export default function CompliancePage() {
   return (
     <div className="p-4 md:p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <ShieldCheck className="w-7 h-7 text-primary" />
           <h1 className="text-2xl font-bold text-foreground">Compliance Dashboard</h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => api.download('/export/equipment-checkouts/csv')}
             className="flex items-center gap-2 px-3 py-2 text-sm bg-secondary border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors"
           >
-            <Download className="w-4 h-4" /> Export CSV
+            {/* The equipment checkout log: there is no compliance export. */}
+            <Download className="w-4 h-4" /> Export checkouts CSV
           </button>
           <button
             onClick={load}

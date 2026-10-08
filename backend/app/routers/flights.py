@@ -4,11 +4,13 @@ from math import ceil
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload
 
 from app.constants import FLIGHT_NOT_FOUND, UTC_OFFSET
 from app.models.flight import Flight, FlightPurpose
+from app.models.pilot import Pilot
+from app.models.vehicle import Vehicle
 from app.deps import DBSession, CurrentUser, AdminUser, PilotUser, SupervisorUser
 from app.responses import responses
 from app.services.audit import log_action
@@ -77,6 +79,40 @@ def _flight_to_out(flight: Flight) -> FlightOut:
     })
 
 
+def _flight_search(text: str):
+    """Flights whose pilot, vehicle, purpose, location, case number or flight ID
+    contains ``text``. Run in the database so a search covers every page."""
+    return or_(
+        (Pilot.first_name + " " + Pilot.last_name).icontains(text, autoescape=True),
+        Vehicle.nickname.icontains(text, autoescape=True),
+        (Vehicle.manufacturer + " " + Vehicle.model).icontains(text, autoescape=True),
+        Vehicle.serial_number.icontains(text, autoescape=True),
+        Flight.purpose.icontains(text, autoescape=True),
+        Flight.takeoff_address.icontains(text, autoescape=True),
+        Flight.case_number.icontains(text, autoescape=True),
+        Flight.external_id.icontains(text, autoescape=True),
+    )
+
+
+# Sortable columns: the list page's headers, ordered over every flight rather
+# than only the page in view. Ties fall back to newest first.
+FLIGHT_SORTS = {
+    "date": (Flight.date, Flight.takeoff_time),
+    "pilot_name": (Pilot.first_name, Pilot.last_name),
+    "vehicle_name": (func.coalesce(Vehicle.nickname, Vehicle.model),),
+    "purpose": (Flight.purpose,),
+    "duration_seconds": (Flight.duration_seconds,),
+    "review_status": (Flight.review_status,),
+}
+
+
+def _flight_order(sort: str, order: str) -> list:
+    columns = FLIGHT_SORTS.get(sort, FLIGHT_SORTS["date"])
+    direction = "asc" if order == "asc" else "desc"
+    keys = [getattr(c, direction)().nulls_last() for c in columns]
+    return keys + [Flight.date.desc().nulls_first(), Flight.takeoff_time.desc().nulls_first(), Flight.id.desc()]
+
+
 @router.get("")
 def list_flights(
     db: DBSession,
@@ -87,6 +123,9 @@ def list_flights(
     date_from: date | None = None,
     date_to: date | None = None,
     review_status: str | None = None,
+    search: str | None = None,
+    sort: str = "date",
+    order: str = "desc",
     page: int = 1,
     per_page: int = 100):
     filters = []
@@ -104,13 +143,15 @@ def list_flights(
         filters.append(Flight.date <= date_to)
     if review_status:
         filters.append(Flight.review_status == review_status)
-    total = db.query(func.count(Flight.id)).filter(*filters).scalar()
+    if search and search.strip():
+        filters.append(_flight_search(search.strip()))
+    base = (db.query(Flight).outerjoin(Pilot, Pilot.id == Flight.pilot_id)
+            .outerjoin(Vehicle, Vehicle.id == Flight.vehicle_id).filter(*filters))
+    total = base.with_entities(func.count(Flight.id)).scalar()
     offset = (page - 1) * per_page
-    flights = db.query(Flight).options(
+    flights = base.options(
         joinedload(Flight.pilot), joinedload(Flight.vehicle)
-    ).filter(*filters).order_by(
-        Flight.date.desc().nulls_first(), Flight.takeoff_time.desc().nulls_first()
-    ).offset(offset).limit(per_page).all()
+    ).order_by(*_flight_order(sort, order)).offset(offset).limit(per_page).all()
     return {
         "flights": [_flight_to_out(f) for f in flights],
         "total": total,

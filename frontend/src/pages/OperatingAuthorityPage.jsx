@@ -130,8 +130,10 @@ export default function OperatingAuthorityPage() {
     try {
       if (editing) {
         await api.patch(`/operating-authorities/${editing.id}`, body)
+        toast.success('Authority updated')
       } else {
         await api.post('/operating-authorities', body)
+        toast.success('Authority added')
       }
       setFormOpen(false)
       load()
@@ -149,6 +151,7 @@ export default function OperatingAuthorityPage() {
       onConfirm: async () => {
         try {
           await api.delete(`/operating-authorities/${row.id}`)
+          toast.success('Authority deleted')
           load()
         } catch (err) {
           toast.error(err.message)

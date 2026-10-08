@@ -11,7 +11,7 @@ import os
 import secrets
 import tempfile
 import zipfile
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -310,9 +310,11 @@ def _get_column_types(model_class) -> dict:
     types = {}
     for col_attr in mapper.mapper.column_attrs:
         col = col_attr.columns[0]
-        if isinstance(col.type, DateTime):
+        # Look through a TypeDecorator (UTCDateTime) to the type it stores as.
+        col_type = getattr(col.type, "impl", col.type)
+        if isinstance(col_type, DateTime):
             types[col_attr.key] = "datetime"
-        elif isinstance(col.type, Date):
+        elif isinstance(col_type, Date):
             types[col_attr.key] = "date"
     return types
 
@@ -604,7 +606,12 @@ def backup_status(db: DBSession, admin: AdminUser):
 def _audit_key(row) -> tuple:
     """Identity of an audit entry for spotting the same event twice."""
     get = row.get if isinstance(row, dict) else lambda k: getattr(row, k)
-    return (get("created_at"), get("action"), get("entity_type"), get("entity_id"), get("user_name"))
+    created = get("created_at")
+    # Stored rows read back UTC-aware (UTCDateTime); rows parsed from a backup
+    # file are naive UTC. Compare them as the same moment.
+    if isinstance(created, datetime) and created.tzinfo is not None:
+        created = created.astimezone(timezone.utc).replace(tzinfo=None)
+    return (created, get("action"), get("entity_type"), get("entity_id"), get("user_name"))
 
 
 def _prepare_restore_rows(db: Session, name: str, rows: list[dict]) -> list[dict]:

@@ -122,7 +122,7 @@ def delete_folder(folder_id: int, db: DBSession, user: PilotUser):
     db.query(Folder).filter(Folder.parent_id == folder_id).update({"parent_id": folder.parent_id})
 
     # The record stays, marked deleted, so the trail can still name it.
-    folder.deleted_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    folder.deleted_at = datetime.now(timezone.utc)
     log_action(db, user.id, user.display_name, "delete", "folder", folder.id, folder.name,
                details=f"{moved} document(s) moved to Unfiled" if moved else None)
     db.commit()

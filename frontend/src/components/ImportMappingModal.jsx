@@ -7,6 +7,7 @@ import { useState } from 'react'
 import { api } from '@/api/client'
 import { useToast } from '@/contexts/ToastContext'
 import { Loader2, Upload, X, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { useEscapeToClose } from '@/hooks/useEscapeToClose'
 
 const TITLES = {
   missions: 'Import Mission Logs',
@@ -81,10 +82,12 @@ export function ImportMappingModal({ entity, onClose, onComplete }) {
   const canCommit = preview && requiredMissing.length === 0 && !busy
   const rowWord = preview?.row_count === 1 ? 'row' : 'rows'
 
+  useEscapeToClose(onClose)
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <button className="absolute inset-0 bg-black/60 backdrop-blur-sm cursor-default" onClick={onClose} aria-label="Close" />
-      <div className="relative bg-popover border border-border rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
+      <div role="dialog" aria-modal="true" aria-label={TITLES[entity] || 'Import'} className="relative bg-popover border border-border rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-5 py-3 border-b border-border">
           <h2 className="text-base font-semibold text-foreground">{TITLES[entity] || 'Import'}</h2>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground p-1" aria-label="Close">

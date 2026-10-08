@@ -1,8 +1,9 @@
 from datetime import datetime, date
 from typing import Optional
-from sqlalchemy import String, Text, Integer, Float, ForeignKey, DateTime, Date, Boolean, func
+from sqlalchemy import String, Text, Integer, Float, ForeignKey, Date, Boolean, func
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
+from app.models.types import UTCDateTime
 
 
 class Component(Base):
@@ -21,5 +22,5 @@ class Component(Base):
     warranty_expiry: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     replacement_cost: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

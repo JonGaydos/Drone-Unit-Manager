@@ -3,6 +3,7 @@ from typing import Optional
 from sqlalchemy import String, Text, Integer, ForeignKey, DateTime, Date, Boolean, Float, func
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
+from app.models.types import UTCDateTime
 
 
 class FlightPlan(Base):
@@ -25,10 +26,10 @@ class FlightPlan(Base):
     status: Mapped[str] = mapped_column(String(30), default="pending")  # pending, approved, denied, cancelled, completed
     submitted_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     reviewed_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
-    review_date: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    review_date: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)
     review_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     denial_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     linked_flight_id: Mapped[Optional[int]] = mapped_column(ForeignKey("flights.id"), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

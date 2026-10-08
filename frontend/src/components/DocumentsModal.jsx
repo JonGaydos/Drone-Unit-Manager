@@ -4,6 +4,7 @@
  */
 import { X } from 'lucide-react'
 import DocumentUpload from '@/components/DocumentUpload'
+import { useEscapeToClose } from '@/hooks/useEscapeToClose'
 
 /**
  * @param {Object} props
@@ -13,10 +14,12 @@ import DocumentUpload from '@/components/DocumentUpload'
  * @param {Function} props.onClose - Called when the modal is dismissed.
  */
 export function DocumentsModal({ entityType, entityId, title, onClose }) {
+  useEscapeToClose(onClose)
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <button className="absolute inset-0 bg-transparent cursor-default" onClick={onClose} aria-label="Close dialog" />
-      <div className="relative bg-popover border border-border rounded-xl p-6 w-full max-w-lg shadow-xl">
+      <div role="dialog" aria-modal="true" aria-label={title || 'Documents'} className="relative bg-popover border border-border rounded-xl p-6 w-full max-w-lg shadow-xl">
         <div className="flex items-start justify-between mb-4 gap-4">
           <div className="min-w-0">
             <h2 className="text-lg font-semibold text-foreground">Documents</h2>

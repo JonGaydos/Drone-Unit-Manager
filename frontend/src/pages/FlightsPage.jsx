@@ -1,9 +1,9 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { formatDuration, normalizeDateValue } from '@/lib/utils'
-import { sortByName, sortVehicles, sortPilotsActiveFirst, vehicleDisplayName } from '@/lib/formatters'
+import { sortByName, sortVehicles, sortPilotsActiveFirst, vehicleDisplayName, telemetryLabel } from '@/lib/formatters'
 import { Plus, Search, CheckCircle, ChevronUp, ChevronDown, Pencil, X, Check, Download, Loader2, Copy } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
@@ -192,23 +192,9 @@ function SortIndicator({ column, sortKey, sortDir }) {
     : <ChevronDown className="w-3 h-3 inline ml-1" />
 }
 
-// Sort value for a flight under the given column key. Strings are lowercased so
-// the comparison is case-insensitive; numbers/dates compare as-is.
-function flightSortValue(f, sortKey) {
-  switch (sortKey) {
-    case 'date': return f.date || f.takeoff_time || ''
-    case 'pilot_name': return (f.pilot_name || '').toLowerCase()
-    case 'vehicle_name': return (f.vehicle_name || '').toLowerCase()
-    case 'purpose': return (f.purpose || '').toLowerCase()
-    case 'duration_seconds': return f.duration_seconds || 0
-    case 'review_status': return (f.review_status || '').toLowerCase()
-    default: return (f[sortKey] || '').toString().toLowerCase()
-  }
-}
-
 // Build the /flights request path from the active filters. Only set params that
 // are present so the backend sees a clean query string.
-function buildFlightsPath({ filterDateFrom, filterDateTo, filterPilotId, filterVehicleId, filterPurpose, statusFilter, page }) {
+function buildFlightsPath({ filterDateFrom, filterDateTo, filterPilotId, filterVehicleId, filterPurpose, statusFilter, query, sortKey, sortDir, page }) {
   const qp = new URLSearchParams()
   if (filterDateFrom) qp.set('date_from', filterDateFrom)
   if (filterDateTo) qp.set('date_to', filterDateTo)
@@ -216,6 +202,11 @@ function buildFlightsPath({ filterDateFrom, filterDateTo, filterPilotId, filterV
   if (filterVehicleId) qp.set('vehicle_id', filterVehicleId)
   if (filterPurpose) qp.set('purpose', filterPurpose)
   if (statusFilter && statusFilter !== 'all') qp.set('review_status', statusFilter)
+  // Search and sort run on the server, so they cover every flight, not just
+  // the page in view.
+  if (query) qp.set('search', query)
+  qp.set('sort', sortKey)
+  qp.set('order', sortDir)
   qp.set('page', page)
   qp.set('per_page', 100)
   const qs = qp.toString()
@@ -231,6 +222,7 @@ export default function FlightsPage() {
   const [sensors, setSensors] = useState([])
   const [attachments, setAttachments] = useState([])
   const [search, setSearch] = useState('')
+  const [query, setQuery] = useState('')
   const [modal, setModal] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -271,7 +263,14 @@ export default function FlightsPage() {
   const toggleSort = (key) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
     else { setSortKey(key); setSortDir('asc') }
+    setPage(1)
   }
+
+  // Search once typing pauses, from the first page.
+  useEffect(() => {
+    const timer = setTimeout(() => { setQuery(search.trim()); setPage(1) }, 300)
+    return () => clearTimeout(timer)
+  }, [search])
 
   const abortRef = useRef(null)
 
@@ -285,7 +284,7 @@ export default function FlightsPage() {
     setSelectedIds(new Set())  // never act on rows hidden by a filter/page change
 
     const path = buildFlightsPath({
-      filterDateFrom, filterDateTo, filterPilotId, filterVehicleId, filterPurpose, statusFilter, page,
+      filterDateFrom, filterDateTo, filterPilotId, filterVehicleId, filterPurpose, statusFilter, query, sortKey, sortDir, page,
     })
 
     Promise.all([
@@ -315,15 +314,12 @@ export default function FlightsPage() {
     })
   }
 
-  useEffect(() => { load() }, [filterDateFrom, filterDateTo, filterPilotId, filterVehicleId, filterPurpose, statusFilter, page])
-
-  // Client-side search hides rows; clearing selection on search change keeps bulk
-  // ops from acting on rows you can no longer see.
-  useEffect(() => setSelectedIds(new Set()), [search])
+  useEffect(() => { load() }, [filterDateFrom, filterDateTo, filterPilotId, filterVehicleId, filterPurpose, statusFilter, query, sortKey, sortDir, page])
 
   const handleSave = async (data) => {
     try {
       await api.post('/flights', data)
+      toast.success('Flight added')
       setModal(false)
       load()
     } catch (err) { toast.error(err.message) }
@@ -334,6 +330,7 @@ export default function FlightsPage() {
       await api.post('/flights/bulk-update', {
         flight_ids: ids, review_status: 'reviewed', pilot_confirmed: true
       })
+      toast.success(`${ids.length} flight(s) marked reviewed`)
       load()
     } catch (err) { toast.error(err.message) }
   }
@@ -363,6 +360,7 @@ export default function FlightsPage() {
       if (data.duration_seconds) data.duration_seconds = Number.parseInt(data.duration_seconds, 10)
       else delete data.duration_seconds
       await api.patch(`/flights/${editingId}`, data)
+      toast.success('Flight updated')
       setEditingId(null)
       setEditForm({})
       load()
@@ -375,22 +373,8 @@ export default function FlightsPage() {
     } catch (err) { toast.error(err.message) }
   }
 
-  const filtered = useMemo(() => {
-    // Status filter is now applied server-side via the API query param
-    // Apply text search
-    let list = flights.filter(f =>
-      `${f.pilot_name || ''} ${f.vehicle_name || ''} ${f.purpose || ''} ${f.takeoff_address || ''}`
-        .toLowerCase().includes(search.toLowerCase())
-    )
-
-    return [...list].sort((a, b) => {
-      const aVal = flightSortValue(a, sortKey)
-      const bVal = flightSortValue(b, sortKey)
-      if (aVal < bVal) return sortDir === 'asc' ? -1 : 1
-      if (aVal > bVal) return sortDir === 'asc' ? 1 : -1
-      return 0
-    })
-  }, [flights, search, sortKey, sortDir])
+  // Filters, search and sort are all applied by the server.
+  const filtered = flights
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>
 
@@ -463,6 +447,7 @@ export default function FlightsPage() {
     setBulkBusy(true)
     try {
       await api.post('/flights/bulk-update', { flight_ids: [...selectedIds], ...body })
+      toast.success(`${selectedIds.size} flight(s) updated`)
       load()
     } catch (err) { toast.error(err.message) } finally { setBulkBusy(false) }
   }
@@ -470,6 +455,7 @@ export default function FlightsPage() {
     setBulkBusy(true)
     try {
       await api.post('/flights/bulk-delete', { flight_ids: [...selectedIds] }, { timeout: 120000 })
+      toast.success(`${selectedIds.size} flight(s) deleted`)
       load()
     } catch (err) { toast.error(err.message) } finally { setBulkBusy(false) }
   }
@@ -660,19 +646,12 @@ export default function FlightsPage() {
                       return <span className={badgeCls}>{label}</span>
                     })()}
                     {(() => {
-                      if (f.telemetry_synced) {
-                        const cls = "text-[10px] leading-none text-emerald-400"
-                        return isSupervisor
-                          ? <button type="button" onClick={async (e) => { e.stopPropagation(); try { await api.patch(`/flights/${f.id}/telemetry-status`, { telemetry_synced: false }); load() } catch (err) { toast.error(err.message) } }} className={`${cls} cursor-pointer hover:text-emerald-300`} title="Click to mark not synced">Telemetry ✓</button>
-                          : <span className={cls}>Telemetry ✓</span>
-                      }
-                      if (f.external_id) {
-                        const cls = "text-[10px] leading-none text-muted-foreground"
-                        return isSupervisor
-                          ? <button type="button" onClick={async (e) => { e.stopPropagation(); try { await api.patch(`/flights/${f.id}/telemetry-status`, { telemetry_synced: true }); load() } catch (err) { toast.error(err.message) } }} className={`${cls} cursor-pointer hover:text-foreground`} title="Click to mark synced">Telemetry pending</button>
-                          : <span className={cls}>Telemetry pending</span>
-                      }
-                      return null
+                      const label = telemetryLabel(f)
+                      if (!label) return null
+                      const cls = `text-[10px] leading-none ${f.has_telemetry ? 'text-emerald-400' : 'text-muted-foreground'}`
+                      return isSupervisor
+                        ? <button type="button" onClick={async (e) => { e.stopPropagation(); try { await api.patch(`/flights/${f.id}/telemetry-status`, { telemetry_synced: !f.telemetry_synced }); load() } catch (err) { toast.error(err.message) } }} className={`${cls} cursor-pointer hover:text-foreground`} title={f.telemetry_synced ? 'Click to let sync look for telemetry again' : 'Click to stop sync looking for telemetry'}>{label}</button>
+                        : <span className={cls}>{label}</span>
                     })()}
                   </div>
                 </td>
@@ -793,8 +772,7 @@ function FlightEditRow({ f, editForm, setEditForm, pilots, purposes, onSave, onC
               {f.review_status === 'needs_review' ? 'Needs Review' : 'Reviewed'}
             </span>
           )}
-          {f.telemetry_synced && <span className="text-[10px] leading-none text-emerald-400">Telemetry ✓</span>}
-          {!f.telemetry_synced && f.external_id && <span className="text-[10px] leading-none text-muted-foreground">Telemetry pending</span>}
+          {telemetryLabel(f) && <span className={`text-[10px] leading-none ${f.has_telemetry ? 'text-emerald-400' : 'text-muted-foreground'}`}>{telemetryLabel(f)}</span>}
         </div>
       </td>
       <td className="px-4 py-2 text-right">

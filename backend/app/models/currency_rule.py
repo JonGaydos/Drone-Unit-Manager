@@ -1,8 +1,9 @@
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import String, Integer, Float, Boolean, DateTime, func
+from sqlalchemy import String, Integer, Float, Boolean, func
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
+from app.models.types import UTCDateTime
 
 
 class CurrencyRule(Base):
@@ -15,4 +16,4 @@ class CurrencyRule(Base):
     period_days: Mapped[int] = mapped_column(Integer)  # within this many days
     required_flights: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # min flights in period
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow)

@@ -87,7 +87,8 @@ def authenticate_api_token(db: Session, raw: str, method: str, path: str) -> Use
     token = db.query(ApiToken).filter(ApiToken.token_hash == hash_token(raw)).first()
     if not token or token.revoked_at is not None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    # Aware, like the token's own timestamps (UTCDateTime).
+    now = datetime.now(timezone.utc)
     if token.expires_at is not None and now >= token.expires_at:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
     if token.read_only and method.upper() not in READ_METHODS:

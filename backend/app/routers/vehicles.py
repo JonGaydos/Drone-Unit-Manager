@@ -263,7 +263,7 @@ def set_vehicle_location(vehicle_id: int, data: VehicleLocationUpdate, db: DBSes
         vehicle.manual_location_pilot_id = None
         vehicle.manual_location_place = data.place
         loc_label = data.place
-    vehicle.location_set_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    vehicle.location_set_at = datetime.now(timezone.utc)
     vehicle.location_set_by_id = user.id
     log_action(db, user.id, user.display_name, "update", "vehicle", vehicle.id,
                vehicle.nickname or f"{vehicle.manufacturer} {vehicle.model}",

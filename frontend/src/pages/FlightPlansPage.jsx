@@ -9,6 +9,7 @@ import {
   ClipboardCheck, Plus, Filter, X, Loader2, Check, Ban, Clock,
   ChevronDown, ChevronUp, Cloud, Download,
 } from 'lucide-react'
+import { useEscapeToClose } from '@/hooks/useEscapeToClose'
 
 const STATUS_COLORS = {
   pending: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
@@ -60,10 +61,12 @@ function PlanModal({ pilots, vehicles, currentUser, onSave, onClose }) {
     try { await onSave(data) } finally { setSaving(false) }
   }
 
+  useEscapeToClose(onClose)
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <button className="absolute inset-0 bg-transparent cursor-default" onClick={onClose} aria-label="Close dialog" />
-      <div className="relative bg-popover border border-border rounded-xl p-6 w-full max-w-2xl shadow-xl max-h-[90vh] overflow-y-auto">
+      <div role="dialog" aria-modal="true" aria-label="Submit Flight Plan" className="relative bg-popover border border-border rounded-xl p-6 w-full max-w-2xl shadow-xl max-h-[90vh] overflow-y-auto">
         <h2 className="text-lg font-semibold text-foreground mb-4">Submit Flight Plan</h2>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
@@ -167,10 +170,12 @@ function DenyModal({ plan, onDeny, onClose }) {
     try { await onDeny(plan.id, { denial_reason: reason, review_notes: notes || undefined }) } finally { setSaving(false) }
   }
 
+  useEscapeToClose(onClose)
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <button className="absolute inset-0 bg-transparent cursor-default" onClick={onClose} aria-label="Close dialog" />
-      <div className="relative bg-popover border border-border rounded-xl p-6 w-full max-w-md shadow-xl">
+      <div role="dialog" aria-modal="true" aria-label="Deny Flight Plan" className="relative bg-popover border border-border rounded-xl p-6 w-full max-w-md shadow-xl">
         <h2 className="text-lg font-semibold text-foreground mb-4">Deny Flight Plan</h2>
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>

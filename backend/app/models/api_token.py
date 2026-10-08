@@ -1,10 +1,11 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import String, Text, Boolean, DateTime, ForeignKey, func
+from sqlalchemy import String, Text, Boolean, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
+from app.models.types import UTCDateTime
 
 
 class ApiToken(Base):
@@ -26,8 +27,8 @@ class ApiToken(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     read_only: Mapped[bool] = mapped_column(Boolean, default=True)
     scopes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON list; null = all areas
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now())
+    last_used_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)
     # Empty means the token never expires.
-    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)
