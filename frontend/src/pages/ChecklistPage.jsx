@@ -112,7 +112,7 @@ function TemplateModal({ template, vehicles, onSave, onClose }) {
             <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
               <input type="checkbox" checked={form.is_active}
                 onChange={e => setForm({ ...form, is_active: e.target.checked })} className="rounded border-border" />
-              Active (inactive templates are kept with their history but not offered for new checklists)
+              <span>Active (inactive templates are kept with their history but not offered for new checklists)</span>
             </label>
           )}
 
