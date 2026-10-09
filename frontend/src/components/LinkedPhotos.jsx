@@ -3,7 +3,7 @@ import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { Image as ImageIcon, Plus, X, Loader2 } from 'lucide-react'
-import { useEscapeToClose } from '@/hooks/useEscapeToClose'
+import { Modal } from '@/components/ui/Modal'
 
 const API_BASE = '/api'
 
@@ -160,24 +160,18 @@ function PhotoPicker({ entityType, entityId, linkedIds, onClose, onAttached }) {
     }
   }
 
-  useEscapeToClose(onClose)
-
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <button className="absolute inset-0 bg-transparent cursor-default" onClick={onClose} aria-label="Close dialog" />
-      <div role="dialog" aria-modal="true" aria-label="Attach photos" className="relative bg-popover border border-border rounded-xl p-6 w-full max-w-2xl shadow-xl max-h-[80vh] flex flex-col">
-        <h2 className="text-lg font-semibold text-foreground mb-3">Attach photos</h2>
-        <div className="flex-1 overflow-y-auto">
-          {pickerBody({ loading, available, selected, toggle })}
-        </div>
-        <div className="flex gap-2 mt-4">
-          <button onClick={attach} disabled={selected.size === 0 || saving}
-            className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2">
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : attachLabel}
-          </button>
-          <button onClick={onClose} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm">Cancel</button>
-        </div>
+    <Modal open onClose={onClose} title="Attach photos" className="max-w-2xl">
+      <div className="max-h-[55vh] overflow-y-auto">
+        {pickerBody({ loading, available, selected, toggle })}
       </div>
-    </div>
+      <div className="flex gap-2 mt-4">
+        <button onClick={attach} disabled={selected.size === 0 || saving}
+          className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2">
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : attachLabel}
+        </button>
+        <button onClick={onClose} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm">Cancel</button>
+      </div>
+    </Modal>
   )
 }

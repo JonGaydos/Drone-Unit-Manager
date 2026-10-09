@@ -27,7 +27,7 @@ If you have a backup ZIP from another instance, choose "Restore from a backup in
       },
       {
         title: 'Dates, Times and Sign-in',
-        body: `Times are shown in the unit's time zone, set in Settings → General. A flight is dated by the local day it took off, so an evening flight stays on that day even though it is already the next day in UTC.
+        body: `Times are shown in the unit's time zone, set in Settings → General. A flight is dated by the local day it took off, so an evening flight stays on that day even though it is already the next day in UTC. CSV exports use the same local times, and an export's date range covers whole local days. The flight export also keeps the UTC takeoff and landing times beside the local ones.
 
 You stay signed in for up to 12 hours. After 30 minutes with no activity in any open tab, the app signs you out of this browser and asks you to sign in again. Signing out from the menu signs you out on every device.`
       },
