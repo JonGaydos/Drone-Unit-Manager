@@ -85,8 +85,7 @@ test.describe('ops journeys', () => {
     await expect(page).toHaveURL(/\/flight-plans(?:$|[/?])/)
 
     await page.getByRole('button', { name: 'Submit Plan' }).click()
-    // FlightPlansPage uses a custom modal (no role=dialog); match by heading.
-    const modal = page.locator('div').filter({ has: page.getByRole('heading', { name: 'Submit Flight Plan' }) }).last()
+    const modal = page.getByRole('dialog', { name: 'Submit Flight Plan' })
     await expect(page.getByRole('heading', { name: 'Submit Flight Plan' })).toBeVisible()
 
     await modal.locator('#title').fill(title)
