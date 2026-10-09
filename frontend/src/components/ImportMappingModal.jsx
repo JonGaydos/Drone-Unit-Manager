@@ -6,7 +6,7 @@
 import { useState } from 'react'
 import { api } from '@/api/client'
 import { useToast } from '@/contexts/ToastContext'
-import { Loader2, Upload, X, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { Loader2, Upload, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 
 const TITLES = {
