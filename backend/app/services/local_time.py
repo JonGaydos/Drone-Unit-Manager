@@ -6,7 +6,7 @@ one, even though it is already tomorrow in UTC.
 """
 
 import os
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from app.models.setting import Setting
@@ -31,3 +31,22 @@ def local_flight_date(takeoff: datetime | None, zone: ZoneInfo) -> date | None:
     if takeoff.tzinfo is None:
         takeoff = takeoff.replace(tzinfo=timezone.utc)
     return takeoff.astimezone(zone).date()
+
+
+def local_day_start(day: date, zone: ZoneInfo) -> datetime:
+    """Midnight at the start of ``day`` in ``zone``, as a UTC moment.
+
+    A server-stamped time is stored in UTC, so a filter "on or after Oct 7"
+    starts at 05:00 UTC in Chicago, not at 00:00 UTC (7 PM the evening before).
+    """
+    return datetime.combine(day, time.min, tzinfo=zone).astimezone(timezone.utc)
+
+
+def stamped_on_or_after(column, day: date, zone: ZoneInfo):
+    """Filter: ``column`` falls on ``day`` or later, in local days."""
+    return column >= local_day_start(day, zone)
+
+
+def stamped_on_or_before(column, day: date, zone: ZoneInfo):
+    """Filter: ``column`` falls on ``day`` or earlier, in local days."""
+    return column < local_day_start(day + timedelta(days=1), zone)

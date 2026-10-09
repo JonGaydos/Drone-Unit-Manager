@@ -9,7 +9,7 @@ import logging
 import smtplib
 import ssl
 from html import escape
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -130,7 +130,7 @@ def _build_recent_incidents(db: Session, pref) -> list[dict] | None:
     from app.models.incident import Incident
     freq = pref.frequency if pref else "daily"
     lookback = timedelta(days=1) if freq == "daily" else timedelta(days=7)
-    since = datetime.now() - lookback
+    since = datetime.now(timezone.utc) - lookback
     recent = db.query(Incident).filter(Incident.created_at >= since).all()
     if not recent:
         return None

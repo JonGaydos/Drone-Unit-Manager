@@ -3,7 +3,6 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.constants import TEMPLATE_NOT_FOUND
@@ -13,6 +12,7 @@ from app.models.pilot import Pilot
 from app.models.vehicle import Vehicle
 from app.responses import responses
 from app.services.audit import log_action
+from app.services.local_time import display_zone, stamped_on_or_after, stamped_on_or_before
 
 router = APIRouter(prefix="/api/checklists", tags=["checklists"])
 
@@ -217,10 +217,11 @@ def list_completions(
         q = q.filter(ChecklistCompletion.vehicle_id == vehicle_id)
     if flight_plan_id:
         q = q.filter(ChecklistCompletion.flight_plan_id == flight_plan_id)
+    zone = display_zone(db)
     if date_from:
-        q = q.filter(func.date(ChecklistCompletion.completed_at) >= date_from)
+        q = q.filter(stamped_on_or_after(ChecklistCompletion.completed_at, date_from, zone))
     if date_to:
-        q = q.filter(func.date(ChecklistCompletion.completed_at) <= date_to)
+        q = q.filter(stamped_on_or_before(ChecklistCompletion.completed_at, date_to, zone))
     completions = q.order_by(ChecklistCompletion.completed_at.desc()).all()
     return [_completion_out(c, db) for c in completions]
 

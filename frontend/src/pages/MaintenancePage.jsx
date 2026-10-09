@@ -11,7 +11,7 @@ import { sortPilotsActiveFirst, vehicleDisplayName, equipmentDisplayName } from 
 import { Plus, Trash2, Search, Wrench, CalendarClock, History, Download, Edit, CheckCircle, Clock, Upload, Paperclip } from 'lucide-react'
 import { ImportMappingModal } from '@/components/ImportMappingModal'
 import { DocumentsModal } from '@/components/DocumentsModal'
-import { useEscapeToClose } from '@/hooks/useEscapeToClose'
+import { Modal } from '@/components/ui/Modal'
 
 // Map entity_type to API endpoint
 const ENTITY_ENDPOINTS = {
@@ -96,119 +96,113 @@ function MaintenanceModal({ record, onSave, onClose, entityLists, pilots }) {
     }
   }
 
-  useEscapeToClose(onClose)
-
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <button className="absolute inset-0 bg-transparent cursor-default" onClick={onClose} aria-label="Close dialog" />
-      <div role="dialog" aria-modal="true" aria-label={record ? 'Edit Maintenance' : 'Add Maintenance'} className="relative bg-popover border border-border rounded-xl p-6 w-full max-w-lg shadow-xl">
-        <h2 className="text-lg font-semibold text-foreground mb-4">{record ? 'Edit Maintenance' : 'Add Maintenance'}</h2>
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label htmlFor="entity-type" className="block text-sm font-medium text-foreground mb-1">Entity Type</label>
-              <select id="entity-type"
-                value={form.entity_type}
-                onChange={(e) => setForm({ ...form, entity_type: e.target.value, entity_id: '' })}
-                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
-              >
-                <option value="vehicle">Vehicle</option>
-                <option value="battery">Battery</option>
-                <option value="controller">Controller</option>
-                <option value="dock">Dock</option>
-                <option value="organization">Organization-wide</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
-            <div>
-              <label htmlFor="entity" className="block text-sm font-medium text-foreground mb-1">Entity</label>
-              {form.entity_type === 'organization' ? (
-                <input id="entity" type="text" disabled value="All" className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-muted-foreground text-sm" />
-              ) : (
-                <select id="entity"
-                  value={form.entity_id || ''}
-                  onChange={(e) => setForm({ ...form, entity_id: e.target.value })}
-                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
-                >
-                  <option value="">{form.entity_type === 'other' ? 'No specific item' : `Select ${form.entity_type}...`}</option>
-                  {[...entityOptions].sort((a, b) => getEntityName(a, form.entity_type).localeCompare(getEntityName(b, form.entity_type))).map(ent => (
-                    <option key={ent.id} value={ent.id}>{getEntityName(ent, form.entity_type)}</option>
-                  ))}
-                </select>
-              )}
-            </div>
-          </div>
+    <Modal open onClose={onClose} title={record ? 'Edit Maintenance' : 'Add Maintenance'} className="max-h-[90vh] overflow-y-auto">
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <div className="grid grid-cols-2 gap-3">
           <div>
-            <label htmlFor="maintenance-type" className="block text-sm font-medium text-foreground mb-1">Maintenance Type</label>
-            <select id="maintenance-type"
-              value={form.maintenance_type}
-              onChange={(e) => setForm({ ...form, maintenance_type: e.target.value })}
+            <label htmlFor="entity-type" className="block text-sm font-medium text-foreground mb-1">Entity Type</label>
+            <select id="entity-type"
+              value={form.entity_type}
+              onChange={(e) => setForm({ ...form, entity_type: e.target.value, entity_id: '' })}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
             >
-              <option value="scheduled">Scheduled</option>
-              <option value="unscheduled">Unscheduled</option>
-              <option value="inspection">Inspection</option>
+              <option value="vehicle">Vehicle</option>
+              <option value="battery">Battery</option>
+              <option value="controller">Controller</option>
+              <option value="dock">Dock</option>
+              <option value="organization">Organization-wide</option>
+              <option value="other">Other</option>
             </select>
-            {form.maintenance_type === 'scheduled' && !record && (
-              <p className="text-xs text-muted-foreground mt-1">
-                This logs work that was already performed. To plan a future or recurring task, use Add Schedule / Task instead.
-              </p>
-            )}
           </div>
           <div>
-            <label htmlFor="description" className="block text-sm font-medium text-foreground mb-1">Description</label>
-            <input id="description"
-              type="text"
-              value={form.description || ''}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
+            <label htmlFor="entity" className="block text-sm font-medium text-foreground mb-1">Entity</label>
+            {form.entity_type === 'organization' ? (
+              <input id="entity" type="text" disabled value="All" className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-muted-foreground text-sm" />
+            ) : (
+              <select id="entity"
+                value={form.entity_id || ''}
+                onChange={(e) => setForm({ ...form, entity_id: e.target.value })}
+                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
+              >
+                <option value="">{form.entity_type === 'other' ? 'No specific item' : `Select ${form.entity_type}...`}</option>
+                {[...entityOptions].sort((a, b) => getEntityName(a, form.entity_type).localeCompare(getEntityName(b, form.entity_type))).map(ent => (
+                  <option key={ent.id} value={ent.id}>{getEntityName(ent, form.entity_type)}</option>
+                ))}
+              </select>
+            )}
+          </div>
+        </div>
+        <div>
+          <label htmlFor="maintenance-type" className="block text-sm font-medium text-foreground mb-1">Maintenance Type</label>
+          <select id="maintenance-type"
+            value={form.maintenance_type}
+            onChange={(e) => setForm({ ...form, maintenance_type: e.target.value })}
+            className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
+          >
+            <option value="scheduled">Scheduled</option>
+            <option value="unscheduled">Unscheduled</option>
+            <option value="inspection">Inspection</option>
+          </select>
+          {form.maintenance_type === 'scheduled' && !record && (
+            <p className="text-xs text-muted-foreground mt-1">
+              This logs work that was already performed. To plan a future or recurring task, use Add Schedule / Task instead.
+            </p>
+          )}
+        </div>
+        <div>
+          <label htmlFor="description" className="block text-sm font-medium text-foreground mb-1">Description</label>
+          <input id="description"
+            type="text"
+            value={form.description || ''}
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+            className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label htmlFor="performed-by" className="block text-sm font-medium text-foreground mb-1">Performed By</label>
+            <select id="performed-by"
+              value={form.performed_by || ''}
+              onChange={(e) => setForm({ ...form, performed_by: e.target.value })}
+              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
+            >
+              <option value="">Select pilot...</option>
+              {sortPilotsActiveFirst(pilots).map(p => (
+                <option key={p.id} value={p.full_name}>{p.full_name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="performed-date" className="block text-sm font-medium text-foreground mb-1">Performed Date</label>
+            <input id="performed-date"
+              type="date"
+              value={form.performed_date || ''}
+              onChange={(e) => setForm({ ...form, performed_date: e.target.value })}
+              onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) setForm(prev => ({...prev, performed_date: n})) }}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring text-sm"
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label htmlFor="performed-by" className="block text-sm font-medium text-foreground mb-1">Performed By</label>
-              <select id="performed-by"
-                value={form.performed_by || ''}
-                onChange={(e) => setForm({ ...form, performed_by: e.target.value })}
-                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
-              >
-                <option value="">Select pilot...</option>
-                {sortPilotsActiveFirst(pilots).map(p => (
-                  <option key={p.id} value={p.full_name}>{p.full_name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label htmlFor="performed-date" className="block text-sm font-medium text-foreground mb-1">Performed Date</label>
-              <input id="performed-date"
-                type="date"
-                value={form.performed_date || ''}
-                onChange={(e) => setForm({ ...form, performed_date: e.target.value })}
-                onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) setForm(prev => ({...prev, performed_date: n})) }}
-                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring text-sm"
-              />
-            </div>
-          </div>
-          <div>
-            <label htmlFor="notes" className="block text-sm font-medium text-foreground mb-1">Notes</label>
-            <textarea id="notes"
-              value={form.notes || ''}
-              onChange={(e) => setForm({ ...form, notes: e.target.value })}
-              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm h-20 resize-none"
-            />
-          </div>
-          {submitError && <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg p-2">{submitError}</div>}
-          <div className="flex gap-2 pt-2">
-            <button type="submit" disabled={submitting} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50">
-              {submitting ? 'Saving...' : submitLabel}
-            </button>
-            <button type="button" onClick={onClose} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90">
-              Cancel
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        </div>
+        <div>
+          <label htmlFor="notes" className="block text-sm font-medium text-foreground mb-1">Notes</label>
+          <textarea id="notes"
+            value={form.notes || ''}
+            onChange={(e) => setForm({ ...form, notes: e.target.value })}
+            className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm h-20 resize-none"
+          />
+        </div>
+        {submitError && <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg p-2">{submitError}</div>}
+        <div className="flex gap-2 pt-2">
+          <button type="submit" disabled={submitting} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50">
+            {submitting ? 'Saving...' : submitLabel}
+          </button>
+          <button type="button" onClick={onClose} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90">
+            Cancel
+          </button>
+        </div>
+      </form>
+    </Modal>
   )
 }
 
@@ -270,122 +264,116 @@ function ScheduleModal({ schedule, onSave, onClose }) {
     return entity.serial_number || `#${entity.id}`
   }
 
-  useEscapeToClose(onClose)
-
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <button className="absolute inset-0 bg-transparent cursor-default" onClick={onClose} aria-label="Close dialog" />
-      <div role="dialog" aria-modal="true" aria-label={schedule ? 'Edit Schedule / Task' : 'Add Schedule / Task'} className="relative bg-popover border border-border rounded-xl p-6 w-full max-w-lg shadow-xl">
-        <h2 className="text-lg font-semibold text-foreground mb-4">{schedule ? 'Edit Schedule / Task' : 'Add Schedule / Task'}</h2>
-        <form onSubmit={handleSubmit} className="space-y-3">
+    <Modal open onClose={onClose} title={schedule ? 'Edit Schedule / Task' : 'Add Schedule / Task'} className="max-h-[90vh] overflow-y-auto">
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <div>
+          <label htmlFor="name" className="block text-sm font-medium text-foreground mb-1">Name *</label>
+          <input id="name"
+            type="text"
+            required
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
           <div>
-            <label htmlFor="name" className="block text-sm font-medium text-foreground mb-1">Name *</label>
-            <input id="name"
-              type="text"
-              required
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label htmlFor="entity-type-1" className="block text-sm font-medium text-foreground mb-1">Entity Type</label>
-              <select id="entity-type-1"
-                value={form.entity_type}
-                onChange={(e) => setForm({ ...form, entity_type: e.target.value, entity_id: '' })}
-                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
-              >
-                <option value="vehicle">Vehicle</option>
-                <option value="battery">Battery</option>
-                <option value="controller">Controller</option>
-                <option value="dock">Dock</option>
-                <option value="organization">Organization-wide</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
-            <div>
-              <label htmlFor="entity-1" className="block text-sm font-medium text-foreground mb-1">Entity</label>
-              {form.entity_type === 'organization' ? (
-                <input id="entity-1" type="text" disabled value="All" className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-muted-foreground text-sm" />
-              ) : (
-                <select id="entity-1"
-                  value={form.entity_id}
-                  onChange={(e) => setForm({ ...form, entity_id: e.target.value })}
-                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
-                >
-                  <option value="">{form.entity_type === 'other' ? 'No specific item' : 'Select...'}</option>
-                  {[...entities].sort((a, b) => getEntityLabel(a).localeCompare(getEntityLabel(b))).map(e => (
-                    <option key={e.id} value={e.id}>{getEntityLabel(e)}</option>
-                  ))}
-                </select>
-              )}
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label htmlFor="frequency" className="block text-sm font-medium text-foreground mb-1">Frequency</label>
-              <select id="frequency"
-                value={form.frequency}
-                onChange={(e) => setForm({ ...form, frequency: e.target.value })}
-                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
-              >
-                <option value="monthly">Monthly</option>
-                <option value="quarterly">Quarterly</option>
-                <option value="yearly">Yearly</option>
-                <option value="two_years">Every 2 Years</option>
-                <option value="three_years">Every 3 Years</option>
-                <option value="one_time">One-time task</option>
-              </select>
-            </div>
-            <div>
-              <label htmlFor="assigned-to" className="block text-sm font-medium text-foreground mb-1">Assigned To</label>
-              <select id="assigned-to"
-                value={form.assigned_to_id}
-                onChange={(e) => setForm({ ...form, assigned_to_id: e.target.value })}
-                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
-              >
-                <option value="">Unassigned</option>
-                {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
-              </select>
-            </div>
+            <label htmlFor="entity-type-1" className="block text-sm font-medium text-foreground mb-1">Entity Type</label>
+            <select id="entity-type-1"
+              value={form.entity_type}
+              onChange={(e) => setForm({ ...form, entity_type: e.target.value, entity_id: '' })}
+              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
+            >
+              <option value="vehicle">Vehicle</option>
+              <option value="battery">Battery</option>
+              <option value="controller">Controller</option>
+              <option value="dock">Dock</option>
+              <option value="organization">Organization-wide</option>
+              <option value="other">Other</option>
+            </select>
           </div>
           <div>
-            <label htmlFor="next-due" className="block text-sm font-medium text-foreground mb-1">
-              {form.frequency === 'one_time' ? 'Due Date *' : 'Due Date (optional override)'}
-            </label>
-            <input id="next-due"
-              type="date"
-              required={form.frequency === 'one_time'}
-              value={form.next_due || ''}
-              onChange={(e) => setForm({ ...form, next_due: e.target.value })}
-              onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) setForm(prev => ({ ...prev, next_due: n })) }}
-              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring text-sm"
-            />
-            {form.frequency !== 'one_time' && (
-              <p className="text-xs text-muted-foreground mt-1">Leave blank to auto-calculate from the frequency.</p>
+            <label htmlFor="entity-1" className="block text-sm font-medium text-foreground mb-1">Entity</label>
+            {form.entity_type === 'organization' ? (
+              <input id="entity-1" type="text" disabled value="All" className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-muted-foreground text-sm" />
+            ) : (
+              <select id="entity-1"
+                value={form.entity_id}
+                onChange={(e) => setForm({ ...form, entity_id: e.target.value })}
+                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
+              >
+                <option value="">{form.entity_type === 'other' ? 'No specific item' : 'Select...'}</option>
+                {[...entities].sort((a, b) => getEntityLabel(a).localeCompare(getEntityLabel(b))).map(e => (
+                  <option key={e.id} value={e.id}>{getEntityLabel(e)}</option>
+                ))}
+              </select>
             )}
           </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
           <div>
-            <label htmlFor="description-1" className="block text-sm font-medium text-foreground mb-1">Description</label>
-            <textarea id="description-1"
-              value={form.description || ''}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm h-20 resize-none"
-            />
+            <label htmlFor="frequency" className="block text-sm font-medium text-foreground mb-1">Frequency</label>
+            <select id="frequency"
+              value={form.frequency}
+              onChange={(e) => setForm({ ...form, frequency: e.target.value })}
+              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
+            >
+              <option value="monthly">Monthly</option>
+              <option value="quarterly">Quarterly</option>
+              <option value="yearly">Yearly</option>
+              <option value="two_years">Every 2 Years</option>
+              <option value="three_years">Every 3 Years</option>
+              <option value="one_time">One-time task</option>
+            </select>
           </div>
-          {submitError && <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg p-2">{submitError}</div>}
-          <div className="flex gap-2 pt-2">
-            <button type="submit" disabled={submitting} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50">
-              {submitting ? 'Saving...' : submitLabel}
-            </button>
-            <button type="button" onClick={onClose} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90">
-              Cancel
-            </button>
+          <div>
+            <label htmlFor="assigned-to" className="block text-sm font-medium text-foreground mb-1">Assigned To</label>
+            <select id="assigned-to"
+              value={form.assigned_to_id}
+              onChange={(e) => setForm({ ...form, assigned_to_id: e.target.value })}
+              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
+            >
+              <option value="">Unassigned</option>
+              {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+            </select>
           </div>
-        </form>
-      </div>
-    </div>
+        </div>
+        <div>
+          <label htmlFor="next-due" className="block text-sm font-medium text-foreground mb-1">
+            {form.frequency === 'one_time' ? 'Due Date *' : 'Due Date (optional override)'}
+          </label>
+          <input id="next-due"
+            type="date"
+            required={form.frequency === 'one_time'}
+            value={form.next_due || ''}
+            onChange={(e) => setForm({ ...form, next_due: e.target.value })}
+            onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) setForm(prev => ({ ...prev, next_due: n })) }}
+            className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+          />
+          {form.frequency !== 'one_time' && (
+            <p className="text-xs text-muted-foreground mt-1">Leave blank to auto-calculate from the frequency.</p>
+          )}
+        </div>
+        <div>
+          <label htmlFor="description-1" className="block text-sm font-medium text-foreground mb-1">Description</label>
+          <textarea id="description-1"
+            value={form.description || ''}
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+            className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm h-20 resize-none"
+          />
+        </div>
+        {submitError && <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg p-2">{submitError}</div>}
+        <div className="flex gap-2 pt-2">
+          <button type="submit" disabled={submitting} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50">
+            {submitting ? 'Saving...' : submitLabel}
+          </button>
+          <button type="button" onClick={onClose} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90">
+            Cancel
+          </button>
+        </div>
+      </form>
+    </Modal>
   )
 }
 

@@ -91,6 +91,18 @@ describe('MaintenancePage', () => {
     expect(screen.queryByText(/vehicle #1\b/i)).toBeNull()
   })
 
+  // The record form is the shared Modal: a named dialog that closes on Escape.
+  it('opens the record form as a named dialog that closes on Escape', async () => {
+    mockMount()
+    const { user } = renderWithProviders(<MaintenancePage />, { role: 'admin' })
+
+    await screen.findByText('Prop swap')
+    await user.click(screen.getByRole('button', { name: /Add Maintenance/ }))
+    expect(await screen.findByRole('dialog', { name: 'Add Maintenance' })).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  })
+
   it('excludes retired entities from the Add Maintenance and Add Schedule dropdowns', async () => {
     mockMount()
     const { user } = renderWithProviders(<MaintenancePage />, { role: 'admin' })

@@ -9,7 +9,7 @@ import {
   ClipboardCheck, Plus, Filter, X, Loader2, Check, Ban, Clock,
   ChevronDown, ChevronUp, Cloud, Download,
 } from 'lucide-react'
-import { useEscapeToClose } from '@/hooks/useEscapeToClose'
+import { Modal } from '@/components/ui/Modal'
 
 const STATUS_COLORS = {
   pending: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
@@ -61,100 +61,94 @@ function PlanModal({ pilots, vehicles, currentUser, onSave, onClose }) {
     try { await onSave(data) } finally { setSaving(false) }
   }
 
-  useEscapeToClose(onClose)
-
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <button className="absolute inset-0 bg-transparent cursor-default" onClick={onClose} aria-label="Close dialog" />
-      <div role="dialog" aria-modal="true" aria-label="Submit Flight Plan" className="relative bg-popover border border-border rounded-xl p-6 w-full max-w-2xl shadow-xl max-h-[90vh] overflow-y-auto">
-        <h2 className="text-lg font-semibold text-foreground mb-4">Submit Flight Plan</h2>
-        <form onSubmit={handleSubmit} className="space-y-3">
+    <Modal open onClose={onClose} title="Submit Flight Plan" className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <div>
+          <label htmlFor="title" className="block text-sm font-medium text-foreground mb-1">Title *</label>
+          <input id="title" type="text" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })}
+            className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" required />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
           <div>
-            <label htmlFor="title" className="block text-sm font-medium text-foreground mb-1">Title *</label>
-            <input id="title" type="text" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })}
+            <label htmlFor="planned-date-time" className="block text-sm font-medium text-foreground mb-1">Planned Date/Time *</label>
+            <input id="planned-date-time" type="datetime-local" value={form.date_planned} onChange={e => setForm({ ...form, date_planned: e.target.value })}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" required />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label htmlFor="planned-date-time" className="block text-sm font-medium text-foreground mb-1">Planned Date/Time *</label>
-              <input id="planned-date-time" type="datetime-local" value={form.date_planned} onChange={e => setForm({ ...form, date_planned: e.target.value })}
-                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" required />
-            </div>
-            <div>
-              <label htmlFor="pilot" className="block text-sm font-medium text-foreground mb-1">Pilot *</label>
-              <select id="pilot" value={form.pilot_id} onChange={e => setForm({ ...form, pilot_id: e.target.value })}
-                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" required>
-                <option value="">Select pilot...</option>
-                {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
-              </select>
-            </div>
+          <div>
+            <label htmlFor="pilot" className="block text-sm font-medium text-foreground mb-1">Pilot *</label>
+            <select id="pilot" value={form.pilot_id} onChange={e => setForm({ ...form, pilot_id: e.target.value })}
+              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" required>
+              <option value="">Select pilot...</option>
+              {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+            </select>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label htmlFor="vehicle" className="block text-sm font-medium text-foreground mb-1">Vehicle</label>
-              <select id="vehicle" value={form.vehicle_id} onChange={e => setForm({ ...form, vehicle_id: e.target.value })}
-                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
-                <option value="">Select vehicle...</option>
-                {sortVehicles(vehicles).map(v => <option key={v.id} value={v.id}>{vehicleDisplayName(v)}</option>)}
-              </select>
-            </div>
-            <div>
-              <label htmlFor="location" className="block text-sm font-medium text-foreground mb-1">Location</label>
-              <input id="location" type="text" value={form.location} onChange={e => setForm({ ...form, location: e.target.value })}
-                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label htmlFor="purpose" className="block text-sm font-medium text-foreground mb-1">Purpose</label>
-              <input id="purpose" type="text" value={form.purpose} onChange={e => setForm({ ...form, purpose: e.target.value })}
-                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
-            </div>
-            <div>
-              <label htmlFor="case-number" className="block text-sm font-medium text-foreground mb-1">Case Number</label>
-              <input id="case-number" type="text" value={form.case_number} onChange={e => setForm({ ...form, case_number: e.target.value })}
-                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
-            </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label htmlFor="vehicle" className="block text-sm font-medium text-foreground mb-1">Vehicle</label>
+            <select id="vehicle" value={form.vehicle_id} onChange={e => setForm({ ...form, vehicle_id: e.target.value })}
+              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
+              <option value="">Select vehicle...</option>
+              {sortVehicles(vehicles).map(v => <option key={v.id} value={v.id}>{vehicleDisplayName(v)}</option>)}
+            </select>
           </div>
           <div>
-            <label htmlFor="description" className="block text-sm font-medium text-foreground mb-1">Description</label>
-            <textarea id="description" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
-              rows={3} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm resize-none" />
+            <label htmlFor="location" className="block text-sm font-medium text-foreground mb-1">Location</label>
+            <input id="location" type="text" value={form.location} onChange={e => setForm({ ...form, location: e.target.value })}
+              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label htmlFor="max-altitude-ft" className="block text-sm font-medium text-foreground mb-1">Max Altitude (ft)</label>
-              <input id="max-altitude-ft" type="number" min="0" max="400" step="1" value={form.max_altitude_planned} onChange={e => setForm({ ...form, max_altitude_planned: e.target.value })}
-                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" placeholder="Max 400 ft AGL" />
-            </div>
-            <div>
-              <label htmlFor="est-duration-min" className="block text-sm font-medium text-foreground mb-1">Est. Duration (min)</label>
-              <input id="est-duration-min" type="number" value={form.estimated_duration_min} onChange={e => setForm({ ...form, estimated_duration_min: e.target.value })}
-                className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <input type="checkbox" id="checklist" checked={form.checklist_completed}
-              onChange={e => setForm({ ...form, checklist_completed: e.target.checked })}
-              className="rounded border-border" />
-            <label htmlFor="checklist" className="text-sm text-foreground">Pre-flight checklist completed</label>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label htmlFor="purpose" className="block text-sm font-medium text-foreground mb-1">Purpose</label>
+            <input id="purpose" type="text" value={form.purpose} onChange={e => setForm({ ...form, purpose: e.target.value })}
+              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
           </div>
           <div>
-            <label htmlFor="notes" className="block text-sm font-medium text-foreground mb-1">Notes</label>
-            <textarea id="notes" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })}
-              rows={2} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm resize-none" />
+            <label htmlFor="case-number" className="block text-sm font-medium text-foreground mb-1">Case Number</label>
+            <input id="case-number" type="text" value={form.case_number} onChange={e => setForm({ ...form, case_number: e.target.value })}
+              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
           </div>
-          <div className="flex gap-2 pt-2">
-            <button type="submit" disabled={saving}
-              className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2">
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Submit Plan'}
-            </button>
-            <button type="button" onClick={onClose}
-              className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm">Cancel</button>
+        </div>
+        <div>
+          <label htmlFor="description" className="block text-sm font-medium text-foreground mb-1">Description</label>
+          <textarea id="description" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
+            rows={3} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm resize-none" />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label htmlFor="max-altitude-ft" className="block text-sm font-medium text-foreground mb-1">Max Altitude (ft)</label>
+            <input id="max-altitude-ft" type="number" min="0" max="400" step="1" value={form.max_altitude_planned} onChange={e => setForm({ ...form, max_altitude_planned: e.target.value })}
+              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" placeholder="Max 400 ft AGL" />
           </div>
-        </form>
-      </div>
-    </div>
+          <div>
+            <label htmlFor="est-duration-min" className="block text-sm font-medium text-foreground mb-1">Est. Duration (min)</label>
+            <input id="est-duration-min" type="number" value={form.estimated_duration_min} onChange={e => setForm({ ...form, estimated_duration_min: e.target.value })}
+              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <input type="checkbox" id="checklist" checked={form.checklist_completed}
+            onChange={e => setForm({ ...form, checklist_completed: e.target.checked })}
+            className="rounded border-border" />
+          <label htmlFor="checklist" className="text-sm text-foreground">Pre-flight checklist completed</label>
+        </div>
+        <div>
+          <label htmlFor="notes" className="block text-sm font-medium text-foreground mb-1">Notes</label>
+          <textarea id="notes" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })}
+            rows={2} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm resize-none" />
+        </div>
+        <div className="flex gap-2 pt-2">
+          <button type="submit" disabled={saving}
+            className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2">
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Submit Plan'}
+          </button>
+          <button type="button" onClick={onClose}
+            className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm">Cancel</button>
+        </div>
+      </form>
+    </Modal>
   )
 }
 
@@ -170,35 +164,29 @@ function DenyModal({ plan, onDeny, onClose }) {
     try { await onDeny(plan.id, { denial_reason: reason, review_notes: notes || undefined }) } finally { setSaving(false) }
   }
 
-  useEscapeToClose(onClose)
-
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <button className="absolute inset-0 bg-transparent cursor-default" onClick={onClose} aria-label="Close dialog" />
-      <div role="dialog" aria-modal="true" aria-label="Deny Flight Plan" className="relative bg-popover border border-border rounded-xl p-6 w-full max-w-md shadow-xl">
-        <h2 className="text-lg font-semibold text-foreground mb-4">Deny Flight Plan</h2>
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <div>
-            <label htmlFor="denial-reason" className="block text-sm font-medium text-foreground mb-1">Denial Reason *</label>
-            <textarea id="denial-reason" value={reason} onChange={e => setReason(e.target.value)}
-              rows={3} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm resize-none" required />
-          </div>
-          <div>
-            <label htmlFor="review-notes" className="block text-sm font-medium text-foreground mb-1">Review Notes</label>
-            <textarea id="review-notes" value={notes} onChange={e => setNotes(e.target.value)}
-              rows={2} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm resize-none" />
-          </div>
-          <div className="flex gap-2 pt-2">
-            <button type="submit" disabled={saving}
-              className="flex-1 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2">
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Deny Plan'}
-            </button>
-            <button type="button" onClick={onClose}
-              className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm">Cancel</button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <Modal open onClose={onClose} title="Deny Flight Plan" className="max-w-md">
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <div>
+          <label htmlFor="denial-reason" className="block text-sm font-medium text-foreground mb-1">Denial Reason *</label>
+          <textarea id="denial-reason" value={reason} onChange={e => setReason(e.target.value)}
+            rows={3} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm resize-none" required />
+        </div>
+        <div>
+          <label htmlFor="review-notes" className="block text-sm font-medium text-foreground mb-1">Review Notes</label>
+          <textarea id="review-notes" value={notes} onChange={e => setNotes(e.target.value)}
+            rows={2} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm resize-none" />
+        </div>
+        <div className="flex gap-2 pt-2">
+          <button type="submit" disabled={saving}
+            className="flex-1 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2">
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Deny Plan'}
+          </button>
+          <button type="button" onClick={onClose}
+            className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm">Cancel</button>
+        </div>
+      </form>
+    </Modal>
   )
 }
 

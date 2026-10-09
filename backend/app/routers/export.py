@@ -12,7 +12,7 @@ from starlette.concurrency import run_in_threadpool
 from sqlalchemy.orm import joinedload
 
 from app.models.flight import Flight
-from app.services.local_time import display_zone
+from app.services.local_time import display_zone, stamped_on_or_after, stamped_on_or_before
 from app.services.pilot_contacts import hides_contacts
 from app.models.pilot import Pilot
 from app.models.vehicle import Vehicle
@@ -90,12 +90,12 @@ def _csv_fmt_utc(dt):
     return dt.strftime("%Y-%m-%d %H:%M") if dt else ""
 
 
-def _csv_fmt_local(dt, local_tz):
+def _csv_fmt_local(dt, local_tz, fmt="%Y-%m-%d %H:%M"):
     """A stored UTC datetime converted to the configured local zone, or empty."""
     if not dt:
         return ""
     from datetime import timezone
-    return dt.replace(tzinfo=timezone.utc).astimezone(local_tz).strftime("%Y-%m-%d %H:%M")
+    return dt.replace(tzinfo=timezone.utc).astimezone(local_tz).strftime(fmt)
 
 
 def _csv_eq(v):
@@ -337,6 +337,7 @@ def export_checklists_csv(db: DBSession, user: CurrentUser):
         "checklists",
     )
 
+    local_tz = display_zone(db)
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(["Date", "Pilot", "Vehicle", "Template", "Passed", "Notes"])
@@ -345,7 +346,7 @@ def export_checklists_csv(db: DBSession, user: CurrentUser):
         vehicle = db.query(Vehicle).filter(Vehicle.id == c.vehicle_id).first() if c.vehicle_id else None
         template = db.query(ChecklistTemplate).filter(ChecklistTemplate.id == c.template_id).first()
         writer.writerow([
-            c.completed_at.strftime("%Y-%m-%d %H:%M") if c.completed_at else "",
+            _csv_fmt_local(c.completed_at, local_tz),
             _csv_safe(pilot.full_name) if pilot else "",
             _csv_safe(f"{vehicle.manufacturer} {vehicle.model}") if vehicle else "",
             _csv_safe(template.name) if template else "",
@@ -582,12 +583,12 @@ def export_audit_csv(
     date_from: date | None = None,
     date_to: date | None = None):
     from app.models.audit_log import AuditLog
-    from sqlalchemy import func as sqlfunc
+    local_tz = display_zone(db)
     q = db.query(AuditLog)
     if date_from:
-        q = q.filter(sqlfunc.date(AuditLog.created_at) >= date_from)
+        q = q.filter(stamped_on_or_after(AuditLog.created_at, date_from, local_tz))
     if date_to:
-        q = q.filter(sqlfunc.date(AuditLog.created_at) <= date_to)
+        q = q.filter(stamped_on_or_before(AuditLog.created_at, date_to, local_tz))
     logs = q.order_by(AuditLog.created_at.desc()).limit(5000).all()
 
     output = io.StringIO()
@@ -598,7 +599,7 @@ def export_audit_csv(
     ])
     for log in logs:
         writer.writerow([
-            log.created_at.strftime("%Y-%m-%d %H:%M:%S") if log.created_at else "",
+            _csv_fmt_local(log.created_at, local_tz, "%Y-%m-%d %H:%M:%S"),
             _csv_safe(log.user_name or ""), _csv_safe(log.action), _csv_safe(log.entity_type),
             log.entity_id or "", _csv_safe(log.entity_name or ""),
             _csv_safe(log.details or ""), _csv_safe(log.ip_address or ""),
@@ -611,15 +612,16 @@ def export_audit_csv(
     )
 
 
-def _equipment_checkout_csv_row(c, db):
-    """One equipment-checkouts-export row."""
+def _equipment_checkout_csv_row(c, db, local_tz):
+    """One equipment-checkouts-export row. Out and in are server-stamped (UTC);
+    the expected return is a wall-clock time someone typed in."""
     pilot_out = db.query(Pilot).filter(Pilot.id == c.checked_out_by_id).first() if c.checked_out_by_id else None
     return [
         _csv_safe(c.entity_type), _csv_safe(c.entity_name or ""),
         _csv_safe(pilot_out.full_name) if pilot_out else "",
-        c.checked_out_at.strftime("%Y-%m-%d %H:%M") if c.checked_out_at else "",
+        _csv_fmt_local(c.checked_out_at, local_tz),
         c.expected_return.strftime("%Y-%m-%d %H:%M") if c.expected_return else "",
-        c.checked_in_at.strftime("%Y-%m-%d %H:%M") if c.checked_in_at else "",
+        _csv_fmt_local(c.checked_in_at, local_tz),
         _csv_safe(c.condition_out or ""), _csv_safe(c.condition_in or ""),
         _csv_safe(c.notes_out or ""), _csv_safe(c.notes_in or ""),
     ]
@@ -632,12 +634,12 @@ def export_equipment_checkouts_csv(
     date_from: date | None = None,
     date_to: date | None = None):
     from app.models.equipment_checkout import EquipmentCheckout
-    from sqlalchemy import func as sqlfunc
+    local_tz = display_zone(db)
     q = db.query(EquipmentCheckout)
     if date_from:
-        q = q.filter(sqlfunc.date(EquipmentCheckout.checked_out_at) >= date_from)
+        q = q.filter(stamped_on_or_after(EquipmentCheckout.checked_out_at, date_from, local_tz))
     if date_to:
-        q = q.filter(sqlfunc.date(EquipmentCheckout.checked_out_at) <= date_to)
+        q = q.filter(stamped_on_or_before(EquipmentCheckout.checked_out_at, date_to, local_tz))
     checkouts = _cap_rows(q.order_by(EquipmentCheckout.checked_out_at.desc()).all(), "equipment_checkouts")
 
     output = io.StringIO()
@@ -648,7 +650,7 @@ def export_equipment_checkouts_csv(
         "Notes Out", "Notes In",
     ])
     for c in checkouts:
-        writer.writerow(_equipment_checkout_csv_row(c, db))
+        writer.writerow(_equipment_checkout_csv_row(c, db, local_tz))
     output.seek(0)
     return StreamingResponse(
         iter([output.getvalue()]),
