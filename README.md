@@ -286,7 +286,7 @@ Import flight logs from DJI Go 4 (.txt files) or Litchi (.csv files). The applic
 
 ## API Documentation
 
-Interactive API documentation is available at `/docs` (Swagger UI) and `/redoc` (ReDoc) on your running instance.
+Interactive API documentation (`/docs` for Swagger UI, `/redoc` for ReDoc, and the OpenAPI schema) is off by default, so a production instance does not publish its API surface. Set the environment variable `EXPOSE_API_DOCS=true` to turn it on, for example in development.
 
 ## Backup and Restore
 

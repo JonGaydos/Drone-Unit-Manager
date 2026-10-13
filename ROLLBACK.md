@@ -3,10 +3,11 @@
 ## Production
 
 Production runs a pinned version tag on Unraid (port 3014), not `:latest`.
-It moves from 3.2.1 straight to 3.2.3; 3.2.2 was released and tested on
-staging but never ran on production.
+It moved from 3.2.1 straight to 3.2.3 (running on production, confirmed
+2026-10-13); 3.2.2 was released and tested on staging but never ran on
+production.
 
-| | Next | Current | Before 3.x migrations |
+| | Current | Rollback target | Before 3.x migrations |
 | --- | --- | --- | --- |
 | Version | 3.2.3 | 3.2.1 | 3.0.17 |
 | Tag | `v3.2.3` | `v3.2.1` | `v3.0.17` |
