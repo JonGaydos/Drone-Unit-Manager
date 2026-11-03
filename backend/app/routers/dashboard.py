@@ -666,7 +666,7 @@ def compliance_dashboard(db: DBSession, user: CurrentUser):
     # Pilot currency: reuses currency.py's evaluator so the rule semantics stay
     # identical to PilotDetailPage.
     currency_rules_active, pilot_currency_status, pilots_current, pilots_lapsed = _currency_status(
-        db, total_pilots, with_email=not hides_contacts(user))
+        db, total_pilots, with_email=not hides_contacts(db, user))
 
     # Operating authority (org-level COAs / Part 107 waivers).
     authorities, expired_authorities, expiring_authorities, grounding_expired, advisory_expired, score_cap_reason = _authority_summary(db, today)

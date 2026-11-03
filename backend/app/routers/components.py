@@ -1,16 +1,21 @@
 from datetime import date
-from typing import Optional
+from typing import Annotated, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from app.constants import COMPONENT_NOT_FOUND
-from app.deps import DBSession, CurrentUser, PilotUser, SupervisorUser
+from app.deps import DBSession
+from app.models.user import User
+from app.routers.auth import require_permission
 from app.models.component import Component
 from app.services.audit import log_action
 from app.responses import responses
 
 router = APIRouter(prefix="/api/components", tags=["components"])
+
+ViewUser = Annotated[User, Depends(require_permission("fleet.view"))]
+ManageUser = Annotated[User, Depends(require_permission("fleet.manage"))]
 
 
 
@@ -70,7 +75,7 @@ def _serialize(c: Component) -> dict:
 @router.get("")
 def list_components(
     db: DBSession,
-    user: CurrentUser,
+    user: ViewUser,
     vehicle_id: Optional[int] = None,
     component_type: Optional[str] = None,
     status: Optional[str] = None):
@@ -85,7 +90,7 @@ def list_components(
 
 
 @router.get("/{component_id}", responses=responses(401, 404))
-def get_component(component_id: int, db: DBSession, user: CurrentUser):
+def get_component(component_id: int, db: DBSession, user: ViewUser):
     c = db.query(Component).filter(Component.id == component_id).first()
     if not c:
         raise HTTPException(404, COMPONENT_NOT_FOUND)
@@ -93,7 +98,7 @@ def get_component(component_id: int, db: DBSession, user: CurrentUser):
 
 
 @router.post("", status_code=201, responses=responses(401))
-def create_component(data: ComponentCreate, db: DBSession, user: PilotUser):
+def create_component(data: ComponentCreate, db: DBSession, user: ManageUser):
     c = Component(
         name=data.name,
         component_type=data.component_type,
@@ -117,7 +122,7 @@ def create_component(data: ComponentCreate, db: DBSession, user: PilotUser):
 
 
 @router.patch("/{component_id}", responses=responses(401, 404))
-def update_component(component_id: int, data: ComponentUpdate, db: DBSession, user: PilotUser):
+def update_component(component_id: int, data: ComponentUpdate, db: DBSession, user: ManageUser):
     c = db.query(Component).filter(Component.id == component_id).first()
     if not c:
         raise HTTPException(404, COMPONENT_NOT_FOUND)
@@ -134,7 +139,7 @@ def update_component(component_id: int, data: ComponentUpdate, db: DBSession, us
 
 
 @router.delete("/{component_id}", responses=responses(401, 404))
-def delete_component(component_id: int, db: DBSession, user: SupervisorUser):
+def delete_component(component_id: int, db: DBSession, user: ManageUser):
     c = db.query(Component).filter(Component.id == component_id).first()
     if not c:
         raise HTTPException(404, COMPONENT_NOT_FOUND)

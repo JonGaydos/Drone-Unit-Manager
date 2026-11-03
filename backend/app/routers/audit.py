@@ -1,14 +1,21 @@
-from fastapi import APIRouter, Query
-from app.deps import DBSession, AdminUser
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Query
+
+from app.deps import DBSession
 from app.models.audit_log import AuditLog
+from app.models.user import User
+from app.routers.auth import require_permission
 
 router = APIRouter(prefix="/api/audit", tags=["audit"])
+
+ViewUser = Annotated[User, Depends(require_permission("audit.view"))]
 
 
 @router.get("")
 def list_audit_logs(
     db: DBSession,
-    user: AdminUser,
+    user: ViewUser,
     entity_type: str | None = None,
     entity_id: int | None = None,
     user_id: int | None = None,

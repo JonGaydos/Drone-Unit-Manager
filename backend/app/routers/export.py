@@ -148,7 +148,7 @@ def export_flights_csv(
     display timezone.
     """
     local_tz = display_zone(db)
-    with_email = not hides_contacts(user)
+    with_email = not hides_contacts(db, user)
 
     q = db.query(Flight).options(joinedload(Flight.pilot), joinedload(Flight.vehicle))
     if date_from:

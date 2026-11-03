@@ -1,16 +1,21 @@
 import math
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from app.constants import GEOFENCE_NOT_FOUND
-from app.deps import CurrentUser, DBSession, SupervisorUser
+from app.deps import DBSession
+from app.models.user import User
+from app.routers.auth import require_permission
 from app.models.geofence import Geofence
 from app.services.audit import log_action
 from app.responses import responses
 
 router = APIRouter(prefix="/api/geofences", tags=["geofences"])
+
+ViewUser = Annotated[User, Depends(require_permission("authority.view"))]
+ManageUser = Annotated[User, Depends(require_permission("authority.manage"))]
 
 
 
@@ -98,7 +103,7 @@ def check_geofences(
 
     db: DBSession,
 
-    user: CurrentUser,
+    user: ViewUser,
 
     lat: Annotated[float, Query(...)],
 
@@ -127,7 +132,7 @@ def check_geofences(
 @router.get("")
 def list_geofences(
     db: DBSession,
-    user: CurrentUser,
+    user: ViewUser,
     zone_type: Optional[str] = None,
     active_only: bool = True):
     q = db.query(Geofence)
@@ -139,7 +144,7 @@ def list_geofences(
 
 
 @router.get("/{geofence_id}", responses=responses(401, 404))
-def get_geofence(geofence_id: int, db: DBSession, user: CurrentUser):
+def get_geofence(geofence_id: int, db: DBSession, user: ViewUser):
     g = db.query(Geofence).filter(Geofence.id == geofence_id).first()
     if not g:
         raise HTTPException(404, GEOFENCE_NOT_FOUND)
@@ -147,7 +152,7 @@ def get_geofence(geofence_id: int, db: DBSession, user: CurrentUser):
 
 
 @router.post("", status_code=201, responses=responses(401))
-def create_geofence(data: GeofenceCreate, db: DBSession, user: SupervisorUser):
+def create_geofence(data: GeofenceCreate, db: DBSession, user: ManageUser):
     g = Geofence(
         name=data.name,
         description=data.description,
@@ -170,7 +175,7 @@ def create_geofence(data: GeofenceCreate, db: DBSession, user: SupervisorUser):
 
 
 @router.patch("/{geofence_id}", responses=responses(401, 404))
-def update_geofence(geofence_id: int, data: GeofenceUpdate, db: DBSession, user: SupervisorUser):
+def update_geofence(geofence_id: int, data: GeofenceUpdate, db: DBSession, user: ManageUser):
     g = db.query(Geofence).filter(Geofence.id == geofence_id).first()
     if not g:
         raise HTTPException(404, GEOFENCE_NOT_FOUND)
@@ -184,7 +189,7 @@ def update_geofence(geofence_id: int, data: GeofenceUpdate, db: DBSession, user:
 
 
 @router.delete("/{geofence_id}", responses=responses(401, 404))
-def delete_geofence(geofence_id: int, db: DBSession, user: SupervisorUser):
+def delete_geofence(geofence_id: int, db: DBSession, user: ManageUser):
     g = db.query(Geofence).filter(Geofence.id == geofence_id).first()
     if not g:
         raise HTTPException(404, GEOFENCE_NOT_FOUND)

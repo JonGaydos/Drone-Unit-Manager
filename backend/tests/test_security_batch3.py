@@ -220,10 +220,10 @@ def test_photo_upload_edit_and_links_are_audited(client, db, pilot_user, supervi
     assert [e.action for e in _audit(db, "photo") if e.action in ("link", "unlink")] == ["link", "unlink"]
 
 
-def test_folder_changes_are_audited(client, db, pilot_user):
-    folder_id = client.post("/api/folders", headers=_bearer(pilot_user), json={"name": "Case 12"}).json()["id"]
-    client.patch(f"/api/folders/{folder_id}", headers=_bearer(pilot_user), json={"name": "Case 12A"})
-    client.delete(f"/api/folders/{folder_id}", headers=_bearer(pilot_user))
+def test_folder_changes_are_audited(client, db, supervisor_user):
+    folder_id = client.post("/api/folders", headers=_bearer(supervisor_user), json={"name": "Case 12"}).json()["id"]
+    client.patch(f"/api/folders/{folder_id}", headers=_bearer(supervisor_user), json={"name": "Case 12A"})
+    client.delete(f"/api/folders/{folder_id}", headers=_bearer(supervisor_user))
     assert [e.action for e in _audit(db, "folder")] == ["create", "update", "delete"]
 
 

@@ -1,25 +1,32 @@
 """Vehicle (drone) CRUD endpoints with flight statistics and profile photo management."""
 
 from pathlib import Path
+from typing import Annotated
 
 import anyio
-from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from app.config import settings
 from app.constants import VEHICLE_NOT_FOUND, ACCESS_DENIED, FILE_TYPE_NOT_ALLOWED, FILE_TOO_LARGE
-from app.deps import DBSession, CurrentUser, AdminUser, SupervisorUser, PilotUser
+from app.deps import DBSession, AdminUser
+from app.models.user import User
+from app.routers.auth import require_permission
 from app.models.vehicle import Vehicle
 from app.schemas.vehicle import VehicleCreate, VehicleUpdate, VehicleOut, VehicleLocationUpdate
 from app.responses import responses
 
 router = APIRouter(prefix="/api/vehicles", tags=["vehicles"])
 
+ViewUser = Annotated[User, Depends(require_permission("fleet.view"))]
+ManageUser = Annotated[User, Depends(require_permission("fleet.manage"))]
+LocationUser = Annotated[User, Depends(require_permission("fleet.location"))]
+
 
 @router.get("", response_model=list[VehicleOut])
 def list_vehicles(
     db: DBSession,
-    user: CurrentUser,
+    user: ViewUser,
     status: str | None = None,
     manufacturer: str | None = None):
     """List all vehicles with optional filtering by status and manufacturer.
@@ -75,7 +82,7 @@ def _resolve_vehicle_location(v, co, names):
 
 
 @router.get("/locations", responses=responses(401))
-def vehicle_locations(db: DBSession, user: CurrentUser):
+def vehicle_locations(db: DBSession, user: ViewUser):
     """Current location per active drone: the more recent of an active checkout
     (with a pilot) or a manually-set location. Readable by any user."""
     from app.models.pilot import Pilot
@@ -95,7 +102,7 @@ def vehicle_locations(db: DBSession, user: CurrentUser):
 
 
 @router.get("/{vehicle_id}", response_model=VehicleOut, responses=responses(401, 404))
-def get_vehicle(vehicle_id: int, db: DBSession, user: CurrentUser):
+def get_vehicle(vehicle_id: int, db: DBSession, user: ViewUser):
     """Retrieve a single vehicle by ID."""
     vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
     if not vehicle:
@@ -104,7 +111,7 @@ def get_vehicle(vehicle_id: int, db: DBSession, user: CurrentUser):
 
 
 @router.post("/{target_id}/merge", responses=responses(400, 401, 404))
-def merge_vehicles(target_id: int, merge_from_id: int, db: DBSession, admin: SupervisorUser):
+def merge_vehicles(target_id: int, merge_from_id: int, db: DBSession, admin: ManageUser):
     """Merge a duplicate vehicle (source) into a keeper (target).
 
     Reassigns every reference (flights, flight plans, incidents, mission and
@@ -186,7 +193,7 @@ def merge_vehicles(target_id: int, merge_from_id: int, db: DBSession, admin: Sup
 
 
 @router.get("/{vehicle_id}/stats", responses=responses(401, 404))
-def get_vehicle_stats(vehicle_id: int, db: DBSession, user: CurrentUser):
+def get_vehicle_stats(vehicle_id: int, db: DBSession, user: ViewUser):
     """Get aggregated flight statistics for a vehicle (total flights, hours, last flight date)."""
     from sqlalchemy import func
     from app.models.flight import Flight
@@ -207,7 +214,7 @@ def get_vehicle_stats(vehicle_id: int, db: DBSession, user: CurrentUser):
 
 
 @router.post("", response_model=VehicleOut, responses=responses(400, 401))
-def create_vehicle(data: VehicleCreate, db: DBSession, admin: SupervisorUser):
+def create_vehicle(data: VehicleCreate, db: DBSession, admin: ManageUser):
     """Create a new vehicle record. Enforces unique serial numbers. Supervisor or admin only."""
     from app.services.audit import log_action
     if db.query(Vehicle).filter(Vehicle.serial_number == data.serial_number).first():
@@ -224,7 +231,7 @@ def create_vehicle(data: VehicleCreate, db: DBSession, admin: SupervisorUser):
 
 
 @router.patch("/{vehicle_id}", response_model=VehicleOut, responses=responses(401, 404))
-def update_vehicle(vehicle_id: int, data: VehicleUpdate, db: DBSession, admin: SupervisorUser):
+def update_vehicle(vehicle_id: int, data: VehicleUpdate, db: DBSession, admin: ManageUser):
     """Update a vehicle's details with audit-logged change tracking. Supervisor or admin only."""
     from app.services.audit import log_action, compute_changes
     vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
@@ -242,7 +249,7 @@ def update_vehicle(vehicle_id: int, data: VehicleUpdate, db: DBSession, admin: S
 
 
 @router.patch("/{vehicle_id}/location", responses=responses(400, 401, 404))
-def set_vehicle_location(vehicle_id: int, data: VehicleLocationUpdate, db: DBSession, user: PilotUser):
+def set_vehicle_location(vehicle_id: int, data: VehicleLocationUpdate, db: DBSession, user: LocationUser):
     """Manually set a drone's location to a pilot OR a named place. Pilots and above."""
     from datetime import datetime, timezone
     from app.services.audit import log_action
@@ -273,7 +280,7 @@ def set_vehicle_location(vehicle_id: int, data: VehicleLocationUpdate, db: DBSes
 
 
 @router.delete("/{vehicle_id}", responses=responses(401, 404))
-def delete_vehicle(vehicle_id: int, db: DBSession, admin: SupervisorUser):
+def delete_vehicle(vehicle_id: int, db: DBSession, admin: ManageUser):
     """Soft-delete a vehicle by setting status to retired. Supervisor or admin only."""
     from app.services.audit import log_action
     vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
@@ -320,7 +327,7 @@ async def upload_vehicle_photo(vehicle_id: int, file: UploadFile, db: DBSession,
 
 
 @router.get("/{vehicle_id}/photo/view", responses=responses(401, 403, 404))
-def view_vehicle_photo(vehicle_id: int, db: DBSession, _user: CurrentUser):
+def view_vehicle_photo(vehicle_id: int, db: DBSession, _user: ViewUser):
     """Serve a vehicle's profile photo with path-traversal prevention."""
     vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
     if not vehicle:

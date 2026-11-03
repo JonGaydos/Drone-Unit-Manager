@@ -1,25 +1,63 @@
 from datetime import date
-from typing import Optional
+from typing import Annotated, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 
 from app.constants import BATTERY_NOT_FOUND, CONTROLLER_NOT_FOUND, SENSOR_NOT_FOUND, ATTACHMENT_NOT_FOUND, DOCK_NOT_FOUND
-from app.deps import DBSession, CurrentUser, SupervisorUser
+from app.deps import CurrentUser, DBSession
+from app.models.user import User
+from app.routers.auth import require_permission
 from app.models.battery import Battery
 from app.models.controller import Controller
 from app.models.dock import Dock
 from app.models.sensor import SensorPackage
 from app.models.attachment import Attachment
 from app.models.other_equipment import OtherEquipment
+from app.models.vehicle import Vehicle
 from app.responses import responses
 from app.services.equipment_lifecycle import end_schedules
 from app.services.equipment_lifecycle import set_fields_with_lifecycle as _set_fields_with_lifecycle
 
 router = APIRouter(prefix="/api", tags=["equipment"])
 
+ViewUser = Annotated[User, Depends(require_permission("fleet.view"))]
+ManageUser = Annotated[User, Depends(require_permission("fleet.manage"))]
+
 OTHER_EQUIPMENT_NOT_FOUND = "Equipment item not found"
+
+def _option_rows(db, model, label) -> list[dict]:
+    """Picker rows (id, name, status) for one equipment table, sorted by name."""
+    rows = [{"id": r.id, "name": label(r), "status": r.status} for r in db.query(model).all()]
+    return sorted(rows, key=lambda row: row["name"].lower())
+
+
+def _nickname_or_serial(item) -> str:
+    return item.nickname or item.serial_number
+
+
+def _name_or_serial(item) -> str:
+    return item.name or item.serial_number
+
+
+@router.get("/fleet/options", responses=responses(401))
+def fleet_options(db: DBSession, user: CurrentUser):
+    """Every equipment type as picker rows of id, name and status.
+
+    Open to any signed-in user so forms can offer a vehicle or item without the
+    fleet lists. Retired items are included with their status.
+    """
+    return {
+        "vehicles": _option_rows(db, Vehicle, _nickname_or_serial),
+        "batteries": _option_rows(db, Battery, _nickname_or_serial),
+        "controllers": _option_rows(db, Controller, _nickname_or_serial),
+        "sensors": _option_rows(db, SensorPackage, _name_or_serial),
+        "attachments": _option_rows(db, Attachment, _name_or_serial),
+        "docks": _option_rows(db, Dock, _name_or_serial),
+        "other_equipment": _option_rows(db, OtherEquipment, _name_or_serial),
+    }
+
 
 class BatteryCreate(BaseModel):
     serial_number: str
@@ -63,11 +101,11 @@ class BatteryOut(BaseModel):
     model_config = {"from_attributes": True}
 
 @router.get("/batteries", response_model=list[BatteryOut], responses=responses(401))
-def list_batteries(db: DBSession, user: CurrentUser):
+def list_batteries(db: DBSession, user: ViewUser):
     return [BatteryOut.model_validate(b) for b in db.query(Battery).order_by(Battery.serial_number).all()]
 
 @router.post("/batteries", response_model=BatteryOut, responses=responses(401))
-def create_battery(data: BatteryCreate, db: DBSession, admin: SupervisorUser):
+def create_battery(data: BatteryCreate, db: DBSession, admin: ManageUser):
     b = Battery()
     _set_fields_with_lifecycle(b, data.model_dump())
     db.add(b)
@@ -76,7 +114,7 @@ def create_battery(data: BatteryCreate, db: DBSession, admin: SupervisorUser):
     return BatteryOut.model_validate(b)
 
 @router.patch("/batteries/{bid}", response_model=BatteryOut, responses=responses(401, 404))
-def update_battery(bid: int, data: BatteryUpdate, db: DBSession, admin: SupervisorUser):
+def update_battery(bid: int, data: BatteryUpdate, db: DBSession, admin: ManageUser):
     b = db.query(Battery).filter(Battery.id == bid).first()
     if not b:
         raise HTTPException(404, BATTERY_NOT_FOUND)
@@ -86,7 +124,7 @@ def update_battery(bid: int, data: BatteryUpdate, db: DBSession, admin: Supervis
     return BatteryOut.model_validate(b)
 
 @router.delete("/batteries/{bid}", responses=responses(401, 404))
-def delete_battery(bid: int, db: DBSession, admin: SupervisorUser):
+def delete_battery(bid: int, db: DBSession, admin: ManageUser):
     b = db.query(Battery).filter(Battery.id == bid).first()
     if not b:
         raise HTTPException(404, BATTERY_NOT_FOUND)
@@ -96,14 +134,14 @@ def delete_battery(bid: int, db: DBSession, admin: SupervisorUser):
     return {"ok": True}
 
 @router.get("/batteries/{bid}", response_model=BatteryOut, responses=responses(401, 404))
-def get_battery(bid: int, db: DBSession, user: CurrentUser):
+def get_battery(bid: int, db: DBSession, user: ViewUser):
     b = db.query(Battery).filter(Battery.id == bid).first()
     if not b:
         raise HTTPException(404, BATTERY_NOT_FOUND)
     return BatteryOut.model_validate(b)
 
 @router.get("/batteries/{bid}/stats", responses=responses(401, 404))
-def get_battery_stats(bid: int, db: DBSession, user: CurrentUser):
+def get_battery_stats(bid: int, db: DBSession, user: ViewUser):
     from app.models.flight import Flight
     battery = db.query(Battery).filter(Battery.id == bid).first()
     if not battery:
@@ -114,7 +152,7 @@ def get_battery_stats(bid: int, db: DBSession, user: CurrentUser):
 
 
 @router.get("/batteries/{bid}/flights", responses=responses(401, 404))
-def get_battery_flights(bid: int, db: DBSession, user: CurrentUser):
+def get_battery_flights(bid: int, db: DBSession, user: ViewUser):
     """Get all flights that used a specific battery."""
     from app.models.flight import Flight
     from app.models.pilot import Pilot
@@ -138,7 +176,7 @@ def get_battery_flights(bid: int, db: DBSession, user: CurrentUser):
 
 
 @router.get("/batteries/{bid}/pilots", responses=responses(401, 404))
-def get_battery_pilots(bid: int, db: DBSession, user: CurrentUser):
+def get_battery_pilots(bid: int, db: DBSession, user: ViewUser):
     """Get unique pilots who have used a specific battery."""
     from app.models.flight import Flight
     from app.models.pilot import Pilot
@@ -154,7 +192,7 @@ def get_battery_pilots(bid: int, db: DBSession, user: CurrentUser):
 
 
 @router.post("/batteries/{bid}/merge", responses=responses(400, 401, 404))
-def merge_batteries(bid: int, merge_from_id: int, db: DBSession, admin: SupervisorUser):
+def merge_batteries(bid: int, merge_from_id: int, db: DBSession, admin: ManageUser):
     """Merge a duplicate battery into this one. Updates all flight references and deletes the duplicate."""
     from app.services.audit import log_action
     from app.models.flight import Flight
@@ -186,7 +224,7 @@ def merge_batteries(bid: int, merge_from_id: int, db: DBSession, admin: Supervis
 
 
 @router.post("/attachments/{aid}/merge", responses=responses(400, 401, 404))
-def merge_attachments(aid: int, merge_from_id: int, db: DBSession, admin: SupervisorUser):
+def merge_attachments(aid: int, merge_from_id: int, db: DBSession, admin: ManageUser):
     """Merge a duplicate attachment into this one."""
     from app.services.audit import log_action
     target = db.query(Attachment).filter(Attachment.id == aid).first()
@@ -208,7 +246,7 @@ def merge_attachments(aid: int, merge_from_id: int, db: DBSession, admin: Superv
 
 
 @router.post("/sensors/{sid}/merge", responses=responses(400, 401, 404))
-def merge_sensors(sid: int, merge_from_id: int, db: DBSession, admin: SupervisorUser):
+def merge_sensors(sid: int, merge_from_id: int, db: DBSession, admin: ManageUser):
     """Merge a duplicate sensor package into this one."""
     from app.services.audit import log_action
     from app.models.sensor import SensorPackage as SP
@@ -239,7 +277,7 @@ class BatteryReadingCreate(BaseModel):
 
 
 @router.get("/batteries/{bid}/health-history", responses=responses(401, 404))
-def get_battery_health_history(bid: int, db: DBSession, user: CurrentUser):
+def get_battery_health_history(bid: int, db: DBSession, user: ViewUser):
     """Get historical health readings for a battery, ordered by date."""
     from app.models.battery_reading import BatteryReading
     b = db.query(Battery).filter(Battery.id == bid).first()
@@ -265,7 +303,7 @@ def get_battery_health_history(bid: int, db: DBSession, user: CurrentUser):
 
 
 @router.post("/batteries/{bid}/readings", responses=responses(401, 404))
-def add_battery_reading(bid: int, data: BatteryReadingCreate, db: DBSession, admin: SupervisorUser):
+def add_battery_reading(bid: int, data: BatteryReadingCreate, db: DBSession, admin: ManageUser):
     """Manually record a battery health reading."""
     from app.models.battery_reading import BatteryReading
     b = db.query(Battery).filter(Battery.id == bid).first()
@@ -327,11 +365,11 @@ class ControllerOut(BaseModel):
     model_config = {"from_attributes": True}
 
 @router.get("/controllers", response_model=list[ControllerOut], responses=responses(401))
-def list_controllers(db: DBSession, user: CurrentUser):
+def list_controllers(db: DBSession, user: ViewUser):
     return [ControllerOut.model_validate(c) for c in db.query(Controller).order_by(Controller.serial_number).all()]
 
 @router.post("/controllers", response_model=ControllerOut, responses=responses(401))
-def create_controller(data: ControllerCreate, db: DBSession, admin: SupervisorUser):
+def create_controller(data: ControllerCreate, db: DBSession, admin: ManageUser):
     c = Controller()
     _set_fields_with_lifecycle(c, data.model_dump())
     db.add(c)
@@ -340,7 +378,7 @@ def create_controller(data: ControllerCreate, db: DBSession, admin: SupervisorUs
     return ControllerOut.model_validate(c)
 
 @router.patch("/controllers/{cid}", response_model=ControllerOut, responses=responses(401, 404))
-def update_controller(cid: int, data: ControllerUpdate, db: DBSession, admin: SupervisorUser):
+def update_controller(cid: int, data: ControllerUpdate, db: DBSession, admin: ManageUser):
     c = db.query(Controller).filter(Controller.id == cid).first()
     if not c:
         raise HTTPException(404, CONTROLLER_NOT_FOUND)
@@ -350,7 +388,7 @@ def update_controller(cid: int, data: ControllerUpdate, db: DBSession, admin: Su
     return ControllerOut.model_validate(c)
 
 @router.delete("/controllers/{cid}", responses=responses(401, 404))
-def delete_controller(cid: int, db: DBSession, admin: SupervisorUser):
+def delete_controller(cid: int, db: DBSession, admin: ManageUser):
     c = db.query(Controller).filter(Controller.id == cid).first()
     if not c:
         raise HTTPException(404, CONTROLLER_NOT_FOUND)
@@ -360,7 +398,7 @@ def delete_controller(cid: int, db: DBSession, admin: SupervisorUser):
     return {"ok": True}
 
 @router.get("/controllers/{cid}", response_model=ControllerOut, responses=responses(401, 404))
-def get_controller(cid: int, db: DBSession, user: CurrentUser):
+def get_controller(cid: int, db: DBSession, user: ViewUser):
     c = db.query(Controller).filter(Controller.id == cid).first()
     if not c:
         raise HTTPException(404, CONTROLLER_NOT_FOUND)
@@ -368,7 +406,7 @@ def get_controller(cid: int, db: DBSession, user: CurrentUser):
 
 
 @router.get("/controllers/{cid}/stats", responses=responses(401, 404))
-def get_controller_stats(cid: int, db: DBSession, user: CurrentUser):
+def get_controller_stats(cid: int, db: DBSession, user: ViewUser):
     """Get basic stats for a controller."""
     ctrl = db.query(Controller).filter(Controller.id == cid).first()
     if not ctrl:
@@ -412,11 +450,11 @@ class DockOut(BaseModel):
     model_config = {"from_attributes": True}
 
 @router.get("/docks", response_model=list[DockOut], responses=responses(401))
-def list_docks(db: DBSession, user: CurrentUser):
+def list_docks(db: DBSession, user: ViewUser):
     return [DockOut.model_validate(d) for d in db.query(Dock).order_by(Dock.name).all()]
 
 @router.post("/docks", response_model=DockOut, responses=responses(401))
-def create_dock(data: DockCreate, db: DBSession, admin: SupervisorUser):
+def create_dock(data: DockCreate, db: DBSession, admin: ManageUser):
     d = Dock()
     _set_fields_with_lifecycle(d, data.model_dump())
     db.add(d)
@@ -425,7 +463,7 @@ def create_dock(data: DockCreate, db: DBSession, admin: SupervisorUser):
     return DockOut.model_validate(d)
 
 @router.patch("/docks/{did}", response_model=DockOut, responses=responses(401, 404))
-def update_dock(did: int, data: DockUpdate, db: DBSession, admin: SupervisorUser):
+def update_dock(did: int, data: DockUpdate, db: DBSession, admin: ManageUser):
     d = db.query(Dock).filter(Dock.id == did).first()
     if not d:
         raise HTTPException(404, DOCK_NOT_FOUND)
@@ -435,7 +473,7 @@ def update_dock(did: int, data: DockUpdate, db: DBSession, admin: SupervisorUser
     return DockOut.model_validate(d)
 
 @router.delete("/docks/{did}", responses=responses(401, 404))
-def delete_dock(did: int, db: DBSession, admin: SupervisorUser):
+def delete_dock(did: int, db: DBSession, admin: ManageUser):
     d = db.query(Dock).filter(Dock.id == did).first()
     if not d:
         raise HTTPException(404, DOCK_NOT_FOUND)
@@ -446,7 +484,7 @@ def delete_dock(did: int, db: DBSession, admin: SupervisorUser):
 
 
 @router.get("/docks/{did}", response_model=DockOut, responses=responses(401, 404))
-def get_dock(did: int, db: DBSession, user: CurrentUser):
+def get_dock(did: int, db: DBSession, user: ViewUser):
     d = db.query(Dock).filter(Dock.id == did).first()
     if not d:
         raise HTTPException(404, DOCK_NOT_FOUND)
@@ -454,7 +492,7 @@ def get_dock(did: int, db: DBSession, user: CurrentUser):
 
 
 @router.get("/docks/{did}/stats", responses=responses(401, 404))
-def get_dock_stats(did: int, db: DBSession, user: CurrentUser):
+def get_dock_stats(did: int, db: DBSession, user: ViewUser):
     """Get basic stats for a dock. Docks don't link to flights directly."""
     d = db.query(Dock).filter(Dock.id == did).first()
     if not d:
@@ -498,11 +536,11 @@ class SensorOut(BaseModel):
     model_config = {"from_attributes": True}
 
 @router.get("/sensors", response_model=list[SensorOut], responses=responses(401))
-def list_sensors(db: DBSession, user: CurrentUser):
+def list_sensors(db: DBSession, user: ViewUser):
     return [SensorOut.model_validate(s) for s in db.query(SensorPackage).order_by(SensorPackage.name).all()]
 
 @router.post("/sensors", response_model=SensorOut, responses=responses(401))
-def create_sensor(data: SensorCreate, db: DBSession, admin: SupervisorUser):
+def create_sensor(data: SensorCreate, db: DBSession, admin: ManageUser):
     s = SensorPackage()
     _set_fields_with_lifecycle(s, data.model_dump())
     db.add(s)
@@ -511,7 +549,7 @@ def create_sensor(data: SensorCreate, db: DBSession, admin: SupervisorUser):
     return SensorOut.model_validate(s)
 
 @router.patch("/sensors/{sid}", response_model=SensorOut, responses=responses(401, 404))
-def update_sensor(sid: int, data: SensorUpdate, db: DBSession, admin: SupervisorUser):
+def update_sensor(sid: int, data: SensorUpdate, db: DBSession, admin: ManageUser):
     s = db.query(SensorPackage).filter(SensorPackage.id == sid).first()
     if not s:
         raise HTTPException(404, SENSOR_NOT_FOUND)
@@ -521,7 +559,7 @@ def update_sensor(sid: int, data: SensorUpdate, db: DBSession, admin: Supervisor
     return SensorOut.model_validate(s)
 
 @router.delete("/sensors/{sid}", responses=responses(401, 404))
-def delete_sensor(sid: int, db: DBSession, admin: SupervisorUser):
+def delete_sensor(sid: int, db: DBSession, admin: ManageUser):
     s = db.query(SensorPackage).filter(SensorPackage.id == sid).first()
     if not s:
         raise HTTPException(404, SENSOR_NOT_FOUND)
@@ -532,7 +570,7 @@ def delete_sensor(sid: int, db: DBSession, admin: SupervisorUser):
 
 
 @router.get("/sensors/{sid}", response_model=SensorOut, responses=responses(401, 404))
-def get_sensor(sid: int, db: DBSession, user: CurrentUser):
+def get_sensor(sid: int, db: DBSession, user: ViewUser):
     s = db.query(SensorPackage).filter(SensorPackage.id == sid).first()
     if not s:
         raise HTTPException(404, SENSOR_NOT_FOUND)
@@ -540,7 +578,7 @@ def get_sensor(sid: int, db: DBSession, user: CurrentUser):
 
 
 @router.get("/sensors/{sid}/stats", responses=responses(401, 404))
-def get_sensor_stats(sid: int, db: DBSession, user: CurrentUser):
+def get_sensor_stats(sid: int, db: DBSession, user: ViewUser):
     """Get flight stats for a sensor package."""
     from app.models.flight import Flight
     sensor = db.query(SensorPackage).filter(SensorPackage.id == sid).first()
@@ -552,7 +590,7 @@ def get_sensor_stats(sid: int, db: DBSession, user: CurrentUser):
 
 
 @router.get("/sensors/{sid}/flights", responses=responses(401, 404))
-def get_sensor_flights(sid: int, db: DBSession, user: CurrentUser):
+def get_sensor_flights(sid: int, db: DBSession, user: ViewUser):
     """Get all flights that used a specific sensor package."""
     from app.models.flight import Flight
     from app.models.pilot import Pilot
@@ -576,7 +614,7 @@ def get_sensor_flights(sid: int, db: DBSession, user: CurrentUser):
 
 
 @router.get("/sensors/{sid}/pilots", responses=responses(401, 404))
-def get_sensor_pilots(sid: int, db: DBSession, user: CurrentUser):
+def get_sensor_pilots(sid: int, db: DBSession, user: ViewUser):
     """Get unique pilots who have used a specific sensor package."""
     from app.models.flight import Flight
     from app.models.pilot import Pilot
@@ -627,11 +665,11 @@ class AttachmentOut(BaseModel):
     model_config = {"from_attributes": True}
 
 @router.get("/attachments", response_model=list[AttachmentOut], responses=responses(401))
-def list_attachments(db: DBSession, user: CurrentUser):
+def list_attachments(db: DBSession, user: ViewUser):
     return [AttachmentOut.model_validate(a) for a in db.query(Attachment).order_by(Attachment.name).all()]
 
 @router.post("/attachments", response_model=AttachmentOut, responses=responses(401))
-def create_attachment(data: AttachmentCreate, db: DBSession, admin: SupervisorUser):
+def create_attachment(data: AttachmentCreate, db: DBSession, admin: ManageUser):
     a = Attachment()
     _set_fields_with_lifecycle(a, data.model_dump())
     db.add(a)
@@ -640,7 +678,7 @@ def create_attachment(data: AttachmentCreate, db: DBSession, admin: SupervisorUs
     return AttachmentOut.model_validate(a)
 
 @router.patch("/attachments/{aid}", response_model=AttachmentOut, responses=responses(401, 404))
-def update_attachment(aid: int, data: AttachmentUpdate, db: DBSession, admin: SupervisorUser):
+def update_attachment(aid: int, data: AttachmentUpdate, db: DBSession, admin: ManageUser):
     a = db.query(Attachment).filter(Attachment.id == aid).first()
     if not a:
         raise HTTPException(404, ATTACHMENT_NOT_FOUND)
@@ -650,7 +688,7 @@ def update_attachment(aid: int, data: AttachmentUpdate, db: DBSession, admin: Su
     return AttachmentOut.model_validate(a)
 
 @router.delete("/attachments/{aid}", responses=responses(401, 404))
-def delete_attachment(aid: int, db: DBSession, admin: SupervisorUser):
+def delete_attachment(aid: int, db: DBSession, admin: ManageUser):
     a = db.query(Attachment).filter(Attachment.id == aid).first()
     if not a:
         raise HTTPException(404, ATTACHMENT_NOT_FOUND)
@@ -661,7 +699,7 @@ def delete_attachment(aid: int, db: DBSession, admin: SupervisorUser):
 
 
 @router.get("/attachments/{aid}", response_model=AttachmentOut, responses=responses(401, 404))
-def get_attachment(aid: int, db: DBSession, user: CurrentUser):
+def get_attachment(aid: int, db: DBSession, user: ViewUser):
     a = db.query(Attachment).filter(Attachment.id == aid).first()
     if not a:
         raise HTTPException(404, ATTACHMENT_NOT_FOUND)
@@ -669,7 +707,7 @@ def get_attachment(aid: int, db: DBSession, user: CurrentUser):
 
 
 @router.get("/attachments/{aid}/stats", responses=responses(401, 404))
-def get_attachment_stats(aid: int, db: DBSession, user: CurrentUser):
+def get_attachment_stats(aid: int, db: DBSession, user: ViewUser):
     """Get flight stats for an attachment across all positions."""
     from app.models.flight import Flight
     from sqlalchemy import or_
@@ -714,7 +752,7 @@ def _attachment_flight_item(f, sn) -> dict:
 
 
 @router.get("/attachments/{aid}/flights", responses=responses(401, 404))
-def get_attachment_flights(aid: int, db: DBSession, user: CurrentUser):
+def get_attachment_flights(aid: int, db: DBSession, user: ViewUser):
     """Get all flights that used a specific attachment, including which position."""
     from app.models.flight import Flight
     from app.models.pilot import Pilot
@@ -734,7 +772,7 @@ def get_attachment_flights(aid: int, db: DBSession, user: CurrentUser):
 
 
 @router.get("/attachments/{aid}/pilots", responses=responses(401, 404))
-def get_attachment_pilots(aid: int, db: DBSession, user: CurrentUser):
+def get_attachment_pilots(aid: int, db: DBSession, user: ViewUser):
     """Get unique pilots who have used a specific attachment."""
     from app.models.flight import Flight
     from app.models.pilot import Pilot
@@ -787,11 +825,11 @@ class OtherEquipmentOut(BaseModel):
     model_config = {"from_attributes": True}
 
 @router.get("/other-equipment", response_model=list[OtherEquipmentOut], responses=responses(401))
-def list_other_equipment(db: DBSession, user: CurrentUser):
+def list_other_equipment(db: DBSession, user: ViewUser):
     return [OtherEquipmentOut.model_validate(o) for o in db.query(OtherEquipment).order_by(OtherEquipment.name).all()]
 
 @router.post("/other-equipment", response_model=OtherEquipmentOut, responses=responses(401))
-def create_other_equipment(data: OtherEquipmentCreate, db: DBSession, admin: SupervisorUser):
+def create_other_equipment(data: OtherEquipmentCreate, db: DBSession, admin: ManageUser):
     o = OtherEquipment()
     _set_fields_with_lifecycle(o, data.model_dump())
     db.add(o)
@@ -800,7 +838,7 @@ def create_other_equipment(data: OtherEquipmentCreate, db: DBSession, admin: Sup
     return OtherEquipmentOut.model_validate(o)
 
 @router.patch("/other-equipment/{oid}", response_model=OtherEquipmentOut, responses=responses(401, 404))
-def update_other_equipment(oid: int, data: OtherEquipmentUpdate, db: DBSession, admin: SupervisorUser):
+def update_other_equipment(oid: int, data: OtherEquipmentUpdate, db: DBSession, admin: ManageUser):
     o = db.query(OtherEquipment).filter(OtherEquipment.id == oid).first()
     if not o:
         raise HTTPException(404, OTHER_EQUIPMENT_NOT_FOUND)
@@ -810,7 +848,7 @@ def update_other_equipment(oid: int, data: OtherEquipmentUpdate, db: DBSession, 
     return OtherEquipmentOut.model_validate(o)
 
 @router.delete("/other-equipment/{oid}", responses=responses(401, 404))
-def delete_other_equipment(oid: int, db: DBSession, admin: SupervisorUser):
+def delete_other_equipment(oid: int, db: DBSession, admin: ManageUser):
     o = db.query(OtherEquipment).filter(OtherEquipment.id == oid).first()
     if not o:
         raise HTTPException(404, OTHER_EQUIPMENT_NOT_FOUND)
@@ -820,7 +858,7 @@ def delete_other_equipment(oid: int, db: DBSession, admin: SupervisorUser):
     return {"ok": True}
 
 @router.get("/other-equipment/{oid}", response_model=OtherEquipmentOut, responses=responses(401, 404))
-def get_other_equipment(oid: int, db: DBSession, user: CurrentUser):
+def get_other_equipment(oid: int, db: DBSession, user: ViewUser):
     o = db.query(OtherEquipment).filter(OtherEquipment.id == oid).first()
     if not o:
         raise HTTPException(404, OTHER_EQUIPMENT_NOT_FOUND)

@@ -1,17 +1,22 @@
 from datetime import date, datetime, timedelta
-from typing import Optional
+from typing import Annotated, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
 
-from app.deps import DBSession, CurrentUser, SupervisorUser
+from app.deps import DBSession
+from app.models.user import User
+from app.routers.auth import require_permission
 from app.models.currency_rule import CurrencyRule
 from app.models.pilot import Pilot
 from app.models.flight import Flight
 from app.responses import responses
 
 router = APIRouter(prefix="/api/currency", tags=["currency"])
+
+ViewUser = Annotated[User, Depends(require_permission("certifications.view"))]
+ManageUser = Annotated[User, Depends(require_permission("certifications.manage"))]
 
 
 
@@ -49,12 +54,12 @@ class RuleOut(BaseModel):
 
 
 @router.get("/rules", response_model=list[RuleOut], responses=responses(401))
-def list_rules(db: DBSession, user: CurrentUser):
+def list_rules(db: DBSession, user: ViewUser):
     return db.query(CurrencyRule).order_by(CurrencyRule.name).all()
 
 
 @router.post("/rules", response_model=RuleOut, responses=responses(401))
-def create_rule(data: RuleCreate, db: DBSession, user: SupervisorUser):
+def create_rule(data: RuleCreate, db: DBSession, user: ManageUser):
     rule = CurrencyRule(**data.model_dump())
     db.add(rule)
     db.commit()
@@ -63,7 +68,7 @@ def create_rule(data: RuleCreate, db: DBSession, user: SupervisorUser):
 
 
 @router.patch("/rules/{rule_id}", response_model=RuleOut, responses=responses(401, 404))
-def update_rule(rule_id: int, data: RuleUpdate, db: DBSession, user: SupervisorUser):
+def update_rule(rule_id: int, data: RuleUpdate, db: DBSession, user: ManageUser):
     rule = db.query(CurrencyRule).filter(CurrencyRule.id == rule_id).first()
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")
@@ -75,7 +80,7 @@ def update_rule(rule_id: int, data: RuleUpdate, db: DBSession, user: SupervisorU
 
 
 @router.delete("/rules/{rule_id}", responses=responses(401, 404))
-def delete_rule(rule_id: int, db: DBSession, user: SupervisorUser):
+def delete_rule(rule_id: int, db: DBSession, user: ManageUser):
     rule = db.query(CurrencyRule).filter(CurrencyRule.id == rule_id).first()
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")
@@ -168,7 +173,7 @@ def _pilot_currency(pilot: Pilot, rules: list[CurrencyRule], db: Session):
 
 
 @router.get("/status", responses=responses(401))
-def get_all_currency_status(db: DBSession, user: CurrentUser):
+def get_all_currency_status(db: DBSession, user: ViewUser):
     """Get currency status for all active pilots."""
     rules = db.query(CurrencyRule).filter(CurrencyRule.is_active.is_(True)).all()
     pilots = db.query(Pilot).filter(Pilot.status == "active").order_by(Pilot.last_name).all()
@@ -252,7 +257,7 @@ def _send_one_reminder(pilot, rules, flights, org_name: str, intro: str, db) -> 
 def send_currency_reminders(
     data: ReminderRequest,
     db: DBSession,
-    admin: SupervisorUser,
+    admin: ManageUser,
 ):
     """Email currency reminders to lapsed pilots. If pilot_ids is provided,
     only those are notified; otherwise every active pilot lapsed on any rule
@@ -302,7 +307,7 @@ def send_currency_reminders(
 
 
 @router.get("/status/{pilot_id}", responses=responses(401, 404))
-def get_pilot_currency_status(pilot_id: int, db: DBSession, user: CurrentUser):
+def get_pilot_currency_status(pilot_id: int, db: DBSession, user: ViewUser):
     """Get currency status for a single pilot."""
     pilot = db.query(Pilot).filter(Pilot.id == pilot_id).first()
     if not pilot:

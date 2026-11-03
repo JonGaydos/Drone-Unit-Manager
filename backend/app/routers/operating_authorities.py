@@ -6,14 +6,16 @@ feed into the compliance score. Admin and Supervisor write; Pilot and Viewer rea
 """
 
 from datetime import date
-from typing import Optional
+from typing import Annotated, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import func
 
 from app.constants import OPERATING_AUTHORITY_NOT_FOUND
-from app.deps import CurrentUser, DBSession, SupervisorUser
+from app.deps import DBSession
+from app.models.user import User
+from app.routers.auth import require_permission
 from app.models.document import Document
 from app.models.operating_authority import (
     AUTHORITY_TYPES,
@@ -27,6 +29,9 @@ from app.services import evidence
 from app.services.audit import log_action
 
 router = APIRouter(prefix="/api/operating-authorities", tags=["operating-authorities"])
+
+ViewUser = Annotated[User, Depends(require_permission("authority.view"))]
+ManageUser = Annotated[User, Depends(require_permission("authority.manage"))]
 
 DOCUMENT_ENTITY_TYPE = "operating_authority"
 
@@ -95,7 +100,7 @@ def _serialize(a: OperatingAuthority, today: date, document_count: int = 0) -> d
 
 
 @router.get("", responses=responses(401))
-def list_authorities(db: DBSession, user: CurrentUser, record_status: Optional[str] = None):
+def list_authorities(db: DBSession, user: ViewUser, record_status: Optional[str] = None):
     """List operating authorities, newest expiry first. Superseded and
     not-applicable records are included unless filtered out."""
     q = db.query(OperatingAuthority)
@@ -113,7 +118,7 @@ def list_authorities(db: DBSession, user: CurrentUser, record_status: Optional[s
 
 
 @router.get("/{authority_id}", responses=responses(401, 404))
-def get_authority(authority_id: int, db: DBSession, user: CurrentUser):
+def get_authority(authority_id: int, db: DBSession, user: ViewUser):
     a = db.query(OperatingAuthority).filter(OperatingAuthority.id == authority_id).first()
     if not a:
         raise HTTPException(404, OPERATING_AUTHORITY_NOT_FOUND)
@@ -122,7 +127,7 @@ def get_authority(authority_id: int, db: DBSession, user: CurrentUser):
 
 
 @router.post("", status_code=201, responses=responses(400, 401))
-def create_authority(data: AuthorityCreate, db: DBSession, user: SupervisorUser):
+def create_authority(data: AuthorityCreate, db: DBSession, user: ManageUser):
     _validate(data.authority_type, data.record_status)
     a = OperatingAuthority(**data.model_dump())
     db.add(a)
@@ -134,7 +139,7 @@ def create_authority(data: AuthorityCreate, db: DBSession, user: SupervisorUser)
 
 
 @router.patch("/{authority_id}", responses=responses(400, 401, 404))
-def update_authority(authority_id: int, data: AuthorityUpdate, db: DBSession, user: SupervisorUser):
+def update_authority(authority_id: int, data: AuthorityUpdate, db: DBSession, user: ManageUser):
     a = db.query(OperatingAuthority).filter(OperatingAuthority.id == authority_id).first()
     if not a:
         raise HTTPException(404, OPERATING_AUTHORITY_NOT_FOUND)
@@ -152,7 +157,7 @@ def update_authority(authority_id: int, data: AuthorityUpdate, db: DBSession, us
 
 
 @router.delete("/{authority_id}", responses=responses(401, 404, 409))
-def delete_authority(authority_id: int, db: DBSession, user: SupervisorUser):
+def delete_authority(authority_id: int, db: DBSession, user: ManageUser):
     a = db.query(OperatingAuthority).filter(OperatingAuthority.id == authority_id).first()
     if not a:
         raise HTTPException(404, OPERATING_AUTHORITY_NOT_FOUND)

@@ -2,16 +2,19 @@
 
 from datetime import date
 from pathlib import Path
+from typing import Annotated
 
 import anyio
-from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import func
 
 from app.config import settings
 from app.constants import PILOT_NOT_FOUND, ACCESS_DENIED, FILE_TYPE_NOT_ALLOWED, FILE_TOO_LARGE
-from app.deps import DBSession, CurrentUser, AdminUser, PilotUser, SupervisorUser
+from app.deps import DBSession, CurrentUser, AdminUser
+from app.models.user import User
+from app.routers.auth import require_permission
 from app.models.pilot import Pilot
 from app.models.flight import Flight
 from app.models.currency_rule import CurrencyRule
@@ -19,15 +22,37 @@ from app.models.certification import PilotCertification, CertificationType
 from app.routers.currency import _pilot_currency
 from app.schemas.pilot import PilotCreate, PilotUpdate, PilotOut, PilotStats
 from app.responses import responses
+from app.services import permissions as permissions_service
 from app.services.pilot_contacts import pilot_out
 
 router = APIRouter(prefix="/api/pilots", tags=["pilots"])
+
+EDIT_KEY = "pilots.edit"
+MANAGE_KEY = "pilots.manage"
+
+ViewUser = Annotated[User, Depends(require_permission("pilots.view"))]
+EditUser = Annotated[User, Depends(require_permission(EDIT_KEY))]
+ManageUser = Annotated[User, Depends(require_permission(MANAGE_KEY))]
+
+
+@router.get("/options", responses=responses(401))
+def pilot_options(db: DBSession, user: CurrentUser):
+    """Pilots for a picker: id, name, badge number and status, with no contact details.
+
+    Open to any signed-in user so forms can offer a pilot without the pilots
+    list. Inactive pilots are included with their status.
+    """
+    pilots = db.query(Pilot).order_by(Pilot.first_name, Pilot.last_name).all()
+    return [
+        {"id": p.id, "full_name": p.full_name, "badge_number": p.badge_number, "status": p.status}
+        for p in pilots
+    ]
 
 
 @router.get("", response_model=list[PilotOut])
 def list_pilots(
     db: DBSession,
-    user: CurrentUser,
+    user: ViewUser,
     status: str | None = None):
     """List all pilots with optional status filtering.
 
@@ -40,20 +65,20 @@ def list_pilots(
     q = db.query(Pilot)
     if status:
         q = q.filter(Pilot.status == status)
-    return [pilot_out(p, user) for p in q.order_by(Pilot.first_name, Pilot.last_name).all()]
+    return [pilot_out(db, p, user) for p in q.order_by(Pilot.first_name, Pilot.last_name).all()]
 
 
 @router.get("/{pilot_id}", response_model=PilotOut, responses=responses(401, 404))
-def get_pilot(pilot_id: int, db: DBSession, user: CurrentUser):
+def get_pilot(pilot_id: int, db: DBSession, user: ViewUser):
     """Retrieve a single pilot by ID."""
     pilot = db.query(Pilot).filter(Pilot.id == pilot_id).first()
     if not pilot:
         raise HTTPException(status_code=404, detail=PILOT_NOT_FOUND)
-    return pilot_out(pilot, user)
+    return pilot_out(db, pilot, user)
 
 
 @router.get("/{pilot_id}/stats", response_model=PilotStats, responses=responses(401, 404))
-def get_pilot_stats(pilot_id: int, db: DBSession, user: CurrentUser):
+def get_pilot_stats(pilot_id: int, db: DBSession, user: ViewUser):
     """Get aggregated flight statistics for a pilot (total flights, hours, avg duration)."""
     pilot = db.query(Pilot).filter(Pilot.id == pilot_id).first()
     if not pilot:
@@ -71,7 +96,7 @@ def get_pilot_stats(pilot_id: int, db: DBSession, user: CurrentUser):
 
 
 @router.get("/{pilot_id}/needs-attention", responses=responses(401, 404))
-def get_pilot_needs_attention(pilot_id: int, db: DBSession, user: CurrentUser):
+def get_pilot_needs_attention(pilot_id: int, db: DBSession, user: ViewUser):
     """Aggregate a pilot's lapsed currency and expired/expiring certifications.
 
     Single source of truth for the Pilot Detail "Needs Attention" card.
@@ -122,8 +147,8 @@ def get_pilot_needs_attention(pilot_id: int, db: DBSession, user: CurrentUser):
 
 
 @router.post("", response_model=PilotOut, responses=responses(401))
-def create_pilot(data: PilotCreate, db: DBSession, admin: SupervisorUser):
-    """Create a new pilot record. Supervisor or admin only."""
+def create_pilot(data: PilotCreate, db: DBSession, admin: ManageUser):
+    """Create a new pilot record. Needs the pilots.manage permission."""
     from app.services.audit import log_action
     pilot = Pilot(**data.model_dump())
     db.add(pilot)
@@ -131,7 +156,7 @@ def create_pilot(data: PilotCreate, db: DBSession, admin: SupervisorUser):
     log_action(db, admin.id, admin.display_name, "create", "pilot", pilot.id, f"{pilot.first_name} {pilot.last_name}")
     db.commit()
     db.refresh(pilot)
-    return PilotOut.model_validate(pilot)
+    return pilot_out(db, pilot, admin)
 
 
 # Profile fields a pilot may not change on their own record: reactivating
@@ -141,18 +166,21 @@ SUPERVISOR_ONLY_PILOT_FIELDS = ("status", "counts_toward_totals", "photo_url")
 
 
 @router.patch("/{pilot_id}", response_model=PilotOut, responses=responses(401, 403, 404))
-def update_pilot(pilot_id: int, data: PilotUpdate, db: DBSession, user: PilotUser):
-    """Update a pilot's profile. Pilots can only edit their own; supervisors/admins can edit any."""
+def update_pilot(pilot_id: int, data: PilotUpdate, db: DBSession, user: EditUser):
+    """Update a pilot's profile.
+
+    The pilots.edit level decides whether the user may edit this pilot: Own
+    covers the pilot linked to their account, All covers any pilot.
+    """
     from app.services.audit import log_action, compute_changes
     pilot = db.query(Pilot).filter(Pilot.id == pilot_id).first()
     if not pilot:
         raise HTTPException(status_code=404, detail=PILOT_NOT_FOUND)
-    # Pilots can only edit their own profile; supervisors/admins can edit any
-    if user.role == "pilot" and user.pilot_id != pilot_id:
-        raise HTTPException(status_code=403, detail="You can only edit your own profile")
+    owned = user.pilot_id is not None and user.pilot_id == pilot_id
+    permissions_service.require_record_access(db, user, EDIT_KEY, owned)
     update_data = data.model_dump(exclude_unset=True)
     # Rejected only on an actual change, so a form echoing current values works.
-    if user.role not in ("admin", "supervisor") and any(
+    if not permissions_service.can(db, user, MANAGE_KEY) and any(
         f in update_data and update_data[f] != getattr(pilot, f) for f in SUPERVISOR_ONLY_PILOT_FIELDS
     ):
         raise HTTPException(status_code=403, detail="Only a supervisor can change status, unit totals, or photo URL")
@@ -163,12 +191,12 @@ def update_pilot(pilot_id: int, data: PilotUpdate, db: DBSession, user: PilotUse
         log_action(db, user.id, user.display_name, "update", "pilot", pilot.id, f"{pilot.first_name} {pilot.last_name}", changes=changes)
     db.commit()
     db.refresh(pilot)
-    return PilotOut.model_validate(pilot)
+    return pilot_out(db, pilot, user)
 
 
 @router.delete("/{pilot_id}", responses=responses(401, 404))
-def delete_pilot(pilot_id: int, db: DBSession, admin: SupervisorUser):
-    """Soft-delete a pilot by setting status to inactive. Supervisor or admin only."""
+def delete_pilot(pilot_id: int, db: DBSession, admin: ManageUser):
+    """Soft-delete a pilot by setting status to inactive. Needs the pilots.manage permission."""
     from app.services.audit import log_action
     pilot = db.query(Pilot).filter(Pilot.id == pilot_id).first()
     if not pilot:
@@ -223,7 +251,7 @@ def _merge_certifications(db, source_id: int, target_id: int) -> int:
 
 
 @router.post("/{target_id}/merge", responses=responses(400, 401, 404))
-def merge_pilots(target_id: int, data: PilotMergeRequest, db: DBSession, admin: SupervisorUser):
+def merge_pilots(target_id: int, data: PilotMergeRequest, db: DBSession, admin: ManageUser):
     """Merge a duplicate pilot (source) into a keeper (target).
 
     Reassigns every reference (flights, mission/training rosters, certifications,
@@ -231,7 +259,7 @@ def merge_pilots(target_id: int, data: PilotMergeRequest, db: DBSession, admin: 
     checkouts, controller assignment, maintenance schedule, linked user, calendar
     events, vehicle location) from the source to the target, copies the source
     email onto the target when it has none (so future email-matched imports find
-    the keeper), then deletes the source. Supervisor or admin only.
+    the keeper), then deletes the source. Needs the pilots.manage permission.
     """
     from app.services.audit import log_action
     source_id = data.source_id
@@ -303,7 +331,7 @@ def merge_pilots(target_id: int, data: PilotMergeRequest, db: DBSession, admin: 
     log_action(db, admin.id, admin.display_name, "merge", "pilot", target.id, tgt_name, details=f"{src_name} -> {tgt_name}")
     db.commit()
     db.refresh(target)
-    return {"ok": True, "references_moved": moved, "target": PilotOut.model_validate(target)}
+    return {"ok": True, "references_moved": moved, "target": pilot_out(db, target, admin)}
 
 
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
@@ -336,7 +364,7 @@ async def upload_pilot_photo(pilot_id: int, file: UploadFile, db: DBSession, use
 
 
 @router.get("/{pilot_id}/photo/view", responses=responses(401, 403, 404))
-def view_pilot_photo(pilot_id: int, db: DBSession, _user: CurrentUser):
+def view_pilot_photo(pilot_id: int, db: DBSession, _user: ViewUser):
     """Serve a pilot's profile photo with path-traversal prevention."""
     pilot = db.query(Pilot).filter(Pilot.id == pilot_id).first()
     if not pilot:

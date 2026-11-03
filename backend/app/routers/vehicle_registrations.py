@@ -1,15 +1,20 @@
 from datetime import date, timedelta
-from typing import Optional
+from typing import Annotated, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app.deps import DBSession, CurrentUser, AdminUser
+from app.deps import DBSession
+from app.models.user import User
+from app.routers.auth import require_permission
 from app.models.vehicle import Vehicle
 from app.models.vehicle_registration import VehicleRegistration
 from app.responses import responses
 
 router = APIRouter(tags=["vehicle-registrations"])
+
+ViewUser = Annotated[User, Depends(require_permission("registrations.view"))]
+ManageUser = Annotated[User, Depends(require_permission("registrations.manage"))]
 
 
 class RegistrationCreate(BaseModel):
@@ -38,7 +43,7 @@ def create_registration(
     vehicle_id: int,
     data: RegistrationCreate,
     db: DBSession,
-    user: AdminUser,
+    user: ManageUser,
 ):
     vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
     if not vehicle:
@@ -73,7 +78,7 @@ def create_registration(
 def list_registrations(
     vehicle_id: int,
     db: DBSession,
-    user: CurrentUser,
+    user: ViewUser,
 ):
     regs = (
         db.query(VehicleRegistration)
@@ -87,7 +92,7 @@ def list_registrations(
 @router.get("/api/vehicle-registrations/current", response_model=list[RegistrationOut])
 def list_current_registrations(
     db: DBSession,
-    user: CurrentUser,
+    user: ViewUser,
 ):
     """Return the current registration for every vehicle in a single query.
 
@@ -106,7 +111,7 @@ def list_current_registrations(
 def delete_registration(
     reg_id: int,
     db: DBSession,
-    user: AdminUser,
+    user: ManageUser,
 ):
     reg = db.query(VehicleRegistration).filter(VehicleRegistration.id == reg_id).first()
     if not reg:

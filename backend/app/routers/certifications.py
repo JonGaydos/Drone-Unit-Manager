@@ -1,12 +1,14 @@
 import calendar
 from datetime import date
-from typing import Optional
+from typing import Annotated, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.constants import CERTIFICATION_TYPE_NOT_FOUND, PILOT_CERTIFICATION_NOT_FOUND, EQUIPMENT_QUAL_NOT_FOUND
-from app.deps import DBSession, CurrentUser, SupervisorUser
+from app.deps import DBSession
+from app.models.user import User
+from app.routers.auth import require_permission
 from app.responses import responses
 from app.models.certification import CertificationType, PilotCertification, PilotEquipmentQual
 from app.models.pilot import Pilot
@@ -28,11 +30,14 @@ class ReorderRequest(BaseModel):
 
 router = APIRouter(tags=["certifications"])
 
+ViewUser = Annotated[User, Depends(require_permission("certifications.view"))]
+ManageUser = Annotated[User, Depends(require_permission("certifications.manage"))]
+
 
 @router.get("/api/certification-types", response_model=list[CertificationTypeOut])
 def list_certification_types(
     db: DBSession,
-    user: CurrentUser,
+    user: ViewUser,
 ):
     rows = db.query(CertificationType).order_by(CertificationType.sort_order, CertificationType.name).all()
     return [CertificationTypeOut.model_validate(r) for r in rows]
@@ -42,7 +47,7 @@ def list_certification_types(
 def create_certification_type(
     data: CertificationTypeCreate,
     db: DBSession,
-    admin: SupervisorUser,
+    admin: ManageUser,
 ):
     from app.services.audit import log_action
     if db.query(CertificationType).filter(CertificationType.name == data.name).first():
@@ -60,7 +65,7 @@ def create_certification_type(
 def reorder_certification_types(
     data: ReorderRequest,
     db: DBSession,
-    admin: SupervisorUser,
+    admin: ManageUser,
 ):
     for item in data.items:
         ct = db.query(CertificationType).filter(CertificationType.id == item.id).first()
@@ -75,7 +80,7 @@ def update_certification_type(
     ct_id: int,
     data: CertificationTypeUpdate,
     db: DBSession,
-    admin: SupervisorUser,
+    admin: ManageUser,
 ):
     from app.services.audit import log_action
     ct = db.query(CertificationType).filter(CertificationType.id == ct_id).first()
@@ -93,7 +98,7 @@ def update_certification_type(
 def delete_certification_type(
     ct_id: int,
     db: DBSession,
-    admin: SupervisorUser,
+    admin: ManageUser,
 ):
     from app.services.audit import log_action
     ct = db.query(CertificationType).filter(CertificationType.id == ct_id).first()
@@ -123,7 +128,7 @@ def _pilot_cert_to_out(pc: PilotCertification) -> PilotCertificationOut:
 @router.get("/api/pilot-certifications", response_model=list[PilotCertificationOut])
 def list_pilot_certifications(
     db: DBSession,
-    user: CurrentUser,
+    user: ViewUser,
     pilot_id: int | None = None,
     cert_type_id: int | None = None):
     q = db.query(PilotCertification)
@@ -139,7 +144,7 @@ def list_pilot_certifications(
 def create_pilot_certification(
     data: PilotCertificationCreate,
     db: DBSession,
-    admin: SupervisorUser,
+    admin: ManageUser,
 ):
     from app.services.audit import log_action
     pc = PilotCertification(**data.model_dump())
@@ -159,7 +164,7 @@ def update_pilot_certification(
     pc_id: int,
     data: PilotCertificationUpdate,
     db: DBSession,
-    admin: SupervisorUser,
+    admin: ManageUser,
 ):
     from app.services.audit import log_action
     pc = db.query(PilotCertification).filter(PilotCertification.id == pc_id).first()
@@ -211,7 +216,7 @@ def renew_pilot_certification(
     pc_id: int,
     data: CertRenewRequest,
     db: DBSession,
-    admin: SupervisorUser,
+    admin: ManageUser,
 ):
     """Renew a certification: mark old as renewed, create new with history link."""
     from app.services.audit import log_action
@@ -240,7 +245,7 @@ class CertBulkRenewRequest(BaseModel):
 
 
 @router.post("/api/pilot-certifications/bulk-renew", responses=responses(400))
-def bulk_renew_pilot_certifications(data: CertBulkRenewRequest, db: DBSession, admin: SupervisorUser):
+def bulk_renew_pilot_certifications(data: CertBulkRenewRequest, db: DBSession, admin: ManageUser):
     """Renew many certifications at once (e.g. a training day): each selected
     cert is renewed with the same issue date, expiration auto-calculated per
     cert type. Already-renewed certs are skipped. Supervisor or admin only."""
@@ -263,7 +268,7 @@ def bulk_renew_pilot_certifications(data: CertBulkRenewRequest, db: DBSession, a
 def get_certification_history(
     pc_id: int,
     db: DBSession,
-    user: CurrentUser,
+    user: ViewUser,
 ):
     """Get renewal history chain for a certification."""
     cert = db.query(PilotCertification).filter(PilotCertification.id == pc_id).first()
@@ -289,7 +294,7 @@ def get_certification_history(
 def delete_pilot_certification(
     pc_id: int,
     db: DBSession,
-    admin: SupervisorUser,
+    admin: ManageUser,
 ):
     from app.services.audit import log_action
     pc = db.query(PilotCertification).filter(PilotCertification.id == pc_id).first()
@@ -304,7 +309,7 @@ def delete_pilot_certification(
 @router.get("/api/pilot-equipment-quals", response_model=list[PilotEquipmentQualOut])
 def list_pilot_equipment_quals(
     db: DBSession,
-    user: CurrentUser,
+    user: ViewUser,
     pilot_id: int | None = None):
     q = db.query(PilotEquipmentQual)
     if pilot_id:
@@ -317,7 +322,7 @@ def list_pilot_equipment_quals(
 def create_pilot_equipment_qual(
     data: PilotEquipmentQualCreate,
     db: DBSession,
-    admin: SupervisorUser,
+    admin: ManageUser,
 ):
     peq = PilotEquipmentQual(**data.model_dump())
     db.add(peq)
@@ -331,7 +336,7 @@ def update_pilot_equipment_qual(
     peq_id: int,
     data: PilotEquipmentQualUpdate,
     db: DBSession,
-    admin: SupervisorUser,
+    admin: ManageUser,
 ):
     peq = db.query(PilotEquipmentQual).filter(PilotEquipmentQual.id == peq_id).first()
     if not peq:
@@ -347,7 +352,7 @@ def update_pilot_equipment_qual(
 def delete_pilot_equipment_qual(
     peq_id: int,
     db: DBSession,
-    admin: SupervisorUser,
+    admin: ManageUser,
 ):
     peq = db.query(PilotEquipmentQual).filter(PilotEquipmentQual.id == peq_id).first()
     if not peq:
@@ -382,7 +387,7 @@ def _cert_cell(pc) -> dict:
 @router.get("/api/certifications/matrix")
 def certification_matrix(
     db: DBSession,
-    user: CurrentUser,
+    user: ViewUser,
 ):
     pilots = db.query(Pilot).filter(Pilot.status == "active").order_by(Pilot.last_name, Pilot.first_name).all()
     cert_types = db.query(CertificationType).filter(CertificationType.is_active.is_(True)).order_by(

@@ -80,7 +80,7 @@ def global_search(q: str, db: DBSession, user: CurrentUser, limit: int = 6):
     return {
         "query": query,
         "results": (
-            _search_pilots(db, like, limit, with_email=not hides_contacts(user))
+            _search_pilots(db, like, limit, with_email=not hides_contacts(db, user))
             + _search_vehicles(db, like, limit)
             + _search_flights(db, like, limit)
         ),

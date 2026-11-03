@@ -1,18 +1,23 @@
 """Folder management router for document storage."""
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Annotated, Optional
 from pydantic import BaseModel
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 
 from app.constants import FOLDER_NOT_FOUND
 from app.models.folder import Folder
 from app.models.document import Document
-from app.deps import DBSession, CurrentUser, PilotUser
+from app.deps import DBSession
+from app.models.user import User
+from app.routers.auth import require_permission
 from app.responses import responses
 from app.services.audit import compute_changes, log_action
 
 router = APIRouter(prefix="/api/folders", tags=["folders"])
+
+ViewUser = Annotated[User, Depends(require_permission("files.view"))]
+ManageUser = Annotated[User, Depends(require_permission("folders.manage"))]
 
 
 class FolderCreate(BaseModel):
@@ -39,7 +44,7 @@ def _live_folder(db, folder_id: int) -> Folder:
 
 
 @router.get("", responses=responses(401))
-def list_folders(db: DBSession, _user: CurrentUser):
+def list_folders(db: DBSession, _user: ViewUser):
     folders = db.query(Folder).filter(Folder.deleted_at.is_(None)).order_by(Folder.name).all()
     result = []
     for f in folders:
@@ -58,7 +63,7 @@ def list_folders(db: DBSession, _user: CurrentUser):
 
 
 @router.get("/{folder_id}/documents", responses=responses(401, 404))
-def get_folder_documents(folder_id: int, db: DBSession, _user: CurrentUser):
+def get_folder_documents(folder_id: int, db: DBSession, _user: ViewUser):
     _live_folder(db, folder_id)
     docs = (db.query(Document)
             .filter(Document.folder_id == folder_id, Document.deleted_at.is_(None))
@@ -80,7 +85,7 @@ def get_folder_documents(folder_id: int, db: DBSession, _user: CurrentUser):
 
 
 @router.post("", responses=responses(401))
-def create_folder(data: FolderCreate, db: DBSession, user: PilotUser):
+def create_folder(data: FolderCreate, db: DBSession, user: ManageUser):
     folder = Folder(
         name=data.name,
         parent_id=data.parent_id,
@@ -95,7 +100,7 @@ def create_folder(data: FolderCreate, db: DBSession, user: PilotUser):
 
 
 @router.patch("/{folder_id}", responses=responses(400, 401, 404))
-def update_folder(folder_id: int, data: FolderUpdate, db: DBSession, user: PilotUser):
+def update_folder(folder_id: int, data: FolderUpdate, db: DBSession, user: ManageUser):
     folder = _live_folder(db, folder_id)
     if folder.is_system:
         raise HTTPException(400, "Cannot rename system folders")
@@ -110,7 +115,7 @@ def update_folder(folder_id: int, data: FolderUpdate, db: DBSession, user: Pilot
 
 
 @router.delete("/{folder_id}", responses=responses(400, 401, 404))
-def delete_folder(folder_id: int, db: DBSession, user: PilotUser):
+def delete_folder(folder_id: int, db: DBSession, user: ManageUser):
     folder = _live_folder(db, folder_id)
     if folder.is_system:
         raise HTTPException(400, "Cannot delete system folders")

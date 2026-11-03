@@ -118,24 +118,24 @@ def test_deleted_document_is_hidden_and_restorable(client, db, document, pilot_u
     assert [d["id"] for d in client.get("/api/documents", headers=_bearer(pilot_user)).json()] == [document.id]
 
 
-def test_deleted_folder_is_hidden_but_its_record_stays(client, db, pilot_user):
-    folder_id = client.post("/api/folders", headers=_bearer(pilot_user), json={"name": "Case 7"}).json()["id"]
-    assert client.delete(f"/api/folders/{folder_id}", headers=_bearer(pilot_user)).status_code == 200
-    assert all(f["id"] != folder_id for f in client.get("/api/folders", headers=_bearer(pilot_user)).json())
+def test_deleted_folder_is_hidden_but_its_record_stays(client, db, supervisor_user):
+    folder_id = client.post("/api/folders", headers=_bearer(supervisor_user), json={"name": "Case 7"}).json()["id"]
+    assert client.delete(f"/api/folders/{folder_id}", headers=_bearer(supervisor_user)).status_code == 200
+    assert all(f["id"] != folder_id for f in client.get("/api/folders", headers=_bearer(supervisor_user)).json())
     db.expire_all()
     assert db.get(Folder, folder_id).deleted_at is not None
-    assert client.get(f"/api/folders/{folder_id}/documents", headers=_bearer(pilot_user)).status_code == 404
+    assert client.get(f"/api/folders/{folder_id}/documents", headers=_bearer(supervisor_user)).status_code == 404
 
 
-def test_folder_listing_skips_deleted_documents(client, db, pilot_user, upload_dir):
-    folder_id = client.post("/api/folders", headers=_bearer(pilot_user), json={"name": "Case 8"}).json()["id"]
-    doc_id = client.post("/api/documents/upload", headers=_bearer(pilot_user),
+def test_folder_listing_skips_deleted_documents(client, db, supervisor_user, upload_dir):
+    folder_id = client.post("/api/folders", headers=_bearer(supervisor_user), json={"name": "Case 8"}).json()["id"]
+    doc_id = client.post("/api/documents/upload", headers=_bearer(supervisor_user),
                          data={"entity_type": "general", "document_type": "other", "title": "A",
                                "folder_id": str(folder_id)},
                          files={"file": ("a.pdf", b"%PDF-1.4 a", "application/pdf")}).json()["id"]
-    client.delete(f"/api/documents/{doc_id}", headers=_bearer(pilot_user))
-    assert client.get(f"/api/folders/{folder_id}/documents", headers=_bearer(pilot_user)).json() == []
-    folder = next(f for f in client.get("/api/folders", headers=_bearer(pilot_user)).json() if f["id"] == folder_id)
+    client.delete(f"/api/documents/{doc_id}", headers=_bearer(supervisor_user))
+    assert client.get(f"/api/folders/{folder_id}/documents", headers=_bearer(supervisor_user)).json() == []
+    folder = next(f for f in client.get("/api/folders", headers=_bearer(supervisor_user)).json() if f["id"] == folder_id)
     assert folder["document_count"] == 0
 
 
