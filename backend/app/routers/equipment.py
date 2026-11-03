@@ -24,6 +24,8 @@ router = APIRouter(prefix="/api", tags=["equipment"])
 
 ViewUser = Annotated[User, Depends(require_permission("fleet.view"))]
 ManageUser = Annotated[User, Depends(require_permission("fleet.manage"))]
+# Flights and flyers of a piece of equipment follow the flights view permission.
+FlightsViewUser = Annotated[User, Depends(require_permission("flights.view"))]
 
 OTHER_EQUIPMENT_NOT_FOUND = "Equipment item not found"
 
@@ -141,7 +143,7 @@ def get_battery(bid: int, db: DBSession, user: ViewUser):
     return BatteryOut.model_validate(b)
 
 @router.get("/batteries/{bid}/stats", responses=responses(401, 404))
-def get_battery_stats(bid: int, db: DBSession, user: ViewUser):
+def get_battery_stats(bid: int, db: DBSession, user: ViewUser, _flights: FlightsViewUser):
     from app.models.flight import Flight
     battery = db.query(Battery).filter(Battery.id == bid).first()
     if not battery:
@@ -152,7 +154,7 @@ def get_battery_stats(bid: int, db: DBSession, user: ViewUser):
 
 
 @router.get("/batteries/{bid}/flights", responses=responses(401, 404))
-def get_battery_flights(bid: int, db: DBSession, user: ViewUser):
+def get_battery_flights(bid: int, db: DBSession, user: ViewUser, _flights: FlightsViewUser):
     """Get all flights that used a specific battery."""
     from app.models.flight import Flight
     from app.models.pilot import Pilot
@@ -176,7 +178,7 @@ def get_battery_flights(bid: int, db: DBSession, user: ViewUser):
 
 
 @router.get("/batteries/{bid}/pilots", responses=responses(401, 404))
-def get_battery_pilots(bid: int, db: DBSession, user: ViewUser):
+def get_battery_pilots(bid: int, db: DBSession, user: ViewUser, _flights: FlightsViewUser):
     """Get unique pilots who have used a specific battery."""
     from app.models.flight import Flight
     from app.models.pilot import Pilot
@@ -578,7 +580,7 @@ def get_sensor(sid: int, db: DBSession, user: ViewUser):
 
 
 @router.get("/sensors/{sid}/stats", responses=responses(401, 404))
-def get_sensor_stats(sid: int, db: DBSession, user: ViewUser):
+def get_sensor_stats(sid: int, db: DBSession, user: ViewUser, _flights: FlightsViewUser):
     """Get flight stats for a sensor package."""
     from app.models.flight import Flight
     sensor = db.query(SensorPackage).filter(SensorPackage.id == sid).first()
@@ -590,7 +592,7 @@ def get_sensor_stats(sid: int, db: DBSession, user: ViewUser):
 
 
 @router.get("/sensors/{sid}/flights", responses=responses(401, 404))
-def get_sensor_flights(sid: int, db: DBSession, user: ViewUser):
+def get_sensor_flights(sid: int, db: DBSession, user: ViewUser, _flights: FlightsViewUser):
     """Get all flights that used a specific sensor package."""
     from app.models.flight import Flight
     from app.models.pilot import Pilot
@@ -614,7 +616,7 @@ def get_sensor_flights(sid: int, db: DBSession, user: ViewUser):
 
 
 @router.get("/sensors/{sid}/pilots", responses=responses(401, 404))
-def get_sensor_pilots(sid: int, db: DBSession, user: ViewUser):
+def get_sensor_pilots(sid: int, db: DBSession, user: ViewUser, _flights: FlightsViewUser):
     """Get unique pilots who have used a specific sensor package."""
     from app.models.flight import Flight
     from app.models.pilot import Pilot
@@ -707,7 +709,7 @@ def get_attachment(aid: int, db: DBSession, user: ViewUser):
 
 
 @router.get("/attachments/{aid}/stats", responses=responses(401, 404))
-def get_attachment_stats(aid: int, db: DBSession, user: ViewUser):
+def get_attachment_stats(aid: int, db: DBSession, user: ViewUser, _flights: FlightsViewUser):
     """Get flight stats for an attachment across all positions."""
     from app.models.flight import Flight
     from sqlalchemy import or_
@@ -752,7 +754,7 @@ def _attachment_flight_item(f, sn) -> dict:
 
 
 @router.get("/attachments/{aid}/flights", responses=responses(401, 404))
-def get_attachment_flights(aid: int, db: DBSession, user: ViewUser):
+def get_attachment_flights(aid: int, db: DBSession, user: ViewUser, _flights: FlightsViewUser):
     """Get all flights that used a specific attachment, including which position."""
     from app.models.flight import Flight
     from app.models.pilot import Pilot
@@ -772,7 +774,7 @@ def get_attachment_flights(aid: int, db: DBSession, user: ViewUser):
 
 
 @router.get("/attachments/{aid}/pilots", responses=responses(401, 404))
-def get_attachment_pilots(aid: int, db: DBSession, user: ViewUser):
+def get_attachment_pilots(aid: int, db: DBSession, user: ViewUser, _flights: FlightsViewUser):
     """Get unique pilots who have used a specific attachment."""
     from app.models.flight import Flight
     from app.models.pilot import Pilot

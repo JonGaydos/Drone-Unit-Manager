@@ -149,6 +149,13 @@ def _evaluate_currency(rules: list[CurrencyRule], flights: list[Flight]):
     return [_evaluate_rule(rule, flights, today) for rule in rules]
 
 
+def counted_flights_filter():
+    """The flights that count toward currency: only reviewed ones, from every
+    source. Everything that evaluates currency loads through flights_by_pilot,
+    so this one condition is the rule everywhere."""
+    return Flight.review_status == "reviewed"
+
+
 def flights_by_pilot(db: Session, pilot_ids: list[int], rules: list[CurrencyRule]) -> dict[int, list[Flight]]:
     """Each pilot's flights that any rule can see, in one query.
 
@@ -161,7 +168,7 @@ def flights_by_pilot(db: Session, pilot_ids: list[int], rules: list[CurrencyRule
     since = date.today() - timedelta(days=max(rule.period_days for rule in rules))
     grouped: dict[int, list[Flight]] = {}
     for f in db.query(Flight).options(joinedload(Flight.vehicle)).filter(
-        Flight.pilot_id.in_(pilot_ids), Flight.date >= since,
+        Flight.pilot_id.in_(pilot_ids), Flight.date >= since, counted_flights_filter(),
     ).all():
         grouped.setdefault(f.pilot_id, []).append(f)
     return grouped

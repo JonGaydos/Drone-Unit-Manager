@@ -61,7 +61,7 @@ def _seed_rule(db, *, name, required_hours, period_days, required_flights=None):
 
 
 def _seed_flight(db, *, pilot_id, flight_date, duration_seconds):
-    f = Flight(pilot_id=pilot_id, date=flight_date, duration_seconds=duration_seconds)
+    f = Flight(pilot_id=pilot_id, date=flight_date, duration_seconds=duration_seconds, review_status="reviewed")
     db.add(f)
     db.commit()
     db.refresh(f)

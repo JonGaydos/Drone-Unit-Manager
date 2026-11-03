@@ -3,10 +3,10 @@ import logging
 import os
 from datetime import date
 from types import SimpleNamespace
-from typing import Optional
+from typing import Annotated, Optional
 from xml.sax.saxutils import escape as xml_escape
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import func, or_
@@ -14,7 +14,9 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.constants import APP_TITLE
 from app.config import settings
-from app.deps import DBSession, PilotUser
+from app.deps import DBSession
+from app.routers.auth import require_permission
+from app.services.permissions import can
 from app.models.flight import Flight
 from app.models.pilot import Pilot
 from app.services.flight_scope import counted_flight_clause, counted_only
@@ -27,6 +29,7 @@ from app.models.operating_authority import (
 from app.models.battery import Battery
 from app.models.maintenance import MaintenanceRecord
 from app.models.setting import Setting
+from app.models.user import User
 from app.models.mission_log import MissionLog
 from app.models.mission_log_pilot import MissionLogPilot
 from app.models.training_log import TrainingLog
@@ -44,6 +47,16 @@ rl_config.trustedSchemes = ["file", "data"]
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
 logger = logging.getLogger(__name__)
+
+ReportUser = Annotated[User, Depends(require_permission("reports.generate"))]
+
+FLIGHTS_VIEW = "flights.view"
+LOGS_VIEW = "logs.view"
+FLEET_VIEW = "fleet.view"
+CERTIFICATIONS_VIEW = "certifications.view"
+AUTHORITY_VIEW = "authority.view"
+MAINTENANCE_VIEW = "maintenance.view"
+INCIDENTS_VIEW = "incidents.view"
 
 # Hard cap on the number of per-pilot PDFs rendered into a single ZIP. Generous
 # so normal batches are unaffected; bounds an otherwise unbounded render loop.
@@ -89,14 +102,39 @@ def _dispatch_report(config: ReportConfig, db: Session) -> dict:
         "annual_unit_report": _annual_unit_report,
         "per_pilot_annual_review": _per_pilot_annual_review,
     }
-    generator = generators.get(config.report_type)
-    if generator:
-        return generator(config, db)
-    return {"error": "Unknown report type"}
+    return generators[config.report_type](config, db)
 
 
-@router.post("/generate", responses=responses(401))
-def generate_report(config: ReportConfig, db: DBSession, user: PilotUser):
+# The view keys each report needs, all of them, because its content comes from
+# those features. A report type with no entry is refused.
+REPORT_VIEW_KEYS: dict[str, tuple[str, ...]] = {
+    "flight_summary": (FLIGHTS_VIEW,),
+    "pilot_hours": (FLIGHTS_VIEW,),
+    "equipment_utilization": (FLEET_VIEW, FLIGHTS_VIEW),
+    "pilot_certifications": (CERTIFICATIONS_VIEW, AUTHORITY_VIEW),
+    "battery_status": (FLEET_VIEW,),
+    "maintenance_history": (MAINTENANCE_VIEW,),
+    "pilot_activity_summary": (FLIGHTS_VIEW, LOGS_VIEW),
+    "annual_unit_report": (
+        FLIGHTS_VIEW, LOGS_VIEW, FLEET_VIEW, CERTIFICATIONS_VIEW, AUTHORITY_VIEW,
+        MAINTENANCE_VIEW, INCIDENTS_VIEW,
+    ),
+    "per_pilot_annual_review": (FLIGHTS_VIEW, LOGS_VIEW, CERTIFICATIONS_VIEW),
+}
+
+
+def _require_report_views(db: Session, user: User, report_type: str) -> None:
+    """Refuse an unknown report type, or one needing a view the user lacks."""
+    view_keys = REPORT_VIEW_KEYS.get(report_type)
+    if view_keys is None:
+        raise HTTPException(400, "Unknown report type")
+    if not all(can(db, user, key) for key in view_keys):
+        raise HTTPException(403, "You do not have permission to view this report's content")
+
+
+@router.post("/generate", responses=responses(400, 401, 403))
+def generate_report(config: ReportConfig, db: DBSession, user: ReportUser):
+    _require_report_views(db, user, config.report_type)
     return _dispatch_report(config, db)
 
 
@@ -385,11 +423,10 @@ def _render_report_pdf(data: dict, config: ReportConfig, org_name: str, logo_pat
     return buffer
 
 
-@router.post("/generate/pdf", responses=responses(401))
-def generate_report_pdf(config: ReportConfig, db: DBSession, user: PilotUser):
+@router.post("/generate/pdf", responses=responses(400, 401, 403))
+def generate_report_pdf(config: ReportConfig, db: DBSession, user: ReportUser):
+    _require_report_views(db, user, config.report_type)
     data = _dispatch_report(config, db)
-    if "error" in data:
-        data = {"title": "Unknown Report", "summary": {}, "rows": [], "columns": []}
     org_name, logo_path = _get_org_branding(db)
     buffer = _render_report_pdf(data, config, org_name, logo_path)
     filename = f"{config.report_type}_{date.today()}.pdf"
@@ -400,10 +437,15 @@ def generate_report_pdf(config: ReportConfig, db: DBSession, user: PilotUser):
     )
 
 
-@router.post("/per-pilot/zip", responses=responses(401))
-def generate_per_pilot_zip(config: ReportConfig, db: DBSession, user: PilotUser):
-    """Generate one Per-Pilot Annual Review PDF per pilot and return as a zip."""
+@router.post("/per-pilot/zip", responses=responses(401, 403))
+def generate_per_pilot_zip(config: ReportConfig, db: DBSession, user: ReportUser):
+    """Generate one Per-Pilot Annual Review PDF per pilot and return as a zip.
+
+    Always renders that report, so its view keys apply whatever type the body names.
+    """
     import zipfile
+
+    _require_report_views(db, user, "per_pilot_annual_review")
 
     if config.pilot_ids:
         pilots = db.query(Pilot).filter(Pilot.id.in_(config.pilot_ids)).all()

@@ -1,13 +1,18 @@
 from datetime import date, timedelta
 
-from fastapi import APIRouter, HTTPException
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, extract
 
 from app.deps import DBSession, CurrentUser
 from app.responses import responses
+from app.routers.auth import require_permission
 from app.models.flight import Flight
 from app.models.pilot import Pilot
+from app.models.user import User
 from app.services.flight_scope import counted_flight_clause
+from app.services.permissions import can
 from app.services.pilot_contacts import hides_contacts
 from app.models.vehicle import Vehicle
 from app.models.certification import PilotCertification, CertificationType
@@ -21,6 +26,11 @@ from app.schemas.dashboard import (
 )
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
+
+FlightsUser = Annotated[User, Depends(require_permission("flights.view"))]
+FleetUser = Annotated[User, Depends(require_permission("fleet.view"))]
+MaintenanceUser = Annotated[User, Depends(require_permission("maintenance.view"))]
+CertificationsUser = Annotated[User, Depends(require_permission("certifications.view"))]
 
 
 # What the dashboard tile shows at once. Five is enough to cover everything
@@ -78,7 +88,7 @@ def _due_items(db):
 
 
 @router.get("/maintenance-due", responses=responses(401))
-def maintenance_due(db: DBSession, user: CurrentUser, limit: int = MAINTENANCE_DUE_LIMIT):
+def maintenance_due(db: DBSession, user: MaintenanceUser, limit: int = MAINTENANCE_DUE_LIMIT):
     """Maintenance needing attention, most overdue first.
 
     Sorted by days remaining ascending, so a negative number (overdue) sorts
@@ -196,7 +206,7 @@ def activity_by_month(db: DBSession, user: CurrentUser, months: int = 12):
 
 
 @router.get("/top-pilots-30d", responses=responses(401))
-def top_pilots_30d(db: DBSession, user: CurrentUser, limit: int = 5):
+def top_pilots_30d(db: DBSession, user: FlightsUser, limit: int = 5):
     """Top N pilots by flight hours in the last 30 days. For the bento
     leaderboard tile."""
     cutoff = date.today() - timedelta(days=30)
@@ -220,7 +230,7 @@ def top_pilots_30d(db: DBSession, user: CurrentUser, limit: int = 5):
 
 
 @router.get("/top-vehicles-30d", responses=responses(401))
-def top_vehicles_30d(db: DBSession, user: CurrentUser, limit: int = 5):
+def top_vehicles_30d(db: DBSession, user: FleetUser, limit: int = 5):
     """Top N vehicles by flight hours in the last 30 days."""
     cutoff = date.today() - timedelta(days=30)
     rows = db.query(
@@ -245,7 +255,7 @@ def top_vehicles_30d(db: DBSession, user: CurrentUser, limit: int = 5):
 @router.get("/analytics/flights-by-purpose", response_model=list[FlightsByPurpose])
 def flights_by_purpose(
     db: DBSession,
-    user: CurrentUser,
+    user: FlightsUser,
     date_from: date | None = None,
     date_to: date | None = None):
     # Group by the expression, not by the string "purpose": grouping by the
@@ -263,7 +273,7 @@ def flights_by_purpose(
 
 
 @router.get("/analytics/flights-by-year", response_model=list[FlightsByYear], responses=responses(401))
-def flights_by_year(db: DBSession, user: CurrentUser):
+def flights_by_year(db: DBSession, user: FlightsUser):
     rows = db.query(
         extract("year", Flight.date).label("year"),
         func.count(Flight.id).label("count"),
@@ -274,7 +284,7 @@ def flights_by_year(db: DBSession, user: CurrentUser):
 @router.get("/analytics/flights-by-year-purpose", response_model=list[FlightsByYearPurpose])
 def flights_by_year_purpose(
     db: DBSession,
-    user: CurrentUser,
+    user: FlightsUser,
 ):
     purpose = func.coalesce(func.nullif(Flight.purpose, ""), "Unspecified")
     year = extract("year", Flight.date)
@@ -287,7 +297,7 @@ def flights_by_year_purpose(
 @router.get("/analytics/flights-by-pilot", response_model=list[FlightsByPilot])
 def flights_by_pilot(
     db: DBSession,
-    user: CurrentUser,
+    user: FlightsUser,
     date_from: date | None = None,
     date_to: date | None = None):
     q = db.query(
@@ -314,7 +324,7 @@ def flights_by_pilot(
 
 
 @router.get("/analytics/avg-duration-by-year", response_model=list[AvgDurationByYear], responses=responses(401))
-def avg_duration_by_year(db: DBSession, user: CurrentUser):
+def avg_duration_by_year(db: DBSession, user: FlightsUser):
     rows = db.query(
         extract("year", Flight.date).label("year"),
         func.avg(Flight.duration_seconds).label("avg_seconds"),
@@ -324,7 +334,7 @@ def avg_duration_by_year(db: DBSession, user: CurrentUser):
 
 
 @router.get("/analytics/monthly-flights", response_model=list[MonthlyFlights], responses=responses(401))
-def monthly_flights(db: DBSession, user: CurrentUser):
+def monthly_flights(db: DBSession, user: FlightsUser):
     rows = db.query(
         extract("year", Flight.date).label("year"),
         extract("month", Flight.date).label("month"),
@@ -334,7 +344,7 @@ def monthly_flights(db: DBSession, user: CurrentUser):
 
 
 @router.get("/analytics/vehicle-hours", response_model=list[VehicleHours], responses=responses(401))
-def vehicle_hours(db: DBSession, user: CurrentUser):
+def vehicle_hours(db: DBSession, user: FleetUser):
     rows = db.query(
         Vehicle.manufacturer,
         Vehicle.model,
@@ -353,7 +363,7 @@ def vehicle_hours(db: DBSession, user: CurrentUser):
 
 
 @router.get("/analytics/pilot-hours", response_model=list[PilotHours], responses=responses(401))
-def pilot_hours(db: DBSession, user: CurrentUser):
+def pilot_hours(db: DBSession, user: FlightsUser):
     rows = db.query(
         Pilot.id,
         Pilot.first_name,
@@ -375,7 +385,7 @@ def pilot_hours(db: DBSession, user: CurrentUser):
 
 
 @router.get("/analytics/pilot-performance/{pilot_id}", responses=responses(401, 404))
-def pilot_performance(pilot_id: int, db: DBSession, user: CurrentUser):
+def pilot_performance(pilot_id: int, db: DBSession, user: FlightsUser):
     from app.models.incident import Incident
     from app.models.training_log_pilot import TrainingLogPilot
     from app.models.mission_log_pilot import MissionLogPilot
@@ -420,18 +430,20 @@ def pilot_performance(pilot_id: int, db: DBSession, user: CurrentUser):
     ).all()
     flights_by_purpose = [{"purpose": r.purpose, "count": r.count} for r in purpose_rows]
 
-    # Incidents involving this pilot
-    incidents = db.query(Incident).filter(Incident.pilot_id == pilot_id).count()
+    # Incidents involving this pilot, for users who may view incidents
+    incidents = None
+    if can(db, user, "incidents.view"):
+        incidents = db.query(Incident).filter(Incident.pilot_id == pilot_id).count()
 
-    # Training hours
-    training_hours = db.query(func.coalesce(func.sum(TrainingLogPilot.hours), 0)).filter(
-        TrainingLogPilot.pilot_id == pilot_id
-    ).scalar()
-
-    # Mission hours
-    mission_hours = db.query(func.coalesce(func.sum(MissionLogPilot.hours), 0)).filter(
-        MissionLogPilot.pilot_id == pilot_id
-    ).scalar()
+    # Training and mission hours, for users who may view the logs
+    training_hours = mission_hours = None
+    if can(db, user, "logs.view"):
+        training_hours = round(float(db.query(func.coalesce(func.sum(TrainingLogPilot.hours), 0)).filter(
+            TrainingLogPilot.pilot_id == pilot_id
+        ).scalar()), 1)
+        mission_hours = round(float(db.query(func.coalesce(func.sum(MissionLogPilot.hours), 0)).filter(
+            MissionLogPilot.pilot_id == pilot_id
+        ).scalar()), 1)
 
     # Max altitude and speed from telemetry
     max_alt = db.query(func.max(Flight.max_altitude_m)).filter(
@@ -449,15 +461,15 @@ def pilot_performance(pilot_id: int, db: DBSession, user: CurrentUser):
         "flights_by_purpose": flights_by_purpose,
         "vehicles_flown": vehicles_flown,
         "incidents": incidents,
-        "training_hours": round(float(training_hours), 1),
-        "mission_hours": round(float(mission_hours), 1),
+        "training_hours": training_hours,
+        "mission_hours": mission_hours,
         "max_altitude_m": round(float(max_alt), 1) if max_alt else None,
         "max_speed_mps": round(float(max_speed), 1) if max_speed else None,
     }
 
 
 @router.get("/analytics/fleet-health", responses=responses(401))
-def fleet_health(db: DBSession, user: CurrentUser):
+def fleet_health(db: DBSession, user: FleetUser):
     from app.models.battery import Battery
     from app.models.maintenance_schedule import MaintenanceSchedule
 
@@ -518,6 +530,10 @@ def fleet_health(db: DBSession, user: CurrentUser):
     # Overall stats
     avg_battery_health = sum(b.health_pct or 0 for b in batteries) / len(batteries) if batteries else 0
     total_overdue = sum(v["overdue_maintenance"] for v in vehicle_stats)
+
+    # The unit total stays; the count against a named vehicle follows maintenance.view.
+    if not can(db, user, "maintenance.view"):
+        vehicle_stats = [{**v, "overdue_maintenance": None} for v in vehicle_stats]
 
     return {
         "vehicles": vehicle_stats,
@@ -671,6 +687,11 @@ def compliance_dashboard(db: DBSession, user: CurrentUser):
     # Operating authority (org-level COAs / Part 107 waivers).
     authorities, expired_authorities, expiring_authorities, grounding_expired, advisory_expired, score_cap_reason = _authority_summary(db, today)
 
+    # The score and counts are unit-wide. The lists name records, so they follow
+    # their features' view permissions.
+    shows_certifications = can(db, user, "certifications.view")
+    shows_authorities = can(db, user, "authority.view")
+
     return {
         "total_pilots": total_pilots,
         "expired_certifications": expired_certs,
@@ -679,7 +700,7 @@ def compliance_dashboard(db: DBSession, user: CurrentUser):
             "cert_type_id": c.certification_type_id,
             "expiration_date": c.expiration_date.isoformat() if c.expiration_date else None,
             "days_remaining": (c.expiration_date - today).days if c.expiration_date else None,
-        } for c in expiring_soon],
+        } for c in expiring_soon] if shows_certifications else [],
         "total_vehicles": total_vehicles,
         "expired_registrations": expired_regs,
         "overdue_maintenance": overdue_maintenance,
@@ -689,10 +710,10 @@ def compliance_dashboard(db: DBSession, user: CurrentUser):
         "currency_rules_active": currency_rules_active,
         "pilots_current": pilots_current,
         "pilots_lapsed": pilots_lapsed,
-        "pilot_currency_status": pilot_currency_status,
+        "pilot_currency_status": pilot_currency_status if shows_certifications else [],
         "operating_authorities_tracked": len(authorities),
-        "expired_authorities": [_authority_brief(a, today) for a in expired_authorities],
-        "expiring_authorities": [_authority_brief(a, today) for a in expiring_authorities],
+        "expired_authorities": [_authority_brief(a, today) for a in expired_authorities] if shows_authorities else [],
+        "expiring_authorities": [_authority_brief(a, today) for a in expiring_authorities] if shows_authorities else [],
         "score_cap_reason": score_cap_reason,
         "compliance_score": _calc_compliance_score(
             total_pilots, expired_certs, total_vehicles, expired_regs,
@@ -747,7 +768,7 @@ def _calc_compliance_score(pilots, exp_certs, vehicles, exp_regs, overdue, incid
 
 
 @router.get("/upcoming-expirations", responses=responses(401))
-def upcoming_expirations(db: DBSession, user: CurrentUser, days: int = 90):
+def upcoming_expirations(db: DBSession, user: CertificationsUser, days: int = 90):
     cutoff = date.today() + timedelta(days=days)
     rows = db.query(
         PilotCertification, Pilot, CertificationType,

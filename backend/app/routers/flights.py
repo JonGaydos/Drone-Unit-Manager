@@ -239,16 +239,40 @@ def list_purposes_with_usage(db: DBSession, user: ReviewUser):
     ]
 
 
+def _overdue_maintenance_warnings(db, vehicle_id: int, today: date) -> list[str]:
+    from app.models.maintenance_schedule import MaintenanceSchedule
+
+    overdue = db.query(MaintenanceSchedule).filter(
+        MaintenanceSchedule.entity_type == "vehicle",
+        MaintenanceSchedule.entity_id == vehicle_id,
+        MaintenanceSchedule.is_active.is_(True),
+        MaintenanceSchedule.next_due.isnot(None),
+        MaintenanceSchedule.next_due < today,
+    ).all()
+    return [f"Overdue maintenance: {s.name} (due {s.next_due})." for s in overdue]
+
+
+def _expired_registration_warnings(db, vehicle_id: int, today: date) -> list[str]:
+    from app.models.vehicle_registration import VehicleRegistration
+
+    current_reg = db.query(VehicleRegistration).filter(
+        VehicleRegistration.vehicle_id == vehicle_id,
+        VehicleRegistration.is_current.is_(True),
+    ).order_by(VehicleRegistration.registration_date.desc()).first()
+    if current_reg and current_reg.expiry_date and current_reg.expiry_date < today:
+        return [f"FAA registration expired on {current_reg.expiry_date}."]
+    return []
+
+
 @router.get("/preflight-check", responses=responses(401))
 def preflight_check(vehicle_id: int, db: DBSession, user: ViewUser):
     """Non-blocking pre-flight readiness warnings for a vehicle: a non-active
     status, overdue active maintenance schedules, or an expired current FAA
     registration. Surfaced in the Add Flight form so the logger sees airframe
     issues without being blocked from recording a flight that already happened.
+    Maintenance and registration warnings need those features' view permissions.
     """
     from app.models.vehicle import Vehicle
-    from app.models.maintenance_schedule import MaintenanceSchedule
-    from app.models.vehicle_registration import VehicleRegistration
 
     today = date.today()
     warnings = []
@@ -259,22 +283,10 @@ def preflight_check(vehicle_id: int, db: DBSession, user: ViewUser):
     if vehicle.status and vehicle.status != "active":
         warnings.append(f"Vehicle status is '{vehicle.status}', not active.")
 
-    overdue = db.query(MaintenanceSchedule).filter(
-        MaintenanceSchedule.entity_type == "vehicle",
-        MaintenanceSchedule.entity_id == vehicle_id,
-        MaintenanceSchedule.is_active.is_(True),
-        MaintenanceSchedule.next_due.isnot(None),
-        MaintenanceSchedule.next_due < today,
-    ).all()
-    for s in overdue:
-        warnings.append(f"Overdue maintenance: {s.name} (due {s.next_due}).")
-
-    current_reg = db.query(VehicleRegistration).filter(
-        VehicleRegistration.vehicle_id == vehicle_id,
-        VehicleRegistration.is_current.is_(True),
-    ).order_by(VehicleRegistration.registration_date.desc()).first()
-    if current_reg and current_reg.expiry_date and current_reg.expiry_date < today:
-        warnings.append(f"FAA registration expired on {current_reg.expiry_date}.")
+    if permissions_service.can(db, user, "maintenance.view"):
+        warnings += _overdue_maintenance_warnings(db, vehicle_id, today)
+    if permissions_service.can(db, user, "registrations.view"):
+        warnings += _expired_registration_warnings(db, vehicle_id, today)
 
     return {"warnings": warnings}
 

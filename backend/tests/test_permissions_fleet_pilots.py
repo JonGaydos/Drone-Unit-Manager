@@ -19,6 +19,7 @@ PILOT_OPTIONS_URL = "/api/pilots/options"
 FLEET_OPTIONS_URL = "/api/fleet/options"
 FOLDERS_URL = "/api/folders"
 AUDIT_URL = "/api/audit"
+AUDIT_CSV_URL = "/api/export/audit/csv"
 REGISTRATIONS_URL = "/api/vehicle-registrations/current"
 CERT_TYPES_URL = "/api/certification-types"
 SEARCH_URL = "/api/search?q=secret"
@@ -279,9 +280,16 @@ def test_manage_keys_grantable(client, admin_headers, pilot_headers, supervisor_
 
 def test_audit_view_grantable(client, admin_headers, supervisor_headers, pilot_headers):
     assert client.get(AUDIT_URL, headers=supervisor_headers).status_code == 403
+    assert client.get(AUDIT_CSV_URL, headers=supervisor_headers).status_code == 403
     _grid(client, admin_headers, ("supervisor", "audit.view", "yes"))
     assert client.get(AUDIT_URL, headers=supervisor_headers).status_code == 200
+    assert client.get(AUDIT_CSV_URL, headers=supervisor_headers).status_code == 200
     assert client.get(AUDIT_URL, headers=pilot_headers).status_code == 403
+    assert client.get(AUDIT_CSV_URL, headers=pilot_headers).status_code == 403
+    # The audit CSV also needs the export permission.
+    _grid(client, admin_headers, ("supervisor", "reports.export", "no"))
+    assert client.get(AUDIT_URL, headers=supervisor_headers).status_code == 200
+    assert client.get(AUDIT_CSV_URL, headers=supervisor_headers).status_code == 403
 
 
 def test_folder_manage_refused_for_pilot(client, db, admin_headers, supervisor_headers, pilot_headers):

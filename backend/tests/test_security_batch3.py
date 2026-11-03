@@ -275,8 +275,8 @@ def test_test_digest_sends_are_rate_limited(client, db, pilot_user, monkeypatch)
     assert len(_audit(db, "notification", "send_test")) == 3
 
 
-def test_digest_redirect_address_is_audited(client, db, pilot_user):
-    client.put("/api/notifications/preferences", headers=_bearer(pilot_user),
+def test_digest_redirect_address_is_audited(client, db, supervisor_user):
+    client.put("/api/notifications/preferences", headers=_bearer(supervisor_user),
                json={"email_override": "someone@elsewhere.example"})
     entries = _audit(db, "notification_preference", "update")
     assert entries

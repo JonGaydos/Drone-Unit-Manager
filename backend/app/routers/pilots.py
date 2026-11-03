@@ -33,6 +33,9 @@ MANAGE_KEY = "pilots.manage"
 ViewUser = Annotated[User, Depends(require_permission("pilots.view"))]
 EditUser = Annotated[User, Depends(require_permission(EDIT_KEY))]
 ManageUser = Annotated[User, Depends(require_permission(MANAGE_KEY))]
+# Figures drawn from another feature follow that feature's view permission.
+FlightsViewUser = Annotated[User, Depends(require_permission("flights.view"))]
+CertificationsViewUser = Annotated[User, Depends(require_permission("certifications.view"))]
 
 
 @router.get("/options", responses=responses(401))
@@ -78,7 +81,7 @@ def get_pilot(pilot_id: int, db: DBSession, user: ViewUser):
 
 
 @router.get("/{pilot_id}/stats", response_model=PilotStats, responses=responses(401, 404))
-def get_pilot_stats(pilot_id: int, db: DBSession, user: ViewUser):
+def get_pilot_stats(pilot_id: int, db: DBSession, user: ViewUser, _flights: FlightsViewUser):
     """Get aggregated flight statistics for a pilot (total flights, hours, avg duration)."""
     pilot = db.query(Pilot).filter(Pilot.id == pilot_id).first()
     if not pilot:
@@ -96,7 +99,7 @@ def get_pilot_stats(pilot_id: int, db: DBSession, user: ViewUser):
 
 
 @router.get("/{pilot_id}/needs-attention", responses=responses(401, 404))
-def get_pilot_needs_attention(pilot_id: int, db: DBSession, user: ViewUser):
+def get_pilot_needs_attention(pilot_id: int, db: DBSession, user: ViewUser, _certifications: CertificationsViewUser):
     """Aggregate a pilot's lapsed currency and expired/expiring certifications.
 
     Single source of truth for the Pilot Detail "Needs Attention" card.

@@ -21,6 +21,8 @@ router = APIRouter(prefix="/api/vehicles", tags=["vehicles"])
 ViewUser = Annotated[User, Depends(require_permission("fleet.view"))]
 ManageUser = Annotated[User, Depends(require_permission("fleet.manage"))]
 LocationUser = Annotated[User, Depends(require_permission("fleet.location"))]
+# Flight figures follow the flights view permission.
+FlightsViewUser = Annotated[User, Depends(require_permission("flights.view"))]
 
 
 @router.get("", response_model=list[VehicleOut])
@@ -193,7 +195,7 @@ def merge_vehicles(target_id: int, merge_from_id: int, db: DBSession, admin: Man
 
 
 @router.get("/{vehicle_id}/stats", responses=responses(401, 404))
-def get_vehicle_stats(vehicle_id: int, db: DBSession, user: ViewUser):
+def get_vehicle_stats(vehicle_id: int, db: DBSession, user: ViewUser, _flights: FlightsViewUser):
     """Get aggregated flight statistics for a vehicle (total flights, hours, last flight date)."""
     from sqlalchemy import func
     from app.models.flight import Flight
