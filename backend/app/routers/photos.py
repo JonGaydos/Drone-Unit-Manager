@@ -569,7 +569,7 @@ def unlink_photo_incident(photo_id: int, incident_id: int, db: DBSession, user: 
 @router.delete("/{photo_id}", responses=responses(401, 404, 409))
 def delete_photo(photo_id: int, db: DBSession, user: EditUser):
     """Move a photo to Recently deleted. The file and its links stay, so a
-    supervisor can restore it; only an admin purge removes it for good."""
+    role holding files.custody can restore it; only an admin purge removes it for good."""
     photo = _live_photo(db, photo_id)
     permissions_service.require_record_access(db, user, FILES_EDIT, permissions_service.owns_photo(user, photo))
     evidence.soft_delete(photo, user)

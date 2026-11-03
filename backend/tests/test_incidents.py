@@ -10,7 +10,7 @@ auto-grounding side effect in ``_ground_vehicle_if_needed``:
   ``was_grounded`` (captured before the update); when the flag was already set,
   the false->true transition never fires, so editing other fields is inert on
   the vehicle.
-* Create/edit are pilot-gated (``require_pilot``); a viewer gets 403.
+* Create and edit follow ``incidents.create`` and ``incidents.edit``; a viewer gets 403.
 
 Vehicles are seeded via the ``db`` fixture and re-read after ``expire_all`` since
 the app commits on a separate session.

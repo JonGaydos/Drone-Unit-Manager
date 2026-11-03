@@ -335,8 +335,8 @@ def delete_document(
     db: DBSession,
     admin: EditUser,
 ):
-    """Move a document to Recently deleted. The file stays, so a supervisor can
-    restore it; only an admin purge removes it for good."""
+    """Move a document to Recently deleted. The file stays, so a role holding
+    files.custody can restore it; only an admin purge removes it for good."""
     doc = _live_document(db, doc_id)
     permissions_service.require_record_access(db, admin, FILES_EDIT, permissions_service.owns_document(db, admin, doc))
     evidence.soft_delete(doc, admin)

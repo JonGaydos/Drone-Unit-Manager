@@ -154,20 +154,6 @@ def require_admin(user: Annotated[User, Depends(get_current_user)]) -> User:
     return user
 
 
-def require_supervisor(user: Annotated[User, Depends(get_current_user)]) -> User:
-    """Allow admin or supervisor roles."""
-    if user.role not in ("admin", "supervisor"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Requires supervisor role or higher")
-    return user
-
-
-def require_pilot(user: Annotated[User, Depends(get_current_user)]) -> User:
-    """Allow admin, supervisor, or pilot roles."""
-    if user.role not in ("admin", "supervisor", "pilot"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Requires pilot role or higher")
-    return user
-
-
 def require_permission(key: str):
     """Build a dependency that allows users whose role holds the permission key.
 

@@ -89,6 +89,340 @@ ALLOWLISTS = {
     "PUBLIC_ROUTES": PUBLIC_ROUTES,
 }
 
+# Each route's permission keys, written from the Route Mapping in the plan. Only
+# keys a route declares as guards appear here. The matrix tests cover checks made
+# inside handlers, which a dependency walk cannot see:
+#   Level checks with require_record_access:
+#     PATCH and DELETE on flights, maintenance records and calendar events
+#     PATCH and cancel on flight plans
+#     PATCH on incidents and pilots
+#     PATCH, DELETE and roster add and remove on mission and training logs
+#     PATCH and DELETE on documents and photos
+#     DELETE /api/media/{media_id}, which holds no key here (see SIGNED_IN_ROUTES)
+#   POST /api/documents/upload: files.upload at All to attach to anyone's record
+#   PATCH /api/flights/{flight_id}: flights.review for the sign-off fields
+#   PATCH /api/incidents/{incident_id}: incidents.resolve for its fields
+#   PATCH /api/pilots/{pilot_id}: pilots.manage for the supervisor-only fields
+#   The /api/reports routes: the view keys for the report's content
+FLIGHTS_VIEW = "flights.view"
+FLIGHTS_REVIEW = "flights.review"
+PLANS_VIEW = "flight_plans.view"
+PLANS_EDIT = "flight_plans.edit"
+PLANS_APPROVE = "flight_plans.approve"
+INCIDENTS_VIEW = "incidents.view"
+LOGS_VIEW = "logs.view"
+LOGS_CREATE = "logs.create"
+LOGS_EDIT = "logs.edit"
+MAINTENANCE_VIEW = "maintenance.view"
+MAINTENANCE_EDIT = "maintenance.edit"
+SCHEDULES_MANAGE = "schedules.manage"
+FLEET_VIEW = "fleet.view"
+FLEET_MANAGE = "fleet.manage"
+CHECKOUTS_USE = "checkouts.use"
+PILOTS_VIEW = "pilots.view"
+PILOTS_MANAGE = "pilots.manage"
+CERTIFICATIONS_VIEW = "certifications.view"
+CERTIFICATIONS_MANAGE = "certifications.manage"
+CHECKLISTS_VIEW = "checklists.view"
+CHECKLISTS_MANAGE = "checklists.manage"
+CALENDAR_EDIT = "calendar.edit"
+FILES_VIEW = "files.view"
+FILES_UPLOAD = "files.upload"
+FILES_EDIT = "files.edit"
+FILES_CUSTODY = "files.custody"
+FOLDERS_MANAGE = "folders.manage"
+ALERTS_VIEW = "alerts.view"
+ALERTS_DISMISS = "alerts.dismiss"
+AUTHORITY_VIEW = "authority.view"
+AUTHORITY_MANAGE = "authority.manage"
+REGISTRATIONS_VIEW = "registrations.view"
+REGISTRATIONS_MANAGE = "registrations.manage"
+AUDIT_VIEW = "audit.view"
+REPORTS_GENERATE = "reports.generate"
+REPORTS_EXPORT = "reports.export"
+
+EXPECTED_ROUTE_KEYS = {
+    # flights
+    "GET /api/flights": {FLIGHTS_VIEW},
+    "GET /api/flights/count": {FLIGHTS_VIEW},
+    "GET /api/flights/review": {FLIGHTS_VIEW},
+    "GET /api/flights/{flight_id}": {FLIGHTS_VIEW},
+    "GET /api/flights/preflight-check": {FLIGHTS_VIEW},
+    "GET /api/flights/purposes/usage": {FLIGHTS_REVIEW},
+    "POST /api/flights": {"flights.create"},
+    "PATCH /api/flights/{flight_id}": {"flights.edit"},
+    "DELETE /api/flights/{flight_id}": {"flights.delete"},
+    "POST /api/flights/bulk-update": {FLIGHTS_REVIEW},
+    "POST /api/flights/bulk-delete": {FLIGHTS_REVIEW},
+    "PATCH /api/flights/{flight_id}/telemetry-status": {FLIGHTS_REVIEW},
+    "PATCH /api/flights/{flight_id}/review-status": {FLIGHTS_REVIEW},
+    # telemetry
+    "GET /api/telemetry/flight/{flight_id}": {FLIGHTS_VIEW},
+    # flight_plans
+    "GET /api/flight-plans": {PLANS_VIEW},
+    "GET /api/flight-plans/pending/count": {PLANS_VIEW},
+    "GET /api/flight-plans/{plan_id}": {PLANS_VIEW},
+    "POST /api/flight-plans": {"flight_plans.create"},
+    "PATCH /api/flight-plans/{plan_id}": {PLANS_EDIT},
+    "POST /api/flight-plans/{plan_id}/cancel": {PLANS_EDIT},
+    "POST /api/flight-plans/{plan_id}/approve": {PLANS_APPROVE},
+    "POST /api/flight-plans/{plan_id}/deny": {PLANS_APPROVE},
+    "DELETE /api/flight-plans/{plan_id}": {PLANS_APPROVE},
+    # incidents
+    "GET /api/incidents": {INCIDENTS_VIEW},
+    "GET /api/incidents/stats": {INCIDENTS_VIEW},
+    "GET /api/incidents/{incident_id}": {INCIDENTS_VIEW},
+    "POST /api/incidents": {"incidents.create"},
+    "PATCH /api/incidents/{incident_id}": {"incidents.edit"},
+    "DELETE /api/incidents/{incident_id}": {"incidents.delete"},
+    # mission_logs
+    "GET /api/mission-logs": {LOGS_VIEW},
+    "GET /api/mission-logs/{mission_id}": {LOGS_VIEW},
+    "POST /api/mission-logs": {LOGS_CREATE},
+    "PATCH /api/mission-logs/{mission_id}": {LOGS_EDIT},
+    "DELETE /api/mission-logs/{mission_id}": {LOGS_EDIT},
+    "POST /api/mission-logs/{mission_id}/pilots": {LOGS_EDIT},
+    "DELETE /api/mission-logs/{mission_id}/pilots/{pilot_id}": {LOGS_EDIT},
+    # training_logs
+    "GET /api/training-logs": {LOGS_VIEW},
+    "GET /api/training-logs/{training_id}": {LOGS_VIEW},
+    "POST /api/training-logs": {LOGS_CREATE},
+    "PATCH /api/training-logs/{training_id}": {LOGS_EDIT},
+    "DELETE /api/training-logs/{training_id}": {LOGS_EDIT},
+    "POST /api/training-logs/{training_id}/pilots": {LOGS_EDIT},
+    "DELETE /api/training-logs/{training_id}/pilots/{pilot_id}": {LOGS_EDIT},
+    # maintenance
+    "GET /api/maintenance": {MAINTENANCE_VIEW},
+    "GET /api/maintenance/{record_id}": {MAINTENANCE_VIEW},
+    "POST /api/maintenance": {"maintenance.create"},
+    "PATCH /api/maintenance/{record_id}": {MAINTENANCE_EDIT},
+    "DELETE /api/maintenance/{record_id}": {MAINTENANCE_EDIT},
+    # maintenance_schedules
+    "GET /api/maintenance/schedules": {MAINTENANCE_VIEW},
+    "GET /api/maintenance/schedules/{schedule_id}": {MAINTENANCE_VIEW},
+    "POST /api/maintenance/schedules/{schedule_id}/complete": {"schedules.complete"},
+    "POST /api/maintenance/schedules": {SCHEDULES_MANAGE},
+    "PATCH /api/maintenance/schedules/{schedule_id}": {SCHEDULES_MANAGE},
+    "DELETE /api/maintenance/schedules/{schedule_id}": {SCHEDULES_MANAGE},
+    # vehicles. The stats also follow flights.view, under the design's rule that
+    # flight figures follow that feature's view, which the mapping row does not state.
+    "GET /api/vehicles": {FLEET_VIEW},
+    "GET /api/vehicles/locations": {FLEET_VIEW},
+    "GET /api/vehicles/{vehicle_id}": {FLEET_VIEW},
+    "GET /api/vehicles/{vehicle_id}/photo/view": {FLEET_VIEW},
+    "GET /api/vehicles/{vehicle_id}/stats": {FLEET_VIEW, FLIGHTS_VIEW},
+    "POST /api/vehicles": {FLEET_MANAGE},
+    "PATCH /api/vehicles/{vehicle_id}": {FLEET_MANAGE},
+    "DELETE /api/vehicles/{vehicle_id}": {FLEET_MANAGE},
+    "POST /api/vehicles/{target_id}/merge": {FLEET_MANAGE},
+    "PATCH /api/vehicles/{vehicle_id}/location": {"fleet.location"},
+    # equipment. Stats, flights and pilots also follow flights.view where they
+    # draw on flights, by the same design rule. Controller and dock stats do not.
+    "GET /api/batteries": {FLEET_VIEW},
+    "GET /api/batteries/{bid}": {FLEET_VIEW},
+    "GET /api/batteries/{bid}/health-history": {FLEET_VIEW},
+    "GET /api/batteries/{bid}/stats": {FLEET_VIEW, FLIGHTS_VIEW},
+    "GET /api/batteries/{bid}/flights": {FLEET_VIEW, FLIGHTS_VIEW},
+    "GET /api/batteries/{bid}/pilots": {FLEET_VIEW, FLIGHTS_VIEW},
+    "POST /api/batteries": {FLEET_MANAGE},
+    "PATCH /api/batteries/{bid}": {FLEET_MANAGE},
+    "DELETE /api/batteries/{bid}": {FLEET_MANAGE},
+    "POST /api/batteries/{bid}/merge": {FLEET_MANAGE},
+    "POST /api/batteries/{bid}/readings": {FLEET_MANAGE},
+    "GET /api/controllers": {FLEET_VIEW},
+    "GET /api/controllers/{cid}": {FLEET_VIEW},
+    "GET /api/controllers/{cid}/stats": {FLEET_VIEW},
+    "POST /api/controllers": {FLEET_MANAGE},
+    "PATCH /api/controllers/{cid}": {FLEET_MANAGE},
+    "DELETE /api/controllers/{cid}": {FLEET_MANAGE},
+    "GET /api/docks": {FLEET_VIEW},
+    "GET /api/docks/{did}": {FLEET_VIEW},
+    "GET /api/docks/{did}/stats": {FLEET_VIEW},
+    "POST /api/docks": {FLEET_MANAGE},
+    "PATCH /api/docks/{did}": {FLEET_MANAGE},
+    "DELETE /api/docks/{did}": {FLEET_MANAGE},
+    "GET /api/sensors": {FLEET_VIEW},
+    "GET /api/sensors/{sid}": {FLEET_VIEW},
+    "GET /api/sensors/{sid}/stats": {FLEET_VIEW, FLIGHTS_VIEW},
+    "GET /api/sensors/{sid}/flights": {FLEET_VIEW, FLIGHTS_VIEW},
+    "GET /api/sensors/{sid}/pilots": {FLEET_VIEW, FLIGHTS_VIEW},
+    "POST /api/sensors": {FLEET_MANAGE},
+    "PATCH /api/sensors/{sid}": {FLEET_MANAGE},
+    "DELETE /api/sensors/{sid}": {FLEET_MANAGE},
+    "POST /api/sensors/{sid}/merge": {FLEET_MANAGE},
+    "GET /api/attachments": {FLEET_VIEW},
+    "GET /api/attachments/{aid}": {FLEET_VIEW},
+    "GET /api/attachments/{aid}/stats": {FLEET_VIEW, FLIGHTS_VIEW},
+    "GET /api/attachments/{aid}/flights": {FLEET_VIEW, FLIGHTS_VIEW},
+    "GET /api/attachments/{aid}/pilots": {FLEET_VIEW, FLIGHTS_VIEW},
+    "POST /api/attachments": {FLEET_MANAGE},
+    "PATCH /api/attachments/{aid}": {FLEET_MANAGE},
+    "DELETE /api/attachments/{aid}": {FLEET_MANAGE},
+    "POST /api/attachments/{aid}/merge": {FLEET_MANAGE},
+    "GET /api/other-equipment": {FLEET_VIEW},
+    "GET /api/other-equipment/{oid}": {FLEET_VIEW},
+    "POST /api/other-equipment": {FLEET_MANAGE},
+    "PATCH /api/other-equipment/{oid}": {FLEET_MANAGE},
+    "DELETE /api/other-equipment/{oid}": {FLEET_MANAGE},
+    # components
+    "GET /api/components": {FLEET_VIEW},
+    "GET /api/components/{component_id}": {FLEET_VIEW},
+    "POST /api/components": {FLEET_MANAGE},
+    "PATCH /api/components/{component_id}": {FLEET_MANAGE},
+    "DELETE /api/components/{component_id}": {FLEET_MANAGE},
+    # equipment_checkouts
+    "GET /api/equipment-checkouts": {FLEET_VIEW},
+    "GET /api/equipment-checkouts/active": {FLEET_VIEW},
+    "POST /api/equipment-checkouts": {CHECKOUTS_USE},
+    "POST /api/equipment-checkouts/{checkout_id}/checkin": {CHECKOUTS_USE},
+    "DELETE /api/equipment-checkouts/{checkout_id}": {"checkouts.delete"},
+    # pilots. Stats and needs-attention also follow the view of what they show,
+    # under the design's read-path rule, which the mapping row does not state.
+    "GET /api/pilots": {PILOTS_VIEW},
+    "GET /api/pilots/{pilot_id}": {PILOTS_VIEW},
+    "GET /api/pilots/{pilot_id}/photo/view": {PILOTS_VIEW},
+    "GET /api/pilots/{pilot_id}/stats": {PILOTS_VIEW, FLIGHTS_VIEW},
+    "GET /api/pilots/{pilot_id}/needs-attention": {PILOTS_VIEW, CERTIFICATIONS_VIEW},
+    "PATCH /api/pilots/{pilot_id}": {"pilots.edit"},
+    "POST /api/pilots": {PILOTS_MANAGE},
+    "DELETE /api/pilots/{pilot_id}": {PILOTS_MANAGE},
+    "POST /api/pilots/{target_id}/merge": {PILOTS_MANAGE},
+    # certifications
+    "GET /api/certification-types": {CERTIFICATIONS_VIEW},
+    "POST /api/certification-types": {CERTIFICATIONS_MANAGE},
+    "PATCH /api/certification-types/reorder": {CERTIFICATIONS_MANAGE},
+    "PATCH /api/certification-types/{ct_id}": {CERTIFICATIONS_MANAGE},
+    "DELETE /api/certification-types/{ct_id}": {CERTIFICATIONS_MANAGE},
+    "GET /api/pilot-certifications": {CERTIFICATIONS_VIEW},
+    "GET /api/pilot-certifications/{pc_id}/history": {CERTIFICATIONS_VIEW},
+    "POST /api/pilot-certifications": {CERTIFICATIONS_MANAGE},
+    "PATCH /api/pilot-certifications/{pc_id}": {CERTIFICATIONS_MANAGE},
+    "POST /api/pilot-certifications/{pc_id}/renew": {CERTIFICATIONS_MANAGE},
+    "POST /api/pilot-certifications/bulk-renew": {CERTIFICATIONS_MANAGE},
+    "DELETE /api/pilot-certifications/{pc_id}": {CERTIFICATIONS_MANAGE},
+    "GET /api/pilot-equipment-quals": {CERTIFICATIONS_VIEW},
+    "POST /api/pilot-equipment-quals": {CERTIFICATIONS_MANAGE},
+    "PATCH /api/pilot-equipment-quals/{peq_id}": {CERTIFICATIONS_MANAGE},
+    "DELETE /api/pilot-equipment-quals/{peq_id}": {CERTIFICATIONS_MANAGE},
+    "GET /api/certifications/matrix": {CERTIFICATIONS_VIEW},
+    # currency
+    "GET /api/currency/rules": {CERTIFICATIONS_VIEW},
+    "GET /api/currency/status": {CERTIFICATIONS_VIEW},
+    "GET /api/currency/status/{pilot_id}": {CERTIFICATIONS_VIEW},
+    "POST /api/currency/rules": {CERTIFICATIONS_MANAGE},
+    "PATCH /api/currency/rules/{rule_id}": {CERTIFICATIONS_MANAGE},
+    "DELETE /api/currency/rules/{rule_id}": {CERTIFICATIONS_MANAGE},
+    "POST /api/currency/send-reminders": {CERTIFICATIONS_MANAGE},
+    # checklists
+    "GET /api/checklists/templates": {CHECKLISTS_VIEW},
+    "GET /api/checklists/templates/{template_id}": {CHECKLISTS_VIEW},
+    "GET /api/checklists/completions": {CHECKLISTS_VIEW},
+    "GET /api/checklists/completions/{completion_id}": {CHECKLISTS_VIEW},
+    "POST /api/checklists/complete": {"checklists.complete"},
+    "POST /api/checklists/templates": {CHECKLISTS_MANAGE},
+    "PATCH /api/checklists/templates/{template_id}": {CHECKLISTS_MANAGE},
+    "DELETE /api/checklists/templates/{template_id}": {CHECKLISTS_MANAGE},
+    "DELETE /api/checklists/completions/{completion_id}": {CHECKLISTS_MANAGE},
+    # calendar
+    "GET /api/calendar": {"calendar.view"},
+    "POST /api/calendar/events": {"calendar.create"},
+    "PATCH /api/calendar/events/{event_id}": {CALENDAR_EDIT},
+    "DELETE /api/calendar/events/{event_id}": {CALENDAR_EDIT},
+    # documents
+    "GET /api/documents": {FILES_VIEW},
+    "GET /api/documents/{doc_id}/view": {FILES_VIEW},
+    "POST /api/documents/upload": {FILES_UPLOAD},
+    "PATCH /api/documents/{doc_id}": {FILES_EDIT},
+    "DELETE /api/documents/{doc_id}": {FILES_EDIT},
+    "GET /api/documents/deleted": {FILES_CUSTODY},
+    "POST /api/documents/{doc_id}/restore": {FILES_CUSTODY},
+    "PUT /api/documents/{doc_id}/hold": {FILES_CUSTODY},
+    # photos
+    "GET /api/photos": {FILES_VIEW},
+    "GET /api/photos/{photo_id}/signed-urls": {FILES_VIEW},
+    "POST /api/photos/upload": {FILES_UPLOAD},
+    "PATCH /api/photos/{photo_id}": {FILES_EDIT},
+    "DELETE /api/photos/{photo_id}": {FILES_EDIT},
+    "GET /api/photos/deleted": {FILES_CUSTODY},
+    "POST /api/photos/{photo_id}/restore": {FILES_CUSTODY},
+    "PUT /api/photos/{photo_id}/hold": {FILES_CUSTODY},
+    "POST /api/photos/{photo_id}/flight/{flight_id}": {FILES_CUSTODY},
+    "DELETE /api/photos/{photo_id}/flight/{flight_id}": {FILES_CUSTODY},
+    "POST /api/photos/{photo_id}/incident/{incident_id}": {FILES_CUSTODY},
+    "DELETE /api/photos/{photo_id}/incident/{incident_id}": {FILES_CUSTODY},
+    # media
+    "GET /api/media": {FILES_VIEW},
+    "GET /api/media/count": {FILES_VIEW},
+    # folders
+    "GET /api/folders": {FILES_VIEW},
+    "GET /api/folders/{folder_id}/documents": {FILES_VIEW},
+    "POST /api/folders": {FOLDERS_MANAGE},
+    "PATCH /api/folders/{folder_id}": {FOLDERS_MANAGE},
+    "DELETE /api/folders/{folder_id}": {FOLDERS_MANAGE},
+    # alerts
+    "GET /api/alerts": {ALERTS_VIEW},
+    "GET /api/alerts/count": {ALERTS_VIEW},
+    "PATCH /api/alerts/{alert_id}/read": {ALERTS_DISMISS},
+    "PATCH /api/alerts/{alert_id}/dismiss": {ALERTS_DISMISS},
+    "POST /api/alerts/dismiss-all": {ALERTS_DISMISS},
+    # operating_authorities
+    "GET /api/operating-authorities": {AUTHORITY_VIEW},
+    "GET /api/operating-authorities/{authority_id}": {AUTHORITY_VIEW},
+    "POST /api/operating-authorities": {AUTHORITY_MANAGE},
+    "PATCH /api/operating-authorities/{authority_id}": {AUTHORITY_MANAGE},
+    "DELETE /api/operating-authorities/{authority_id}": {AUTHORITY_MANAGE},
+    # geofences
+    "GET /api/geofences": {AUTHORITY_VIEW},
+    "GET /api/geofences/check": {AUTHORITY_VIEW},
+    "GET /api/geofences/{geofence_id}": {AUTHORITY_VIEW},
+    "POST /api/geofences": {AUTHORITY_MANAGE},
+    "PATCH /api/geofences/{geofence_id}": {AUTHORITY_MANAGE},
+    "DELETE /api/geofences/{geofence_id}": {AUTHORITY_MANAGE},
+    # vehicle_registrations
+    "GET /api/vehicles/{vehicle_id}/registrations": {REGISTRATIONS_VIEW},
+    "GET /api/vehicle-registrations/current": {REGISTRATIONS_VIEW},
+    "POST /api/vehicles/{vehicle_id}/registrations": {REGISTRATIONS_MANAGE},
+    "DELETE /api/vehicle-registrations/{reg_id}": {REGISTRATIONS_MANAGE},
+    # audit
+    "GET /api/audit": {AUDIT_VIEW},
+    # reports
+    "POST /api/reports/generate": {REPORTS_GENERATE},
+    "POST /api/reports/generate/pdf": {REPORTS_GENERATE},
+    "POST /api/reports/per-pilot/zip": {REPORTS_GENERATE},
+    # export. The roster stays supervisor-level through pilots.manage, a call the
+    # mapping records. Checkouts follow fleet.view.
+    "GET /api/export/flights/csv": {REPORTS_EXPORT, FLIGHTS_VIEW},
+    "GET /api/export/flights/{flight_id}/gpx": {REPORTS_EXPORT, FLIGHTS_VIEW},
+    "GET /api/export/flights/{flight_id}/kml": {REPORTS_EXPORT, FLIGHTS_VIEW},
+    "GET /api/export/pilots/csv": {REPORTS_EXPORT, PILOTS_MANAGE},
+    "GET /api/export/vehicles/csv": {REPORTS_EXPORT, FLEET_VIEW},
+    "GET /api/export/fleet/{equipment_type}/csv": {REPORTS_EXPORT, FLEET_VIEW},
+    "GET /api/export/equipment-checkouts/csv": {REPORTS_EXPORT, FLEET_VIEW},
+    "GET /api/export/maintenance/csv": {REPORTS_EXPORT, MAINTENANCE_VIEW},
+    "GET /api/export/checklists/csv": {REPORTS_EXPORT, CHECKLISTS_VIEW},
+    "GET /api/export/certifications/csv": {REPORTS_EXPORT, CERTIFICATIONS_VIEW},
+    "GET /api/export/training-logs/csv": {REPORTS_EXPORT, LOGS_VIEW},
+    "GET /api/export/mission-logs/csv": {REPORTS_EXPORT, LOGS_VIEW},
+    "GET /api/export/incidents/csv": {REPORTS_EXPORT, INCIDENTS_VIEW},
+    "GET /api/export/flight-plans/csv": {REPORTS_EXPORT, PLANS_VIEW},
+    "GET /api/export/audit/csv": {REPORTS_EXPORT, AUDIT_VIEW},
+    # dashboard
+    "GET /api/dashboard/top-pilots-30d": {FLIGHTS_VIEW},
+    "GET /api/dashboard/analytics/flights-by-purpose": {FLIGHTS_VIEW},
+    "GET /api/dashboard/analytics/flights-by-year": {FLIGHTS_VIEW},
+    "GET /api/dashboard/analytics/flights-by-year-purpose": {FLIGHTS_VIEW},
+    "GET /api/dashboard/analytics/flights-by-pilot": {FLIGHTS_VIEW},
+    "GET /api/dashboard/analytics/avg-duration-by-year": {FLIGHTS_VIEW},
+    "GET /api/dashboard/analytics/monthly-flights": {FLIGHTS_VIEW},
+    "GET /api/dashboard/analytics/pilot-hours": {FLIGHTS_VIEW},
+    "GET /api/dashboard/analytics/pilot-performance/{pilot_id}": {FLIGHTS_VIEW},
+    "GET /api/dashboard/top-vehicles-30d": {FLEET_VIEW},
+    "GET /api/dashboard/analytics/vehicle-hours": {FLEET_VIEW},
+    "GET /api/dashboard/analytics/fleet-health": {FLEET_VIEW},
+    "GET /api/dashboard/maintenance-due": {MAINTENANCE_VIEW},
+    "GET /api/dashboard/upcoming-expirations": {CERTIFICATIONS_VIEW},
+}
+
 # Keys no route depends on, because a handler or service checks them inline.
 NON_ROUTE_CHECKS = {
     "digest.redirect": "the digest address override",
@@ -163,6 +497,18 @@ def _report(problems) -> str:
     return "\n" + "\n".join(sorted(problems))
 
 
+def _route_key_problems(table: dict[str, Guards], expected: dict[str, set[str]]) -> list[str]:
+    """Every difference between the keys routes declare and the expected table."""
+    actual = {name: guards.keys for name, guards in table.items() if guards.keys}
+    problems = [f"{name}: declares {sorted(keys)} but is missing from the expected table"
+                for name, keys in actual.items() if name not in expected]
+    problems += [f"{name}: in the expected table with {sorted(keys)} but declares no key or no longer exists"
+                 for name, keys in expected.items() if name not in actual]
+    problems += [f"{name}: declares {sorted(actual[name])} but {sorted(keys)} is expected"
+                 for name, keys in expected.items() if name in actual and actual[name] != keys]
+    return problems
+
+
 # Route classes ---------------------------------------------------------------
 
 def test_every_route_is_classified():
@@ -184,17 +530,22 @@ def test_route_permission_keys_are_in_the_registry():
     assert not unknown, _report(unknown)
 
 
+def test_every_route_has_its_expected_keys():
+    problems = _route_key_problems(_route_table(app), EXPECTED_ROUTE_KEYS)
+    assert not problems, _report(problems)
+
+
 def test_walk_reaches_included_routers_and_stacked_guards():
     table = _route_table(app)
-    assert table["GET /api/flights"].keys == {"flights.view"}
-    assert table["GET /api/export/flights/csv"].keys == {"reports.export", "flights.view"}
+    assert table["GET /api/flights"].keys == {FLIGHTS_VIEW}
+    assert table["GET /api/export/flights/csv"].keys == {REPORTS_EXPORT, FLIGHTS_VIEW}
     assert table["POST /api/auth/users"].admin
     assert table["GET /api/auth/me"].login
 
 
 # The gate itself -------------------------------------------------------------
 
-GUARDED_KEY = "flights.view"
+GUARDED_KEY = FLIGHTS_VIEW
 GUARD = Annotated[object, Depends(require_permission(GUARDED_KEY))]
 
 
@@ -265,6 +616,20 @@ def test_gate_refuses_a_signed_in_entry_with_no_login():
     assert len(_problems({name: table[name]}, {"SIGNED_IN_ROUTES": frozenset({name})})) == 1
     signed_in = "GET /router/signed-in"
     assert not _problems({signed_in: table[signed_in]}, {"SIGNED_IN_ROUTES": frozenset({signed_in})})
+
+
+def test_gate_names_every_key_difference():
+    table = _route_table(_scratch_app())
+    nested = "GET /router/nested"
+    guard = "GET /router/router-guard"
+    assert _route_key_problems(table, {nested: {GUARDED_KEY}, guard: {GUARDED_KEY}}) == []
+    assert _route_key_problems(table, {nested: {GUARDED_KEY}}) == [
+        f"{guard}: declares ['{GUARDED_KEY}'] but is missing from the expected table"]
+    stale = "GET /router/gone"
+    assert _route_key_problems(table, {nested: {GUARDED_KEY}, guard: {GUARDED_KEY}, stale: {GUARDED_KEY}}) == [
+        f"{stale}: in the expected table with ['{GUARDED_KEY}'] but declares no key or no longer exists"]
+    assert _route_key_problems(table, {nested: {"other.key"}, guard: {GUARDED_KEY}}) == [
+        f"{nested}: declares ['{GUARDED_KEY}'] but ['other.key'] is expected"]
 
 
 # Registry keys ---------------------------------------------------------------

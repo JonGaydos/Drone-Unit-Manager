@@ -3,7 +3,7 @@
 Covers the real behavior of ``app.routers.photos``:
 
 * POST/DELETE ``/api/photos/{id}/flight/{id}`` and ``.../incident/{id}`` are
-  supervisor-gated (``SupervisorUser``); a pilot gets 403, an admin succeeds and
+  gated by ``files.custody``; a pilot gets 403 by default, an admin succeeds and
   a junction row (``PhotoFlight`` / ``PhotoIncident``) is created/removed.
 * Linking to a nonexistent flight/incident returns 404 and leaves NO dangling
   junction row.

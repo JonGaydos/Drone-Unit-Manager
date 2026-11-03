@@ -150,8 +150,8 @@ def delete_completion(
     db: DBSession,
     user: ManageUser,
 ):
-    """Remove a submitted checklist, for one entered by mistake. Supervisors
-    only, and on the record."""
+    """Remove a submitted checklist, for one entered by mistake. Needs the
+    checklists.manage permission, and is recorded in the audit log."""
     c = db.query(ChecklistCompletion).filter(ChecklistCompletion.id == completion_id).first()
     if not c:
         raise HTTPException(status_code=404, detail="Checklist not found")

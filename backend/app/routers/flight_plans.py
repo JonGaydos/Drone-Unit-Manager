@@ -249,7 +249,7 @@ def _changes_reviewed_content(plan: FlightPlan, update_data: dict) -> bool:
 
 def _apply_status_change(plan: FlightPlan, update_data: dict, user) -> None:
     """Handle ``status`` on a plan edit. Approval only ever happens through the
-    supervisor /approve endpoint, so the one status an edit may set is
+    /approve endpoint, which needs flight_plans.approve, so the one status an edit may set is
     ``pending``, and only an admin may set it (to reopen a reviewed plan)."""
     requested = update_data.pop("status", None)
     if requested is None:

@@ -3,7 +3,7 @@
 ``app.routers.calendar`` exposes a manual-event write endpoint,
 ``POST /api/calendar/events``. ``viewer`` is the system's read-only role (and
 the default role for new users), so it must NOT be able to create events; every
-other write endpoint is gated by ``require_pilot`` (admin/supervisor/pilot).
+other write endpoint follows its permission key, which a viewer never holds.
 
 * A viewer posting to ``/api/calendar/events`` gets 403 and no row is written.
 * A pilot CAN create an event (200) and it persists.
