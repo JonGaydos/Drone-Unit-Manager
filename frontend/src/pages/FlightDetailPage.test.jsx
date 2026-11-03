@@ -245,4 +245,14 @@ describe('FlightDetailPage', () => {
     await user.click(screen.getByRole('button', { name: 'Save' }))
     expect(await screen.findByText(/back for review.*does not count toward currency until reviewed/i)).toBeInTheDocument()
   })
+
+  it.each(['/api/fleet/options', '/api/pilots/options', '/api/flights/purposes/list'])('stays rendered with the flight when %s 500s', async (path) => {
+    mockMount()
+    server.use(http.get(path, () => HttpResponse.json({ detail: 'boom' }, { status: 500 })))
+    const { user } = render('admin')
+    expect(await screen.findByText('Flight on 2026-05-01')).toBeInTheDocument()
+    expect(screen.queryByText('Flight not found')).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    expect(await screen.findByLabelText('Case #')).toBeInTheDocument()
+  })
 })

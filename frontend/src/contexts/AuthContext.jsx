@@ -108,7 +108,7 @@ export function AuthProvider({ children }) {
     }
   }, [signedIn])
 
-  // A failed refresh keeps the current user unless the session itself has ended.
+  // A failed or empty refresh keeps the current user unless the session itself has ended.
   useEffect(() => {
     if (!signedIn) return undefined
     let active = true
@@ -122,7 +122,7 @@ export function AuthProvider({ children }) {
       if (now - lastRefresh < USER_REFRESH_MS || idleExpired()) return
       lastRefresh = now
       api.get('/auth/me')
-        .then(next => { if (active) setUser(replaceIfChanged(next)) })
+        .then(next => { if (active && next?.id) setUser(replaceIfChanged(next)) })
         .catch(err => { if (active && err.status === 401) onSessionEnded() })
     }
     globalThis.addEventListener('focus', refresh)

@@ -30,6 +30,7 @@ from app.services.permissions import REGISTRY
 from app.services.pilot_contacts import CONTACT_HIDDEN
 
 PERMISSIONS_URL = "/api/permissions"
+AUDIT_URL = "/api/audit"
 PILOT_ADDRESS = "pilot-record@example.org"
 SEARCH_URL = "/api/search"
 COMPLIANCE_URL = "/api/dashboard/compliance"
@@ -687,7 +688,7 @@ def test_audit_api_redacts_contacts_without_the_permission(client, db, admin_hea
     _seed_contact_audit(db)
     _hide_contacts_with_audit(client, admin_headers)
 
-    resp = client.get("/api/audit", headers=pilot_headers)
+    resp = client.get(AUDIT_URL, headers=pilot_headers)
 
     assert resp.status_code == 200, resp.text
     assert AUDIT_EMAIL not in resp.text and AUDIT_PHONE not in resp.text and "bob@example.org" not in resp.text
@@ -714,12 +715,12 @@ def test_audit_keeps_contacts_with_the_permission_and_stored_rows_intact(client,
     _seed_contact_audit(db)
     _grid(client, admin_headers, ("pilot", "audit.view", "yes"))
 
-    assert AUDIT_EMAIL in client.get("/api/audit", headers=pilot_headers).text
+    assert AUDIT_EMAIL in client.get(AUDIT_URL, headers=pilot_headers).text
     assert AUDIT_EMAIL in client.get("/api/export/audit/csv", headers=pilot_headers).text
-    assert AUDIT_EMAIL in client.get("/api/audit", headers=admin_headers).text
+    assert AUDIT_EMAIL in client.get(AUDIT_URL, headers=admin_headers).text
 
     _hide_contacts_with_audit(client, admin_headers)
-    client.get("/api/audit", headers=pilot_headers)
+    client.get(AUDIT_URL, headers=pilot_headers)
     db.expire_all()
     stored = db.query(AuditLog).filter(AuditLog.action == "update", AuditLog.entity_type == "pilot").first()
     assert stored.changes["email"]["new"] == AUDIT_EMAIL

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { api } from '@/api/client'
+import { api, getSection } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { ownsFlight } from '@/lib/ownership'
 import { useToast } from '@/contexts/ToastContext'
@@ -184,19 +184,19 @@ function useFlightDetail(id) {
     Promise.all([
       api.get(`/flights/${id}`, { signal }),
       api.get(`/telemetry/flight/${id}`, { signal }).catch(() => []),
-      api.get('/pilots/options', { signal }),
-      api.get('/fleet/options', { signal }),
-      api.get('/flights/purposes/list', { signal }),
+      getSection(true, '/pilots/options', [], { signal }),
+      getSection(true, '/fleet/options', {}, { signal }),
+      getSection(true, '/flights/purposes/list', [], { signal }),
     ]).then(([f, t, p, fleet, pu]) => {
       if (ignore) return
       setFlight(f)
       setTelemetry(Array.isArray(t) ? t : [])
       setPilots(p)
-      setVehicles(fleet.vehicles)
+      setVehicles(fleet.vehicles ?? [])
       setPurposes(pu)
-      setBatteries(fleet.batteries)
-      setSensors(fleet.sensors)
-      setAttachments(fleet.attachments)
+      setBatteries(fleet.batteries ?? [])
+      setSensors(fleet.sensors ?? [])
+      setAttachments(fleet.attachments ?? [])
     }).catch(err => {
       // A superseded load rejects with AbortError; ignore it (a newer load owns the UI).
       if (ignore || err.name === 'AbortError') return

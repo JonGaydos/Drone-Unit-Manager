@@ -380,6 +380,18 @@ describe('refresh on window focus', () => {
     expect(localStorage.getItem('token')).toBe('t')
   })
 
+  it.each([
+    ['a 200 with an empty body', () => new HttpResponse('', { status: 200 })],
+    ['a 204', () => new HttpResponse(null, { status: 204 })],
+  ])('keeps the user on %s', async (_name, respond) => {
+    const { result, calls } = await signIn(respond)
+    await focusLater()
+    await waitFor(() => expect(calls.me).toBe(1))
+    await act(async () => {})
+    expect(result.current.user).toEqual(ME)
+    expect(localStorage.getItem('token')).toBe('t')
+  })
+
   it('clears the session on a 401', async () => {
     vi.stubGlobal('location', { href: 'http://localhost/', origin: 'http://localhost' })
     const { result } = await signIn(() => new HttpResponse(null, { status: 401 }))
