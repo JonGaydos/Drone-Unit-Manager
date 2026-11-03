@@ -40,6 +40,17 @@ FLIGHTS_VIEW = "flights.view"
 FLIGHTS_CREATE = "flights.create"
 FLIGHTS_EDIT = "flights.edit"
 FLIGHTS_DELETE = "flights.delete"
+FLEET_VIEW = "fleet.view"
+FLEET_LOCATION = "fleet.location"
+CHECKOUTS_USE = "checkouts.use"
+CHECKOUTS_DELETE = "checkouts.delete"
+MAINTENANCE_VIEW = "maintenance.view"
+SCHEDULES_COMPLETE = "schedules.complete"
+SCHEDULES_MANAGE = "schedules.manage"
+FILES_VIEW = "files.view"
+FOLDERS_MANAGE = "folders.manage"
+PILOTS_CONTACTS = "pilots.contacts"
+UNKNOWN_KEY = "no.such.key"
 
 # The spec's default grid: key, supervisor, pilot, viewer. A locked cell is
 # written locked-<value>.
@@ -159,12 +170,17 @@ def test_registry_defaults_match_spec():
     (FLIGHTS_VIEW, None),
     (FLIGHTS_CREATE, FLIGHTS_VIEW),
     (FLIGHTS_EDIT, FLIGHTS_VIEW),
-    ("pilots.contacts", "pilots.view"),
+    (PILOTS_CONTACTS, "pilots.view"),
     ("alerts.dismiss", "alerts.view"),
     ("audit.view", None),
     ("reports.generate", None),
     ("reports.export", None),
     ("digest.redirect", None),
+    (SCHEDULES_COMPLETE, MAINTENANCE_VIEW),
+    (SCHEDULES_MANAGE, MAINTENANCE_VIEW),
+    (CHECKOUTS_USE, FLEET_VIEW),
+    (CHECKOUTS_DELETE, FLEET_VIEW),
+    (FOLDERS_MANAGE, FILES_VIEW),
 ])
 def test_registry_requires(key, requires):
     assert permissions.REGISTRY[key].requires == requires
@@ -207,13 +223,13 @@ def test_invalid_stored_value_falls_back_to_default(db, stored):
 
 
 def test_stored_row_for_unknown_key_is_ignored(db):
-    _store(db, PILOT, "no.such.key", YES)
-    assert "no.such.key" not in permissions.resolved_for(db, PILOT)
+    _store(db, PILOT, UNKNOWN_KEY, YES)
+    assert UNKNOWN_KEY not in permissions.resolved_for(db, PILOT)
 
 
 def test_unknown_key_raises(db):
     with pytest.raises(KeyError):
-        permissions.get_value(db, PILOT, "no.such.key")
+        permissions.get_value(db, PILOT, UNKNOWN_KEY)
 
 
 def test_unknown_role_resolves_to_lowest(db):
@@ -233,9 +249,9 @@ def test_can_and_level_follow_value(db, pilot_user):
 
 
 def test_unknown_key_denies(db, admin_user, pilot_user):
-    assert permissions.can(db, pilot_user, "no.such.key") is False
-    assert permissions.can(db, admin_user, "no.such.key") is False
-    assert permissions.level(db, admin_user, "no.such.key") == NONE
+    assert permissions.can(db, pilot_user, UNKNOWN_KEY) is False
+    assert permissions.can(db, admin_user, UNKNOWN_KEY) is False
+    assert permissions.level(db, admin_user, UNKNOWN_KEY) == NONE
 
 
 def test_values_are_cached_on_the_loaded_user(db, pilot_user):
@@ -251,7 +267,7 @@ def test_values_are_cached_on_the_loaded_user(db, pilot_user):
 @pytest.mark.parametrize("role,key,value,fragment", [
     (VIEWER, FLIGHTS_EDIT, ALL, FLIGHTS_EDIT),
     (VIEWER, FLIGHTS_EDIT, NONE, FLIGHTS_EDIT),
-    (PILOT, "no.such.key", YES, "no.such.key"),
+    (PILOT, UNKNOWN_KEY, YES, UNKNOWN_KEY),
     (PILOT, FLIGHTS_EDIT, YES, FLIGHTS_EDIT),
     (PILOT, FLIGHTS_VIEW, ALL, FLIGHTS_VIEW),
     (ADMIN, FLIGHTS_VIEW, NO, ADMIN),
@@ -265,35 +281,66 @@ def test_validate_change_refuses(role, key, value, fragment):
     (PILOT, FLIGHTS_EDIT, ALL),
     (SUPERVISOR, FLIGHTS_VIEW, NO),
     (VIEWER, FLIGHTS_VIEW, NO),
-    (VIEWER, "pilots.contacts", YES),
+    (VIEWER, PILOTS_CONTACTS, YES),
 ])
 def test_validate_change_accepts(role, key, value):
     assert permissions.validate_change(role, key, value) is None
 
 
 def test_validate_grid_applies_view_rule_to_resulting_grid(db):
-    errors = permissions.validate_grid(db, [_change(PILOT, "fleet.view", NO)])
-    assert len(errors) == 1
-    assert "fleet.location" in errors[0]
+    errors = permissions.validate_grid(db, [_change(PILOT, FLEET_VIEW, NO)])
+    assert len(errors) == 2
+    assert any(FLEET_LOCATION in error for error in errors)
+    assert any(CHECKOUTS_USE in error for error in errors)
     assert permissions.validate_grid(db, [
-        _change(PILOT, "fleet.view", NO),
-        _change(PILOT, "fleet.location", NO),
+        _change(PILOT, FLEET_VIEW, NO),
+        _change(PILOT, FLEET_LOCATION, NO),
+        _change(PILOT, CHECKOUTS_USE, NO),
     ]) == []
 
 
 def test_validate_grid_reads_stored_rows(db):
-    _store(db, PILOT, "fleet.location", NO)
-    assert permissions.validate_grid(db, [_change(PILOT, "fleet.view", NO)]) == []
-    errors = permissions.validate_grid(db, [_change(PILOT, "fleet.location", YES), _change(PILOT, "fleet.view", NO)])
-    assert any("fleet.location" in error for error in errors)
+    _store(db, PILOT, FLEET_LOCATION, NO)
+    _store(db, PILOT, CHECKOUTS_USE, NO)
+    assert permissions.validate_grid(db, [_change(PILOT, FLEET_VIEW, NO)]) == []
+    errors = permissions.validate_grid(db, [_change(PILOT, FLEET_LOCATION, YES), _change(PILOT, FLEET_VIEW, NO)])
+    assert any(FLEET_LOCATION in error for error in errors)
+
+
+def _turned_off(role, view_key, skip=None):
+    """Changes turning a view off with every key that depends on it, apart from skip."""
+    changes = [_change(role, view_key, NO)]
+    for key, definition in permissions.REGISTRY.items():
+        if definition.requires == view_key and key != skip:
+            changes.append(_change(role, key, permissions.OPTIONS[definition.kind][0]))
+    return changes
+
+
+@pytest.mark.parametrize("view_key,linked_key", [
+    (MAINTENANCE_VIEW, SCHEDULES_COMPLETE),
+    (MAINTENANCE_VIEW, SCHEDULES_MANAGE),
+    (FLEET_VIEW, CHECKOUTS_USE),
+    (FLEET_VIEW, CHECKOUTS_DELETE),
+    (FILES_VIEW, FOLDERS_MANAGE),
+])
+def test_validate_grid_ties_feature_to_another_features_view(db, view_key, linked_key):
+    # Supervisors hold all of these by default.
+    alone = permissions.validate_grid(db, [_change(SUPERVISOR, view_key, NO)])
+    assert any(linked_key in error for error in alone)
+
+    still_on = permissions.validate_grid(db, _turned_off(SUPERVISOR, view_key, skip=linked_key))
+    assert len(still_on) == 1
+    assert linked_key in still_on[0]
+
+    assert permissions.validate_grid(db, _turned_off(SUPERVISOR, view_key)) == []
 
 
 def test_validate_grid_covers_contacts_on_viewer(db):
     errors = permissions.validate_grid(db, [
-        _change(VIEWER, "pilots.contacts", YES),
+        _change(VIEWER, PILOTS_CONTACTS, YES),
         _change(VIEWER, "pilots.view", NO),
     ])
-    assert any("pilots.contacts" in error for error in errors)
+    assert any(PILOTS_CONTACTS in error for error in errors)
 
 
 # Admin API -------------------------------------------------------------------
@@ -335,9 +382,9 @@ def test_put_refuses_locked_viewer_cell(client, db, admin_headers):
 
 
 def test_put_refuses_unknown_key(client, db, admin_headers):
-    resp = _put(client, admin_headers, _change(PILOT, "no.such.key", YES))
+    resp = _put(client, admin_headers, _change(PILOT, UNKNOWN_KEY, YES))
     assert resp.status_code == 422
-    assert "no.such.key" in resp.text
+    assert UNKNOWN_KEY in resp.text
     assert db.query(RolePermission).count() == 0
 
 
@@ -437,7 +484,7 @@ def test_require_permission_carries_its_key():
 
 
 def test_require_permission_with_unknown_key_denies_admin(db, admin_user):
-    guard = require_permission("no.such.key")
+    guard = require_permission(UNKNOWN_KEY)
     with pytest.raises(HTTPException) as refused:
         guard(user=admin_user, db=db)
     assert refused.value.status_code == 403
@@ -525,6 +572,7 @@ def test_last_admin_still_protected(client, db, admin_user, admin_headers):
     user_url = f"/api/auth/users/{admin_user.id}"
     assert client.patch(user_url, headers=admin_headers, json={"role": PILOT}).status_code == 400
     assert client.patch(user_url, headers=admin_headers, json={"is_active": False}).status_code == 400
+    # Exercises the self-delete branch: an admin caller is always another active admin.
     assert client.delete(user_url, headers=admin_headers).status_code == 400
     assert _put(client, admin_headers, _change(ADMIN, FLIGHTS_VIEW, NO)).status_code == 422
     db.expire_all()

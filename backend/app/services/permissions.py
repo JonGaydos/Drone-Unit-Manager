@@ -59,6 +59,7 @@ class PermissionDef:
 
 # Feature label, then rows of key, action label, supervisor, pilot and viewer.
 # Within a feature, the row labelled View is the key every other row requires.
+# A feature with no View row of its own depends on _FEATURE_VIEW_OVERRIDES.
 _DEFAULT_GRID = (
     ("Flights", (
         ("flights.view", VIEW, YES, YES, YES),
@@ -157,10 +158,19 @@ _DEFAULT_GRID = (
 )
 
 
+# Features whose records are seen through another feature's view.
+_FEATURE_VIEW_OVERRIDES = {
+    "Maintenance schedules": "maintenance.view",
+    "Equipment checkouts": "fleet.view",
+    "Folders": "files.view",
+}
+
+
 def _build_registry() -> dict[str, PermissionDef]:
     registry = {}
     for feature, rows in _DEFAULT_GRID:
-        view_key = next((row[0] for row in rows if row[1] == VIEW), None)
+        own_view = next((row[0] for row in rows if row[1] == VIEW), None)
+        view_key = _FEATURE_VIEW_OVERRIDES.get(feature, own_view)
         for key, action, supervisor, pilot, viewer in rows:
             kind = LEVEL if {supervisor, pilot} & {NONE, OWN, ALL} else BOOL
             registry[key] = PermissionDef(
