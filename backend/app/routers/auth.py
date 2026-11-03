@@ -24,8 +24,6 @@ from app.constants import USER_NOT_FOUND
 from app.services import api_tokens as api_tokens_service
 from app.services import permissions as permissions_service
 from app.database import get_db
-from app.models.audit_log import AuditLog
-from app.models.flight import Flight
 from app.models.user import User
 from app.schemas.user import LoginRequest, LoginResponse, UserOut, UserCreate, UserUpdate, ChangePasswordRequest, AdminResetPasswordRequest, SetupRequest
 from app.responses import responses
@@ -770,17 +768,6 @@ def admin_reset_password(user_id: int, req: AdminResetPasswordRequest, admin: An
     return {"ok": True, "message": f"Password reset for {target.username}"}
 
 
-def _clear_user_references(db: Session, user_id: int) -> None:
-    """Null the user's references on other records so the user row can be deleted."""
-    db.query(Flight).filter(Flight.created_by_id == user_id).update(
-        {Flight.created_by_id: None}, synchronize_session=False
-    )
-    # The audit row keeps user_name, so history still shows who acted.
-    db.query(AuditLog).filter(AuditLog.user_id == user_id).update(
-        {AuditLog.user_id: None}, synchronize_session=False
-    )
-
-
 @router.delete("/users/{user_id}", responses=responses(400, 404))
 def delete_user(user_id: int, admin: Annotated[User, Depends(require_admin)], db: DBSession):
     """Permanently delete a user account. Admin only. Cannot delete self."""
@@ -792,7 +779,6 @@ def delete_user(user_id: int, admin: Annotated[User, Depends(require_admin)], db
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
     target_name = target.display_name
     target_username = target.username
-    _clear_user_references(db, target.id)
     db.delete(target)
     log_action(db, admin.id, admin.display_name, "delete", "user", user_id, target_name, details=f"Deleted user '{target_username}'")
     db.commit()

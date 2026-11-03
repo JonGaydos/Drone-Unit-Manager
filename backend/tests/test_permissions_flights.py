@@ -2,6 +2,7 @@
 
 from datetime import date
 
+from app.models.audit_log import AuditLog
 from app.models.flight import Flight
 from app.models.pilot import Pilot
 from app.models.user import User
@@ -208,7 +209,8 @@ def test_delete_user_who_logged_a_flight(client, db, admin_headers, pilot_user, 
     created = client.post(FLIGHTS_URL, headers=pilot_headers, json={}).json()
     user_id = pilot_user.id
     resp = client.delete(f"/api/auth/users/{user_id}", headers=admin_headers)
-    assert resp.status_code == 200
+    assert resp.status_code == 409
     db.expire_all()
-    assert db.query(User).filter(User.id == user_id).first() is None
-    assert db.query(Flight).filter(Flight.id == created["id"]).one().created_by_id is None
+    assert db.query(User).filter(User.id == user_id).first() is not None
+    assert db.query(Flight).filter(Flight.id == created["id"]).one().created_by_id == user_id
+    assert db.query(AuditLog).filter(AuditLog.user_id == user_id).count() > 0
