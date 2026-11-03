@@ -109,6 +109,7 @@ Create, edit, and manage user accounts.
 2. Optionally link the user to a pilot profile so the system knows which pilot they are.
 3. Use the edit button on existing users to change their role, display name, or pilot link.
 4. Toggle users active or inactive as needed.
+5. What each role can do is set in the Role Permissions card below (see section 18).
 
 ### 3.5 Sidebar Configuration
 
@@ -136,7 +137,7 @@ Go to the Pilots page and click Add Pilot. Enter the pilot's first name, last na
 
 ### 4.2 Pilot Profiles
 
-Click any pilot's name to view their full profile. The profile shows contact information, flight statistics, certifications, flight history, currency status, performance analytics, and uploaded documents. Administrators and supervisors can edit any pilot's profile. Pilots can edit only their own profile.
+Click any pilot's name to view their full profile. The profile shows contact information, flight statistics, certifications, flight history, currency status, performance analytics, and uploaded documents. By default, administrators and supervisors can edit any pilot's profile and pilots can edit only their own. The Role Permissions grid in Settings changes this (see section 18).
 
 ### 4.3 Certifications on Profiles
 
@@ -148,7 +149,7 @@ A table of all flights associated with this pilot, showing date, vehicle, purpos
 
 ### 4.5 Currency Status
 
-If currency rules are configured in the system, this section shows whether the pilot meets each rule's requirements. Green indicates current, red indicates lapsed. Currency rules define how many flight hours or flights a pilot must complete within a given time period to remain current on a specific equipment type.
+If currency rules are configured in the system, this section shows whether the pilot meets each rule's requirements. Green indicates current, red indicates lapsed. Only reviewed flights count toward currency, from every source. A flight that still needs review, including one sent back after an edit, does not count until a supervisor reviews it, so a pilot can show as lapsed while their flights wait in the review queue. Currency rules define how many flight hours or flights a pilot must complete within a given time period to remain current on a specific equipment type.
 
 ### 4.6 Performance Analytics
 
@@ -198,11 +199,11 @@ A small colored dot next to the status badge indicates telemetry sync status: gr
 
 ### 6.2 Reviewing API-Synced Flights
 
-Flights imported from the Skydio API arrive with a "Needs Review" status. They include the date, pilot (if email matched), vehicle, duration, and location, but may lack a purpose code since Skydio does not track flight purpose. Use the inline edit button (pencil icon) to assign a purpose and verify the pilot, then approve the flight.
+Flights imported from the Skydio API arrive with a "Needs Review" status. They include the date, pilot (if email matched), vehicle, duration, and location, but may lack a purpose code since Skydio does not track flight purpose. Use the inline edit button (pencil icon) to assign a purpose and verify the pilot, then approve the flight. Editing a reviewed flight without the review permission (a pilot correcting their own flight, for example) returns it to the review queue.
 
 ### 6.3 Adding Manual Flights
 
-Click Add Flight to manually create a flight record. This is useful for drones without API integration. Enter the date, pilot, vehicle, purpose, duration, and any other available information.
+Click Add Flight to manually create a flight record. This is useful for drones without API integration. Enter the date, pilot, vehicle, purpose, duration, and any other available information. A manually added flight always starts as Needs Review, whoever logs it, and counts toward currency once it is reviewed.
 
 ### 6.4 Flight Detail and Telemetry
 
@@ -268,7 +269,7 @@ The raw METAR and TAF strings are available in expandable sections for reference
 The Flight Plans page manages a pre-flight approval workflow.
 
 1. A pilot submits a flight plan with the date, location, vehicle, purpose, estimated duration, and maximum altitude (0-400 feet).
-2. A supervisor reviews the plan and approves or denies it (with a reason if denied).
+2. A user with approval permission (a supervisor by default) reviews the plan and approves or denies it (with a reason if denied). Nobody approves a plan they submitted.
 3. The submitter can edit their plan while it is pending approval.
 4. Administrators can edit any plan regardless of its status.
 
@@ -276,7 +277,7 @@ The sidebar shows a badge count of pending flight plans requiring review.
 
 ### 8.3 Pre-Flight Checklists
 
-Administrators and supervisors create checklist templates with named items that can be marked as required. Pilots complete checklists before flights by checking off each item and optionally adding notes. Completed checklists are stored with the date, pilot, vehicle, and pass/fail status.
+By default, administrators and supervisors create checklist templates with named items that can be marked as required. Pilots complete checklists before flights by checking off each item and optionally adding notes. Completed checklists are stored with the date, pilot, vehicle, and pass/fail status.
 
 ---
 
@@ -328,7 +329,7 @@ Click Report and select "Success" as the type. Choose a category (missing person
 
 ### 11.3 Resolution Workflow
 
-Supervisors can update an incident's status from open to investigating to resolved to closed. Add a resolution description, corrective actions taken, and resolution date. Equipment can be grounded as part of an incident response.
+By default, supervisors can update an incident's status from open to investigating to resolved to closed. Add a resolution description, corrective actions taken, and resolution date. Equipment can be grounded as part of an incident response.
 
 ---
 
@@ -425,7 +426,7 @@ Use the action buttons on each document to rename it, move it to a different fol
 
 ### 17.1 Viewing Activity
 
-The Audit Log (accessible to administrators only) shows a chronological record of every change made in the system: who did what, when, and what the old and new values were. This provides accountability and a complete audit trail.
+The Audit Log (administrators only by default; the Role Permissions grid can allow other roles to view it) shows a chronological record of every change made in the system: who did what, when, and what the old and new values were. This provides accountability and a complete audit trail.
 
 ### 17.2 Filtering and Exporting
 
@@ -435,21 +436,88 @@ Filter the audit log by entity type (flight, pilot, vehicle, etc.) or action typ
 
 ## 18. User Roles
 
+There are four roles: Admin, Supervisor, Pilot and Viewer. What Supervisors, Pilots and Viewers can do is configurable. An administrator sets it in Settings, on the Users tab, in the Role Permissions card below User Management. Changes apply from each user's next request and do not sign anyone out.
+
 ### 18.1 Admin
 
-Full access to everything. Can manage users, configure settings, access the audit log, manage API keys, and perform all actions in the system.
+Full access to everything, always. The Admin column in the grid is locked on. These areas are admin-only and cannot be delegated: user management, the permission grid, settings and integrations, backup and restore, API tokens, bulk imports, flight purposes, and permanent purge.
 
-### 18.2 Supervisor
+### 18.2 Role Permissions Grid
 
-Can approve and deny flight plans. Can manage pilots, vehicles, certifications, and fleet equipment. Can resolve incidents and manage maintenance schedules. Cannot access user management, API configuration, or the audit log.
+The grid lists each feature with its actions and one column per role. A setting is either Yes or No, or, for records that have an owner, None, Own or All.
 
-### 18.3 Pilot
+- **None** means the role cannot do the action.
+- **Own** means only on records the user owns (see below).
+- **All** means on every record.
 
-Can add flights, mission logs, training logs, and maintenance records. Can complete checklists, submit flight plans, report incidents, and upload photos and documents. Can edit only their own pilot profile. Cannot manage other pilots, modify certifications, or access settings.
+Every feature also has a View setting. Turning a view off hides that feature's pages, lists, search results, exports and report sections, and its navigation entry. The settings that depend on a view are switched off with it, and a role cannot hold a change permission while that feature's view is off. Names on other features' records stay visible (a flight still shows its pilot's name), and contact details follow the separate "View email and phone" setting everywhere. Unit-wide totals with no names stay visible to everyone.
 
-### 18.4 Viewer
+Use Save to apply changes, Discard to drop them, and Reset to defaults to return to the table below. On a phone the grid becomes one card per feature with a Role selector, so every setting stays reachable.
 
-Read-only access to all data. Can view dashboards, reports, flights, pilots, and all other pages. Cannot create, edit, or delete any records.
+**What Own means**
+
+| Record | Own means |
+| --- | --- |
+| Flight | The flight's pilot is the user's linked pilot, or the user logged it |
+| Flight plan | Submitted by the user |
+| Incident | Reported by the user |
+| Mission or training log | Created by the user, or the user's linked pilot is on the roster |
+| Maintenance record | Created by the user |
+| Calendar event | Created by the user |
+| Pilot profile | The user's linked pilot |
+| Photo | Uploaded by the user |
+| Document | Uploaded by the user, or attached to the user's own pilot record or certification |
+
+A login with no linked pilot owns no pilot profile, and only the flights it logged. Records created before this feature have no recorded creator, so only a role with All can edit them (apart from a roster match on logs). A user with Own edit on flights cannot reassign a flight to a different pilot; only All can.
+
+**Default grid**
+
+| Feature | Supervisor | Pilot | Viewer |
+| --- | --- | --- | --- |
+| View any feature (flights, flight plans, incidents, logs, maintenance, fleet, pilots, certifications, checklists, calendar, documents and photos, alerts, operating authority, vehicle registrations) | Yes | Yes | Yes |
+| Create flights, flight plans, incidents, logs, maintenance records, calendar events | Yes | Yes | No |
+| Edit flights, flight plans, incidents, logs, maintenance records, calendar events | All | Own | None |
+| Edit pilot profiles | All | Own | None |
+| Upload, edit and soft delete documents and photos | All | Own | None |
+| Delete flights | All | None | None |
+| Review flights, bulk actions | Yes | No | No |
+| Approve, deny or delete flight plans | Yes | No | No |
+| Resolve, close or delete incidents | Yes | No | No |
+| Complete maintenance schedules | Yes | Yes | No |
+| Create, edit or delete maintenance schedules | Yes | No | No |
+| Manage fleet equipment and components | Yes | No | No |
+| Update vehicle location | Yes | Yes | No |
+| Check equipment out and in | Yes | Yes | No |
+| Delete checkouts | Yes | No | No |
+| Create, delete or merge pilots | Yes | No | No |
+| View pilot email and phone | Yes | Yes | No |
+| Manage certifications, send reminders | Yes | No | No |
+| Complete checklists | Yes | Yes | No |
+| Manage checklist templates | Yes | No | No |
+| Restore documents, legal hold | Yes | No | No |
+| Manage folders | Yes | No | No |
+| Mark alerts read or dismiss them (shared for everyone) | Yes | No | No |
+| Generate reports | Yes | Yes | No |
+| Export CSV | Yes | Yes | Yes |
+| Manage operating authority and geofences | Yes | No | No |
+| Manage vehicle registrations | No | No | No |
+| View the audit log | No | No | No |
+| Send the email digest to another address | Yes | No | No |
+
+**Always enforced, whatever the grid says**
+
+- Nobody approves a flight plan they submitted.
+- A legal hold blocks delete and purge.
+- The last active admin cannot be demoted, deactivated or deleted.
+- A viewer can never change unit data. Change settings for the Viewer column are locked to No or None. The server refuses them, ignores any stored value (including one from a restored backup), and the grid greys them out.
+
+**Flights and currency**
+
+- A flight logged by hand always starts as needs review.
+- When a user without the flight review permission changes a reviewed flight, it returns to the review queue. Editing with review permission keeps the status, and saving unchanged values does not count as a change.
+- Only reviewed flights count toward pilot currency, from every source. A flight waiting for review, including one sent back after an edit, stops counting until a supervisor reviews it.
+
+**Any signed-in user, own account only:** change your own password, theme, profile and notification preferences. A viewer keeps these.
 
 ---
 

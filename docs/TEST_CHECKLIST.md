@@ -249,6 +249,66 @@ Test from a completely clean database. Check each item as you go.
 
 ---
 
+## 36. Role Permissions (staging pass, one login per role)
+
+Setup: create one login each for Supervisor, Pilot and Viewer (for example `<supervisor-user>`, `<pilot-user>`, `<viewer-user>`), plus the admin. Link the pilot login to a pilot record. Use `<staging-url>` and a second pilot record with a flight that belongs to someone else. Start from Reset to defaults in Settings > Users > Role Permissions.
+
+### 36.1 Grid in Settings
+- [ ] Role Permissions card appears below User Management, admin only
+- [ ] Admin column is locked on; viewer change cells are greyed out with a reason
+- [ ] At phone width every setting is reachable (one card per feature, Role selector)
+- [ ] Turning a View off switches its dependent settings off; Discard restores them
+- [ ] Reset to defaults asks for confirmation and restores the grid
+
+### 36.2 Default grid, Supervisor login
+- [ ] Can edit and delete any flight, and review flights and use bulk actions
+- [ ] Can approve or deny another user's flight plan, but not one they submitted
+- [ ] Can resolve and delete incidents, manage fleet, schedules, certifications, checklist templates and folders
+- [ ] Can restore documents and place a legal hold; can dismiss alerts
+- [ ] Cannot reach user management, settings, backups, API tokens or the audit log
+- [ ] Cannot manage vehicle registrations
+
+### 36.3 Default grid, Pilot login
+- [ ] Can view every feature and create flights, flight plans, incidents, logs, maintenance records and events
+- [ ] Can edit own flight, plan, incident, log, maintenance record, event and profile; cannot edit another user's
+- [ ] Cannot delete a flight, review flights, approve plans, resolve incidents or dismiss alerts
+- [ ] Can complete a maintenance schedule, check equipment out and in, update vehicle location, complete a checklist, generate a report
+- [ ] Cannot create or edit schedules, manage fleet equipment, certifications or checklist templates
+- [ ] Can see pilot email and phone
+
+### 36.4 Default grid, Viewer login
+- [ ] Can view every feature and export CSV
+- [ ] No create, edit, delete or action buttons anywhere; direct API writes are refused
+- [ ] Pilot email and phone are hidden; Generate report is unavailable
+- [ ] Can still change own password and theme
+
+### 36.5 Flipping a toggle
+- [ ] As admin, set Pilot Delete flights to Own and save; as the pilot, with no new sign-in, the next request lets them delete their own flight but not another pilot's
+- [ ] Set it back to None; the pilot loses delete on the next request without being signed out
+- [ ] Set Pilot Edit flights to None; the pilot's edit controls disappear after a refresh
+
+### 36.6 Pilot edits a reviewed flight
+- [ ] A flight the pilot logs starts as Needs Review
+- [ ] A supervisor marks it reviewed
+- [ ] The pilot edits a field; the flight returns to Needs Review and the review badge count goes up
+- [ ] Saving it again with no changes leaves the status alone
+- [ ] A supervisor edits a reviewed flight; the status stays reviewed
+- [ ] The pilot's currency does not count the flight until it is reviewed again; clear the review queue first and confirm currency recovers
+
+### 36.7 Viewer with a view off
+- [ ] Turn Flights View off for Viewer: the Flights nav entry, flight search results, flight charts, flight CSV export and flight report sections are gone
+- [ ] Direct requests to flight pages and flight API routes are refused for the viewer
+- [ ] Names on other records (a flight's pilot on an incident, for example) still show
+- [ ] Turn the view back on; the dependent settings stay off until set again
+
+### 36.8 Backup and restore
+- [ ] Change two toggles, then Export Backup
+- [ ] Reset to defaults, then restore the backup; the two changes are back
+- [ ] Restore a backup taken before this feature; the grid is at defaults
+- [ ] After restore, a viewer cell is still locked and the viewer still cannot change data
+
+---
+
 ## Test Results Summary
 
 | Section | Status | Notes |
@@ -288,3 +348,4 @@ Test from a completely clean database. Check each item as you go.
 | 33. Security | | |
 | 34. Validation Errors | | |
 | 35. Backup & Restore | | |
+| 36. Role Permissions | | |

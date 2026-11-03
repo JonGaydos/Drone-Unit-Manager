@@ -129,6 +129,7 @@ The application runs as a single Docker container with no external dependencies.
 
 ### Security and Access Control
 - Four roles: Admin, Supervisor, Pilot, Viewer
+- Configurable role permissions: an admin sets what Supervisors, Pilots and Viewers can do from one grid in Settings (Yes/No, or None/Own/All for records with an owner), enforced by the backend on every request; viewers can never change unit data
 - First-run setup wizard (no default credentials)
 - Login rate limiting
 - File upload size limits with stream-checked size enforcement on the largest endpoints
@@ -141,7 +142,7 @@ The application runs as a single Docker container with no external dependencies.
 - CORS restricted to specific methods and headers
 - Request ID tracking (X-Request-ID header)
 - Settings access control: non-admin users only see non-sensitive keys (org name/logo, sidebar, weather defaults). SMTP and integration secrets are admin-only and render as a presence marker even to admins.
-- Linking and unlinking photos to flights and incidents requires Supervisor or Admin; pilots and viewers can view linked photos but not attach or detach them
+- Linking and unlinking photos to flights and incidents follows the role permission grid (custody permission; Supervisor and Admin by default); pilots and viewers can view linked photos but not attach or detach them by default
 - Backup import requires Admin JWT once any user exists, or a one-time install token (printed to container logs) on a fresh install
 
 ## Quick Start

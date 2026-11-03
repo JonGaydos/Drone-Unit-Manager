@@ -40,4 +40,15 @@ describe('UserManualPage', () => {
     expect(term.tagName).toBe('STRONG')
     expect(term.parentElement).toHaveTextContent('Org name, your name, email address.')
   })
+
+  it('describes roles as configurable with the default grid and always-enforced rules', () => {
+    renderWithProviders(<UserManualPage />, { route: '/manual' })
+
+    expect(screen.getByRole('heading', { name: 'Role Permissions' })).toBeInTheDocument()
+    expect(screen.getByText(/configurable by an admin/)).toBeInTheDocument()
+    expect(screen.getByText(/Own is a fixed rule per record/)).toBeInTheDocument()
+    expect(screen.getByText(/a viewer can never hold a change permission/)).toBeInTheDocument()
+    expect(screen.getByText(/Only reviewed flights count toward pilot currency/)).toBeInTheDocument()
+    expect(screen.getByText(/it returns to the review queue; saving unchanged values/)).toBeInTheDocument()
+  })
 })

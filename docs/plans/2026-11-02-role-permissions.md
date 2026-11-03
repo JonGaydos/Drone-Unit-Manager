@@ -59,7 +59,7 @@ This table is the decision record for Tasks 3 to 7. "Level" means a None / Own /
 | `audit` | `audit.view` | none |
 | `reports` | none | `reports.generate`, plus the view key for the report's content |
 | `export` CSV, GPX, KML | `reports.export` plus the entity's view key | imports: admin |
-| `dashboard` | Signed-in: stats, trends, activity-by-month, compliance. `flights.view`: top-pilots-30d, flights-by-*, avg-duration-by-year, monthly-flights, pilot-hours, pilot-performance. `fleet.view`: top-vehicles-30d, vehicle-hours, fleet-health. `maintenance.view`: maintenance-due. `certifications.view`: upcoming-expirations | none |
+| `dashboard` | Signed-in: stats, trends, compliance. `flights.view`: activity-by-month, top-pilots-30d, flights-by-*, avg-duration-by-year, monthly-flights, pilot-hours, pilot-performance. `fleet.view`: top-vehicles-30d, vehicle-hours, fleet-health. `maintenance.view`: maintenance-due. `certifications.view`: upcoming-expirations | none |
 | `search` | Signed-in, with each result group filtered by its view key | none |
 | `notifications` | Signed-in, own account. `/log` stays as is | Signed-in, own account. Override follows `digest.redirect` |
 | `weather`, `adsb`, `geocode`, `settings` reads | Signed-in | Settings writes: admin |

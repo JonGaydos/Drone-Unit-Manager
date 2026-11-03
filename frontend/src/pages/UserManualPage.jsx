@@ -18,12 +18,46 @@ If you have a backup ZIP from another instance, choose "Restore from a backup in
       },
       {
         title: 'User Roles',
-        body: `The application has four roles with increasing permissions:
+        body: `The application has four roles: Admin, Supervisor, Pilot and Viewer. What Supervisors, Pilots and Viewers can do is configurable by an admin (see "Role Permissions" below). Defaults:
 
-• **Viewer** — Read-only access. Pilot email addresses and phone numbers are hidden from viewers.
-• **Pilot** — Can view data and submit flight plans. Pilots can edit their own profile (contact details, not status) and attach documents to their own record and certifications.
-• **Supervisor** — Can approve flights, manage pilots, create/edit most records, and generate reports.
-• **Admin** — Full access including user management, system settings, and audit log.`
+• **Viewer**: Can view every feature and export CSV, and can never change unit data. Pilot email addresses and phone numbers are hidden from viewers.
+• **Pilot**: Can view every feature and create records. Can edit only their own flights, plans, incidents, logs, maintenance records, events, profile, documents and photos. Cannot delete flights.
+• **Supervisor**: Can edit and delete any record, review and approve, manage pilots, fleet, certifications and checklists, and generate reports.
+• **Admin**: Full access including user management, the permission grid, system settings, and backups. The audit log is admin-only by default.`
+      },
+      {
+        title: 'Role Permissions',
+        body: `Admins set what each role can do in Settings (Users tab), in the Role Permissions card below User Management. Each setting is Yes or No, or None, Own or All for records that have an owner. Changes apply from each person's next request and do not sign anyone out. Use Save changes to apply, Discard to drop edits, and Reset to defaults to restore the table below. On a phone the grid becomes one card per feature with a Role selector.
+
+Own is a fixed rule per record:
+
+• **Flight**: The flight's pilot is your linked pilot, or you logged it.
+• **Flight plan**: You submitted it.
+• **Incident**: You reported it.
+• **Mission or training log**: You created it, or your linked pilot is on the roster.
+• **Maintenance record**: You created it.
+• **Calendar event**: You created it.
+• **Pilot profile**: Your linked pilot.
+• **Photo**: You uploaded it.
+• **Document**: You uploaded it, or it is attached to your own pilot record or certification.
+
+A login with no linked pilot owns no pilot profile, and only the flights it logged. Records created before this feature have no recorded creator, so only a role with All can edit them (apart from a roster match on logs). Own edit on flights cannot reassign a flight to a different pilot.
+
+Default settings:
+
+• **View**: Supervisor, Pilot and Viewer can all view every feature. Turning a view off hides that feature's pages, lists, search results, exports, report sections and navigation entry, and switches off the settings that depend on it.
+• **Create**: Supervisor and Pilot can create flights, flight plans, incidents, logs, maintenance records and calendar events. Viewer cannot.
+• **Edit**: Supervisor All, Pilot Own, Viewer None, for flights, flight plans, incidents, logs, maintenance records, calendar events, pilot profiles, documents and photos.
+• **Delete flights**: Supervisor All, Pilot None.
+• **Supervisor only**: Review and bulk actions on flights, approving and denying flight plans, resolving and deleting incidents, maintenance schedules, fleet management, deleting checkouts, creating, deleting or merging pilots, certifications, checklist templates, document restore and legal hold, folders, alerts, operating authority and geofences, and sending the email digest to another address.
+• **Pilot and Supervisor**: Completing maintenance schedules, updating vehicle location, checking equipment out and in, completing checklists, viewing pilot email and phone, and generating reports.
+• **Nobody but admin**: Vehicle registrations management and the audit log.
+
+Admin only, never delegable: user management, the permission grid, settings and integrations, backup and restore, API tokens, bulk imports, flight purposes, and permanent purge. Your own password, theme, profile and notification preferences stay available to every signed-in user.
+
+Always enforced, whatever the grid says: nobody approves a flight plan they submitted; a legal hold blocks delete and purge; the last active admin cannot be demoted, deactivated or deleted; and a viewer can never hold a change permission. The grid greys out those cells, the server refuses to save them, and any stored value is ignored (including one from a restored backup).
+
+Reviewed flights and currency: a flight logged by hand always starts as Needs Review. When a user without the review permission changes a reviewed flight, it returns to the review queue; saving unchanged values does not count as a change. Only reviewed flights count toward pilot currency, so a flight waiting for review does not count until a supervisor reviews it.`
       },
       {
         title: 'Dates, Times and Sign-in',
@@ -98,7 +132,7 @@ Each category has a colored checkbox above the calendar to show or hide that typ
         title: 'Adding Events and Leave',
         body: `Click "Add event / leave" to create a manual entry. Choose a category (Event or Leave), a title, a start date, an optional end date (for multi-day entries), and optional notes.
 
-Any signed-in user, including pilots, can add their own events and leave. You can edit or delete an entry you created; supervisors and admins can edit or delete any manual entry. The other aggregated items (flights, missions, training, maintenance, certifications) are read-only on the calendar and are managed from their own pages.`
+Any signed-in user, including pilots, can add their own events and leave. You can edit or delete an entry you created; by default supervisors and admins can edit or delete any manual entry. The other aggregated items (flights, missions, training, maintenance, certifications) are read-only on the calendar and are managed from their own pages.`
       },
     ]
   },
@@ -112,11 +146,11 @@ Any signed-in user, including pilots, can add their own events and leave. You ca
       },
       {
         title: 'Adding Flights Manually',
-        body: 'Click "Add Flight" to record a flight manually. Select the pilot, vehicle, date, duration, purpose, and optionally a takeoff address and case number.'
+        body: 'Click "Add Flight" to record a flight manually. Select the pilot, vehicle, date, duration, purpose, and optionally a takeoff address and case number. A flight added by hand always starts as Needs Review, whoever logs it.'
       },
       {
         title: 'Reviewing Flights',
-        body: 'Flights imported from the Skydio API arrive with "Needs Review" status. Supervisors can review individual flights via the inline edit button, or use "Approve Page" to mark the visible page of pending flights as reviewed. Selecting rows with the checkboxes also enables bulk actions (reassign pilot, set purpose, mark reviewed, delete), each shown with a confirmation summarizing exactly what will change.'
+        body: 'Flights imported from the Skydio API arrive with "Needs Review" status. Users with the review permission (supervisors by default) can review individual flights via the inline edit button, or use "Approve Page" to mark the visible page of pending flights as reviewed. Selecting rows with the checkboxes also enables bulk actions (reassign pilot, set purpose, mark reviewed, delete), each shown with a confirmation summarizing exactly what will change. When a user without the review permission edits a reviewed flight, it returns to the review queue.'
       },
       {
         title: 'Flight Detail',
@@ -178,7 +212,7 @@ The checkout defaults to the logged-in user as the holder, but you can pick any 
       },
       {
         title: 'Active and Returned Records',
-        body: 'The page shows a "Currently Out" section with everything still checked out, and a History section. Toggle "Show returned" to include completed (returned) records in the History list. Supervisors and admins can permanently delete a checkout record.'
+        body: 'The page shows a "Currently Out" section with everything still checked out, and a History section. Toggle "Show returned" to include completed (returned) records in the History list. By default supervisors and admins can delete a checkout record.'
       },
     ]
   },
@@ -204,7 +238,7 @@ The list of named places (for example North, Central, South) is configured by ad
     content: [
       {
         title: 'Mission Log',
-        body: `The Mission Log records non-flight missions and operations. Each entry has a date, title, reason/purpose, location, case number, drone used, man-hours, optional start/end times, description, and notes. You can attach multiple pilots to a mission, each with a role (PIC, Observer, Spotter, Visual Observer, Support) and hours. Pilots and above can add, edit, import, and delete entries; use the search box and date/pilot filters to find missions, and Export CSV to download the list.`
+        body: `The Mission Log records non-flight missions and operations. Each entry has a date, title, reason/purpose, location, case number, drone used, man-hours, optional start/end times, description, and notes. You can attach multiple pilots to a mission, each with a role (PIC, Observer, Spotter, Visual Observer, Support) and hours. By default pilots can add entries and edit or delete the ones they created or are rostered on, and supervisors can change any entry; use the search box and date/pilot filters to find missions, and Export CSV to download the list.`
       },
       {
         title: 'Training Log',
@@ -218,13 +252,15 @@ The list of named places (for example North, Central, South) is configured by ad
     content: [
       {
         title: 'Pilot Profiles',
-        body: 'Each pilot has a profile with contact information, badge number, photo, and status (active/inactive). Click a pilot\'s name to view their full profile with flight history, certifications, and training records.'
+        body: 'Each pilot has a profile with contact information, badge number, photo, and status (active/inactive). Click a pilot\'s name to view their full profile with flight history, certifications, and training records. By default supervisors can edit any profile and pilots only their own; the Role Permissions grid can change this.'
       },
       {
         title: 'Pilot Currency',
         body: `Currency rules define how many flight hours (and optionally how many flights) a pilot must log within a rolling period to stay current (e.g., 5 hours in 90 days).
 
-Admins create rules from Settings → Currency Rules. Rules can be scoped to a specific vehicle model or apply across all aircraft. Once at least one active rule exists, each pilot's detail page shows a Currency Status section with per-rule progress, current/lapsed badge, and the projected expiry date (the date the pilot would lapse if they don't fly again).`
+Admins create rules from Settings → Currency Rules. Rules can be scoped to a specific vehicle model or apply across all aircraft. Once at least one active rule exists, each pilot's detail page shows a Currency Status section with per-rule progress, current/lapsed badge, and the projected expiry date (the date the pilot would lapse if they don't fly again).
+
+Only reviewed flights count toward currency, from every source. A flight that still needs review, including one sent back to the queue after an edit, does not count until a supervisor reviews it, so a pilot can show as lapsed while their flights wait for review.`
       },
       {
         title: 'Needs Attention',
@@ -308,11 +344,11 @@ When nothing is outstanding, the card shows an "All clear" message. The count of
     content: [
       {
         title: 'Flight Plan Submission',
-        body: 'Pilots can submit flight plans for supervisor approval. Include the mission objective, location, date/time, equipment, and weather conditions.'
+        body: 'Pilots can submit flight plans for approval by a user with the approval permission (a supervisor by default). Nobody approves a plan they submitted. Include the mission objective, location, date/time, equipment, and weather conditions.'
       },
       {
         title: 'Pre-Flight Checklists',
-        body: 'Create custom pre-flight checklist templates from the Checklists page. Pilots complete checklists before each flight, and completed checklists are stored for compliance records. A checklist submitted with required items unticked is saved as not passed; the Submit button says so. A template that has been used cannot be deleted, because submitted checklists keep a link to it: edit it and untick Active to stop offering it. Supervisors can delete a submitted checklist entered by mistake from its detail view.'
+        body: 'Create custom pre-flight checklist templates from the Checklists page. Pilots complete checklists before each flight, and completed checklists are stored for compliance records. A checklist submitted with required items unticked is saved as not passed; the Submit button says so. A template that has been used cannot be deleted, because submitted checklists keep a link to it: edit it and untick Active to stop offering it. By default, supervisors can delete a submitted checklist entered by mistake from its detail view.'
       },
     ]
   },
@@ -326,9 +362,9 @@ When nothing is outstanding, the card shows an "All clear" message. The count of
       },
       {
         title: 'Deleting, Recently Deleted and Legal Hold',
-        body: `Deleting a document or photo moves it to Recently deleted rather than removing it. Supervisors can restore it from there, and admins can delete it permanently. Deleting a folder moves its documents to Unfiled.
+        body: `Deleting a document or photo moves it to Recently deleted rather than removing it. Users with the restore permission (supervisors by default) can restore it from there, and admins can delete it permanently. Deleting a folder moves its documents to Unfiled.
 
-Supervisors can place a document or photo on legal hold. A held item shows a lock and cannot be deleted or permanently removed until the hold is released. Viewing and downloading documents and photos is recorded in the audit log.`
+Users with the legal hold permission (supervisors by default) can place a document or photo on legal hold. A held item shows a lock and cannot be deleted or permanently removed until the hold is released. Viewing and downloading documents and photos is recorded in the audit log.`
       },
       {
         title: 'Photo Gallery',
@@ -336,7 +372,7 @@ Supervisors can place a document or photo on legal hold. A held item shows a loc
       },
       {
         title: 'Linking Photos to Flights and Incidents',
-        body: 'Flight and incident detail pages have a Photos section listing attached photos. Linking and unlinking photos (attaching existing gallery photos to a flight or incident, or detaching them) requires Supervisor or Admin. Pilots and viewers can see linked photos but cannot attach or detach them.'
+        body: 'Flight and incident detail pages have a Photos section listing attached photos. Linking and unlinking photos (attaching existing gallery photos to a flight or incident, or detaching them) requires the restore and legal hold permission (files custody), which supervisors and admins hold by default. Pilots and viewers can see linked photos but cannot attach or detach them by default.'
       },
     ]
   },
@@ -384,7 +420,7 @@ The report builder also has date-range presets, pilot and vehicle filters (shown
       },
       {
         title: 'Operating Authority',
-        body: `The Operating Authority page tracks the unit's own COAs and Part 107 waivers, with issue and expiry dates, a status badge, and attached documents. Admins and Supervisors can add and edit; Pilots and Viewers have read-only access.
+        body: `The Operating Authority page tracks the unit's own COAs and Part 107 waivers, with issue and expiry dates, a status badge, and attached documents. By default admins and supervisors can add and edit; pilots and viewers have read-only access.
 
 An authority within 90 days of expiry takes 5 points off the compliance score. An expired authority marked "Expiry grounds the unit" caps the score at 50 no matter how clean everything else is, with the reason shown under the score, because a green score while the unit is unauthorised would be misleading. Untick that box for an authority whose lapse restricts one kind of operation rather than grounding the unit (a night waiver, for example); an expired one of those takes 10 points off instead.
 
@@ -475,7 +511,7 @@ Format is auto-detected, or you can pick a specific format. Select multiple file
     content: [
       {
         title: 'Settings Tabs',
-        body: 'The Settings page is organized into tabs: General (organization info, default location, weather thresholds, certification labels, mission purposes, drone locations, currency rules, sidebar config, backup and restore, automated backups), Users (change password, user management), Integrations (provider APIs, SMTP, flight log import), and API Tokens (long-lived API keys for external access).'
+        body: 'The Settings page is organized into tabs: General (organization info, default location, weather thresholds, certification labels, mission purposes, drone locations, currency rules, sidebar config, backup and restore, automated backups), Users (change password, user management, role permissions), Integrations (provider APIs, SMTP, flight log import), and API Tokens (long-lived API keys for external access).'
       },
       {
         title: 'API Tokens',
@@ -505,11 +541,11 @@ Click "Save Sidebar Config" to apply.`
       },
       {
         title: 'User Management',
-        body: 'Admins can create, edit, and deactivate user accounts from Settings > Users. Assign roles and link users to pilot profiles for permissions-based access.'
+        body: 'Admins can create, edit, and deactivate user accounts from Settings > Users. Assign roles and link users to pilot profiles. What each role can do is set in the Role Permissions card below the user list.'
       },
       {
         title: 'Audit Log',
-        body: 'The Audit Log (admin only) shows a complete history of all actions taken in the system: who did what, when, and what changed. Use it for accountability and compliance auditing.'
+        body: 'The Audit Log (admin only by default) shows a complete history of all actions taken in the system: who did what, when, and what changed. Use it for accountability and compliance auditing.'
       },
     ]
   },

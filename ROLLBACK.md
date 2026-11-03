@@ -46,6 +46,28 @@ an older image, so a rollback needs the data folder copied before the upgrade
 Anything recorded in production after the upgrade is in the `failed-3.2.0`
 folder, not in the restored copy.
 
+## Roll back a release with migration 0011 (role permissions)
+
+Migration 0011 creates `role_permissions` and adds `documents.uploaded_by_id`.
+An older image cannot undo it, so run the downgrade inside the new image
+before switching back to the older one:
+
+1. In the app, take a backup first (Settings, General, Backup & Restore,
+   Export Backup), and copy the data folder as well.
+2. With the new image still running, step the schema back one revision:
+
+        docker exec -w /app <container> alembic downgrade 0010_local_dates_for_spreadsheet_imports
+
+3. Check it reported `Running downgrade 0011_role_permissions -> 0010_local_dates_for_spreadsheet_imports`.
+4. Set the Repository to the older tag and Apply. The data folder and Extra
+   Parameters stay as they are.
+
+The downgrade drops the `role_permissions` table and the
+`documents.uploaded_by_id` column. Every admin change to role permissions and
+the recorded uploader of each document are lost, and the older release goes back
+to its fixed role rules. To return to the new release later, run it again; it
+applies the migration on start and the permission grid starts at the defaults.
+
 ## Roll the code back
 
     git revert <commit>
