@@ -3,6 +3,7 @@ import { screen, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { withPermissions } from '@/test/permissions'
+import { fleetOptions, pilotOption, vehicleOption } from '@/test/options'
 import { renderWithProviders } from '@/test/render'
 import CheckoutsPage from './CheckoutsPage'
 
@@ -15,10 +16,10 @@ const CHECKOUTS = [
   { id: 1, entity_type: 'vehicle', entity_id: 10, entity_name: 'DJI Mavic 3 (Falcon)', checked_out_by_name: 'Ada Lovelace', checked_out_at: '2026-06-01T10:00:00', expected_return: '2026-06-10', checked_in_at: null },
 ]
 const PILOTS = [
-  { id: 5, full_name: 'Ada Lovelace', status: 'active' },
+  pilotOption(5, 'Ada Lovelace'),
 ]
 const VEHICLES = [
-  { id: 10, manufacturer: 'DJI', model: 'Mavic 3', nickname: 'Falcon' },
+  vehicleOption({ id: 10, manufacturer: 'DJI', model: 'Mavic 3', nickname: 'Falcon' }),
 ]
 
 function mockMount(overrides = {}) {
@@ -31,7 +32,7 @@ function mockMount(overrides = {}) {
   server.use(
     http.get('/api/equipment-checkouts', base.checkouts),
     http.get('/api/pilots/options', base.pilots),
-    http.get('/api/fleet/options', () => HttpResponse.json({ vehicles: base.vehicles })),
+    http.get('/api/fleet/options', () => HttpResponse.json(fleetOptions({ vehicles: base.vehicles }))),
   )
 }
 

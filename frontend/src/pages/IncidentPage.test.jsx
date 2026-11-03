@@ -3,6 +3,7 @@ import { screen, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { withPermissions } from '@/test/permissions'
+import { fleetOptions, pilotOption, vehicleOption } from '@/test/options'
 import { renderWithProviders } from '@/test/render'
 import IncidentPage from './IncidentPage'
 
@@ -26,8 +27,8 @@ function mockMount(overrides = {}) {
   server.use(
     http.get('/api/incidents/stats', base.stats),
     http.get('/api/incidents', base.incidents),
-    http.get('/api/pilots/options', () => HttpResponse.json([{ id: 5, full_name: 'Jane Doe', is_active: true }])),
-    http.get('/api/fleet/options', () => HttpResponse.json({ vehicles: [{ id: 2, nickname: 'Falcon', model: 'Mavic 3' }], batteries: [], controllers: [], sensors: [], attachments: [], docks: [], other_equipment: [] })),
+    http.get('/api/pilots/options', () => HttpResponse.json([pilotOption(5, 'Jane Doe')])),
+    http.get('/api/fleet/options', () => HttpResponse.json(fleetOptions({ vehicles: [vehicleOption({ id: 2, nickname: 'Falcon', model: 'Mavic 3' })] }))),
     http.get('/api/flights', () => HttpResponse.json([])),
   )
 }
@@ -100,5 +101,22 @@ describe('IncidentPage', () => {
     renderWithProviders(<IncidentPage />, { role: 'pilot', permissions: { 'flights.view': 'no' } })
     expect(await screen.findByRole('button', { name: /New Report/ })).toBeInTheDocument()
     expect(asked).toBe(false)
+  })
+
+  it('offers Resolve only where incidents.edit also covers the record', async () => {
+    const rows = [{ ...INCIDENTS[0], id: 1, title: 'Mine', reported_by_id: 3 }, { ...INCIDENTS[0], id: 2, title: 'Theirs', reported_by_id: 4 }]
+    mockMount({ incidents: () => HttpResponse.json(rows) })
+    renderWithProviders(<IncidentPage />, {
+      user: { id: 3, username: 'p', role: 'pilot' }, permissions: { 'incidents.resolve': 'yes' },
+    })
+    await screen.findByText('Mine')
+    expect(screen.getAllByTitle('Resolve')).toHaveLength(1)
+  })
+
+  it('offers no Resolve without incidents.resolve', async () => {
+    mockMount({ incidents: () => HttpResponse.json([{ ...INCIDENTS[0], reported_by_id: 3 }]) })
+    renderWithProviders(<IncidentPage />, { user: { id: 3, username: 'p', role: 'pilot' } })
+    await screen.findByText('Hard Landing')
+    expect(screen.queryByTitle('Resolve')).toBeNull()
   })
 })

@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { screen } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
+import { fleetOptions, pilotOption, vehicleOption } from '@/test/options'
 import { renderRoute } from '@/test/render'
 import { setDisplayTimezone } from '@/lib/utils'
 import FlightDetailPage from './FlightDetailPage'
@@ -26,8 +27,8 @@ function mockMount(overrides = {}) {
   server.use(
     http.get('/api/flights/:id', base.flight),
     http.get('/api/telemetry/flight/:id', () => HttpResponse.json([])),
-    http.get('/api/pilots/options', () => HttpResponse.json([{ id: 5, full_name: 'Jane Doe', is_active: true }])),
-    http.get('/api/fleet/options', () => HttpResponse.json({ vehicles: [{ id: 2, nickname: 'Falcon', model: 'Mavic 3' }], batteries: [], controllers: [], sensors: [], attachments: [], docks: [], other_equipment: [] })),
+    http.get('/api/pilots/options', () => HttpResponse.json([pilotOption(5, 'Jane Doe')])),
+    http.get('/api/fleet/options', () => HttpResponse.json(fleetOptions({ vehicles: [vehicleOption({ id: 2, nickname: 'Falcon', model: 'Mavic 3' })] }))),
     http.get('/api/flights/purposes/list', () => HttpResponse.json([{ id: 1, name: 'Patrol' }])),
     http.get('/api/photos', () => HttpResponse.json([])),
   )
@@ -54,9 +55,12 @@ describe('FlightDetailPage', () => {
     expect(await screen.findByText('1:30 PM')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: 'Edit' }))
-    await user.click(await screen.findByRole('button', { name: 'Save' }))
-    // The edit form pre-filled 13:30 (zoned) and must post 18:30Z back.
-    expect(patchBody.takeoff_time).toBe('2026-05-01T18:30:00Z')
+    // The edit form pre-fills 13:30 (zoned); 14:00 there must post as 19:00Z.
+    const takeoff = await screen.findByLabelText('Takeoff Time')
+    expect(takeoff).toHaveValue('2026-05-01T13:30')
+    fireEvent.change(takeoff, { target: { value: '2026-05-01T14:00' } })
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(patchBody.takeoff_time).toBe('2026-05-01T19:00:00Z'))
   })
 
   it('renders without crashing', async () => {
@@ -97,10 +101,10 @@ describe('FlightDetailPage', () => {
 
     await screen.findByText('Flight on 2026-05-01')
     await user.click(screen.getByRole('button', { name: 'Edit' }))
-    await user.click(await screen.findByRole('button', { name: 'Save' }))
+    await user.type(await screen.findByLabelText('Case #'), 'C-9')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
 
-    expect(patchBody).not.toBeNull()
-    expect(patchBody.purpose).toBe('Patrol')
+    await waitFor(() => expect(patchBody).toEqual({ case_number: 'C-9' }))
   })
 
   it('approves a needs_review flight via PATCH /flights/:id (admin)', async () => {
@@ -212,5 +216,20 @@ describe('FlightDetailPage', () => {
     })
     await screen.findByText(/Flight on/)
     expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull()
+  })
+
+  it('saving a reviewed flight unchanged sends nothing, with times that have seconds', async () => {
+    let patched = false
+    mockMount({
+      flight: () => HttpResponse.json({ ...FLIGHT, review_status: 'reviewed', purpose: null, takeoff_time: '2026-05-01T18:30:42Z', landing_time: '2026-05-01T18:45:17Z' }),
+    })
+    server.use(http.patch('/api/flights/:id', () => { patched = true; return HttpResponse.json(FLIGHT) }))
+    const { user } = renderRoute(<FlightDetailPage />, {
+      path: '/flights/:id', route: '/flights/1', user: { id: 3, username: 'p', role: 'pilot', pilot_id: 5 },
+    })
+    await user.click(await screen.findByRole('button', { name: 'Edit' }))
+    await user.click(await screen.findByRole('button', { name: 'Save' }))
+    await screen.findByRole('button', { name: 'Edit' })
+    expect(patched).toBe(false)
   })
 })

@@ -3,6 +3,7 @@ import { screen, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { withPermissions } from '@/test/permissions'
+import { fleetOptions } from '@/test/options'
 import { renderWithProviders } from '@/test/render'
 import FleetPage from './FleetPage'
 
@@ -20,7 +21,7 @@ const VEHICLE_ROWS = [
 
 function mockVehicles(rows = VEHICLE_ROWS) {
   server.use(
-    http.get('/api/fleet/options', () => HttpResponse.json({ vehicles: rows })),
+    http.get('/api/fleet/options', () => HttpResponse.json(fleetOptions({ vehicles: rows }))),
     http.get(VEHICLES, () => HttpResponse.json(rows)),
     http.get(CURRENT_REGS, () => HttpResponse.json([])),
   )

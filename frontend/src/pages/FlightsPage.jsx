@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
-import { formatDuration, normalizeDateValue } from '@/lib/utils'
+import { changedFields, formatDuration, normalizeDateValue } from '@/lib/utils'
 import { ownsFlight } from '@/lib/ownership'
 import { sortByName, sortVehicles, sortPilotsActiveFirst, vehicleDisplayName, telemetryLabel } from '@/lib/formatters'
 import { Plus, Search, CheckCircle, ChevronUp, ChevronDown, Pencil, X, Check, Download, Loader2, Copy, Trash2 } from 'lucide-react'
@@ -214,6 +214,18 @@ function buildFlightsPath({ filterDateFrom, filterDateTo, filterPilotId, filterV
   return qs ? `/flights?${qs}` : '/flights'
 }
 
+/** The inline edit row's form, seeded from a flight. Review status needs
+ *  flights.review; other edits do not carry it. */
+function rowEditForm(flight, canReview) {
+  return {
+    pilot_id: flight.pilot_id || '',
+    purpose: flight.purpose || '',
+    date: flight.date || '',
+    duration_seconds: flight.duration_seconds || '',
+    ...(canReview ? { review_status: flight.review_status || 'needs_review' } : {}),
+  }
+}
+
 export default function FlightsPage() {
   const [flights, setFlights] = useState([])
   const [pilots, setPilots] = useState([])
@@ -339,14 +351,7 @@ export default function FlightsPage() {
 
   const startEditing = (flight) => {
     setEditingId(flight.id)
-    setEditForm({
-      pilot_id: flight.pilot_id || '',
-      purpose: flight.purpose || '',
-      date: flight.date || '',
-      duration_seconds: flight.duration_seconds || '',
-      // Review status needs flights.review; other edits do not carry it.
-      ...(canReview ? { review_status: flight.review_status || 'needs_review' } : {}),
-    })
+    setEditForm(rowEditForm(flight, canReview))
   }
 
   const cancelEditing = () => {
@@ -355,10 +360,17 @@ export default function FlightsPage() {
   }
 
   const saveEditing = async () => {
+    // Only changed fields go: an edit that changes a reviewed flight sends it back
+    // to the review queue, so an untouched form must change nothing.
+    const flight = flights.find(f => f.id === editingId)
+    const data = changedFields(rowEditForm(flight, canReview), editForm)
+    if (Object.keys(data).length === 0) {
+      cancelEditing()
+      return
+    }
     try {
-      const data = { ...editForm }
       if (data.pilot_id) data.pilot_id = Number.parseInt(data.pilot_id, 10)
-      else data.pilot_id = null
+      else if ('pilot_id' in data) data.pilot_id = null
       if (data.duration_seconds) data.duration_seconds = Number.parseInt(data.duration_seconds, 10)
       else delete data.duration_seconds
       await api.patch(`/flights/${editingId}`, data)

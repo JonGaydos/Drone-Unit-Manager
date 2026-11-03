@@ -5,6 +5,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Modal } from '@/components/ui/Modal'
 import { useConfirm } from '@/hooks/useConfirm'
+import { ownsRecord } from '@/lib/ownership'
 import { sortVehicles, sortPilotsActiveFirst, vehicleDisplayName } from '@/lib/formatters'
 import { todayLocal } from '@/lib/utils'
 import { Link } from 'react-router-dom'
@@ -294,7 +295,7 @@ export default function IncidentPage() {
   const [resolveTarget, setResolveTarget] = useState(null)
   const [expandedId, setExpandedId] = useState(null)
   const [filters, setFilters] = useState({ status: '', severity: '', category: '', date_from: '', date_to: '', report_type: '' })
-  const { can } = useAuth()
+  const { user, can, canRecord } = useAuth()
   const canSeeFlights = can('flights.view')
   const toast = useToast()
   const [confirmProps, requestConfirm] = useConfirm()
@@ -506,7 +507,7 @@ export default function IncidentPage() {
                           className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent" title="Details">
                           {expandedId === inc.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                         </button>
-                        {can('incidents.resolve') && inc.status !== 'closed' && (
+                        {can('incidents.resolve') && canRecord('incidents.edit', ownsRecord(user, inc.reported_by_id)) && inc.status !== 'closed' && (
                           <button onClick={() => setResolveTarget(inc)}
                             className="p-1.5 text-muted-foreground hover:text-emerald-400 rounded-lg hover:bg-emerald-500/10" title="Resolve">
                             <CheckCircle className="w-4 h-4" />

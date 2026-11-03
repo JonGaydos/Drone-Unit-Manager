@@ -243,9 +243,8 @@ function ScheduleModal({ schedule, onSave, onClose, entityLists }) {
   }
 
   const getEntityLabel = (entity) => {
-    if (entity.nickname) return `${entity.nickname} (${entity.serial_number || ''})`
-    if (entity.name) return `${entity.name} (${entity.serial_number || ''})`
-    return entity.serial_number || `#${entity.id}`
+    const name = entity.name || `#${entity.id}`
+    return entity.serial_number && entity.serial_number !== name ? `${name} (${entity.serial_number})` : name
   }
 
   return (

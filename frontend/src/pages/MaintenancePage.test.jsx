@@ -3,6 +3,7 @@ import { screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { withPermissions } from '@/test/permissions'
+import { fleetOptions, pilotOption, serialOption, vehicleOption } from '@/test/options'
 import { renderWithProviders } from '@/test/render'
 import { addDays, todayLocal } from '@/lib/utils'
 import MaintenancePage from './MaintenancePage'
@@ -15,8 +16,8 @@ import MaintenancePage from './MaintenancePage'
 //   GET /maintenance                 -> http.get('/api/maintenance')
 //   GET /maintenance/schedules?all=true -> http.get('/api/maintenance/schedules')
 const VEHICLES = [
-  { id: 1, nickname: 'Falcon', model: 'Mavic 3', serial_number: 'SN-001', status: 'active' },
-  { id: 9, nickname: 'OldBird', model: 'Mavic 2', serial_number: 'SN-OLD', status: 'retired' },
+  vehicleOption({ id: 1, nickname: 'Falcon', model: 'Mavic 3', serialNumber: 'SN-001' }),
+  vehicleOption({ id: 9, nickname: 'OldBird', model: 'Mavic 2', serialNumber: 'SN-OLD', status: 'retired' }),
 ]
 
 const HISTORY = [
@@ -33,7 +34,7 @@ function mockMount(overrides = {}) {
   const base = {
     vehicles: VEHICLES,
     batteries: [],
-    pilots: () => HttpResponse.json([{ id: 5, full_name: 'Jane Doe', is_active: true }]),
+    pilots: () => HttpResponse.json([pilotOption(5, 'Jane Doe')]),
     // Returns upcoming when ?upcoming=true present, else history.
     maintenance: ({ request }) =>
       HttpResponse.json(new URL(request.url).searchParams.get('upcoming') ? UPCOMING : HISTORY),
@@ -41,9 +42,7 @@ function mockMount(overrides = {}) {
     ...overrides,
   }
   server.use(
-    http.get('/api/fleet/options', () => HttpResponse.json({
-      vehicles: base.vehicles, batteries: base.batteries, controllers: [], docks: [], other_equipment: [],
-    })),
+    http.get('/api/fleet/options', () => HttpResponse.json(fleetOptions({ vehicles: base.vehicles, batteries: base.batteries }))),
     http.get('/api/pilots/options', base.pilots),
     http.get('/api/maintenance/schedules', base.schedules),
     http.get('/api/maintenance', base.maintenance),
@@ -217,7 +216,7 @@ describe('MaintenancePage', () => {
 
   it('sends the new entity when editing a record to a different type', async () => {
     let patched = null
-    mockMount({ batteries: [{ id: 2, name: 'Batt A', serial_number: 'B-001' }] })
+    mockMount({ batteries: [serialOption(2, 'Batt A', 'B-001')] })
     server.use(http.patch('/api/maintenance/:id', async ({ request, params }) => {
       patched = { id: params.id, body: await request.json() }
       return HttpResponse.json({ ok: true })
@@ -240,7 +239,7 @@ describe('MaintenancePage', () => {
 
   it('blocks submitting an edit with a changed type but no entity selected', async () => {
     let patchHit = false
-    mockMount({ batteries: [{ id: 2, name: 'Batt A', serial_number: 'B-001' }] })
+    mockMount({ batteries: [serialOption(2, 'Batt A', 'B-001')] })
     server.use(http.patch('/api/maintenance/:id', () => { patchHit = true; return HttpResponse.json({ ok: true }) }))
     const { user } = renderWithProviders(<MaintenancePage />, { role: 'admin' })
 
@@ -263,5 +262,22 @@ describe('MaintenancePage', () => {
     await screen.findByText('Prop swap')
     await user.click(screen.getAllByTitle('Documents')[0])
     expect(await screen.findByText('No documents uploaded')).toBeInTheDocument()
+  })
+
+  it('labels schedule picker rows without empty or repeated serials', async () => {
+    mockMount({ batteries: [serialOption(2, 'Batt A', 'B-001'), serialOption(3, 'B-002')] })
+    server.use(http.get('/api/fleet/options', () => HttpResponse.json(fleetOptions({
+      batteries: [serialOption(2, 'Batt A', 'B-001'), serialOption(3, 'B-002')],
+      controllers: [{ id: 4, name: 'Pad', status: 'active' }],
+    }))))
+    const { user } = renderWithProviders(<MaintenancePage />, { role: 'admin' })
+    await user.click(await screen.findByRole('button', { name: /Add Schedule \/ Task/ }))
+    await screen.findByRole('heading', { name: 'Add Schedule / Task' })
+    const type = screen.getByLabelText(/Type/)
+    await user.selectOptions(type, 'battery')
+    expect(await screen.findByRole('option', { name: 'Batt A (B-001)' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'B-002' })).toBeInTheDocument()
+    await user.selectOptions(type, 'controller')
+    expect(await screen.findByRole('option', { name: 'Pad' })).toBeInTheDocument()
   })
 })

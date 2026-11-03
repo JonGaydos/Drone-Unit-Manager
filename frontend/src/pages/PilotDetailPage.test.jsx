@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { renderRoute } from '@/test/render'
@@ -132,5 +132,23 @@ describe('PilotDetailPage', () => {
     })
     expect(await screen.findByRole('heading', { name: 'Ada Lovelace' })).toBeInTheDocument()
     expect(asked).toEqual([])
+  })
+
+  it('without pilots.contacts, hides the contact inputs and leaves them out of the save', async () => {
+    let body = null
+    mockMount()
+    server.use(http.patch('/api/pilots/:id', async ({ request }) => { body = await request.json(); return HttpResponse.json(PILOT) }))
+    const { user } = renderRoute(<PilotDetailPage />, {
+      path: '/pilots/:id', route: '/pilots/7', user: { id: 3, username: 'ada', role: 'pilot', pilot_id: 7 },
+      permissions: { 'pilots.contacts': 'no' },
+    })
+    await screen.findByRole('heading', { name: 'Ada Lovelace' })
+    await user.click(screen.getByRole('button', { name: 'Edit profile' }))
+    expect(screen.queryByLabelText('Email')).toBeNull()
+    await user.click(screen.getByRole('button', { name: /^Save/ }))
+    await waitFor(() => expect(body).not.toBeNull())
+    for (const field of ['email', 'phone', 'phone_type', 'phone_work']) {
+      expect(body).not.toHaveProperty(field)
+    }
   })
 })

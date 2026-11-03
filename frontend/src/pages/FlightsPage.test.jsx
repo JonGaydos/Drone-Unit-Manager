@@ -3,6 +3,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { withPermissions } from '@/test/permissions'
+import { fleetOptions, pilotOption, vehicleOption } from '@/test/options'
 import { renderWithProviders } from '@/test/render'
 import FlightsPage from './FlightsPage'
 
@@ -19,8 +20,8 @@ const FLIGHTS = [
   { id: 1, external_id: 'abcdef1234', date: '2026-05-01', pilot_id: 5, pilot_name: 'Jane Doe', vehicle_id: 2, vehicle_name: 'Falcon', purpose: 'Patrol', duration_seconds: 600, takeoff_address: 'Main St', review_status: 'needs_review' },
   { id: 2, external_id: 'beef567890', date: '2026-05-02', pilot_id: 6, pilot_name: 'Bob Roy', vehicle_id: 3, vehicle_name: 'Hawk', purpose: 'Search', duration_seconds: 900, takeoff_address: 'Oak Ave', review_status: 'reviewed' },
 ]
-const PILOTS = [{ id: 5, full_name: 'Jane Doe', is_active: true }, { id: 6, full_name: 'Bob Roy', is_active: true }]
-const VEHICLES = [{ id: 2, nickname: 'Falcon', model: 'Mavic 3' }, { id: 3, nickname: 'Hawk', model: 'X10' }]
+const PILOTS = [pilotOption(5, 'Jane Doe'), pilotOption(6, 'Bob Roy')]
+const VEHICLES = [vehicleOption({ id: 2, nickname: 'Falcon', model: 'Mavic 3' }), vehicleOption({ id: 3, nickname: 'Hawk', model: 'X10' })]
 const PURPOSES = [{ id: 1, name: 'Patrol' }, { id: 2, name: 'Search' }]
 
 function mockMount(overrides = {}) {
@@ -34,7 +35,7 @@ function mockMount(overrides = {}) {
   server.use(
     http.get('/api/flights', base.flights),
     http.get('/api/pilots/options', base.pilots),
-    http.get('/api/fleet/options', () => HttpResponse.json({ vehicles: VEHICLES, batteries: [], sensors: [], attachments: [] })),
+    http.get('/api/fleet/options', () => HttpResponse.json(fleetOptions({ vehicles: VEHICLES }))),
     http.get('/api/flights/purposes/list', base.purposes),
     http.get('/api/flights/count', base.count),
   )
@@ -338,5 +339,32 @@ describe('FlightsPage', () => {
     renderWithProviders(<FlightsPage />, { role: 'admin' })
     const link = await screen.findByRole('link', { name: 'abcdef12' })
     expect(link).toHaveAttribute('href', '/flights/1')
+  })
+
+  it('saving a row unchanged sends nothing, even with a null purpose', async () => {
+    let patched = false
+    mockMount({
+      flights: () => HttpResponse.json({ flights: [{ ...FLIGHTS[0], purpose: null, review_status: 'reviewed' }], total: 1, total_pages: 1 }),
+    })
+    server.use(http.patch('/api/flights/:id', () => { patched = true; return HttpResponse.json({}) }))
+    const { user } = renderWithProviders(<FlightsPage />, { user: { id: 7, username: 'pilot', role: 'pilot', pilot_id: 5 } })
+    await screen.findByRole('link', { name: 'Jane Doe' })
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.click(screen.getByTitle('Save'))
+    await screen.findByRole('button', { name: 'Edit' })
+    expect(patched).toBe(false)
+  })
+
+  it('saving a row sends only the changed field', async () => {
+    let body = null
+    mockMount()
+    server.use(http.patch('/api/flights/:id', async ({ request }) => { body = await request.json(); return HttpResponse.json({}) }))
+    const { user } = renderWithProviders(<FlightsPage />, { user: { id: 7, username: 'pilot', role: 'pilot', pilot_id: 5 } })
+    await screen.findByRole('link', { name: 'Jane Doe' })
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.clear(screen.getByPlaceholderText('sec'))
+    await user.type(screen.getByPlaceholderText('sec'), '700')
+    await user.click(screen.getByTitle('Save'))
+    await waitFor(() => expect(body).toEqual({ duration_seconds: 700 }))
   })
 })

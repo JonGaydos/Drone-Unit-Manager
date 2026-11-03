@@ -4,7 +4,7 @@ import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { ownsFlight } from '@/lib/ownership'
 import { useToast } from '@/contexts/ToastContext'
-import { formatDuration, normalizeDateValue, metersToFeet, mpsToMph, formatTime, utcIsoToZonedInput, zonedInputToUtcIso } from '@/lib/utils'
+import { formatDuration, normalizeDateValue, metersToFeet, mpsToMph, formatTime, utcIsoToZonedInput, zonedInputToUtcIso, changedFields } from '@/lib/utils'
 import { sortByName, sortVehicles, sortPilotsActiveFirst, vehicleDisplayName, telemetryLabel } from '@/lib/formatters'
 import { ArrowLeft, MapPin, Save, RefreshCw, Loader2, Download } from 'lucide-react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
@@ -145,14 +145,14 @@ function initialEditForm(f) {
   }
 }
 
-/** Turn the edit form into the PATCH payload: coerce numeric ids, drop empty
- *  strings to null, and convert the zoned time inputs back to UTC. */
-function buildFlightPayload(editForm) {
-  const data = { ...editForm }
+/** Turn the changed fields of the edit form into the PATCH payload: coerce numeric
+ *  ids, drop empty strings to null, and convert the zoned time inputs back to UTC.
+ *  Only changed fields go, because the form rounds times to the minute, and an edit
+ *  that changes a reviewed flight sends it back to the review queue. */
+function buildFlightPayload(changes) {
+  const data = { ...changes }
   if (data.pilot_id) data.pilot_id = Number.parseInt(data.pilot_id, 10)
-  else data.pilot_id = null
   if (data.vehicle_id) data.vehicle_id = Number.parseInt(data.vehicle_id, 10)
-  else data.vehicle_id = null
   if (data.duration_seconds) data.duration_seconds = Number.parseInt(data.duration_seconds, 10)
   else delete data.duration_seconds
   Object.keys(data).forEach(k => { if (data[k] === '') data[k] = null })
@@ -547,8 +547,13 @@ export default function FlightDetailPage() {
   const canReview = can('flights.review')
 
   const handleSave = async () => {
+    const payload = buildFlightPayload(changedFields(initialEditForm(flight), editForm))
+    if (Object.keys(payload).length === 0) {
+      setEditing(false)
+      return
+    }
     try {
-      const updated = await api.patch(`/flights/${id}`, buildFlightPayload(editForm))
+      const updated = await api.patch(`/flights/${id}`, payload)
       toast.success('Flight updated')
       setFlight(updated)
       setEditing(false)

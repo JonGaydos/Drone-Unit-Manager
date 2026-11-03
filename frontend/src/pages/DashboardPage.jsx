@@ -284,6 +284,7 @@ function LocationsTile({ items, pilots, places, onChange, canSetLocation, colSpa
               </div>
               {canSetLocation && (
                 <select
+                  aria-label={`Set location for ${it.label}`}
                   className="h-8 rounded-md border border-border bg-secondary px-2 text-xs text-foreground max-w-[10rem]"
                   value=""
                   onChange={(e) => { if (e.target.value) onChange(it.vehicle_id, e.target.value) }}

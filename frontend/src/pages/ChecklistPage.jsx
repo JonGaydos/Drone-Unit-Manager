@@ -271,7 +271,7 @@ function CompleteModal({ templates, pilots, vehicles, onSave, onClose }) {
                 required
               >
                 <option value="">Select pilot...</option>
-                {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.first_name} {p.last_name}</option>)}
+                {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
               </select>
             </div>
             <div>

@@ -8,7 +8,13 @@ import { Link } from 'react-router-dom'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Modal } from '@/components/ui/Modal'
 
-function PilotModal({ pilot, canManage, onSave, onClose }) {
+const CONTACT_FIELDS = ['email', 'phone', 'phone_type', 'phone_work']
+
+function withoutContacts(data) {
+  return Object.fromEntries(Object.entries(data).filter(([key]) => !CONTACT_FIELDS.includes(key)))
+}
+
+function PilotModal({ pilot, canManage, canSeeContacts, onSave, onClose }) {
   const [form, setForm] = useState(pilot || {
     first_name: '', last_name: '', email: '', phone: '', phone_type: 'work', phone_work: '', badge_number: '', status: 'active', counts_toward_totals: true, notes: ''
   })
@@ -40,39 +46,43 @@ function PilotModal({ pilot, canManage, onSave, onClose }) {
             {field('First Name', 'first_name')}
             {field('Last Name', 'last_name')}
           </div>
-          {field('Email', 'email', 'email')}
-          <div>
-            <label htmlFor="personal-cell" className="block text-sm font-medium text-foreground mb-1">Personal Cell</label>
-            <input id="personal-cell"
-              type="tel"
-              value={form.phone || ''}
-              onChange={(e) => {
-                const digits = e.target.value.replaceAll(/\D/g, '').slice(0, 10)
-                let formatted = digits
-                if (digits.length > 3) formatted = digits.slice(0,3) + '-' + digits.slice(3)
-                if (digits.length > 6) formatted = digits.slice(0,3) + '-' + digits.slice(3,6) + '-' + digits.slice(6)
-                setForm({ ...form, phone: formatted })
-              }}
-              placeholder="###-###-####"
-              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-          </div>
-          <div>
-            <label htmlFor="work-cell" className="block text-sm font-medium text-foreground mb-1">Work Cell</label>
-            <input id="work-cell"
-              type="tel"
-              value={form.phone_work || ''}
-              onChange={(e) => {
-                const digits = e.target.value.replaceAll(/\D/g, '').slice(0, 10)
-                let formatted = digits
-                if (digits.length > 3) formatted = digits.slice(0,3) + '-' + digits.slice(3)
-                if (digits.length > 6) formatted = digits.slice(0,3) + '-' + digits.slice(3,6) + '-' + digits.slice(6)
-                setForm({ ...form, phone_work: formatted })
-              }}
-              placeholder="###-###-####"
-              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-          </div>
+          {canSeeContacts && (
+            <>
+              {field('Email', 'email', 'email')}
+              <div>
+                <label htmlFor="personal-cell" className="block text-sm font-medium text-foreground mb-1">Personal Cell</label>
+                <input id="personal-cell"
+                  type="tel"
+                  value={form.phone || ''}
+                  onChange={(e) => {
+                    const digits = e.target.value.replaceAll(/\D/g, '').slice(0, 10)
+                    let formatted = digits
+                    if (digits.length > 3) formatted = digits.slice(0,3) + '-' + digits.slice(3)
+                    if (digits.length > 6) formatted = digits.slice(0,3) + '-' + digits.slice(3,6) + '-' + digits.slice(6)
+                    setForm({ ...form, phone: formatted })
+                  }}
+                  placeholder="###-###-####"
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              <div>
+                <label htmlFor="work-cell" className="block text-sm font-medium text-foreground mb-1">Work Cell</label>
+                <input id="work-cell"
+                  type="tel"
+                  value={form.phone_work || ''}
+                  onChange={(e) => {
+                    const digits = e.target.value.replaceAll(/\D/g, '').slice(0, 10)
+                    let formatted = digits
+                    if (digits.length > 3) formatted = digits.slice(0,3) + '-' + digits.slice(3)
+                    if (digits.length > 6) formatted = digits.slice(0,3) + '-' + digits.slice(3,6) + '-' + digits.slice(6)
+                    setForm({ ...form, phone_work: formatted })
+                  }}
+                  placeholder="###-###-####"
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+            </>
+          )}
           {field('Badge Number', 'badge_number')}
           {canManage && (
             <>
@@ -202,6 +212,7 @@ export default function PilotsPage() {
   const [mergeSource, setMergeSource] = useState(null)
   const { user, can, canRecord } = useAuth()
   const canManage = can('pilots.manage')
+  const canSeeContacts = can('pilots.contacts')
   const toast = useToast()
 
   const toggleSort = (key) => {
@@ -216,11 +227,14 @@ export default function PilotsPage() {
   useEffect(() => { loadPilots() }, [])
 
   const handleSave = async (data) => {
+    // Contact details reach this page masked without pilots.contacts, so they
+    // stay out of the save.
+    const body = canSeeContacts ? data : withoutContacts(data)
     try {
       if (data.id) {
-        await api.patch(`/pilots/${data.id}`, data)
+        await api.patch(`/pilots/${data.id}`, body)
       } else {
-        await api.post('/pilots', data)
+        await api.post('/pilots', body)
       }
       setModal(null)
       loadPilots()
@@ -387,6 +401,7 @@ export default function PilotsPage() {
         <PilotModal
           pilot={modal === 'add' ? null : modal}
           canManage={canManage}
+          canSeeContacts={canSeeContacts}
           onSave={handleSave}
           onClose={() => setModal(null)}
         />

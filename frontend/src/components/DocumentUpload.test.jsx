@@ -80,4 +80,16 @@ describe('DocumentUpload', () => {
     await screen.findByText('No documents uploaded')
     expect(screen.queryByRole('button', { name: /Upload/ })).not.toBeInTheDocument()
   })
+
+  it("at own, offers edit on a document on the user's own certification only", async () => {
+    server.use(http.get('/api/documents', () => HttpResponse.json([
+      { id: 1, title: 'Mine', filename: 'a.pdf', document_type: 'other', certification_id: 2, certification_pilot_id: 7 },
+      { id: 2, title: 'Theirs', filename: 'b.pdf', document_type: 'other', certification_id: 3, certification_pilot_id: 8 },
+    ])))
+    renderWithProviders(<DocumentUpload entityType="certification" entityId={2} />, {
+      user: { id: 3, username: 'p', role: 'pilot', pilot_id: 7 },
+    })
+    await screen.findByText('Mine')
+    expect(screen.getAllByTitle('Edit')).toHaveLength(1)
+  })
 })

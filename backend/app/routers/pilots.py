@@ -23,7 +23,7 @@ from app.routers.currency import _pilot_currency
 from app.schemas.pilot import PilotCreate, PilotUpdate, PilotOut, PilotStats
 from app.responses import responses
 from app.services import permissions as permissions_service
-from app.services.pilot_contacts import pilot_out
+from app.services.pilot_contacts import CONTACT_FIELDS, hides_contacts, pilot_out
 
 router = APIRouter(prefix="/api/pilots", tags=["pilots"])
 
@@ -182,6 +182,10 @@ def update_pilot(pilot_id: int, data: PilotUpdate, db: DBSession, user: EditUser
     owned = user.pilot_id is not None and user.pilot_id == pilot_id
     permissions_service.require_record_access(db, user, EDIT_KEY, owned)
     update_data = data.model_dump(exclude_unset=True)
+    # This user sees these fields masked, so a value sent back means nothing.
+    if hides_contacts(db, user):
+        for field in CONTACT_FIELDS:
+            update_data.pop(field, None)
     # Rejected only on an actual change, so a form echoing current values works.
     if not permissions_service.can(db, user, MANAGE_KEY) and any(
         f in update_data and update_data[f] != getattr(pilot, f) for f in SUPERVISOR_ONLY_PILOT_FIELDS

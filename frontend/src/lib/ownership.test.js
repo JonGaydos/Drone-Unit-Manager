@@ -51,8 +51,9 @@ describe('ownsDocument', () => {
     expect(ownsDocument(me, { uploaded_by_id: null, pilot_id: null })).toBe(false)
   })
 
-  it('treats a certification document as possibly own when the user has a linked pilot', () => {
-    expect(ownsDocument(me, { uploaded_by_id: 4, certification_id: 2 })).toBe(true)
-    expect(ownsDocument(noPilot, { uploaded_by_id: 4, certification_id: 2 })).toBe(false)
+  it("covers a document on the user's own certification only", () => {
+    expect(ownsDocument(me, { uploaded_by_id: 4, certification_id: 2, certification_pilot_id: 7 })).toBe(true)
+    expect(ownsDocument(me, { uploaded_by_id: 4, certification_id: 2, certification_pilot_id: 8 })).toBe(false)
+    expect(ownsDocument(noPilot, { uploaded_by_id: 4, certification_id: 2, certification_pilot_id: null })).toBe(false)
   })
 })

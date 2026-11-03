@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { screen, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
+import { pilotOption } from '@/test/options'
 import { renderWithProviders } from '@/test/render'
 import DashboardPage from './DashboardPage'
 
@@ -65,7 +66,7 @@ const POPULATED = {
   topVehicles: [{ vehicle_id: 2, label: 'Skydio X10', hours: 27 }],
   activity: [{ label: '2026-05', flights: 30, hours: 10 }],
   locations: [{ vehicle_id: 2, label: 'Skydio X10', location_text: 'North' }],
-  pilots: [{ id: 7, full_name: 'Active Annie', status: 'active' }],
+  pilots: [pilotOption(7, 'Active Annie')],
   settings: [],
   // Object-valued nested fields — the regression bait.
   weather: {
@@ -332,5 +333,11 @@ describe('DashboardPage', () => {
     renderWithProviders(<DashboardPage />, { role: 'viewer' })
     await screen.findByText(/6 of 7 pilots current/)
     expect(screen.queryByText('Set location…')).toBeNull()
+  })
+
+  it('names the location control after its drone', async () => {
+    mockDashboard({ ...POPULATED, locations: [{ vehicle_id: 1, label: 'Falcon', location_text: 'Base' }] })
+    renderWithProviders(<DashboardPage />, { role: 'pilot' })
+    expect(await screen.findByLabelText('Set location for Falcon')).toBeInTheDocument()
   })
 })

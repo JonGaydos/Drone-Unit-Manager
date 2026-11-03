@@ -20,6 +20,7 @@ export default function PilotDetailPage() {
   const canSeeFlights = can('flights.view')
   const canSeeCerts = can('certifications.view')
   const canSeeFiles = can('files.view')
+  const canSeeContacts = can('pilots.contacts')
   const isOwnPilot = ownsPilot(user, Number.parseInt(id, 10))
   const toast = useToast()
 
@@ -70,10 +71,14 @@ export default function PilotDetailPage() {
     setEditForm({
       first_name: pilot.first_name || '',
       last_name: pilot.last_name || '',
-      email: pilot.email || '',
-      phone: pilot.phone || '',
-      phone_type: pilot.phone_type || 'work',
-      phone_work: pilot.phone_work || '',
+      // Contact details stay out of the save without pilots.contacts: they reach
+      // this page masked, so sending them back would mean nothing.
+      ...(canSeeContacts ? {
+        email: pilot.email || '',
+        phone: pilot.phone || '',
+        phone_type: pilot.phone_type || 'work',
+        phone_work: pilot.phone_work || '',
+      } : {}),
       badge_number: pilot.badge_number || '',
       status: pilot.status || 'active',
       notes: pilot.notes || '',
@@ -152,45 +157,49 @@ export default function PilotDetailPage() {
                       className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label htmlFor="email" className="block text-xs font-medium text-muted-foreground mb-1">Email</label>
-                    <input id="email" type="email" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})}
-                      className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
-                  </div>
-                  <div>
-                    <label htmlFor="personal-cell" className="block text-xs font-medium text-muted-foreground mb-1">Personal Cell</label>
-                    <input id="personal-cell"
-                      type="tel"
-                      value={editForm.phone || ''}
-                      onChange={(e) => {
-                        const digits = e.target.value.replaceAll(/\D/g, '').slice(0, 10)
-                        let formatted = digits
-                        if (digits.length > 3) formatted = digits.slice(0,3) + '-' + digits.slice(3)
-                        if (digits.length > 6) formatted = digits.slice(0,3) + '-' + digits.slice(3,6) + '-' + digits.slice(6)
-                        setEditForm({...editForm, phone: formatted})
-                      }}
-                      placeholder="###-###-####"
-                      className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label htmlFor="work-cell" className="block text-xs font-medium text-muted-foreground mb-1">Work Cell</label>
-                  <input id="work-cell"
-                    type="tel"
-                    value={editForm.phone_work || ''}
-                    onChange={(e) => {
-                      const digits = e.target.value.replaceAll(/\D/g, '').slice(0, 10)
-                      let formatted = digits
-                      if (digits.length > 3) formatted = digits.slice(0,3) + '-' + digits.slice(3)
-                      if (digits.length > 6) formatted = digits.slice(0,3) + '-' + digits.slice(3,6) + '-' + digits.slice(6)
-                      setEditForm({...editForm, phone_work: formatted})
-                    }}
-                    placeholder="###-###-####"
-                    className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                  />
-                </div>
+                {canSeeContacts && (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label htmlFor="email" className="block text-xs font-medium text-muted-foreground mb-1">Email</label>
+                        <input id="email" type="email" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})}
+                          className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                      </div>
+                      <div>
+                        <label htmlFor="personal-cell" className="block text-xs font-medium text-muted-foreground mb-1">Personal Cell</label>
+                        <input id="personal-cell"
+                          type="tel"
+                          value={editForm.phone || ''}
+                          onChange={(e) => {
+                            const digits = e.target.value.replaceAll(/\D/g, '').slice(0, 10)
+                            let formatted = digits
+                            if (digits.length > 3) formatted = digits.slice(0,3) + '-' + digits.slice(3)
+                            if (digits.length > 6) formatted = digits.slice(0,3) + '-' + digits.slice(3,6) + '-' + digits.slice(6)
+                            setEditForm({...editForm, phone: formatted})
+                          }}
+                          placeholder="###-###-####"
+                          className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label htmlFor="work-cell" className="block text-xs font-medium text-muted-foreground mb-1">Work Cell</label>
+                      <input id="work-cell"
+                        type="tel"
+                        value={editForm.phone_work || ''}
+                        onChange={(e) => {
+                          const digits = e.target.value.replaceAll(/\D/g, '').slice(0, 10)
+                          let formatted = digits
+                          if (digits.length > 3) formatted = digits.slice(0,3) + '-' + digits.slice(3)
+                          if (digits.length > 6) formatted = digits.slice(0,3) + '-' + digits.slice(3,6) + '-' + digits.slice(6)
+                          setEditForm({...editForm, phone_work: formatted})
+                        }}
+                        placeholder="###-###-####"
+                        className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      />
+                    </div>
+                  </>
+                )}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label htmlFor="badge-number" className="block text-xs font-medium text-muted-foreground mb-1">Badge Number</label>

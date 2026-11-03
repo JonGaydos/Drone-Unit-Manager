@@ -3,6 +3,7 @@ import { screen } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { withPermissions } from '@/test/permissions'
+import { pilotOption } from '@/test/options'
 import { renderRoute } from '@/test/render'
 import ControllerDetailPage from './ControllerDetailPage'
 
@@ -20,7 +21,7 @@ function mockMount(overrides = {}) {
   const base = {
     controller: () => HttpResponse.json(CONTROLLER),
     maintenance: () => HttpResponse.json([]),
-    pilots: () => HttpResponse.json([{ id: 5, full_name: 'Jane Doe' }]),
+    pilots: () => HttpResponse.json([pilotOption(5, 'Jane Doe')]),
     documents: () => HttpResponse.json([]),
     ...overrides,
   }

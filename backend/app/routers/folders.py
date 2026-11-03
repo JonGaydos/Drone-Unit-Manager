@@ -4,6 +4,7 @@ from typing import Annotated, Optional
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
+from sqlalchemy.orm import selectinload
 
 from app.constants import FOLDER_NOT_FOUND
 from app.models.folder import Folder
@@ -66,6 +67,7 @@ def list_folders(db: DBSession, _user: ViewUser):
 def get_folder_documents(folder_id: int, db: DBSession, _user: ViewUser):
     _live_folder(db, folder_id)
     docs = (db.query(Document)
+            .options(selectinload(Document.certification))
             .filter(Document.folder_id == folder_id, Document.deleted_at.is_(None))
             .order_by(Document.uploaded_at.desc()).all())
     return [{
@@ -81,6 +83,10 @@ def get_folder_documents(folder_id: int, db: DBSession, _user: ViewUser):
         "folder_id": d.folder_id,
         "legal_hold": d.legal_hold,
         "sha256": d.sha256,
+        "uploaded_by_id": d.uploaded_by_id,
+        "pilot_id": d.pilot_id,
+        "certification_id": d.certification_id,
+        "certification_pilot_id": d.certification.pilot_id if d.certification else None,
     } for d in docs]
 
 

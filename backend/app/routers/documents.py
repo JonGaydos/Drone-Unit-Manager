@@ -10,6 +10,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse
+from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
 
 from app.config import settings
@@ -57,6 +58,7 @@ ALLOWED_ENTITY_TYPES = {
 def _doc_to_out(doc: Document) -> DocumentOut:
     """Convert a Document ORM instance to its API response schema with a view URL."""
     out = DocumentOut.model_validate(doc)
+    out.certification_pilot_id = doc.certification.pilot_id if doc.certification else None
     out.view_url = f"/api/documents/{doc.id}/view"
     return out
 
@@ -243,7 +245,7 @@ def list_documents(
         q = q.filter(Document.entity_type == entity_type)
     if entity_id:
         q = q.filter(Document.entity_id == entity_id)
-    rows = q.order_by(Document.uploaded_at.desc()).all()
+    rows = q.options(selectinload(Document.certification)).order_by(Document.uploaded_at.desc()).all()
     return [_doc_to_out(r) for r in rows]
 
 

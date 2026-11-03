@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { api } from '@/api/client'
+import { api, getIfAllowed } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { ownsPilot } from '@/lib/ownership'
@@ -293,6 +293,18 @@ function AssignCertModal({ pilots, certTypes, existingCert, defaults, onSave, on
   )
 }
 
+/** The read-only view of an existing certification: its documents. Changing the
+ *  certification itself needs certifications.manage. */
+function CertDocumentsModal({ cert, folderId, onClose }) {
+  const { user, canRecord } = useAuth()
+  return (
+    <Modal open onClose={onClose} title="Certification Documents">
+      <DocumentUpload entityType="certification" entityId={cert.id} folderId={folderId}
+        canUpload={canRecord('files.upload', ownsPilot(user, cert.pilot_id))} />
+    </Modal>
+  )
+}
+
 export default function CertificationsPage() {
   const [tab, setTab] = useState('matrix')
   const [certTypes, setCertTypes] = useState([])
@@ -303,17 +315,39 @@ export default function CertificationsPage() {
   const [error, setError] = useState(null)
   const { can } = useAuth()
   const canManage = can('certifications.manage')
+  const canSeeFiles = can('files.view')
   const toast = useToast()
   const [confirmProps, requestConfirm] = useConfirm()
 
   // Auto-file documents to Certifications folder
   const [certFolderId, setCertFolderId] = useState(null)
   useEffect(() => {
-    api.get('/folders').then(folders => {
+    getIfAllowed(canSeeFiles, '/folders', []).then(folders => {
       const f = (Array.isArray(folders) ? folders : folders.folders || []).find(f => f.name === 'Certifications')
       if (f) setCertFolderId(f.id)
-    }).catch(() => {})
-  }, [])
+    })
+  }, [canSeeFiles])
+
+  const openCertCell = (row, ct, cert) => {
+    if (cert) {
+      setEditCert({
+        id: cert.id,
+        pilot_id: row.pilot_id,
+        certification_type_id: ct.id,
+        status: cert.status,
+        issue_date: cert.issue_date || '',
+        expiration_date: cert.expiration_date || '',
+        certificate_number: cert.certificate_number || '',
+        nist_level: cert.nist_level,
+        notes: cert.notes || '',
+      })
+      setModal('editCert')
+    } else {
+      setEditCert(null)
+      setAssignDefaults({ pilot_id: row.pilot_id, certification_type_id: ct.id })
+      setModal('assign')
+    }
+  }
 
   // Custom cert status labels
   const [certStatusLabels, setCertStatusLabels] = useState({})
@@ -657,29 +691,11 @@ export default function CertificationsPage() {
                     {filteredCertTypes.map(ct => {
                       const cert = row.certs?.[ct.id]
                       const status = cert?.status || 'not_started'
+                      const opensModal = canManage || (Boolean(cert) && canSeeFiles)
                       return (
-                        <td key={ct.id} className="relative px-3 py-2 text-center cursor-pointer hover:bg-accent/40 transition-colors"
-                          tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.click() } }}
-                          onClick={() => {
-                            if (cert) {
-                              setEditCert({
-                                id: cert.id,
-                                pilot_id: row.pilot_id,
-                                certification_type_id: ct.id,
-                                status: cert.status,
-                                issue_date: cert.issue_date || '',
-                                expiration_date: cert.expiration_date || '',
-                                certificate_number: cert.certificate_number || '',
-                                nist_level: cert.nist_level,
-                                notes: cert.notes || '',
-                              })
-                              setModal('editCert')
-                            } else {
-                              setEditCert(null)
-                              setAssignDefaults({ pilot_id: row.pilot_id, certification_type_id: ct.id })
-                              setModal('assign')
-                            }
-                          }}>
+                        <td key={ct.id} className={`relative px-3 py-2 text-center ${opensModal ? 'cursor-pointer hover:bg-accent/40 transition-colors' : ''}`}
+                          tabIndex={opensModal ? 0 : undefined} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.click() } }}
+                          onClick={opensModal ? () => openCertCell(row, ct, cert) : undefined}>
                           {canManage && cert && ct.has_expiration && (
                             <input
                               type="checkbox"
@@ -754,7 +770,8 @@ export default function CertificationsPage() {
       {/* Modals */}
       {modal === 'addType' && <CertTypeModal onSave={handleSaveCertType} onClose={() => setModal(null)} />}
       {modal === 'assign' && <AssignCertModal pilots={pilots} certTypes={certTypes} defaults={assignDefaults} onSave={handleAssignCert} onClose={() => { setModal(null); setEditCert(null); setAssignDefaults(null) }} certFolderId={certFolderId} />}
-      {modal === 'editCert' && editCert && <AssignCertModal pilots={pilots} certTypes={certTypes} existingCert={editCert} onSave={handleAssignCert} onRenew={handleRenewCert} onDelete={canManage ? handleDeleteCert : null} onClose={() => { setModal(null); setEditCert(null) }} certFolderId={certFolderId} />}
+      {modal === 'editCert' && editCert && canManage && <AssignCertModal pilots={pilots} certTypes={certTypes} existingCert={editCert} onSave={handleAssignCert} onRenew={handleRenewCert} onDelete={handleDeleteCert} onClose={() => { setModal(null); setEditCert(null) }} certFolderId={certFolderId} />}
+      {modal === 'editCert' && editCert && !canManage && <CertDocumentsModal cert={editCert} folderId={certFolderId} onClose={() => { setModal(null); setEditCert(null) }} />}
       {modal && typeof modal === 'object' && modal.name && <CertTypeModal certType={modal} onSave={handleSaveCertType} onClose={() => setModal(null)} />}
       {bulkRenewOpen && (
         <Modal

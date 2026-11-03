@@ -26,9 +26,9 @@ export function ownsLog(user, log) {
 }
 
 /** A document is the user's when they uploaded it or it is attached to their
- *  pilot record or certification. The API does not say whose certification a
- *  document is on, so one is treated as possibly theirs and the server decides. */
+ *  pilot record or certification. */
 export function ownsDocument(user, doc) {
-  if (ownsRecord(user, doc.uploaded_by_id) || ownsPilot(user, doc.pilot_id)) return true
-  return doc.certification_id != null && user?.pilot_id != null
+  return ownsRecord(user, doc.uploaded_by_id)
+    || ownsPilot(user, doc.pilot_id)
+    || ownsPilot(user, doc.certification_pilot_id)
 }

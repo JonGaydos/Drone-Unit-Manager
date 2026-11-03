@@ -176,6 +176,27 @@ def test_contacts_follow_pilot_role(client, db, admin_headers, pilot_headers):
     assert client.get(f"{PILOTS_URL}/{pilot.id}", headers=pilot_headers).json()["email"] is None
 
 
+def test_edit_without_contacts_keeps_stored_contacts(client, db, admin_headers, pilot_headers, linked_pilot):
+    linked_pilot.email = SECRET_EMAIL
+    linked_pilot.phone = "555-111-2222"
+    db.commit()
+    _grid(client, admin_headers, ("pilot", PILOTS_CONTACTS, "no"))
+    resp = client.patch(f"{PILOTS_URL}/{linked_pilot.id}", headers=pilot_headers,
+                        json={"first_name": "Renamed", "email": None, "phone": "000", "phone_type": None, "phone_work": "1"})
+    assert resp.status_code == 200, resp.text
+    db.refresh(linked_pilot)
+    assert linked_pilot.first_name == "Renamed"
+    assert linked_pilot.email == SECRET_EMAIL
+    assert linked_pilot.phone == "555-111-2222"
+
+
+def test_edit_with_contacts_writes_contacts(client, db, pilot_headers, linked_pilot):
+    resp = client.patch(f"{PILOTS_URL}/{linked_pilot.id}", headers=pilot_headers, json={"email": "new@unit.gov"})
+    assert resp.status_code == 200, resp.text
+    db.refresh(linked_pilot)
+    assert linked_pilot.email == "new@unit.gov"
+
+
 def test_options_available_with_view_off(client, db, admin_headers, pilot_headers):
     _other_pilot(db)
     _vehicle(db)

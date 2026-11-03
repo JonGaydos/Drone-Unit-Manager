@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { screen } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
+import { fleetOptions, pilotOption, vehicleOption } from '@/test/options'
 import { renderWithProviders } from '@/test/render'
 import ReportsPage from './ReportsPage'
 
@@ -15,14 +16,14 @@ import ReportsPage from './ReportsPage'
 
 function mockMount(overrides = {}) {
   const base = {
-    pilots: () => HttpResponse.json([{ id: 1, full_name: 'Jane Doe', is_active: true }]),
-    vehicles: [{ id: 5, manufacturer: 'Skydio', model: 'X10', nickname: 'Alpha' }],
+    pilots: () => HttpResponse.json([pilotOption(1, 'Jane Doe')]),
+    vehicles: [vehicleOption({ id: 5, manufacturer: 'Skydio', model: 'X10', nickname: 'Alpha' })],
     settings: () => HttpResponse.json([]),
     ...overrides,
   }
   server.use(
     http.get('/api/pilots/options', base.pilots),
-    http.get('/api/fleet/options', () => HttpResponse.json({ vehicles: base.vehicles })),
+    http.get('/api/fleet/options', () => HttpResponse.json(fleetOptions({ vehicles: base.vehicles }))),
     http.get('/api/settings', base.settings),
   )
 }
@@ -184,5 +185,31 @@ describe('ReportsPage', () => {
 
       expect(captured.body.include_non_unit).toBe(true)
     })
+  })
+
+  it('leaves out report types whose view is off', async () => {
+    mockMount()
+    renderWithProviders(<ReportsPage />, { role: 'pilot', permissions: { 'maintenance.view': 'no' } })
+    await screen.findByText('Report Builder')
+    expect(screen.queryByRole('option', { name: 'Maintenance History' })).toBeNull()
+    expect(screen.queryByRole('option', { name: 'Annual Unit Report' })).toBeNull()
+    expect(screen.getByRole('option', { name: 'Flight Summary' })).toBeInTheDocument()
+  })
+
+  it('moves off a saved report type whose view is now off', async () => {
+    localStorage.setItem('dum_report_config', JSON.stringify({ reportType: 'maintenance_history' }))
+    mockMount()
+    renderWithProviders(<ReportsPage />, { role: 'pilot', permissions: { 'maintenance.view': 'no' } })
+    await screen.findByText('Report Builder')
+    expect(screen.getByLabelText('Report Type')).toHaveValue('flight_summary')
+  })
+
+  it('hides the builder and preview without reports.generate, keeping the exports', async () => {
+    mockMount()
+    renderWithProviders(<ReportsPage />, { role: 'viewer' })
+    expect(await screen.findByText('Quick CSV Exports')).toBeInTheDocument()
+    expect(screen.queryByText('Report Builder')).toBeNull()
+    expect(screen.queryByLabelText('Report Type')).toBeNull()
+    expect(screen.queryByText('Report Preview')).toBeNull()
   })
 })
