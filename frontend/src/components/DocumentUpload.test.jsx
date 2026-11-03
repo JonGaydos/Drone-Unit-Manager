@@ -92,4 +92,17 @@ describe('DocumentUpload', () => {
     await screen.findByText('Mine')
     expect(screen.getAllByTitle('Edit')).toHaveLength(1)
   })
+
+  it('reports a failed list instead of showing it as empty', async () => {
+    server.use(http.get('/api/documents', () => HttpResponse.json({ detail: 'list failed' }, { status: 500 })))
+    renderWithProviders(<DocumentUpload entityType="pilot" entityId={3} />, { role: 'admin' })
+    expect(await screen.findByText('list failed')).toBeInTheDocument()
+  })
+
+  it('shows a refused list as empty, with no error', async () => {
+    server.use(http.get('/api/documents', () => HttpResponse.json({ detail: 'refused' }, { status: 403 })))
+    renderWithProviders(<DocumentUpload entityType="pilot" entityId={3} />, { role: 'admin' })
+    await screen.findByRole('button', { name: /Upload/ })
+    await waitFor(() => expect(screen.queryByText('refused')).toBeNull())
+  })
 })

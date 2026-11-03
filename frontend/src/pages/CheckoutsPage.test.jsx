@@ -59,10 +59,11 @@ describe('CheckoutsPage', () => {
   })
 
   it('falls back to the empty state when /equipment-checkouts 500s', async () => {
-    // load() .catch -> [] so empty UI renders rather than crashing.
+    // load() reports the failure, and the empty UI renders rather than crashing.
     mockMount({ checkouts: () => HttpResponse.json({ detail: 'boom' }, { status: 500 }) })
     renderWithProviders(<CheckoutsPage />, { role: 'admin' })
     expect(await screen.findByText('Nothing checked out.')).toBeInTheDocument()
+    expect(await screen.findByText('boom')).toBeInTheDocument()
   })
 
   it('checks out an item and fires POST /equipment-checkouts with the captured body', async () => {

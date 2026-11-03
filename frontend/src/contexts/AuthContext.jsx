@@ -22,6 +22,9 @@ const ACTIVITY_EVENTS = ['pointerdown', 'keydown', 'touchstart', 'wheel', 'scrol
 // Values of a permission that hold it at any level above the lowest.
 const GRANTED = new Set(['yes', 'own', 'all'])
 const LEVELS = new Set(['own', 'all'])
+// Permissions can change while someone is signed in, so they are fetched again
+// when the window regains focus, at most this often.
+const USER_REFRESH_MS = 60 * 1000
 
 function markActivity() {
   localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()))
@@ -37,6 +40,12 @@ function clearLocalSession() {
   localStorage.removeItem('user')
   localStorage.removeItem(LAST_ACTIVITY_KEY)
 }
+
+/** Keep the same object when nothing changed, so a focus does not reload pages
+ *  whose effects depend on the permission checks. */
+const replaceIfChanged = (next) => (current) => (
+  JSON.stringify(current) === JSON.stringify(next) ? current : next
+)
 
 /**
  * Provides authentication state and actions to the component tree.
@@ -96,6 +105,30 @@ export function AuthProvider({ children }) {
       ACTIVITY_EVENTS.forEach(e => globalThis.removeEventListener(e, onActivity))
       document.removeEventListener('visibilitychange', check)
       clearInterval(timer)
+    }
+  }, [signedIn])
+
+  // A failed refresh keeps the current user unless the session itself has ended.
+  useEffect(() => {
+    if (!signedIn) return undefined
+    let active = true
+    let lastRefresh = Date.now()
+    const onSessionEnded = () => {
+      clearLocalSession()
+      setUser(null)
+    }
+    const refresh = () => {
+      const now = Date.now()
+      if (now - lastRefresh < USER_REFRESH_MS || idleExpired()) return
+      lastRefresh = now
+      api.get('/auth/me')
+        .then(next => { if (active) setUser(replaceIfChanged(next)) })
+        .catch(err => { if (active && err.status === 401) onSessionEnded() })
+    }
+    globalThis.addEventListener('focus', refresh)
+    return () => {
+      active = false
+      globalThis.removeEventListener('focus', refresh)
     }
   }, [signedIn])
 

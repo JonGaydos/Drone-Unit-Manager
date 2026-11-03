@@ -36,8 +36,10 @@ export default function DocumentUpload({ entityType, entityId, folderId, canUplo
   const [confirmProps, requestConfirm] = useConfirm()
 
   const fetchDocs = useCallback(() => {
-    getIfAllowed(canSeeFiles, `/documents?entity_type=${entityType}&entity_id=${entityId}`, []).then(setDocuments)
-  }, [entityType, entityId, canSeeFiles])
+    getIfAllowed(canSeeFiles, `/documents?entity_type=${entityType}&entity_id=${entityId}`, [])
+      .then(setDocuments)
+      .catch(err => toast.error(err.message))
+  }, [entityType, entityId, canSeeFiles, toast])
 
   useEffect(() => {
     fetchDocs()

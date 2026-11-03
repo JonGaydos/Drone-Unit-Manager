@@ -313,3 +313,87 @@ describe('mount validation', () => {
     expect(result.current.user).toBeNull()
   })
 })
+
+describe('refresh on window focus', () => {
+  const ME = { id: 1, username: 'a', role: 'pilot', permissions: { 'flights.delete': 'none' } }
+  const PAST_THROTTLE_MS = 61 * 1000
+
+  async function signIn(meHandler) {
+    const calls = { me: 0 }
+    server.use(
+      http.post('/api/auth/login', () => HttpResponse.json({ token: 't', user: ME })),
+      http.get('/api/auth/me', (info) => { calls.me += 1; return meHandler(info) }),
+    )
+    const view = renderAuth()
+    await act(async () => { await view.result.current.login('a', 'b') })
+    return { ...view, calls }
+  }
+
+  async function focusLater(ms = PAST_THROTTLE_MS) {
+    const later = Date.now() + ms
+    vi.spyOn(Date, 'now').mockReturnValue(later)
+    localStorage.setItem(LAST_ACTIVITY_KEY, String(later))
+    await act(async () => { globalThis.dispatchEvent(new Event('focus')) })
+  }
+
+  afterEach(() => { vi.restoreAllMocks() })
+
+  it('picks up changed permissions', async () => {
+    const changed = { ...ME, permissions: { 'flights.delete': 'all' } }
+    const { result } = await signIn(() => HttpResponse.json(changed))
+    expect(result.current.level('flights.delete')).toBe('none')
+    await focusLater()
+    await waitFor(() => expect(result.current.level('flights.delete')).toBe('all'))
+  })
+
+  it('keeps the same user object when nothing changed, so pages do not reload', async () => {
+    const { result, calls } = await signIn(() => HttpResponse.json(ME))
+    const { can } = result.current
+    await focusLater()
+    await waitFor(() => expect(calls.me).toBe(1))
+    await act(async () => {})
+    expect(result.current.can).toBe(can)
+  })
+
+  it('asks at most once within the throttle window', async () => {
+    const { calls } = await signIn(() => HttpResponse.json(ME))
+    await focusLater(1000)
+    expect(calls.me).toBe(0)
+    await focusLater()
+    await waitFor(() => expect(calls.me).toBe(1))
+    await focusLater(1000)
+    await act(async () => {})
+    expect(calls.me).toBe(1)
+  })
+
+  it('keeps the user on a network failure and on a server error', async () => {
+    const responses = [() => HttpResponse.error(), () => HttpResponse.json({ detail: 'boom' }, { status: 500 })]
+    const { result, calls } = await signIn(() => responses[calls.me - 1]())
+    await focusLater()
+    await waitFor(() => expect(calls.me).toBe(1))
+    await act(async () => {})
+    expect(result.current.user).toEqual(ME)
+    await focusLater(PAST_THROTTLE_MS * 2)
+    await waitFor(() => expect(calls.me).toBe(2))
+    await act(async () => {})
+    expect(result.current.user).toEqual(ME)
+    expect(localStorage.getItem('token')).toBe('t')
+  })
+
+  it('clears the session on a 401', async () => {
+    vi.stubGlobal('location', { href: 'http://localhost/', origin: 'http://localhost' })
+    const { result } = await signIn(() => new HttpResponse(null, { status: 401 }))
+    await focusLater()
+    await waitFor(() => expect(result.current.user).toBeNull())
+    expect(localStorage.getItem('token')).toBeNull()
+  })
+
+  it('does not ask after signing out', async () => {
+    const { result, calls } = await signIn(() => HttpResponse.json(ME))
+    server.use(http.post('/api/auth/logout', () => HttpResponse.json({ ok: true })))
+    act(() => { result.current.logout() })
+    await focusLater()
+    await act(async () => {})
+    expect(calls.me).toBe(0)
+  })
+})

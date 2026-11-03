@@ -392,14 +392,14 @@ export default function DashboardPage() {
     void Promise.all([
       api.get('/dashboard/stats').catch(() => null),
       api.get('/dashboard/trends').catch(() => null),
-      getIfAllowed(canSeeFlights, '/flights?per_page=10', []),
-      getIfAllowed(canSeeMaintenance, '/dashboard/maintenance-due', []),
+      getIfAllowed(canSeeFlights, '/flights?per_page=10', []).catch(() => []),
+      getIfAllowed(canSeeMaintenance, '/dashboard/maintenance-due', []).catch(() => []),
       api.get('/dashboard/compliance').catch(() => null),
-      getIfAllowed(canSeeFlights, '/dashboard/top-pilots-30d', []),
-      getIfAllowed(canSeeFleet, '/dashboard/top-vehicles-30d', []),
-      getIfAllowed(canSeeFlights, '/dashboard/activity-by-month', []),
-      getIfAllowed(canSeeFleet, '/vehicles/locations', []),
-      getIfAllowed(canSetLocation, '/pilots/options', []),
+      getIfAllowed(canSeeFlights, '/dashboard/top-pilots-30d', []).catch(() => []),
+      getIfAllowed(canSeeFleet, '/dashboard/top-vehicles-30d', []).catch(() => []),
+      getIfAllowed(canSeeFlights, '/dashboard/activity-by-month', []).catch(() => []),
+      getIfAllowed(canSeeFleet, '/vehicles/locations', []).catch(() => []),
+      getIfAllowed(canSetLocation, '/pilots/options', []).catch(() => []),
       api.get('/settings').catch(() => []),
     ]).then(([s, t, f, m, c, tp, tv, ac, locs, pilotList, settingsList]) => {
       if (!alive) return

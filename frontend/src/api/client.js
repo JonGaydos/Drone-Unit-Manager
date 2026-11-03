@@ -94,6 +94,13 @@ function buildTimedSignal(callerSignal, timeoutMs) {
   return { signal, timeoutId }
 }
 
+/** An Error carrying the HTTP status, so callers can tell a refusal from a failure. */
+function httpError(message, status) {
+  const error = new Error(message)
+  error.status = status
+  return error
+}
+
 /** Parse a non-OK response body and throw a sanitized Error. Hides SQL errors,
  *  tracebacks, and internal paths. Always throws.
  *  @param {Response} res @returns {Promise<never>} */
@@ -107,9 +114,9 @@ async function throwSanitizedError(res) {
   }
   // Don't expose SQL errors, tracebacks, or internal paths
   if (sanitized.includes('SQL') || sanitized.includes('Traceback') || sanitized.includes('/app/')) {
-    throw new Error('An unexpected error occurred. Please try again.')
+    throw httpError('An unexpected error occurred. Please try again.', res.status)
   }
-  throw new Error(sanitized)
+  throw httpError(sanitized, res.status)
 }
 
 /**
@@ -156,7 +163,7 @@ async function request(path, options = {}) {
   // surface the real detail for LoginPage to render inline.
   if (res.status === 401 && path !== '/auth/login') {
     handleUnauthorized()
-    throw new Error('Session expired. Please log in again.')
+    throw httpError('Session expired. Please log in again.', 401)
   }
 
   if (!res.ok) {
@@ -208,15 +215,16 @@ async function fetchWithTimeout(url, init, options = {}) {
 
   if (res.status === 401) {
     handleUnauthorized()
-    throw new Error('Session expired. Please log in again.')
+    throw httpError('Session expired. Please log in again.', 401)
   }
   return res
 }
 
 /**
  * GET a section of a page the user may be refused. Skips the request when the
- * permission is already off, and gives the fallback on any failure, so the
- * section shows its empty state and the rest of the page still works.
+ * permission is already off, and gives the fallback on a 403, so the section
+ * shows its empty state and the rest of the page still works. Any other failure
+ * rejects, so it is not mistaken for having nothing to show.
  * @param {boolean} allowed - The result of the matching can() check.
  * @param {string} path - GET endpoint.
  * @param {*} fallback - Value to resolve with when skipped or refused.
@@ -225,7 +233,10 @@ async function fetchWithTimeout(url, init, options = {}) {
  */
 export function getIfAllowed(allowed, path, fallback, options) {
   if (!allowed) return Promise.resolve(fallback)
-  return request(path, options).catch(() => fallback)
+  return request(path, options).catch((err) => {
+    if (err.status === 403) return fallback
+    throw err
+  })
 }
 
 /**

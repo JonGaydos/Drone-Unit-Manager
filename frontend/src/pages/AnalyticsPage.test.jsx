@@ -79,6 +79,7 @@ describe('AnalyticsPage', () => {
     renderWithProviders(<AnalyticsPage />, { role: 'admin' })
     expect(await screen.findByText('Pilot Hours Leaderboard')).toBeInTheDocument()
     expect(screen.getByText('Jane Doe')).toBeInTheDocument()
+    expect(await screen.findByText('boom')).toBeInTheDocument()
   })
 
   it('keeps the flight charts with fleet.view off, and does not ask for vehicle hours', async () => {

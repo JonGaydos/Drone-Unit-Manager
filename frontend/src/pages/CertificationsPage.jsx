@@ -322,7 +322,8 @@ export default function CertificationsPage() {
   // Auto-file documents to Certifications folder
   const [certFolderId, setCertFolderId] = useState(null)
   useEffect(() => {
-    getIfAllowed(canSeeFiles, '/folders', []).then(folders => {
+    // Auto-filing is optional: with no folder list, documents simply stay unfiled.
+    getIfAllowed(canSeeFiles, '/folders', []).catch(() => []).then(folders => {
       const f = (Array.isArray(folders) ? folders : folders.folders || []).find(f => f.name === 'Certifications')
       if (f) setCertFolderId(f.id)
     })

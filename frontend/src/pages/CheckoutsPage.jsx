@@ -100,8 +100,10 @@ export default function CheckoutsPage() {
       ])
       setRows(Array.isArray(co) ? co : [])
       setPilots(pil.filter(p => p.status === 'active'))
+    } catch (err) {
+      toast.error(err.message)
     } finally { setLoading(false) }
-  }, [canSeeFleet])
+  }, [canSeeFleet, toast])
 
   useEffect(() => { load() }, [load])
 

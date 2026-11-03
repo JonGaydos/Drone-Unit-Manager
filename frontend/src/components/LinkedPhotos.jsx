@@ -31,8 +31,9 @@ export default function LinkedPhotos({ entityType, entityId }) {
   const loadLinked = useCallback(() => {
     getIfAllowed(canSeeFiles, `/photos?${entityType}_id=${entityId}`, [])
       .then(p => setLinked(Array.isArray(p) ? p : []))
+      .catch(err => toast.error(err.message))
       .finally(() => setLoading(false))
-  }, [entityType, entityId, canSeeFiles])
+  }, [entityType, entityId, canSeeFiles, toast])
 
   useEffect(() => { loadLinked() }, [loadLinked])
 

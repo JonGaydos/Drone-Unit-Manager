@@ -82,4 +82,11 @@ describe('LinkedPhotos', () => {
     await user.click(screen.getByAltText('South field'))
     expect(attach).toHaveTextContent('Attach 2')
   })
+
+  it('reports a failed list and stops loading', async () => {
+    server.use(http.get('/api/photos', () => HttpResponse.json({ detail: 'photos failed' }, { status: 500 })))
+    renderWithProviders(<LinkedPhotos entityType="flight" entityId={5} />, { role: 'admin' })
+    expect(await screen.findByText('photos failed')).toBeInTheDocument()
+    expect(await screen.findByText('No photos linked.')).toBeInTheDocument()
+  })
 })
