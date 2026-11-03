@@ -342,6 +342,7 @@ def _photo_list_item(p, pilot_ids_for_photo, pilots_map, viewer: int | None = No
         "file_size": p.file_size,
         "mime_type": p.mime_type,
         "has_thumbnail": p.thumbnail_path is not None,
+        "uploaded_by_id": p.uploaded_by_id,
         "legal_hold": p.legal_hold,
         "sha256": p.sha256,
         "pilot_names": pilot_names,

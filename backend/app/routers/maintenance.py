@@ -95,6 +95,7 @@ class MaintenanceOut(BaseModel):
     next_due_hours: Optional[float] = None
     cost: Optional[float] = None
     notes: Optional[str] = None
+    created_by_id: Optional[int] = None
 
     model_config = {"from_attributes": True}
 

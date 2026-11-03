@@ -9,6 +9,7 @@ class DocumentOut(BaseModel):
     pilot_id: Optional[int] = None
     vehicle_id: Optional[int] = None
     certification_id: Optional[int] = None
+    uploaded_by_id: Optional[int] = None
     entity_type: str
     entity_id: Optional[int] = None
     document_type: str

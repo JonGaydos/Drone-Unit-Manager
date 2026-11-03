@@ -29,9 +29,16 @@ FlightsViewUser = Annotated[User, Depends(require_permission("flights.view"))]
 
 OTHER_EQUIPMENT_NOT_FOUND = "Equipment item not found"
 
-def _option_rows(db, model, label) -> list[dict]:
-    """Picker rows (id, name, status) for one equipment table, sorted by name."""
-    rows = [{"id": r.id, "name": label(r), "status": r.status} for r in db.query(model).all()]
+SERIAL_OPTION_FIELD = ("serial_number",)
+VEHICLE_OPTION_FIELDS = ("nickname", "manufacturer", "model", "serial_number")
+
+def _option_rows(db, model, label, extra: tuple[str, ...] = ()) -> list[dict]:
+    """Picker rows (id, name, status, plus any extra columns) for one equipment
+    table, sorted by name."""
+    rows = [
+        {"id": r.id, "name": label(r), "status": r.status, **{field: getattr(r, field) for field in extra}}
+        for r in db.query(model).all()
+    ]
     return sorted(rows, key=lambda row: row["name"].lower())
 
 
@@ -48,14 +55,16 @@ def fleet_options(db: DBSession, user: CurrentUser):
     """Every equipment type as picker rows of id, name and status.
 
     Open to any signed-in user so forms can offer a vehicle or item without the
-    fleet lists. Retired items are included with their status.
+    fleet lists. Retired items are included with their status. Flight forms store
+    batteries, sensors and attachments by serial number, and vehicle pickers label
+    and group by make and model, so those rows carry those fields as well.
     """
     return {
-        "vehicles": _option_rows(db, Vehicle, _nickname_or_serial),
-        "batteries": _option_rows(db, Battery, _nickname_or_serial),
+        "vehicles": _option_rows(db, Vehicle, _nickname_or_serial, VEHICLE_OPTION_FIELDS),
+        "batteries": _option_rows(db, Battery, _nickname_or_serial, SERIAL_OPTION_FIELD),
         "controllers": _option_rows(db, Controller, _nickname_or_serial),
-        "sensors": _option_rows(db, SensorPackage, _name_or_serial),
-        "attachments": _option_rows(db, Attachment, _name_or_serial),
+        "sensors": _option_rows(db, SensorPackage, _name_or_serial, SERIAL_OPTION_FIELD),
+        "attachments": _option_rows(db, Attachment, _name_or_serial, SERIAL_OPTION_FIELD),
         "docks": _option_rows(db, Dock, _name_or_serial),
         "other_equipment": _option_rows(db, OtherEquipment, _name_or_serial),
     }

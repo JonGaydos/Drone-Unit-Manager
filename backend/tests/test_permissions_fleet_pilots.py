@@ -4,10 +4,13 @@ from datetime import date
 
 import pytest
 
+from app.models.attachment import Attachment
+from app.models.battery import Battery
 from app.models.component import Component
 from app.models.flight import Flight
 from app.models.folder import Folder
 from app.models.pilot import Pilot
+from app.models.sensor import SensorPackage
 from app.models.vehicle import Vehicle
 from app.services.permissions import REGISTRY
 
@@ -188,7 +191,21 @@ def test_options_available_with_view_off(client, db, admin_headers, pilot_header
     assert fleet.status_code == 200
     body = fleet.json()
     assert set(body) == {"vehicles", "batteries", "controllers", "sensors", "attachments", "docks", "other_equipment"}
-    assert set(body["vehicles"][0]) == {"id", "name", "status"}
+    assert set(body["vehicles"][0]) == {"id", "name", "status", "nickname", "manufacturer", "model", "serial_number"}
+
+
+def test_fleet_options_carry_the_serial_a_flight_form_stores(client, db, viewer_headers):
+    db.add_all([
+        Battery(serial_number="BAT-1", nickname="Blue"),
+        SensorPackage(serial_number="SEN-1", name="Thermal"),
+        Attachment(serial_number="ATT-1", name="Spotlight"),
+    ])
+    db.commit()
+    body = client.get(FLEET_OPTIONS_URL, headers=viewer_headers).json()
+    assert body["batteries"][0]["serial_number"] == "BAT-1"
+    assert body["batteries"][0]["name"] == "Blue"
+    assert body["sensors"][0]["serial_number"] == "SEN-1"
+    assert body["attachments"][0]["serial_number"] == "ATT-1"
 
 
 def test_options_need_sign_in(client):
