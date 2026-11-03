@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { api } from '@/api/client'
+import { api, getSection } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { formatDuration } from '@/lib/utils'
@@ -13,7 +13,10 @@ import EditActions from '@/components/EditActions'
 
 export default function SensorDetailPage() {
   const { id } = useParams()
-  const { isAdmin } = useAuth()
+  const { can } = useAuth()
+  const canManage = can('fleet.manage')
+  const canSeeFlights = can('flights.view')
+  const canSeeMaintenance = can('maintenance.view')
   const toast = useToast()
   const [sensor, setSensor] = useState(null)
   const [stats, setStats] = useState(null)
@@ -27,16 +30,16 @@ export default function SensorDetailPage() {
   useEffect(() => {
     Promise.all([
       api.get(`/sensors/${id}`),
-      api.get(`/sensors/${id}/stats`).catch(() => null),
-      api.get(`/sensors/${id}/flights`).catch(() => []),
-      api.get(`/maintenance?entity_type=sensor&entity_id=${id}`).catch(() => []),
+      getSection(canSeeFlights, `/sensors/${id}/stats`, null),
+      getSection(canSeeFlights, `/sensors/${id}/flights`, []),
+      getSection(canSeeMaintenance, `/maintenance?entity_type=sensor&entity_id=${id}`, []),
     ]).then(([s, st, fl, m]) => {
       setSensor(s)
       setStats(st)
       setFlights(Array.isArray(fl) ? fl : [])
       setMaintenance(Array.isArray(m) ? m : [])
     }).catch(() => {}).finally(() => setLoading(false))
-  }, [id])
+  }, [id, canSeeFlights, canSeeMaintenance])
 
   const startEditing = () => {
     setEditForm({
@@ -138,7 +141,7 @@ export default function SensorDetailPage() {
               <>
                 <div className="flex items-center gap-3">
                   <h2 className="text-xl font-bold text-foreground">{displayName}</h2>
-                  {isAdmin && (
+                  {canManage && (
                     <button onClick={startEditing} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent">
                       <Edit className="w-4 h-4" />
                     </button>

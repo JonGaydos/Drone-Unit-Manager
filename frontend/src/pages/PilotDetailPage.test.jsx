@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { renderRoute } from '@/test/render'
@@ -98,7 +98,6 @@ describe('PilotDetailPage', () => {
   it('lets a pilot edit and attach documents to their own record, without Status', async () => {
     mockMount()
     const me = { id: 3, username: 'ada', role: 'pilot', pilot_id: 7 }
-    server.use(http.get('/api/auth/me', () => HttpResponse.json(me)))
     const { user } = renderRoute(<PilotDetailPage />, { path: '/pilots/:id', route: '/pilots/7', user: me })
     await screen.findByRole('heading', { name: 'Ada Lovelace' })
     expect(screen.getByRole('button', { name: 'Upload' })).toBeInTheDocument()
@@ -110,10 +109,89 @@ describe('PilotDetailPage', () => {
   it("does not offer a pilot Upload or Edit on another pilot's record", async () => {
     mockMount()
     const me = { id: 4, username: 'sam', role: 'pilot', pilot_id: 9 }
-    server.use(http.get('/api/auth/me', () => HttpResponse.json(me)))
     renderRoute(<PilotDetailPage />, { path: '/pilots/:id', route: '/pilots/7', user: me })
     await screen.findByRole('heading', { name: 'Ada Lovelace' })
     expect(screen.queryByRole('button', { name: 'Upload' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Edit profile' })).toBeNull()
+  })
+
+  it('keeps the page when /stats is refused', async () => {
+    mockMount({ stats: () => HttpResponse.json({ detail: 'no' }, { status: 403 }) })
+    render()
+    expect(await screen.findByRole('heading', { name: 'Ada Lovelace' })).toBeInTheDocument()
+  })
+
+  it('does not ask for stats or flights with flights.view off', async () => {
+    const asked = []
+    mockMount({
+      stats: () => { asked.push('stats'); return HttpResponse.json({}) },
+      flights: () => { asked.push('flights'); return HttpResponse.json({ flights: [] }) },
+    })
+    renderRoute(<PilotDetailPage />, {
+      path: '/pilots/:id', route: '/pilots/7', role: 'pilot', permissions: { 'flights.view': 'no' },
+    })
+    expect(await screen.findByRole('heading', { name: 'Ada Lovelace' })).toBeInTheDocument()
+    expect(asked).toEqual([])
+  })
+
+  it('without pilots.contacts, hides the contact inputs and leaves them out of the save', async () => {
+    let body = null
+    mockMount()
+    server.use(http.patch('/api/pilots/:id', async ({ request }) => { body = await request.json(); return HttpResponse.json(PILOT) }))
+    const { user } = renderRoute(<PilotDetailPage />, {
+      path: '/pilots/:id', route: '/pilots/7', user: { id: 3, username: 'ada', role: 'pilot', pilot_id: 7 },
+      permissions: { 'pilots.contacts': 'no' },
+    })
+    await screen.findByRole('heading', { name: 'Ada Lovelace' })
+    await user.click(screen.getByRole('button', { name: 'Edit profile' }))
+    expect(screen.queryByLabelText('Email')).toBeNull()
+    await user.click(screen.getByRole('button', { name: /^Save/ }))
+    await waitFor(() => expect(body).not.toBeNull())
+    for (const field of ['email', 'phone', 'phone_type', 'phone_work']) {
+      expect(body).not.toHaveProperty(field)
+    }
+  })
+
+  describe('performance tiles', () => {
+    const PERFORMANCE = {
+      total_flights: 4, total_flight_hours: 2, avg_duration_min: 30, vehicles_flown: 1,
+      training_hours: 5, mission_hours: 6, incidents: 2, flights_by_month: [], flights_by_purpose: [],
+    }
+
+    it('shows the log and incident tiles when the values are present', async () => {
+      mockMount({ performance: () => HttpResponse.json(PERFORMANCE) })
+      render()
+      expect(await screen.findByText('Training Hours')).toBeInTheDocument()
+      expect(screen.getByText('5h')).toBeInTheDocument()
+      expect(screen.getByText('Mission Hours')).toBeInTheDocument()
+      expect(screen.getByText('Incidents')).toBeInTheDocument()
+    })
+
+    it('shows a zero value rather than hiding the tile', async () => {
+      mockMount({ performance: () => HttpResponse.json({ ...PERFORMANCE, training_hours: 0, incidents: 0 }) })
+      render()
+      expect(await screen.findByText('0h')).toBeInTheDocument()
+      expect(screen.getByText('Incidents')).toBeInTheDocument()
+    })
+
+    it('hides the tiles whose view is off', async () => {
+      mockMount({
+        performance: () => HttpResponse.json({ ...PERFORMANCE, training_hours: null, mission_hours: null, incidents: null }),
+      })
+      render()
+      expect((await screen.findAllByText('Avg Duration')).length).toBeGreaterThan(0)
+      expect(screen.queryByText('Training Hours')).toBeNull()
+      expect(screen.queryByText('Mission Hours')).toBeNull()
+      expect(screen.queryByText('Incidents')).toBeNull()
+      expect(screen.queryByText('nullh')).toBeNull()
+    })
+  })
+
+  it('stays rendered with the pilot when secondary requests 500', async () => {
+    const boom = () => HttpResponse.json({ detail: 'boom' }, { status: 500 })
+    mockMount({ stats: boom, flights: boom, certs: boom, currency: boom, performance: boom, needsAttention: boom, folders: boom })
+    render()
+    expect(await screen.findByRole('heading', { name: 'Ada Lovelace' })).toBeInTheDocument()
+    expect(screen.queryByText('Pilot not found')).toBeNull()
   })
 })

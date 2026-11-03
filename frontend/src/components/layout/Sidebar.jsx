@@ -8,7 +8,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { api } from '@/api/client'
 import { ChevronLeft, ChevronRight, LogOut, BookOpen } from 'lucide-react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
-import { NAV_ITEMS, GROUP_ORDER } from '@/lib/sidebarNav'
+import { NAV_ITEMS, GROUP_ORDER, canViewEntry } from '@/lib/sidebarNav'
 
 /**
  * Lazy import functions per route. Calling these populates Vite's module
@@ -53,7 +53,9 @@ export function Sidebar({ mobileOpen, onMobileClose }) {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('sidebar-collapsed') === 'true')
   const [reviewCount, setReviewCount] = useState(0)
   const [pendingPlansCount, setPendingPlansCount] = useState(0)
-  const { user, logout, isAdmin } = useAuth()
+  const { user, logout, can } = useAuth()
+  const canSeeFlights = can('flights.view')
+  const canSeePlans = can('flight_plans.view')
   const location = useLocation()
 
   const toggleCollapsed = () => {
@@ -88,13 +90,17 @@ export function Sidebar({ mobileOpen, onMobileClose }) {
   // Badge counts can change as the user works, so refresh them on each
   // navigation.
   useEffect(() => {
-    api.get('/flights/count?review_status=needs_review')
-      .then(data => setReviewCount(data.count))
-      .catch(err => console.warn('Failed to fetch review count:', err.message))
-    api.get('/flight-plans/pending/count')
-      .then(data => setPendingPlansCount(data.count))
-      .catch(err => console.warn('Failed to fetch pending plans count:', err.message))
-  }, [location.pathname])
+    if (canSeeFlights) {
+      api.get('/flights/count?review_status=needs_review')
+        .then(data => setReviewCount(data.count))
+        .catch(err => console.warn('Failed to fetch review count:', err.message))
+    }
+    if (canSeePlans) {
+      api.get('/flight-plans/pending/count')
+        .then(data => setPendingPlansCount(data.count))
+        .catch(err => console.warn('Failed to fetch pending plans count:', err.message))
+    }
+  }, [location.pathname, canSeeFlights, canSeePlans])
 
   // Idle preload of the most-likely-next routes so the first nav click feels
   // instant even on a cold app load. Runs once per mount during browser idle.
@@ -135,7 +141,7 @@ export function Sidebar({ mobileOpen, onMobileClose }) {
       <nav className="flex-1 py-4 overflow-y-auto">
         {(() => {
           const showLabels = !collapsed || mobileOpen
-          let items = NAV_ITEMS.filter(item => !item.adminOnly || isAdmin)
+          let items = NAV_ITEMS.filter(item => canViewEntry(item.view, can))
           if (sidebarConfig && Array.isArray(sidebarConfig)) {
             const configMap = {}
             sidebarConfig.forEach(c => { configMap[c.to] = c })

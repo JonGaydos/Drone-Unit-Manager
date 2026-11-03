@@ -1,12 +1,14 @@
 from datetime import date, datetime
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.deps import CurrentUser, DBSession, PilotUser, SupervisorUser
+from app.deps import DBSession
+from app.routers.auth import require_permission
+from app.services import permissions as permissions_service
 from app.models.incident import Incident
 from app.models.pilot import Pilot
 from app.models.vehicle import Vehicle
@@ -16,6 +18,14 @@ from app.services.audit import log_action
 from app.responses import responses
 
 router = APIRouter(prefix="/api/incidents", tags=["incidents"])
+
+ViewUser = Annotated[User, Depends(require_permission("incidents.view"))]
+CreateUser = Annotated[User, Depends(require_permission("incidents.create"))]
+EditUser = Annotated[User, Depends(require_permission("incidents.edit"))]
+DeleteUser = Annotated[User, Depends(require_permission("incidents.delete"))]
+
+# Resolution fields. Changing them needs incidents.resolve on top of edit access.
+RESOLVE_FIELDS = ("status", "resolution", "resolution_date", "corrective_actions")
 
 
 
@@ -153,7 +163,7 @@ def _ground_vehicle_if_needed(incident: Incident, db: Session, user, was_grounde
 
 
 @router.get("/stats", responses=responses(401))
-def incident_stats(db: DBSession, user: CurrentUser):
+def incident_stats(db: DBSession, user: ViewUser):
     status_counts = dict(
         db.query(Incident.status, func.count(Incident.id))
         .group_by(Incident.status).all()
@@ -179,7 +189,7 @@ def list_incidents(
 
     db: DBSession,
 
-    user: CurrentUser,
+    user: ViewUser,
 
     status: str | None = None,
 
@@ -236,7 +246,7 @@ def list_incidents(
 
 
 @router.get("/{incident_id}", response_model=IncidentOut, responses=responses(401, 404))
-def get_incident(incident_id: int, db: DBSession, user: CurrentUser):
+def get_incident(incident_id: int, db: DBSession, user: ViewUser):
     incident = db.query(Incident).filter(Incident.id == incident_id).first()
     if not incident:
         raise HTTPException(status_code=404, detail=INCIDENT_NOT_FOUND)
@@ -244,7 +254,7 @@ def get_incident(incident_id: int, db: DBSession, user: CurrentUser):
 
 
 @router.post("", response_model=IncidentOut, responses=responses(401, 422))
-def create_incident(data: IncidentCreate, db: DBSession, user: PilotUser):
+def create_incident(data: IncidentCreate, db: DBSession, user: CreateUser):
     try:
         parsed_date = date.fromisoformat(data.date)
     except ValueError:
@@ -280,14 +290,23 @@ def create_incident(data: IncidentCreate, db: DBSession, user: PilotUser):
     return _enrich(incident, db)
 
 
+def _check_resolve_allowed(db: Session, user: User, incident: Incident, update_data: dict) -> None:
+    """Raise 403 when the update changes a resolution field without incidents.resolve.
+
+    Values are compared with the stored ones, so a form that echoes unchanged
+    fields back is not refused.
+    """
+    changed = [f for f in RESOLVE_FIELDS if f in update_data and update_data[f] != getattr(incident, f)]
+    if changed and not permissions_service.can(db, user, "incidents.resolve"):
+        raise HTTPException(status_code=403, detail="You do not have permission to resolve or close incidents")
+
+
 @router.patch("/{incident_id}", response_model=IncidentOut, responses=responses(401, 403, 404, 422))
-def update_incident(incident_id: int, data: IncidentUpdate, db: DBSession, user: PilotUser):
+def update_incident(incident_id: int, data: IncidentUpdate, db: DBSession, user: EditUser):
     incident = db.query(Incident).filter(Incident.id == incident_id).first()
     if not incident:
         raise HTTPException(status_code=404, detail=INCIDENT_NOT_FOUND)
-    # Pilots can only update their own reports; supervisors can update any
-    if user.role not in ("admin", "supervisor") and incident.reported_by_id != user.id:
-        raise HTTPException(status_code=403, detail="You can only edit your own incident reports")
+    permissions_service.require_record_access(db, user, "incidents.edit", incident.reported_by_id == user.id)
     was_grounded = bool(incident.equipment_grounded)
     update_data = data.model_dump(exclude_unset=True)
     if "date" in update_data and update_data["date"] is not None:
@@ -300,6 +319,7 @@ def update_incident(incident_id: int, data: IncidentUpdate, db: DBSession, user:
             update_data["resolution_date"] = date.fromisoformat(update_data["resolution_date"])
         except ValueError:
             raise HTTPException(status_code=422, detail=f"Invalid resolution_date format: {update_data['resolution_date']}")
+    _check_resolve_allowed(db, user, incident, update_data)
     for key, value in update_data.items():
         setattr(incident, key, value)
     log_action(db, user.id, user.display_name, "update", "incident", incident.id, incident.title,
@@ -311,7 +331,7 @@ def update_incident(incident_id: int, data: IncidentUpdate, db: DBSession, user:
 
 
 @router.delete("/{incident_id}", responses=responses(401, 404))
-def delete_incident(incident_id: int, db: DBSession, user: SupervisorUser):
+def delete_incident(incident_id: int, db: DBSession, user: DeleteUser):
     incident = db.query(Incident).filter(Incident.id == incident_id).first()
     if not incident:
         raise HTTPException(status_code=404, detail=INCIDENT_NOT_FOUND)

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { api } from '@/api/client'
+import { api, getIfAllowed } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { Modal } from '@/components/ui/Modal'
@@ -10,13 +10,13 @@ import { useConfirm } from '@/hooks/useConfirm'
 import { LogIn, LogOut, Trash2, PackageCheck } from 'lucide-react'
 
 const TYPES = [
-  { value: 'vehicle', label: 'Vehicle', endpoint: '/vehicles' },
-  { value: 'battery', label: 'Battery', endpoint: '/batteries' },
-  { value: 'controller', label: 'Controller', endpoint: '/controllers' },
-  { value: 'dock', label: 'Dock', endpoint: '/docks' },
-  { value: 'sensor', label: 'Sensor', endpoint: '/sensors' },
-  { value: 'attachment', label: 'Attachment', endpoint: '/attachments' },
-  { value: 'other', label: 'Other', endpoint: '/other-equipment' },
+  { value: 'vehicle', label: 'Vehicle', optionsKey: 'vehicles' },
+  { value: 'battery', label: 'Battery', optionsKey: 'batteries' },
+  { value: 'controller', label: 'Controller', optionsKey: 'controllers' },
+  { value: 'dock', label: 'Dock', optionsKey: 'docks' },
+  { value: 'sensor', label: 'Sensor', optionsKey: 'sensors' },
+  { value: 'attachment', label: 'Attachment', optionsKey: 'attachments' },
+  { value: 'other', label: 'Other', optionsKey: 'other_equipment' },
 ]
 
 function itemLabel(type, it) {
@@ -24,8 +24,7 @@ function itemLabel(type, it) {
     const base = `${it.manufacturer || ''} ${it.model || ''}`.trim()
     return it.nickname ? `${base} (${it.nickname})` : base || `vehicle #${it.id}`
   }
-  if (type === 'battery' || type === 'controller') return it.nickname || it.serial_number || `${type} #${it.id}`
-  return it.name || it.serial_number || `${type} #${it.id}`
+  return it.name || `${type} #${it.id}`
 }
 
 const fmtDate = (s) => (s ? new Date(s).toLocaleDateString() : '—')
@@ -38,7 +37,7 @@ function defaultReturner(row, user) {
 }
 
 // Loading, then nothing out, then the table of what is out.
-function activeBody({ loading, active, openCheckin }) {
+function activeBody({ loading, active, openCheckin, canUse }) {
   if (loading) return <div className="p-4 text-sm text-muted-foreground">Loading…</div>
   if (active.length === 0) {
     return <div className="p-4 text-sm text-muted-foreground text-center">Nothing checked out.</div>
@@ -59,7 +58,7 @@ function activeBody({ loading, active, openCheckin }) {
             <td className="px-4 py-2 text-muted-foreground">{fmtDate(r.checked_out_at)}</td>
             <td className="px-4 py-2 text-muted-foreground">{fmtDate(r.expected_return)}</td>
             <td className="px-4 py-2 text-right">
-              <Button variant="secondary" size="sm" onClick={() => openCheckin(r)}><LogOut className="w-3.5 h-3.5 mr-1" /> Check In</Button>
+              {canUse && <Button variant="secondary" size="sm" onClick={() => openCheckin(r)}><LogOut className="w-3.5 h-3.5 mr-1" /> Check In</Button>}
             </td>
           </tr>
         ))}
@@ -69,7 +68,10 @@ function activeBody({ loading, active, openCheckin }) {
 }
 
 export default function CheckoutsPage() {
-  const { user, isSupervisor } = useAuth()
+  const { user, can } = useAuth()
+  const canUse = can('checkouts.use')
+  const canDelete = can('checkouts.delete')
+  const canSeeFleet = can('fleet.view')
   const toast = useToast()
   const [confirmProps, requestConfirm] = useConfirm()
   const [rows, setRows] = useState([])
@@ -93,14 +95,15 @@ export default function CheckoutsPage() {
     setLoading(true)
     try {
       const [co, pil] = await Promise.all([
-        api.get('/equipment-checkouts').catch(() => []),
-        api.get('/pilots').catch(() => []),
+        getIfAllowed(canSeeFleet, '/equipment-checkouts', []),
+        api.get('/pilots/options').catch(() => []),
       ])
       setRows(Array.isArray(co) ? co : [])
-      const plist = Array.isArray(pil) ? pil : (pil.pilots || [])
-      setPilots(plist.filter(p => p.status === 'active'))
+      setPilots(pil.filter(p => p.status === 'active'))
+    } catch (err) {
+      toast.error(err.message)
     } finally { setLoading(false) }
-  }, [])
+  }, [canSeeFleet, toast])
 
   useEffect(() => { load() }, [load])
 
@@ -116,8 +119,8 @@ export default function CheckoutsPage() {
 
   const loadItems = async (type) => {
     const t = TYPES.find(x => x.value === type)
-    const data = await api.get(t.endpoint).catch(() => [])
-    setCoItems(Array.isArray(data) ? data : (data.vehicles || data.items || []))
+    const fleet = await api.get('/fleet/options').catch(() => ({}))
+    setCoItems(fleet[t.optionsKey] || [])
   }
 
   const onTypeChange = (type) => { setCoType(type); setCoForm(f => ({ ...f, entity_id: '' })); void loadItems(type) }
@@ -177,18 +180,18 @@ export default function CheckoutsPage() {
     })
   }
 
-  const pilotOptions = pilots.map(p => ({ id: p.id, name: `${p.first_name} ${p.last_name}` }))
+  const pilotOptions = pilots.map(p => ({ id: p.id, name: p.full_name }))
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-xl font-semibold text-foreground flex items-center gap-2"><PackageCheck className="w-5 h-5 text-primary" /> Equipment Checkouts</h1>
-        <Button onClick={openCheckout}><LogIn className="w-4 h-4 mr-1" /> Check Out</Button>
+        {canUse && <Button onClick={openCheckout}><LogIn className="w-4 h-4 mr-1" /> Check Out</Button>}
       </div>
 
       <section className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-border text-sm font-semibold text-foreground">Currently Out ({active.length})</div>
-        {activeBody({ loading, active, openCheckin })}
+        {activeBody({ loading, active, openCheckin, canUse })}
       </section>
 
       <section className="bg-card border border-border rounded-xl overflow-hidden">
@@ -205,7 +208,7 @@ export default function CheckoutsPage() {
             <thead><tr className="text-left text-muted-foreground border-b border-border">
               <th className="px-4 py-2 font-medium">Equipment</th><th className="px-4 py-2 font-medium">Held by</th>
               <th className="px-4 py-2 font-medium">Out</th><th className="px-4 py-2 font-medium">Returned</th>
-              <th className="px-4 py-2 font-medium">By</th>{isSupervisor && <th className="px-4 py-2"></th>}
+              <th className="px-4 py-2 font-medium">By</th>{canDelete && <th className="px-4 py-2"></th>}
             </tr></thead>
             <tbody className="divide-y divide-border">
               {history.map(r => (
@@ -215,7 +218,7 @@ export default function CheckoutsPage() {
                   <td className="px-4 py-2 text-muted-foreground">{fmtDate(r.checked_out_at)}</td>
                   <td className="px-4 py-2 text-muted-foreground">{r.checked_in_at ? fmtDate(r.checked_in_at) : <span className="text-amber-500">Out</span>}</td>
                   <td className="px-4 py-2 text-muted-foreground">{r.checked_in_by_name || '—'}</td>
-                  {isSupervisor && <td className="px-4 py-2 text-right"><button onClick={() => handleDelete(r)} className="text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></button></td>}
+                  {canDelete && <td className="px-4 py-2 text-right"><button onClick={() => handleDelete(r)} className="text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></button></td>}
                 </tr>
               ))}
             </tbody>

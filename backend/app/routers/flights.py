@@ -1,8 +1,9 @@
 from collections import Counter
 from datetime import date
 from math import ceil
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload
@@ -11,10 +12,13 @@ from app.constants import FLIGHT_NOT_FOUND, UTC_OFFSET
 from app.models.flight import Flight, FlightPurpose
 from app.models.pilot import Pilot
 from app.models.vehicle import Vehicle
-from app.deps import DBSession, CurrentUser, AdminUser, PilotUser, SupervisorUser
+from app.deps import DBSession, CurrentUser, AdminUser
+from app.models.user import User
+from app.routers.auth import require_permission
 from app.responses import responses
 from app.services.audit import log_action
 from app.services.flight_delete import delete_flights, purge_flight_telemetry
+from app.services import permissions as permissions_service
 from app.services.local_time import display_zone, local_flight_date
 from app.schemas.flight import (
     FlightCreate, FlightUpdate, FlightOut,
@@ -23,6 +27,16 @@ from app.schemas.flight import (
 )
 
 router = APIRouter(prefix="/api/flights", tags=["flights"])
+
+EDIT_KEY = "flights.edit"
+DELETE_KEY = "flights.delete"
+REVIEW_KEY = "flights.review"
+NEEDS_REVIEW = "needs_review"
+REVIEWED = "reviewed"
+
+ViewUser = Annotated[User, Depends(require_permission("flights.view"))]
+ReviewUser = Annotated[User, Depends(require_permission(REVIEW_KEY))]
+DeleteUser = Annotated[User, Depends(require_permission(DELETE_KEY))]
 
 
 def _refresh_capable_providers() -> set[str]:
@@ -116,7 +130,7 @@ def _flight_order(sort: str, order: str) -> list:
 @router.get("")
 def list_flights(
     db: DBSession,
-    user: CurrentUser,
+    user: ViewUser,
     pilot_id: int | None = None,
     vehicle_id: int | None = None,
     purpose: str | None = None,
@@ -164,7 +178,7 @@ def list_flights(
 @router.get("/count")
 def count_flights(
     db: DBSession,
-    user: CurrentUser,
+    user: ViewUser,
     review_status: str | None = None):
     q = db.query(func.count(Flight.id))
     if review_status:
@@ -175,12 +189,12 @@ def count_flights(
 @router.get("/review", response_model=list[FlightOut])
 def list_review_queue(
     db: DBSession,
-    user: CurrentUser,
+    user: ViewUser,
 ):
     flights = db.query(Flight).options(
         joinedload(Flight.pilot), joinedload(Flight.vehicle)
     ).filter(
-        Flight.review_status == "needs_review"
+        Flight.review_status == NEEDS_REVIEW
     ).order_by(Flight.date.desc(), Flight.takeoff_time.desc()).all()
     return [_flight_to_out(f) for f in flights]
 
@@ -191,7 +205,7 @@ def list_purposes(db: DBSession, user: CurrentUser):
 
 
 @router.get("/purposes/usage", responses=responses(401))
-def list_purposes_with_usage(db: DBSession, user: SupervisorUser):
+def list_purposes_with_usage(db: DBSession, user: ReviewUser):
     """Purposes plus how many records reference each, for the Settings editor.
 
     Kept separate from /purposes/list, which every flight page calls on load and
@@ -226,16 +240,40 @@ def list_purposes_with_usage(db: DBSession, user: SupervisorUser):
     ]
 
 
+def _overdue_maintenance_warnings(db, vehicle_id: int, today: date) -> list[str]:
+    from app.models.maintenance_schedule import MaintenanceSchedule
+
+    overdue = db.query(MaintenanceSchedule).filter(
+        MaintenanceSchedule.entity_type == "vehicle",
+        MaintenanceSchedule.entity_id == vehicle_id,
+        MaintenanceSchedule.is_active.is_(True),
+        MaintenanceSchedule.next_due.isnot(None),
+        MaintenanceSchedule.next_due < today,
+    ).all()
+    return [f"Overdue maintenance: {s.name} (due {s.next_due})." for s in overdue]
+
+
+def _expired_registration_warnings(db, vehicle_id: int, today: date) -> list[str]:
+    from app.models.vehicle_registration import VehicleRegistration
+
+    current_reg = db.query(VehicleRegistration).filter(
+        VehicleRegistration.vehicle_id == vehicle_id,
+        VehicleRegistration.is_current.is_(True),
+    ).order_by(VehicleRegistration.registration_date.desc()).first()
+    if current_reg and current_reg.expiry_date and current_reg.expiry_date < today:
+        return [f"FAA registration expired on {current_reg.expiry_date}."]
+    return []
+
+
 @router.get("/preflight-check", responses=responses(401))
-def preflight_check(vehicle_id: int, db: DBSession, user: CurrentUser):
+def preflight_check(vehicle_id: int, db: DBSession, user: ViewUser):
     """Non-blocking pre-flight readiness warnings for a vehicle: a non-active
     status, overdue active maintenance schedules, or an expired current FAA
     registration. Surfaced in the Add Flight form so the logger sees airframe
     issues without being blocked from recording a flight that already happened.
+    Maintenance and registration warnings need those features' view permissions.
     """
     from app.models.vehicle import Vehicle
-    from app.models.maintenance_schedule import MaintenanceSchedule
-    from app.models.vehicle_registration import VehicleRegistration
 
     today = date.today()
     warnings = []
@@ -246,28 +284,16 @@ def preflight_check(vehicle_id: int, db: DBSession, user: CurrentUser):
     if vehicle.status and vehicle.status != "active":
         warnings.append(f"Vehicle status is '{vehicle.status}', not active.")
 
-    overdue = db.query(MaintenanceSchedule).filter(
-        MaintenanceSchedule.entity_type == "vehicle",
-        MaintenanceSchedule.entity_id == vehicle_id,
-        MaintenanceSchedule.is_active.is_(True),
-        MaintenanceSchedule.next_due.isnot(None),
-        MaintenanceSchedule.next_due < today,
-    ).all()
-    for s in overdue:
-        warnings.append(f"Overdue maintenance: {s.name} (due {s.next_due}).")
-
-    current_reg = db.query(VehicleRegistration).filter(
-        VehicleRegistration.vehicle_id == vehicle_id,
-        VehicleRegistration.is_current.is_(True),
-    ).order_by(VehicleRegistration.registration_date.desc()).first()
-    if current_reg and current_reg.expiry_date and current_reg.expiry_date < today:
-        warnings.append(f"FAA registration expired on {current_reg.expiry_date}.")
+    if permissions_service.can(db, user, "maintenance.view"):
+        warnings += _overdue_maintenance_warnings(db, vehicle_id, today)
+    if permissions_service.can(db, user, "registrations.view"):
+        warnings += _expired_registration_warnings(db, vehicle_id, today)
 
     return {"warnings": warnings}
 
 
 @router.get("/{flight_id}", response_model=FlightOut, responses=responses(401, 404))
-def get_flight(flight_id: int, db: DBSession, user: CurrentUser):
+def get_flight(flight_id: int, db: DBSession, user: ViewUser):
     flight = db.query(Flight).options(
         joinedload(Flight.pilot), joinedload(Flight.vehicle)
     ).filter(Flight.id == flight_id).first()
@@ -569,9 +595,14 @@ def refresh_flight_from_api(flight_id: int, db: DBSession, admin: AdminUser):
 
 
 @router.post("", response_model=FlightOut, responses=responses(401))
-def create_flight(data: FlightCreate, db: DBSession, admin: PilotUser):
+def create_flight(
+    data: FlightCreate,
+    db: DBSession,
+    admin: Annotated[User, Depends(require_permission("flights.create"))],
+):
     from app.services.audit import log_action
-    flight = Flight(**data.model_dump(), review_status="needs_review", pilot_confirmed=True, data_source="manual")
+    flight = Flight(**data.model_dump(), review_status=NEEDS_REVIEW, pilot_confirmed=True,
+                    data_source="manual", created_by_id=admin.id)
     db.add(flight)
     db.flush()
     # Auto-create Fleet records for any new equipment serials
@@ -586,25 +617,60 @@ def create_flight(data: FlightCreate, db: DBSession, admin: PilotUser):
     return _flight_to_out(flight)
 
 
-# Sign-off fields. Setting them is a review decision, which the dedicated
-# review endpoint already reserves for supervisors; a general edit must not be
-# a way around that.
+# Sign-off fields. Setting them is a review decision, reserved for roles that
+# hold flights.review; a general edit must not be a way around that.
 REVIEW_FIELDS = ("review_status", "pilot_confirmed", "counts_toward_totals")
 
 
+def owns_flight(user: User, flight: Flight) -> bool:
+    """True when the flight is the user's own pilot's, or the user logged it."""
+    if user.pilot_id is not None and user.pilot_id == flight.pilot_id:
+        return True
+    return flight.created_by_id == user.id
+
+
+def _changed_fields(flight: Flight, update_data: dict, fields) -> list[str]:
+    """The named fields whose incoming value differs from the stored one."""
+    return [f for f in fields if f in update_data and update_data[f] != getattr(flight, f)]
+
+
+def _check_edit_allowed(db, user: User, flight: Flight, update_data: dict) -> None:
+    """Raise 403 unless the user may make this edit.
+
+    Values are compared with the stored ones, so a form that echoes unchanged
+    fields back is not refused. Reassigning the pilot needs edit at All.
+    """
+    permissions_service.require_record_access(db, user, EDIT_KEY, owns_flight(user, flight))
+    if _changed_fields(flight, update_data, REVIEW_FIELDS) and not permissions_service.can(db, user, REVIEW_KEY):
+        raise HTTPException(status_code=403, detail="You do not have permission to change a flight's review fields")
+    edit_level = permissions_service.level(db, user, EDIT_KEY)
+    if _changed_fields(flight, update_data, ("pilot_id",)) and edit_level != permissions_service.ALL:
+        raise HTTPException(status_code=403, detail="You do not have permission to reassign a flight's pilot")
+
+
+def _returns_to_queue(db, user: User, flight: Flight, update_data: dict) -> bool:
+    """True when a non-reviewer changes content on a reviewed flight."""
+    if flight.review_status != REVIEWED or permissions_service.can(db, user, REVIEW_KEY):
+        return False
+    content = [f for f in update_data if f not in REVIEW_FIELDS]
+    return bool(_changed_fields(flight, update_data, content))
+
+
 @router.patch("/{flight_id}", response_model=FlightOut, responses=responses(401, 403, 404))
-def update_flight(flight_id: int, data: FlightUpdate, db: DBSession, admin: PilotUser):
+def update_flight(
+    flight_id: int,
+    data: FlightUpdate,
+    db: DBSession,
+    admin: Annotated[User, Depends(require_permission(EDIT_KEY))],
+):
     from app.services.audit import log_action, compute_changes
     flight = db.query(Flight).filter(Flight.id == flight_id).first()
     if not flight:
         raise HTTPException(status_code=404, detail=FLIGHT_NOT_FOUND)
     update_data = data.model_dump(exclude_unset=True)
-    # Rejected only when a value actually changes, so an edit form that echoes
-    # the current review state back is not refused.
-    if admin.role not in ("admin", "supervisor") and any(
-        f in update_data and update_data[f] != getattr(flight, f) for f in REVIEW_FIELDS
-    ):
-        raise HTTPException(status_code=403, detail="Only a supervisor can change a flight's review fields")
+    _check_edit_allowed(db, admin, flight, update_data)
+    if _returns_to_queue(db, admin, flight, update_data):
+        update_data["review_status"] = NEEDS_REVIEW
     # Flights are records of what happened, so every changed field is audited.
     changes = compute_changes(flight, update_data, list(update_data.keys()))
     for key, value in update_data.items():
@@ -626,6 +692,10 @@ def update_flight(flight_id: int, data: FlightUpdate, db: DBSession, admin: Pilo
 # applied nor audited.
 BULK_FIELDS = ("pilot_id", "purpose", "review_status", "pilot_confirmed",
                "counts_toward_totals")
+
+# Changing these rewrites what a flight records rather than signing it off, so
+# they also need flights.edit at All. The other bulk fields need only flights.review.
+BULK_EDIT_FIELDS = ("pilot_id", "purpose")
 
 # Enough of the id list to identify what an edit touched without turning the
 # audit table into a wall of digits.
@@ -664,11 +734,24 @@ def _overwritten(flights, field, new_value) -> str:
     return summary
 
 
+def _changes_bulk_edit_field(flights, updates: dict) -> bool:
+    """Echoing the value a flight already holds is not a change."""
+    return any(getattr(flight, field) != updates[field]
+               for field in BULK_EDIT_FIELDS if field in updates
+               for flight in flights)
+
+
 @router.post("/bulk-update", responses=responses(401))
-def bulk_update_flights(data: FlightBulkUpdate, db: DBSession, admin: SupervisorUser):
+def bulk_update_flights(
+    data: FlightBulkUpdate,
+    db: DBSession,
+    admin: ReviewUser,
+):
     flights = db.query(Flight).filter(Flight.id.in_(data.flight_ids)).all()
     updates = {field: value for field in BULK_FIELDS
                if (value := getattr(data, field)) is not None}
+    if _changes_bulk_edit_field(flights, updates):
+        permissions_service.require_record_access(db, admin, EDIT_KEY, owned=False)
 
     # Read the old values before writing over them.
     changes = {field: {"old": _overwritten(flights, field, value) or "(no change)",
@@ -687,7 +770,7 @@ def bulk_update_flights(data: FlightBulkUpdate, db: DBSession, admin: Supervisor
             touched = touched[:MAX_ID_DETAIL_CHARS].rsplit(", ", 1)[0] + ", ..."
         details += f" (ids {touched})"
 
-    action = "bulk_approve" if data.review_status == "reviewed" else "bulk_update"
+    action = "bulk_approve" if data.review_status == REVIEWED else "bulk_update"
     log_action(db, admin.id, admin.display_name, action, "flight",
                changes=changes or None, details=details)
     db.commit()
@@ -699,11 +782,17 @@ class FlightBulkDelete(BaseModel):
 
 
 @router.post("/bulk-delete", responses=responses(401))
-def bulk_delete_flights(data: FlightBulkDelete, db: DBSession, admin: SupervisorUser):
+def bulk_delete_flights(
+    data: FlightBulkDelete,
+    db: DBSession,
+    admin: ReviewUser,
+    _delete: DeleteUser,
+):
     """Delete multiple flights at once. Purges their telemetry (a separate DB,
-    not ORM-cascaded) in one pass and audit-logs the count. Supervisor or admin
-    only; mirrors the single-flight delete."""
+    not ORM-cascaded) in one pass and audit-logs the count. Needs flights.review
+    plus flights.delete at All; mirrors the single-flight delete."""
     from app.services.audit import log_action
+    permissions_service.require_record_access(db, admin, DELETE_KEY, owned=False)
     flights = db.query(Flight).filter(Flight.id.in_(data.flight_ids)).all()
     if not flights:
         return {"ok": True, "deleted": 0}
@@ -723,7 +812,7 @@ def update_telemetry_status(
     flight_id: int,
     data: TelemetryStatusUpdate,
     db: DBSession,
-    user: SupervisorUser,
+    user: ReviewUser,
 ):
     """Toggle the telemetry synced flag on a flight."""
     from app.services.audit import log_action
@@ -746,17 +835,17 @@ def update_review_status(
     flight_id: int,
     data: ReviewStatusUpdate,
     db: DBSession,
-    user: SupervisorUser,
+    user: ReviewUser,
 ):
     """Toggle the review status flag on a flight."""
     from app.services.audit import log_action
-    if data.review_status not in ("reviewed", "needs_review"):
+    if data.review_status not in (REVIEWED, NEEDS_REVIEW):
         raise HTTPException(400, "review_status must be 'reviewed' or 'needs_review'")
     flight = db.query(Flight).filter(Flight.id == flight_id).first()
     if not flight:
         raise HTTPException(404, FLIGHT_NOT_FOUND)
     flight.review_status = data.review_status
-    action = "approve" if data.review_status == "reviewed" else "unapprove"
+    action = "approve" if data.review_status == REVIEWED else "unapprove"
     log_action(db, user.id, user.display_name, action, "flight", flight_id,
                details=f"Review status set to {data.review_status}")
     db.commit()
@@ -764,11 +853,16 @@ def update_review_status(
 
 
 @router.delete("/{flight_id}", responses=responses(401, 404))
-def delete_flight(flight_id: int, db: DBSession, admin: PilotUser):
+def delete_flight(
+    flight_id: int,
+    db: DBSession,
+    admin: DeleteUser,
+):
     from app.services.audit import log_action
     flight = db.query(Flight).filter(Flight.id == flight_id).first()
     if not flight:
         raise HTTPException(status_code=404, detail=FLIGHT_NOT_FOUND)
+    permissions_service.require_record_access(db, admin, DELETE_KEY, owns_flight(admin, flight))
     flight_name = f"Flight {flight.external_id or flight.id}"
     flight_id = flight.id
     # Telemetry lives in a separate DB and is not cascaded by the ORM, so purge

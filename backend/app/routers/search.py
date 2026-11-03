@@ -6,6 +6,7 @@ from app.deps import DBSession, CurrentUser
 from app.models.pilot import Pilot
 from app.models.vehicle import Vehicle
 from app.models.flight import Flight
+from app.services.permissions import can
 from app.services.pilot_contacts import hides_contacts
 
 router = APIRouter(prefix="/api/search", tags=["search"])
@@ -72,16 +73,17 @@ def _search_flights(db, like: str, limit: int) -> list[dict]:
 @router.get("")
 def global_search(q: str, db: DBSession, user: CurrentUser, limit: int = 6):
     """Search pilots, vehicles, and flights. Returns typed results with a
-    frontend URL each, for the global command palette."""
+    frontend URL each, for the global command palette. Each group needs its
+    feature's view permission."""
     query = (q or "").strip()
     if len(query) < 2:
         return {"query": query, "results": []}
     like = f"%{query}%"
-    return {
-        "query": query,
-        "results": (
-            _search_pilots(db, like, limit, with_email=not hides_contacts(user))
-            + _search_vehicles(db, like, limit)
-            + _search_flights(db, like, limit)
-        ),
-    }
+    results = []
+    if can(db, user, "pilots.view"):
+        results += _search_pilots(db, like, limit, with_email=not hides_contacts(db, user))
+    if can(db, user, "fleet.view"):
+        results += _search_vehicles(db, like, limit)
+    if can(db, user, "flights.view"):
+        results += _search_flights(db, like, limit)
+    return {"query": query, "results": results}

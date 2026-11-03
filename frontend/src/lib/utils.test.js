@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import {
+import { changedFields,
   cn,
   inSequence,
   formatDuration,
@@ -298,5 +298,12 @@ describe('inSequence', () => {
     await expect(inSequence([1, 2, 3], async n => { seen.push(n); if (n === 2) throw new Error('boom') }))
       .rejects.toThrow('boom')
     expect(seen).toEqual([1, 2])
+  })
+})
+
+describe('changedFields', () => {
+  it('keeps only changed fields and compares as text', () => {
+    expect(changedFields({ a: 5, b: 'x', c: true }, { a: '5', b: 'y', c: true })).toEqual({ b: 'y' })
+    expect(changedFields({ a: '' }, { a: '' })).toEqual({})
   })
 })

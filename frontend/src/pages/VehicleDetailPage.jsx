@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { api } from '@/api/client'
+import { api, getSection } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
@@ -14,7 +14,12 @@ import MaintenanceHistoryCard from '@/components/MaintenanceHistoryCard'
 
 export default function VehicleDetailPage() {
   const { id } = useParams()
-  const { isAdmin } = useAuth()
+  const { isAdmin, can } = useAuth()
+  const canManage = can('fleet.manage')
+  const canManageRegs = can('registrations.manage')
+  const canSeeRegs = can('registrations.view')
+  const canSeeFlights = can('flights.view')
+  const canSeeMaintenance = can('maintenance.view')
   const toast = useToast()
   const [confirmProps, requestConfirm] = useConfirm()
   const [vehicle, setVehicle] = useState(null)
@@ -61,14 +66,14 @@ export default function VehicleDetailPage() {
   useEffect(() => {
     Promise.all([
       api.get(`/vehicles/${id}`),
-      api.get(`/vehicles/${id}/stats`),
-      api.get(`/flights?vehicle_id=${id}&per_page=50`),
+      getSection(canSeeFlights, `/vehicles/${id}/stats`, null),
+      getSection(canSeeFlights, `/flights?vehicle_id=${id}&per_page=50`, []),
       api.get('/batteries').catch(() => []),
       api.get('/controllers').catch(() => []),
       api.get('/sensors').catch(() => []),
       api.get('/attachments').catch(() => []),
-      api.get(`/maintenance?entity_type=vehicle&entity_id=${id}`).catch(() => []),
-      api.get(`/vehicles/${id}/registrations`).catch(() => []),
+      getSection(canSeeMaintenance, `/maintenance?entity_type=vehicle&entity_id=${id}`, []),
+      getSection(canSeeRegs, `/vehicles/${id}/registrations`, []),
       api.get(`/components?vehicle_id=${id}`).catch(() => []),
     ]).then(([v, s, fData, bat, ctrl, sens, att, maint, regs, comp]) => {
       setVehicle(v)
@@ -82,7 +87,7 @@ export default function VehicleDetailPage() {
       setRegistrations(regs)
       setComponents(comp)
     }).catch(() => {}).finally(() => setLoading(false))
-  }, [id])
+  }, [id, canSeeFlights, canSeeMaintenance, canSeeRegs])
 
   const startEditing = () => {
     setEditForm({
@@ -243,7 +248,7 @@ export default function VehicleDetailPage() {
               <>
                 <div className="flex items-center gap-3">
                   <h2 className="text-xl font-bold text-foreground">{displayName || 'Unnamed Vehicle'}</h2>
-                  {isAdmin && (
+                  {canManage && (
                     <button onClick={startEditing} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent" aria-label="Edit">
                       <Edit className="w-4 h-4" />
                     </button>
@@ -441,7 +446,7 @@ export default function VehicleDetailPage() {
             <ShieldCheck className="w-4 h-4 text-primary" />
             <h3 className="font-semibold text-foreground">FAA Registration</h3>
           </div>
-          {isAdmin && (
+          {canManageRegs && (
             <button
               onClick={() => setShowRegForm(!showRegForm)}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:opacity-90"
@@ -498,7 +503,7 @@ export default function VehicleDetailPage() {
         })()}
 
         {/* Add Registration Form */}
-        {showRegForm && isAdmin && (
+        {showRegForm && canManageRegs && (
           <div className="px-4 py-3 border-b border-border bg-muted/20 space-y-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
               <div>
@@ -568,7 +573,7 @@ export default function VehicleDetailPage() {
                   <th className="text-left px-4 py-2 text-foreground font-medium">Expires</th>
                   <th className="text-left px-4 py-2 text-foreground font-medium">Status</th>
                   <th className="text-left px-4 py-2 text-foreground font-medium hidden md:table-cell">Notes</th>
-                  {isAdmin && <th className="text-right px-4 py-2 text-foreground font-medium">Actions</th>}
+                  {canManageRegs && <th className="text-right px-4 py-2 text-foreground font-medium">Actions</th>}
                 </tr>
               </thead>
               <tbody>
@@ -595,7 +600,7 @@ export default function VehicleDetailPage() {
                       </span>
                     </td>
                     <td className="px-4 py-2 text-foreground hidden md:table-cell">{r.notes || '--'}</td>
-                    {isAdmin && (
+                    {canManageRegs && (
                       <td className="px-4 py-2 text-right">
                         <button onClick={() => {
                           requestConfirm({
@@ -631,16 +636,18 @@ export default function VehicleDetailPage() {
             <Cog className="w-4 h-4 text-primary" />
             <h3 className="font-semibold text-foreground">Components</h3>
           </div>
-          <button
-            onClick={() => setShowComponentForm(!showComponentForm)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:opacity-90"
-          >
-            <Plus className="w-3.5 h-3.5" /> Add Component
-          </button>
+          {canManage && (
+            <button
+              onClick={() => setShowComponentForm(!showComponentForm)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:opacity-90"
+            >
+              <Plus className="w-3.5 h-3.5" /> Add Component
+            </button>
+          )}
         </div>
 
         {/* Add Component Form */}
-        {showComponentForm && (
+        {showComponentForm && canManage && (
           <div className="px-4 py-3 border-b border-border bg-muted/20 space-y-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
               <div>
@@ -785,7 +792,7 @@ export default function VehicleDetailPage() {
                   <th className="text-left px-4 py-2 text-foreground font-medium hidden md:table-cell">Flight Hours</th>
                   <th className="text-left px-4 py-2 text-foreground font-medium hidden lg:table-cell">Install Date</th>
                   <th className="text-left px-4 py-2 text-foreground font-medium hidden lg:table-cell">Warranty</th>
-                  {isAdmin && <th className="text-right px-4 py-2 text-foreground font-medium">Actions</th>}
+                  {canManage && <th className="text-right px-4 py-2 text-foreground font-medium">Actions</th>}
                 </tr>
               </thead>
               <tbody>
@@ -815,7 +822,7 @@ export default function VehicleDetailPage() {
                       </td>
                       <td className="px-4 py-2 text-foreground hidden lg:table-cell">{c.install_date || '--'}</td>
                       <td className="px-4 py-2 text-foreground hidden lg:table-cell">{c.warranty_expiry || '--'}</td>
-                      {isAdmin && (
+                      {canManage && (
                         <td className="px-4 py-2 text-right">
                           <button onClick={() => {
                             requestConfirm({

@@ -1,10 +1,14 @@
 """Telemetry data endpoints for flight path and sensor visualization."""
 
-from fastapi import APIRouter, HTTPException
+from typing import Annotated
 
-from app.deps import DBSession, TelemetryDBSession, CurrentUser
+from fastapi import APIRouter, Depends, HTTPException
+
+from app.deps import DBSession, TelemetryDBSession
 from app.models.flight import Flight
 from app.models.telemetry import TelemetryPoint
+from app.models.user import User
+from app.routers.auth import require_permission
 from app.responses import responses
 
 router = APIRouter(prefix="/api/telemetry", tags=["telemetry"])
@@ -75,7 +79,7 @@ def get_flight_telemetry(
     flight_id: int,
     db: DBSession,
     tdb: TelemetryDBSession,
-    user: CurrentUser,
+    user: Annotated[User, Depends(require_permission("flights.view"))],
     max_points: int = 2000):
     """Get telemetry data points for a specific flight.
 

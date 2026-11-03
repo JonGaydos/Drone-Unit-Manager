@@ -35,6 +35,7 @@ def _telemetry_session():
     """
     return database.TelemetrySessionLocal()
 from app.deps import DBSession, AdminUser
+from app.services import permissions
 from app.services.sync_lock import restoring, sync_guard_http
 from app.models.user import User
 from app.models.pilot import Pilot
@@ -45,6 +46,7 @@ from app.models.battery_reading import BatteryReading
 from app.models.controller import Controller
 from app.models.other_equipment import OtherEquipment
 from app.models.api_token import ApiToken
+from app.models.role_permission import RolePermission
 from app.models.sensor import SensorPackage
 from app.models.attachment import Attachment
 from app.models.dock import Dock
@@ -102,6 +104,7 @@ EXPORT_ORDER = [
     ("currency_rules", CurrencyRule),
     ("geofences", Geofence),
     ("operating_authorities", OperatingAuthority),
+    ("role_permissions", RolePermission),
     # Tier 2: Base entities
     ("pilots", Pilot),
     ("users", User),
@@ -627,6 +630,9 @@ def _prepare_restore_rows(db: Session, name: str, rows: list[dict]) -> list[dict
     - Each user gets a fresh random token version. Users are restored by id, so
       a login token issued before the restore would otherwise sign in as
       whoever holds that id in the restored data.
+    - Role permissions pass the same checks as the write API: rows with an
+      unknown key, an invalid value, the admin role, a locked viewer cell, or a
+      change permission without its view key are dropped.
     - Audit entries are appended, not substituted: they lose their ids, and any
       entry this install already holds is skipped rather than duplicated.
     """
@@ -636,6 +642,10 @@ def _prepare_restore_rows(db: Session, name: str, rows: list[dict]) -> list[dict
         for r in rows:
             r["password_hash"] = ""
             r["token_version"] = secrets.randbelow(2**31 - 1) + 1
+    elif name == "role_permissions":
+        rows, dropped = permissions.restorable_overrides(rows)
+        if dropped:
+            logger.warning("Dropped %d invalid role permission rows from the backup", dropped)
     elif name == "audit_logs":
         cols = (AuditLog.created_at, AuditLog.action, AuditLog.entity_type,
                 AuditLog.entity_id, AuditLog.user_name)

@@ -24,20 +24,29 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.constants import MIME_JPEG, PHOTO_NOT_FOUND, FLIGHT_NOT_FOUND, INCIDENT_NOT_FOUND, UTC_OFFSET
 from app.database import get_db
-from app.deps import AdminUser, DBSession, CurrentUser, PilotUser, SupervisorUser
+from app.deps import AdminUser, DBSession
 from app.models.user import User
 from app.models.photo import Photo, PhotoPilot, PhotoFlight, PhotoIncident
 from app.models.pilot import Pilot
 from app.models.flight import Flight
 from app.models.incident import Incident
 from app.responses import responses
+from app.routers.auth import require_permission
 from app.services import evidence
+from app.services import permissions as permissions_service
 from app.services.audit import compute_changes, log_action
 from app.services.file_validation import mime_for_filename, user_file_headers
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/photos", tags=["photos"])
+
+FILES_VIEW = "files.view"
+FILES_EDIT = "files.edit"
+ViewUser = Annotated[User, Depends(require_permission(FILES_VIEW))]
+UploadUser = Annotated[User, Depends(require_permission("files.upload"))]
+EditUser = Annotated[User, Depends(require_permission(FILES_EDIT))]
+CustodyUser = Annotated[User, Depends(require_permission("files.custody"))]
 
 UPLOAD_DIR = str(Path(settings.UPLOAD_DIR) / "photos")
 THUMB_WIDTH = 400  # Maximum thumbnail width in pixels
@@ -118,12 +127,17 @@ def _authenticate_image_request(
     signed URL for this photo_id+action. Raises 401 on failure.
 
     Returns the id of the user the request is for: the bearer's, or the one the
-    signed URL was issued to (None for a URL issued without one)."""
+    signed URL was issued to (None for a URL issued without one). A signature
+    needs no permission check, since one is only issued to a user holding
+    files.view; a login token is checked for files.view here."""
     if _verify_photo_sig(photo_id, action, sig, exp, viewer):
         return viewer
     if credentials:
         from app.routers.auth import user_from_login_token
-        return user_from_login_token(credentials.credentials, db).id  # 401 if invalid or revoked
+        user = user_from_login_token(credentials.credentials, db)  # 401 if invalid or revoked
+        if not permissions_service.can(db, user, FILES_VIEW):
+            raise HTTPException(403, "You do not have permission to do this")
+        return user.id
     raise HTTPException(401, "Not authenticated")
 
 
@@ -224,7 +238,7 @@ def upload_photo(
 
     db: DBSession,
 
-    user: PilotUser,
+    user: UploadUser,
 
     file: Annotated[UploadFile, File()],
 
@@ -248,7 +262,7 @@ def upload_photo(
         date_taken: ISO 8601 date string for when the photo was taken.
         pilot_ids: Comma-separated pilot IDs to tag in the photo.
         db: Database session.
-        user: Authenticated user (pilot role or higher).
+        user: Authenticated user holding the upload permission.
 
     Returns:
         Dict with the new photo ID and success message.
@@ -328,6 +342,7 @@ def _photo_list_item(p, pilot_ids_for_photo, pilots_map, viewer: int | None = No
         "file_size": p.file_size,
         "mime_type": p.mime_type,
         "has_thumbnail": p.thumbnail_path is not None,
+        "uploaded_by_id": p.uploaded_by_id,
         "legal_hold": p.legal_hold,
         "sha256": p.sha256,
         "pilot_names": pilot_names,
@@ -338,7 +353,7 @@ def _photo_list_item(p, pilot_ids_for_photo, pilots_map, viewer: int | None = No
 
 
 @router.get("", responses=responses(401))
-def list_photos(db: DBSession, user: CurrentUser, flight_id: int | None = None, incident_id: int | None = None):
+def list_photos(db: DBSession, user: ViewUser, flight_id: int | None = None, incident_id: int | None = None):
     """List photos with their tagged pilot names.
 
     Optionally filter to photos linked to a given flight or incident. Uses
@@ -444,7 +459,7 @@ def view_thumbnail(
 
 
 @router.get("/{photo_id}/signed-urls", responses=responses(401, 404))
-def get_signed_urls(photo_id: int, db: DBSession, user: CurrentUser):
+def get_signed_urls(photo_id: int, db: DBSession, user: ViewUser):
     """Issue a fresh pair of short-lived signed URLs for one photo. Used
     when an existing URL has expired (e.g. user idle past TTL)."""
     _live_photo(db, photo_id)
@@ -458,7 +473,7 @@ def update_photo(
 
     db: DBSession,
 
-    user: PilotUser,
+    user: EditUser,
 
     title: Annotated[Optional[str], Form()] = None,
 
@@ -481,6 +496,7 @@ def update_photo(
         Success message dict.
     """
     photo = _live_photo(db, photo_id)
+    permissions_service.require_record_access(db, user, FILES_EDIT, permissions_service.owns_photo(user, photo))
 
     updates = {k: v for k, v in (("title", title), ("description", description)) if v is not None}
     if date_taken is not None:
@@ -506,7 +522,7 @@ def update_photo(
 
 
 @router.post("/{photo_id}/flight/{flight_id}", responses=responses(401, 404))
-def link_photo_flight(photo_id: int, flight_id: int, db: DBSession, user: SupervisorUser):
+def link_photo_flight(photo_id: int, flight_id: int, db: DBSession, user: CustodyUser):
     """Link a photo to a flight (idempotent)."""
     _live_photo(db, photo_id)
     if not db.query(Flight).filter(Flight.id == flight_id).first():
@@ -520,7 +536,7 @@ def link_photo_flight(photo_id: int, flight_id: int, db: DBSession, user: Superv
 
 
 @router.delete("/{photo_id}/flight/{flight_id}", responses=responses(401, 404))
-def unlink_photo_flight(photo_id: int, flight_id: int, db: DBSession, user: SupervisorUser):
+def unlink_photo_flight(photo_id: int, flight_id: int, db: DBSession, user: CustodyUser):
     """Unlink a photo from a flight."""
     if db.query(PhotoFlight).filter(PhotoFlight.photo_id == photo_id, PhotoFlight.flight_id == flight_id).delete():
         log_action(db, user.id, user.display_name, "unlink", "photo", photo_id, details=f"Unlinked from flight {flight_id}")
@@ -529,7 +545,7 @@ def unlink_photo_flight(photo_id: int, flight_id: int, db: DBSession, user: Supe
 
 
 @router.post("/{photo_id}/incident/{incident_id}", responses=responses(401, 404))
-def link_photo_incident(photo_id: int, incident_id: int, db: DBSession, user: SupervisorUser):
+def link_photo_incident(photo_id: int, incident_id: int, db: DBSession, user: CustodyUser):
     """Link a photo to an incident (idempotent)."""
     _live_photo(db, photo_id)
     if not db.query(Incident).filter(Incident.id == incident_id).first():
@@ -543,7 +559,7 @@ def link_photo_incident(photo_id: int, incident_id: int, db: DBSession, user: Su
 
 
 @router.delete("/{photo_id}/incident/{incident_id}", responses=responses(401, 404))
-def unlink_photo_incident(photo_id: int, incident_id: int, db: DBSession, user: SupervisorUser):
+def unlink_photo_incident(photo_id: int, incident_id: int, db: DBSession, user: CustodyUser):
     """Unlink a photo from an incident."""
     if db.query(PhotoIncident).filter(PhotoIncident.photo_id == photo_id, PhotoIncident.incident_id == incident_id).delete():
         log_action(db, user.id, user.display_name, "unlink", "photo", photo_id, details=f"Unlinked from incident {incident_id}")
@@ -552,10 +568,11 @@ def unlink_photo_incident(photo_id: int, incident_id: int, db: DBSession, user: 
 
 
 @router.delete("/{photo_id}", responses=responses(401, 404, 409))
-def delete_photo(photo_id: int, db: DBSession, user: PilotUser):
+def delete_photo(photo_id: int, db: DBSession, user: EditUser):
     """Move a photo to Recently deleted. The file and its links stay, so a
-    supervisor can restore it; only an admin purge removes it for good."""
+    role holding files.custody can restore it; only an admin purge removes it for good."""
     photo = _live_photo(db, photo_id)
+    permissions_service.require_record_access(db, user, FILES_EDIT, permissions_service.owns_photo(user, photo))
     evidence.soft_delete(photo, user)
     log_action(db, user.id, user.display_name, "delete", "photo", photo_id, photo.original_filename)
     db.commit()
@@ -563,7 +580,7 @@ def delete_photo(photo_id: int, db: DBSession, user: PilotUser):
 
 
 @router.get("/deleted", responses=responses(401, 403))
-def list_deleted_photos(db: DBSession, _user: SupervisorUser):
+def list_deleted_photos(db: DBSession, _user: CustodyUser):
     """Deleted photos, newest deletion first."""
     photos = (db.query(Photo).filter(Photo.deleted_at.is_not(None))
               .order_by(Photo.deleted_at.desc()).all())
@@ -573,7 +590,7 @@ def list_deleted_photos(db: DBSession, _user: SupervisorUser):
 
 
 @router.post("/{photo_id}/restore", responses=responses(401, 403, 404, 409))
-def restore_photo(photo_id: int, db: DBSession, user: SupervisorUser):
+def restore_photo(photo_id: int, db: DBSession, user: CustodyUser):
     """Bring a deleted photo back, with the links it had."""
     photo = _photo_or_404(db, photo_id)
     evidence.restore(photo)
@@ -583,7 +600,7 @@ def restore_photo(photo_id: int, db: DBSession, user: SupervisorUser):
 
 
 @router.put("/{photo_id}/hold", responses=responses(401, 403, 404))
-def set_photo_hold(photo_id: int, data: evidence.HoldUpdate, db: DBSession, user: SupervisorUser):
+def set_photo_hold(photo_id: int, data: evidence.HoldUpdate, db: DBSession, user: CustodyUser):
     """Place or release a legal hold. A held photo cannot be deleted or purged."""
     photo = _photo_or_404(db, photo_id)
     if photo.legal_hold != data.legal_hold:

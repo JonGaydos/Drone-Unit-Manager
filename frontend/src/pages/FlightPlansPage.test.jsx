@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { screen, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
+import { fleetOptions, pilotOption, vehicleOption } from '@/test/options'
 import { renderWithProviders } from '@/test/render'
 import FlightPlansPage from './FlightPlansPage'
 
@@ -23,8 +24,8 @@ function mockMount(overrides = {}) {
   server.use(
     http.get('/api/flight-plans/pending/count', base.count),
     http.get('/api/flight-plans', base.plans),
-    http.get('/api/pilots', () => HttpResponse.json([{ id: 5, full_name: 'Jane Doe', is_active: true }])),
-    http.get('/api/vehicles', () => HttpResponse.json([{ id: 2, nickname: 'Falcon', model: 'Mavic 3' }])),
+    http.get('/api/pilots/options', () => HttpResponse.json([pilotOption(5, 'Jane Doe')])),
+    http.get('/api/fleet/options', () => HttpResponse.json(fleetOptions({ vehicles: [vehicleOption({ id: 2, nickname: 'Falcon', model: 'Mavic 3' })] }))),
   )
 }
 

@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { screen, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
+import { withPermissions } from '@/test/permissions'
+import { pilotOption } from '@/test/options'
 import { renderWithProviders } from '@/test/render'
 import CertificationsPage from './CertificationsPage'
 
@@ -27,7 +29,7 @@ function mockMount(overrides = {}) {
   const base = {
     certTypes: () => HttpResponse.json(CERT_TYPES),
     matrix: () => HttpResponse.json({ matrix: MATRIX }),
-    pilots: () => HttpResponse.json([{ id: 5, first_name: 'Ada', last_name: 'Lovelace', full_name: 'Ada Lovelace', status: 'active' }]),
+    pilots: () => HttpResponse.json([pilotOption(5, 'Ada Lovelace')]),
     labels: () => HttpResponse.json({ value: '' }),
     folders: () => HttpResponse.json([]),
     ...overrides,
@@ -35,7 +37,7 @@ function mockMount(overrides = {}) {
   server.use(
     http.get('/api/certification-types', base.certTypes),
     http.get('/api/certifications/matrix', base.matrix),
-    http.get('/api/pilots', base.pilots),
+    http.get('/api/pilots/options', base.pilots),
     http.get('/api/settings/cert_status_labels', base.labels),
     http.get('/api/folders', base.folders),
   )
@@ -99,7 +101,7 @@ describe('CertificationsPage', () => {
   })
 
   it('hides supervisor-only controls for a non-supervisor (pilot)', async () => {
-    server.use(http.get('/api/auth/me', () => HttpResponse.json({ id: 3, username: 'p', role: 'pilot' })))
+    server.use(http.get('/api/auth/me', () => HttpResponse.json(withPermissions({ id: 3, username: 'p', role: 'pilot' }))))
     mockMount()
     renderWithProviders(<CertificationsPage />, { role: 'pilot' })
     await screen.findByRole('link', { name: 'Ada Lovelace' })
@@ -173,5 +175,35 @@ describe('CertificationsPage', () => {
 
     expect(within(dialog).getByLabelText('Pilot')).toHaveValue('5')
     expect(within(dialog).getByLabelText('Certification')).toHaveValue('2')
+  })
+
+  it('shows an existing cert read-only with its documents without certifications.manage', async () => {
+    mockMount()
+    server.use(http.get('/api/documents', () => HttpResponse.json([])))
+    const { user } = renderWithProviders(<CertificationsPage />, { role: 'pilot' })
+    await screen.findByRole('link', { name: 'Ada Lovelace' })
+    await user.click(screen.getByText('valid'))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('Documents')).toBeInTheDocument()
+    for (const name of ['Update', 'Renew', 'Remove']) {
+      expect(within(dialog).queryByRole('button', { name })).toBeNull()
+    }
+  })
+
+  it('does not open the assign form on an empty cell without certifications.manage', async () => {
+    mockMount()
+    const { user } = renderWithProviders(<CertificationsPage />, { role: 'pilot' })
+    await screen.findByRole('link', { name: 'Ada Lovelace' })
+    await user.click(screen.getAllByText('not started')[0])
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('does not ask for folders with files.view off', async () => {
+    let asked = false
+    mockMount()
+    server.use(http.get('/api/folders', () => { asked = true; return HttpResponse.json([]) }))
+    renderWithProviders(<CertificationsPage />, { role: 'pilot', permissions: { 'files.view': 'no' } })
+    await screen.findByRole('link', { name: 'Ada Lovelace' })
+    expect(asked).toBe(false)
   })
 })

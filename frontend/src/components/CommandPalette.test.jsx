@@ -12,7 +12,7 @@ function LocationProbe() {
   return <div data-testid="location">{location.pathname + location.search}</div>
 }
 
-function renderPalette(opts) {
+function renderPalette(opts = { role: 'admin' }) {
   return renderWithProviders(
     <>
       <CommandPalette />
@@ -44,6 +44,7 @@ describe('CommandPalette', () => {
 
   it('opens on the open-command-palette event', async () => {
     renderPalette()
+    await screen.findByTestId('location')
     globalThis.dispatchEvent(new CustomEvent('open-command-palette'))
     expect(await screen.findByPlaceholderText(/Search pilots/)).toBeInTheDocument()
   })
@@ -72,5 +73,13 @@ describe('CommandPalette', () => {
       expect(screen.getByTestId('location')).toHaveTextContent('/pilots/7'))
     // Selecting closes the palette.
     expect(screen.queryByPlaceholderText(/Search pilots/)).not.toBeInTheDocument()
+  })
+
+  it('leaves out a page whose view is off', async () => {
+    const { user } = renderPalette({ role: 'pilot', permissions: { 'pilots.view': 'no' } })
+    await user.keyboard('{Control>}k{/Control}')
+    await screen.findByPlaceholderText(/Search pilots/)
+    expect(screen.queryByRole('button', { name: /Pilots/ })).toBeNull()
+    expect(screen.getByRole('button', { name: /Fleet Health/ })).toBeInTheDocument()
   })
 })

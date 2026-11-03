@@ -1,10 +1,12 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from datetime import date
-from typing import Optional
+from typing import Annotated, Optional
 
 from app.constants import RECORD_NOT_FOUND
-from app.deps import CurrentUser, DBSession, PilotUser
+from app.deps import DBSession
+from app.routers.auth import require_permission
+from app.services import permissions as permissions_service
 from app.models.attachment import Attachment
 from app.models.battery import Battery
 from app.models.controller import Controller
@@ -12,6 +14,7 @@ from app.models.dock import Dock
 from app.models.maintenance import MaintenanceRecord
 from app.models.other_equipment import OtherEquipment
 from app.models.sensor import SensorPackage
+from app.models.user import User
 from app.models.vehicle import Vehicle
 from app.responses import responses
 
@@ -92,17 +95,29 @@ class MaintenanceOut(BaseModel):
     next_due_hours: Optional[float] = None
     cost: Optional[float] = None
     notes: Optional[str] = None
+    created_by_id: Optional[int] = None
 
     model_config = {"from_attributes": True}
 
 
 router = APIRouter(prefix="/api/maintenance", tags=["maintenance"])
 
+MAINTENANCE_EDIT = "maintenance.edit"
+
+ViewUser = Annotated[User, Depends(require_permission("maintenance.view"))]
+CreateUser = Annotated[User, Depends(require_permission("maintenance.create"))]
+EditUser = Annotated[User, Depends(require_permission(MAINTENANCE_EDIT))]
+
+
+def _require_edit(db, user: User, record: MaintenanceRecord) -> None:
+    """Raise 403 unless the user's maintenance.edit level covers this record."""
+    permissions_service.require_record_access(db, user, MAINTENANCE_EDIT, record.created_by_id == user.id)
+
 
 @router.get("", response_model=list[MaintenanceOut])
 def list_maintenance(
     db: DBSession,
-    user: CurrentUser,
+    user: ViewUser,
     entity_type: str | None = None,
     entity_id: int | None = None,
     upcoming: bool = False):
@@ -123,7 +138,7 @@ def list_maintenance(
 
 
 @router.get("/{record_id}", response_model=MaintenanceOut, responses=responses(401, 404))
-def get_maintenance(record_id: int, db: DBSession, user: CurrentUser):
+def get_maintenance(record_id: int, db: DBSession, user: ViewUser):
     record = db.query(MaintenanceRecord).filter(MaintenanceRecord.id == record_id).first()
     if not record:
         raise HTTPException(status_code=404, detail=RECORD_NOT_FOUND)
@@ -131,7 +146,7 @@ def get_maintenance(record_id: int, db: DBSession, user: CurrentUser):
 
 
 @router.post("", response_model=MaintenanceOut, responses=responses(401))
-def create_maintenance(data: MaintenanceCreate, db: DBSession, admin: PilotUser):
+def create_maintenance(data: MaintenanceCreate, db: DBSession, admin: CreateUser):
     from app.services.audit import log_action
     _validate_entity(db, data.entity_type, data.entity_id)
     # entity_id is NOT NULL in the table; table-less types ("other",
@@ -139,7 +154,7 @@ def create_maintenance(data: MaintenanceCreate, db: DBSession, admin: PilotUser)
     payload = data.model_dump()
     if payload["entity_id"] is None:
         payload["entity_id"] = 0
-    record = MaintenanceRecord(**payload)
+    record = MaintenanceRecord(**payload, created_by_id=admin.id)
     db.add(record)
     db.flush()
     log_action(db, admin.id, admin.display_name, "create", "maintenance", record.id, record.description[:100] if record.description else None)
@@ -171,11 +186,12 @@ def _resolve_entity_change(db, record, update_data: dict) -> None:
 
 
 @router.patch("/{record_id}", response_model=MaintenanceOut, responses=responses(401, 404))
-def update_maintenance(record_id: int, data: MaintenanceUpdate, db: DBSession, admin: PilotUser):
+def update_maintenance(record_id: int, data: MaintenanceUpdate, db: DBSession, admin: EditUser):
     from app.services.audit import log_action
     record = db.query(MaintenanceRecord).filter(MaintenanceRecord.id == record_id).first()
     if not record:
         raise HTTPException(status_code=404, detail=RECORD_NOT_FOUND)
+    _require_edit(db, admin, record)
     update_data = data.model_dump(exclude_unset=True)
     _resolve_entity_change(db, record, update_data)
     for key, value in update_data.items():
@@ -187,11 +203,12 @@ def update_maintenance(record_id: int, data: MaintenanceUpdate, db: DBSession, a
 
 
 @router.delete("/{record_id}", responses=responses(401, 404))
-def delete_maintenance(record_id: int, db: DBSession, admin: PilotUser):
+def delete_maintenance(record_id: int, db: DBSession, admin: EditUser):
     from app.services.audit import log_action
     record = db.query(MaintenanceRecord).filter(MaintenanceRecord.id == record_id).first()
     if not record:
         raise HTTPException(status_code=404, detail=RECORD_NOT_FOUND)
+    _require_edit(db, admin, record)
     log_action(db, admin.id, admin.display_name, "delete", "maintenance", record.id, record.description[:100] if record.description else None)
     db.delete(record)
     db.commit()

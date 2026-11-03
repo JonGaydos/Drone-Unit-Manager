@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
+import { fleetOptions, pilotOption, vehicleOption } from '@/test/options'
 import { renderWithProviders } from '@/test/render'
 import MissionLogPage from './MissionLogPage'
 
@@ -21,8 +22,8 @@ function mockMount(overrides = {}) {
   }
   server.use(
     http.get('/api/mission-logs', base.missions),
-    http.get('/api/pilots', () => HttpResponse.json([{ id: 5, full_name: 'Jane Doe', is_active: true }])),
-    http.get('/api/vehicles', () => HttpResponse.json([{ id: 2, nickname: 'Falcon', model: 'Mavic 3' }])),
+    http.get('/api/pilots/options', () => HttpResponse.json([pilotOption(5, 'Jane Doe')])),
+    http.get('/api/fleet/options', () => HttpResponse.json(fleetOptions({ vehicles: [vehicleOption({ id: 2, nickname: 'Falcon', model: 'Mavic 3' })] }))),
     http.get('/api/settings/mission_purposes', () => HttpResponse.json({ value: '' })),
   )
 }
@@ -78,14 +79,26 @@ describe('MissionLogPage', () => {
 
   it('lists inactive pilots under their own heading in the filter', async () => {
     mockMount()
-    server.use(http.get('/api/pilots', () => HttpResponse.json([
-      { id: 5, full_name: 'Jane Doe', first_name: 'Jane', status: 'active' },
-      { id: 6, full_name: 'Old Timer', first_name: 'Old', status: 'inactive' },
+    server.use(http.get('/api/pilots/options', () => HttpResponse.json([
+      pilotOption(5, 'Jane Doe'),
+      pilotOption(6, 'Old Timer', { status: 'inactive' }),
     ])))
     const { container } = renderWithProviders(<MissionLogPage />, { role: 'admin' })
     await screen.findByText('River Search')
     const group = container.querySelector('optgroup[label="Inactive"]')
     expect(within(group).getByText('Old Timer')).toBeInTheDocument()
     expect(within(group).queryByText('Jane Doe')).toBeNull()
+  })
+
+  it('offers delete on the own roster log only at own, and hides Import from a pilot', async () => {
+    mockMount()
+    server.use(http.get('/api/mission-logs', () => HttpResponse.json([
+      { id: 1, title: 'Mine', date: '2026-01-01', status: 'completed', created_by_id: null, pilots: [{ pilot_id: 5, pilot_name: 'Jane Doe' }] },
+      { id: 2, title: 'Theirs', date: '2026-01-02', status: 'completed', created_by_id: 99, pilots: [] },
+    ])))
+    renderWithProviders(<MissionLogPage />, { user: { id: 3, username: 'p', role: 'pilot', pilot_id: 5 } })
+    await screen.findByText('Mine')
+    expect(screen.getAllByRole('button', { name: 'Delete' })).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: /Import/ })).toBeNull()
   })
 })

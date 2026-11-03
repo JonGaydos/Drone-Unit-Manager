@@ -1,13 +1,19 @@
-from fastapi import APIRouter, HTTPException
+from typing import Annotated, Optional
 
-from app.deps import CurrentUser, DBSession, SupervisorUser
+from fastapi import APIRouter, Depends, HTTPException
+
+from app.deps import DBSession
+from app.models.user import User
+from app.routers.auth import get_current_user, require_permission
+from app.services import permissions as permissions_service
 from app.models.media import MediaFile
 from app.responses import responses
 from pydantic import BaseModel
 from datetime import datetime
-from typing import Optional
 
 router = APIRouter(prefix="/api/media", tags=["media"])
+
+ViewUser = Annotated[User, Depends(require_permission("files.view"))]
 
 
 class MediaOut(BaseModel):
@@ -29,7 +35,7 @@ class MediaOut(BaseModel):
 @router.get("", response_model=list[MediaOut])
 def list_media(
     db: DBSession,
-    user: CurrentUser,
+    user: ViewUser,
     flight_id: int | None = None,
     kind: str | None = None,
     limit: int = 100,
@@ -43,13 +49,15 @@ def list_media(
 
 
 @router.get("/count", responses=responses(401))
-def count_media(db: DBSession, user: CurrentUser):
+def count_media(db: DBSession, user: ViewUser):
     from sqlalchemy import func
     return {"count": db.query(func.count(MediaFile.id)).scalar()}
 
 
 @router.delete("/{media_id}", responses=responses(401, 404))
-def delete_media(media_id: int, db: DBSession, user: SupervisorUser):
+def delete_media(media_id: int, db: DBSession, user: Annotated[User, Depends(get_current_user)]):
+    # Media rows have no owner, so deleting one needs All.
+    permissions_service.require_record_access(db, user, "files.edit", False)
     media = db.query(MediaFile).filter(MediaFile.id == media_id).first()
     if not media:
         raise HTTPException(status_code=404, detail="Media not found")

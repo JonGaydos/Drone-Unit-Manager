@@ -3,6 +3,7 @@ import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
+import { withPermissions } from '@/test/permissions'
 import { renderWithProviders } from '@/test/render'
 import OperatingAuthorityPage from './OperatingAuthorityPage'
 
@@ -101,7 +102,7 @@ describe('OperatingAuthorityPage', () => {
     mockMount()
     // Override /auth/me so the resolved role is pilot, not the default admin.
     server.use(http.get('/api/auth/me', () =>
-      HttpResponse.json({ id: 3, username: 'pilot', role: 'pilot' })))
+      HttpResponse.json(withPermissions({ id: 3, username: 'pilot', role: 'pilot' }))))
     renderWithProviders(<OperatingAuthorityPage />, { role: 'pilot' })
     expect(await screen.findByText('Blanket public safety COA')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Add Authority/ })).not.toBeInTheDocument()

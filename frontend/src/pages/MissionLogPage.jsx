@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
+import { ownsLog } from '@/lib/ownership'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Modal } from '@/components/ui/Modal'
 import { useConfirm } from '@/hooks/useConfirm'
@@ -221,7 +222,9 @@ export default function MissionLogPage() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [filterPilot, setFilterPilot] = useState('')
-  const { isPilot } = useAuth()
+  const { user, isAdmin, can, level, canRecord } = useAuth()
+  const canEditSome = level('logs.edit') !== 'none'
+  const canEditLog = (log) => canRecord('logs.edit', ownsLog(user, log))
   const toast = useToast()
   const [confirmProps, requestConfirm] = useConfirm()
 
@@ -245,15 +248,15 @@ export default function MissionLogPage() {
     const thisLoad = ++latestLoad.current
     Promise.all([
       api.get(`/mission-logs${qs}`),
-      api.get('/pilots'),
-      api.get('/vehicles'),
+      api.get('/pilots/options'),
+      api.get('/fleet/options'),
       // The flight_purposes table, same as the flight pages. This used to read a
       // separate mission_purposes setting, so the two lists drifted apart and
       // editing one never affected the other.
       api.get('/flights/purposes/list').catch(() => []),
-    ]).then(([m, p, v, purposes]) => {
+    ]).then(([m, p, fleet, purposes]) => {
       if (thisLoad !== latestLoad.current) return
-      setMissions(m); setPilots(p); setVehicles(v)
+      setMissions(m); setPilots(p); setVehicles(fleet.vehicles)
       if (Array.isArray(purposes)) setMissionPurposes(purposes.map(x => x.name))
     }).catch(err => setError(err.message)).finally(() => setLoading(false))
   }
@@ -325,21 +328,23 @@ export default function MissionLogPage() {
               </optgroup>
             )}
           </select>
-          <button
-            onClick={() => api.download('/export/mission-logs/csv')}
-            className="flex items-center gap-1.5 px-3 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90"
-          >
-            <Download className="w-4 h-4" /> Export CSV
-          </button>
-          {isPilot && (
-            <>
-              <button onClick={() => setImportOpen(true)} className="flex items-center gap-2 px-3 py-2 bg-secondary text-foreground rounded-lg text-sm font-medium hover:bg-secondary/80">
-                <Upload className="w-4 h-4" /> Import
-              </button>
-              <button onClick={() => { setEditMission(null); setModal(true) }} className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
-                <Plus className="w-4 h-4" /> Add Mission
-              </button>
-            </>
+          {can('reports.export') && (
+            <button
+              onClick={() => api.download('/export/mission-logs/csv')}
+              className="flex items-center gap-1.5 px-3 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90"
+            >
+              <Download className="w-4 h-4" /> Export CSV
+            </button>
+          )}
+          {isAdmin && (
+            <button onClick={() => setImportOpen(true)} className="flex items-center gap-2 px-3 py-2 bg-secondary text-foreground rounded-lg text-sm font-medium hover:bg-secondary/80">
+              <Upload className="w-4 h-4" /> Import
+            </button>
+          )}
+          {can('logs.create') && (
+            <button onClick={() => { setEditMission(null); setModal(true) }} className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
+              <Plus className="w-4 h-4" /> Add Mission
+            </button>
           )}
         </div>
       </div>
@@ -358,7 +363,7 @@ export default function MissionLogPage() {
               <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden lg:table-cell">Pilots</th>
               <th className="text-right px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Man Hours</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
-              {isPilot && <th className="w-10 px-2"></th>}
+              {canEditSome && <th className="w-10 px-2"></th>}
             </tr>
           </thead>
           <tbody>
@@ -385,17 +390,19 @@ export default function MissionLogPage() {
                       {formatStatusText(m.status)}
                     </span>
                   </td>
-                  {isPilot && (
+                  {canEditSome && (
                     <td className="px-2" onClick={e => e.stopPropagation()}>
-                      <button onClick={() => handleDelete(m.id)} className="text-muted-foreground hover:text-destructive p-1" aria-label="Delete">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {canEditLog(m) && (
+                        <button onClick={() => handleDelete(m.id)} className="text-muted-foreground hover:text-destructive p-1" aria-label="Delete">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </td>
                   )}
                 </tr>
                 {expanded === m.id && (
                   <tr key={`${m.id}-detail`} className="border-b border-border/50 bg-muted/10">
-                    <td colSpan={isPilot ? 10 : 9} className="px-8 py-4">
+                    <td colSpan={canEditSome ? 10 : 9} className="px-8 py-4">
                       <div className="grid grid-cols-2 gap-4 text-sm">
                         {m.description && <div><span className="text-muted-foreground">Description:</span> <span className="text-foreground">{m.description}</span></div>}
                         {m.case_number && <div><span className="text-muted-foreground">Case #:</span> <span className="text-foreground">{m.case_number}</span></div>}
@@ -415,7 +422,7 @@ export default function MissionLogPage() {
                           </div>
                         )}
                       </div>
-                      {isPilot && (
+                      {canEditLog(m) && (
                         <button onClick={() => handleEdit(m)} className="mt-3 px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-xs hover:opacity-90">
                           Edit Mission
                         </button>
@@ -425,7 +432,7 @@ export default function MissionLogPage() {
                 )}
               </React.Fragment>
             ))}
-            {missions.length === 0 && <tr><td colSpan={isPilot ? 10 : 9} className="px-4 py-12 text-center text-muted-foreground">No mission logs found</td></tr>}
+            {missions.length === 0 && <tr><td colSpan={canEditSome ? 10 : 9} className="px-4 py-12 text-center text-muted-foreground">No mission logs found</td></tr>}
           </tbody>
         </table>
         </div>

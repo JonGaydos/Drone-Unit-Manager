@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { api } from '@/api/client'
+import { api, getSection } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { STATUS_COLORS } from '@/lib/constants'
@@ -11,7 +11,9 @@ import EditActions from '@/components/EditActions'
 
 export default function ControllerDetailPage() {
   const { id } = useParams()
-  const { isAdmin } = useAuth()
+  const { can } = useAuth()
+  const canManage = can('fleet.manage')
+  const canSeeMaintenance = can('maintenance.view')
   const toast = useToast()
   const [controller, setController] = useState(null)
   const [maintenance, setMaintenance] = useState([])
@@ -25,8 +27,8 @@ export default function ControllerDetailPage() {
   useEffect(() => {
     Promise.all([
       api.get(`/controllers/${id}`),
-      api.get(`/maintenance?entity_type=controller&entity_id=${id}`).catch(() => []),
-      api.get('/pilots').catch(() => []),
+      getSection(canSeeMaintenance, `/maintenance?entity_type=controller&entity_id=${id}`, []),
+      api.get('/pilots/options').catch(() => []),
     ]).then(([c, m, allPilots]) => {
       setController(c)
       setMaintenance(m)
@@ -36,7 +38,7 @@ export default function ControllerDetailPage() {
         setPilot(found || null)
       }
     }).catch(() => {}).finally(() => setLoading(false))
-  }, [id])
+  }, [id, canSeeMaintenance])
 
   const startEditing = () => {
     setEditForm({
@@ -141,7 +143,7 @@ export default function ControllerDetailPage() {
                     <select id="assigned-pilot" value={editForm.assigned_pilot_id} onChange={e => setEditForm({...editForm, assigned_pilot_id: e.target.value})}
                       className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm">
                       <option value="">None</option>
-                      {pilots.map(p => <option key={p.id} value={p.id}>{p.full_name || `${p.first_name || ''} ${p.last_name || ''}`.trim() || `Pilot #${p.id}`}</option>)}
+                      {pilots.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
                     </select>
                   </div>
                 </div>
@@ -156,7 +158,7 @@ export default function ControllerDetailPage() {
               <>
                 <div className="flex items-center gap-3">
                   <h2 className="text-xl font-bold text-foreground">{displayName}</h2>
-                  {isAdmin && (
+                  {canManage && (
                     <button onClick={startEditing} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent">
                       <Edit className="w-4 h-4" />
                     </button>

@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { api } from '@/api/client'
+import { api, getSection } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
+import { ownsFlight } from '@/lib/ownership'
 import { useToast } from '@/contexts/ToastContext'
-import { formatDuration, normalizeDateValue, metersToFeet, mpsToMph, formatTime, utcIsoToZonedInput, zonedInputToUtcIso } from '@/lib/utils'
+import { formatDuration, normalizeDateValue, metersToFeet, mpsToMph, formatTime, utcIsoToZonedInput, zonedInputToUtcIso, changedFields, flightSavedMessage } from '@/lib/utils'
 import { sortByName, sortVehicles, sortPilotsActiveFirst, vehicleDisplayName, telemetryLabel } from '@/lib/formatters'
 import { ArrowLeft, MapPin, Save, RefreshCw, Loader2, Download } from 'lucide-react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
@@ -144,14 +145,14 @@ function initialEditForm(f) {
   }
 }
 
-/** Turn the edit form into the PATCH payload: coerce numeric ids, drop empty
- *  strings to null, and convert the zoned time inputs back to UTC. */
-function buildFlightPayload(editForm) {
-  const data = { ...editForm }
+/** Turn the changed fields of the edit form into the PATCH payload: coerce numeric
+ *  ids, drop empty strings to null, and convert the zoned time inputs back to UTC.
+ *  Only changed fields go, because the form rounds times to the minute, and an edit
+ *  that changes a reviewed flight sends it back to the review queue. */
+function buildFlightPayload(changes) {
+  const data = { ...changes }
   if (data.pilot_id) data.pilot_id = Number.parseInt(data.pilot_id, 10)
-  else data.pilot_id = null
   if (data.vehicle_id) data.vehicle_id = Number.parseInt(data.vehicle_id, 10)
-  else data.vehicle_id = null
   if (data.duration_seconds) data.duration_seconds = Number.parseInt(data.duration_seconds, 10)
   else delete data.duration_seconds
   Object.keys(data).forEach(k => { if (data[k] === '') data[k] = null })
@@ -183,22 +184,19 @@ function useFlightDetail(id) {
     Promise.all([
       api.get(`/flights/${id}`, { signal }),
       api.get(`/telemetry/flight/${id}`, { signal }).catch(() => []),
-      api.get('/pilots', { signal }),
-      api.get('/vehicles', { signal }),
-      api.get('/flights/purposes/list', { signal }),
-      api.get('/batteries', { signal }).catch(() => []),
-      api.get('/sensors', { signal }).catch(() => []),
-      api.get('/attachments', { signal }).catch(() => []),
-    ]).then(([f, t, p, v, pu, bats, sens, atts]) => {
+      getSection(true, '/pilots/options', [], { signal }),
+      getSection(true, '/fleet/options', {}, { signal }),
+      getSection(true, '/flights/purposes/list', [], { signal }),
+    ]).then(([f, t, p, fleet, pu]) => {
       if (ignore) return
       setFlight(f)
       setTelemetry(Array.isArray(t) ? t : [])
       setPilots(p)
-      setVehicles(v)
+      setVehicles(fleet.vehicles ?? [])
       setPurposes(pu)
-      setBatteries(bats)
-      setSensors(sens)
-      setAttachments(atts)
+      setBatteries(fleet.batteries ?? [])
+      setSensors(fleet.sensors ?? [])
+      setAttachments(fleet.attachments ?? [])
     }).catch(err => {
       // A superseded load rejects with AbortError; ignore it (a newer load owns the UI).
       if (ignore || err.name === 'AbortError') return
@@ -211,14 +209,14 @@ function useFlightDetail(id) {
   return { flight, setFlight, telemetry, setTelemetry, pilots, vehicles, purposes, batteries, sensors, attachments, loading }
 }
 
-function FlightActionBar({ flight, editing, isAdmin, refreshing, onApprove, onRefresh, onEdit, onSave, onCancel }) {
+function FlightActionBar({ flight, editing, isAdmin, canExport, canReview, canEdit, refreshing, onApprove, onRefresh, onEdit, onSave, onCancel }) {
   return (
     <div className="flex items-center justify-between">
       <Link to="/flights" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="w-4 h-4" /> Back to Flights
       </Link>
       <div className="flex gap-2">
-        {flight.has_telemetry && (
+        {flight.has_telemetry && canExport && (
           <>
             <button
               onClick={() => api.download(`/export/flights/${flight.id}/gpx`)}
@@ -236,7 +234,7 @@ function FlightActionBar({ flight, editing, isAdmin, refreshing, onApprove, onRe
             </button>
           </>
         )}
-        {flight.review_status === 'needs_review' && isAdmin && (
+        {flight.review_status === 'needs_review' && canReview && canEdit && (
           <button onClick={onApprove} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:opacity-90">
             Approve Flight
           </button>
@@ -254,7 +252,7 @@ function FlightActionBar({ flight, editing, isAdmin, refreshing, onApprove, onRe
             Refresh from API
           </button>
         )}
-        {isAdmin && (editing ? (
+        {canEdit && (editing ? (
           <>
             <button onClick={onSave} className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
               <Save className="w-4 h-4" /> Save
@@ -274,8 +272,8 @@ function FlightActionBar({ flight, editing, isAdmin, refreshing, onApprove, onRe
 }
 
 /** The badges beside the flight heading: id, review status, telemetry-sync
- *  toggle (supervisor only), data source. */
-function FlightInfoHeader({ flight, isSupervisor, onToggleTelemetry }) {
+ *  toggle (with flights.review), data source. */
+function FlightInfoHeader({ flight, canReview, onToggleTelemetry }) {
   return (
     <div className="flex items-center gap-3 mb-4">
       <div className="w-12 h-12 shrink-0 rounded-xl bg-primary/15 flex items-center justify-center text-primary">
@@ -288,7 +286,7 @@ function FlightInfoHeader({ flight, isSupervisor, onToggleTelemetry }) {
           <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
             flight.review_status === 'needs_review' ? 'bg-amber-500/15 text-amber-400' : 'bg-emerald-500/15 text-emerald-400'
           }`}>{flight.review_status === 'needs_review' ? 'Needs Review' : 'Reviewed'}</span>
-          {isSupervisor && telemetryLabel(flight) && (
+          {canReview && telemetryLabel(flight) && (
             <button
               onClick={onToggleTelemetry}
               className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium cursor-pointer transition-colors ${
@@ -326,11 +324,11 @@ function batterySerialDisplay(flight, batteries) {
 
 /** The always-present cells of the info grid (pilot through carrier). Returns a
  *  fragment so each cell stays a direct child of the grid. */
-function FlightCoreFields({ editing, flight, editForm, setEditForm, pilots, vehicles, purposes, batteries, sensors }) {
+function FlightCoreFields({ editing, canReassign, flight, editForm, setEditForm, pilots, vehicles, purposes, batteries, sensors }) {
   const set = (patch) => setEditForm({ ...editForm, ...patch })
   return (
     <>
-      <EditableField editing={editing} label="Pilot" htmlFor="pilot"
+      <EditableField editing={editing && canReassign} label="Pilot" htmlFor="pilot"
         input={
           <select id="pilot" value={editForm.pilot_id} onChange={e => set({ pilot_id: e.target.value })} className={CONTROL}>
             <option value="">Unassigned</option>
@@ -399,7 +397,7 @@ function FlightCoreFields({ editing, flight, editForm, setEditForm, pilots, vehi
           <>
             <PickerInput id="battery-serial" list="detail-battery-list" value={editForm.battery_serial} onChange={e => set({ battery_serial: e.target.value })} />
             <datalist id="detail-battery-list">
-              {batteries.map(b => <option key={b.id} value={b.serial_number}>{b.nickname || b.serial_number}</option>)}
+              {batteries.map(b => <option key={b.id} value={b.serial_number}>{b.name}</option>)}
             </datalist>
           </>
         }
@@ -411,7 +409,7 @@ function FlightCoreFields({ editing, flight, editForm, setEditForm, pilots, vehi
           <>
             <PickerInput id="sensor-package" list="detail-sensor-list" value={editForm.sensor_package} onChange={e => set({ sensor_package: e.target.value })} />
             <datalist id="detail-sensor-list">
-              {sensors.map(s => <option key={s.id} value={s.serial_number}>{s.name || s.serial_number}</option>)}
+              {sensors.map(s => <option key={s.id} value={s.serial_number}>{s.name}</option>)}
             </datalist>
           </>
         }
@@ -430,7 +428,7 @@ function FlightCoreFields({ editing, flight, editForm, setEditForm, pilots, vehi
 
 /** The conditional trailing cells: date, attachments, review status, unit
  *  totals, notes. Returns a fragment so each stays a direct grid child. */
-function FlightExtraFields({ editing, flight, editForm, setEditForm, attachments }) {
+function FlightExtraFields({ editing, canReview, flight, editForm, setEditForm, attachments }) {
   const set = (patch) => setEditForm({ ...editForm, ...patch })
   return (
     <>
@@ -455,7 +453,7 @@ function FlightExtraFields({ editing, flight, editForm, setEditForm, attachments
               <>
                 <PickerInput id="attachment-top" list="detail-attach-list" value={editForm.attachment_top} onChange={e => set({ attachment_top: e.target.value })} />
                 <datalist id="detail-attach-list">
-                  {attachments.map(a => <option key={a.id} value={a.serial_number}>{a.name || a.serial_number}</option>)}
+                  {attachments.map(a => <option key={a.id} value={a.serial_number}>{a.name}</option>)}
                 </datalist>
               </>
             }
@@ -479,7 +477,7 @@ function FlightExtraFields({ editing, flight, editForm, setEditForm, attachments
       {/* Review status is a badge beside the heading when viewing. Editing puts
           it in the trailing gap of the attachment row, which is empty in both
           modes, so it costs no extra row and still displaces nothing. */}
-      {editing && (
+      {editing && canReview && (
         <Field label="Status" htmlFor="status">
           <select id="status" value={editForm.review_status} onChange={e => set({ review_status: e.target.value })} className={CONTROL}>
             <option value="needs_review">Needs Review</option>
@@ -492,8 +490,8 @@ function FlightExtraFields({ editing, flight, editForm, setEditForm, attachments
           not the unit's own activity: a vendor demo flown by one of ours, a
           test flight. Shown when editing, and when viewing only if it is
           off, so a flight missing from the totals says why. */}
-      {(editing || flight.counts_toward_totals === false) && (
-        <EditableField editing={editing} label="Unit totals" htmlFor="counts-toward-totals"
+      {((editing && canReview) || flight.counts_toward_totals === false) && (
+        <EditableField editing={editing && canReview} label="Unit totals" htmlFor="counts-toward-totals"
           input={
             <span className="flex items-center gap-2 mt-1.5 text-sm text-foreground">
               <input
@@ -521,17 +519,17 @@ function FlightExtraFields({ editing, flight, editForm, setEditForm, attachments
 }
 
 /** The flight info card: heading badges plus the two-mode field grid. */
-function FlightInfoCard({ flight, editing, editForm, setEditForm, isSupervisor, onToggleTelemetry, pilots, vehicles, purposes, batteries, sensors, attachments }) {
+function FlightInfoCard({ flight, editing, editForm, setEditForm, canReview, canReassign, onToggleTelemetry, pilots, vehicles, purposes, batteries, sensors, attachments }) {
   return (
     <div className="bg-card border border-border rounded-xl p-6">
-      <FlightInfoHeader flight={flight} isSupervisor={isSupervisor} onToggleTelemetry={onToggleTelemetry} />
+      <FlightInfoHeader flight={flight} canReview={canReview} onToggleTelemetry={onToggleTelemetry} />
 
       {/* One grid for both modes: every cell keeps its position when editing,
           and swaps its read-only value for a control in place. */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 border-t border-border pt-4">
-        <FlightCoreFields editing={editing} flight={flight} editForm={editForm} setEditForm={setEditForm}
+        <FlightCoreFields editing={editing} canReassign={canReassign} flight={flight} editForm={editForm} setEditForm={setEditForm}
           pilots={pilots} vehicles={vehicles} purposes={purposes} batteries={batteries} sensors={sensors} />
-        <FlightExtraFields editing={editing} flight={flight} editForm={editForm} setEditForm={setEditForm} attachments={attachments} />
+        <FlightExtraFields editing={editing} canReview={canReview} flight={flight} editForm={editForm} setEditForm={setEditForm} attachments={attachments} />
       </div>
     </div>
   )
@@ -545,12 +543,18 @@ export default function FlightDetailPage() {
   const [editForm, setEditForm] = useState({})
   const [refreshing, setRefreshing] = useState(false)
   const [refreshResult, setRefreshResult] = useState(null)
-  const { isAdmin, isSupervisor } = useAuth()
+  const { user, isAdmin, can, level, canRecord } = useAuth()
+  const canReview = can('flights.review')
 
   const handleSave = async () => {
+    const payload = buildFlightPayload(changedFields(initialEditForm(flight), editForm))
+    if (Object.keys(payload).length === 0) {
+      setEditing(false)
+      return
+    }
     try {
-      const updated = await api.patch(`/flights/${id}`, buildFlightPayload(editForm))
-      toast.success('Flight updated')
+      const updated = await api.patch(`/flights/${id}`, payload)
+      toast.success(flightSavedMessage(flight, updated))
       setFlight(updated)
       setEditing(false)
     } catch (err) { toast.error(err.message) }
@@ -601,6 +605,8 @@ export default function FlightDetailPage() {
     <div className="space-y-6">
       <FlightActionBar
         flight={flight} editing={editing} isAdmin={isAdmin} refreshing={refreshing}
+        canExport={can('reports.export')} canReview={canReview}
+        canEdit={canRecord('flights.edit', ownsFlight(user, flight))}
         onApprove={handleApprove} onRefresh={handleRefresh}
         onEdit={() => { setEditForm(initialEditForm(flight)); setEditing(true) }}
         onSave={handleSave}
@@ -618,7 +624,7 @@ export default function FlightDetailPage() {
 
       <FlightInfoCard
         flight={flight} editing={editing} editForm={editForm} setEditForm={setEditForm}
-        isSupervisor={isSupervisor} onToggleTelemetry={handleToggleTelemetry}
+        canReview={canReview} canReassign={level('flights.edit') === 'all'} onToggleTelemetry={handleToggleTelemetry}
         pilots={pilots} vehicles={vehicles} purposes={purposes}
         batteries={batteries} sensors={sensors} attachments={attachments}
       />

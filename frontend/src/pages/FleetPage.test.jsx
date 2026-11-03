@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { screen, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
+import { withPermissions } from '@/test/permissions'
+import { fleetOptions } from '@/test/options'
 import { renderWithProviders } from '@/test/render'
 import FleetPage from './FleetPage'
 
@@ -19,6 +21,7 @@ const VEHICLE_ROWS = [
 
 function mockVehicles(rows = VEHICLE_ROWS) {
   server.use(
+    http.get('/api/fleet/options', () => HttpResponse.json(fleetOptions({ vehicles: rows }))),
     http.get(VEHICLES, () => HttpResponse.json(rows)),
     http.get(CURRENT_REGS, () => HttpResponse.json([])),
   )
@@ -83,7 +86,7 @@ describe('FleetPage', () => {
     expect(screen.getByRole('button', { name: /Add Vehicle/ })).toBeInTheDocument()
     unmount()
 
-    server.use(http.get('/api/auth/me', () => HttpResponse.json({ id: 9, username: 'viewer', role: 'viewer' })))
+    server.use(http.get('/api/auth/me', () => HttpResponse.json(withPermissions({ id: 9, username: 'viewer', role: 'viewer' }))))
     mockVehicles()
     renderWithProviders(<FleetPage />, { role: 'viewer' })
     expect(await screen.findByText('Falcon')).toBeInTheDocument()

@@ -6,14 +6,14 @@ import xml.etree.ElementTree as ET
 from datetime import date, datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 from sqlalchemy.orm import joinedload
 
 from app.models.flight import Flight
 from app.services.local_time import display_zone, stamped_on_or_after, stamped_on_or_before
-from app.services.pilot_contacts import hides_contacts
+from app.services.pilot_contacts import hides_contacts, redact_audit_details
 from app.models.pilot import Pilot
 from app.models.vehicle import Vehicle
 from app.models.maintenance import MaintenanceRecord
@@ -28,15 +28,30 @@ from app.models.dock import Dock
 from app.models.sensor import SensorPackage
 from app.models.attachment import Attachment
 from app.models.other_equipment import OtherEquipment
+from app.models.user import User
 from app.config import settings
 from app.constants import APP_TITLE, FILE_TOO_LARGE
-from app.deps import DBSession, CurrentUser, AdminUser, SupervisorUser
+from app.deps import DBSession, AdminUser
+from app.routers.auth import require_permission
 from app.services.audit import log_action
 from app.responses import responses
 
 router = APIRouter(prefix="/api/export", tags=["export"])
 
 logger = logging.getLogger(__name__)
+
+# Every export needs reports.export (ExportUser) and the view key of what it holds.
+ExportUser = Annotated[User, Depends(require_permission("reports.export"))]
+FlightsView = Annotated[User, Depends(require_permission("flights.view"))]
+FleetView = Annotated[User, Depends(require_permission("fleet.view"))]
+LogsView = Annotated[User, Depends(require_permission("logs.view"))]
+PilotsManage = Annotated[User, Depends(require_permission("pilots.manage"))]
+MaintenanceView = Annotated[User, Depends(require_permission("maintenance.view"))]
+ChecklistsView = Annotated[User, Depends(require_permission("checklists.view"))]
+CertificationsView = Annotated[User, Depends(require_permission("certifications.view"))]
+IncidentsView = Annotated[User, Depends(require_permission("incidents.view"))]
+FlightPlansView = Annotated[User, Depends(require_permission("flight_plans.view"))]
+AuditView = Annotated[User, Depends(require_permission("audit.view"))]
 
 CSV_MEDIA_TYPE = "text/csv"
 
@@ -136,7 +151,8 @@ def _flight_csv_row(f, local_tz, with_email: bool = True):
 @router.get("/flights/csv")
 def export_flights_csv(
     db: DBSession,
-    user: CurrentUser,
+    user: ExportUser,
+    _view: FlightsView,
     date_from: date | None = None,
     date_to: date | None = None):
     """Export flights as CSV in the Skydio flight-list column order (plus Purpose).
@@ -148,7 +164,7 @@ def export_flights_csv(
     display timezone.
     """
     local_tz = display_zone(db)
-    with_email = not hides_contacts(user)
+    with_email = not hides_contacts(db, user)
 
     q = db.query(Flight).options(joinedload(Flight.pilot), joinedload(Flight.vehicle))
     if date_from:
@@ -177,10 +193,11 @@ def export_flights_csv(
     )
 
 
-# Contact details for the whole roster in one file: supervisors only, and on
-# the record.
+# Contact details for the whole roster in one file: pilots.manage only, on the
+# record, and blank without pilots.contacts.
 @router.get("/pilots/csv", responses=responses(401, 403))
-def export_pilots_csv(db: DBSession, user: SupervisorUser):
+def export_pilots_csv(db: DBSession, user: ExportUser, _manage: PilotsManage):
+    with_contacts = not hides_contacts(db, user)
     pilots = _cap_rows(db.query(Pilot).order_by(Pilot.last_name).all(), "pilots")
     log_action(db, user.id, user.display_name, "export", "pilot", details=f"pilots.csv, {len(pilots)} rows")
     db.commit()
@@ -189,8 +206,10 @@ def export_pilots_csv(db: DBSession, user: SupervisorUser):
     writer.writerow(["First Name", "Last Name", "Email", "Phone", "Badge Number", "Status", "Notes"])
     for p in pilots:
         writer.writerow([
-            _csv_safe(p.first_name), _csv_safe(p.last_name), _csv_safe(p.email or ""),
-            _csv_safe(p.phone or ""), _csv_safe(p.badge_number or ""), p.status, _csv_safe(p.notes or ""),
+            _csv_safe(p.first_name), _csv_safe(p.last_name),
+            _csv_safe(p.email or "") if with_contacts else "",
+            _csv_safe(p.phone or "") if with_contacts else "",
+            _csv_safe(p.badge_number or ""), p.status, _csv_safe(p.notes or ""),
         ])
     output.seek(0)
     return StreamingResponse(
@@ -201,7 +220,7 @@ def export_pilots_csv(db: DBSession, user: SupervisorUser):
 
 
 @router.get("/vehicles/csv", responses=responses(401))
-def export_vehicles_csv(db: DBSession, user: CurrentUser):
+def export_vehicles_csv(db: DBSession, user: ExportUser, _view: FleetView):
     vehicles = _cap_rows(db.query(Vehicle).order_by(Vehicle.manufacturer).all(), "vehicles")
     output = io.StringIO()
     writer = csv.writer(output)
@@ -267,7 +286,7 @@ EQUIPMENT_EXPORTS = {
 # catch-all registered before the named CSV routes below it and would swallow
 # every one of them, and any future named route added underneath.
 @router.get("/fleet/{equipment_type}/csv", responses=responses(401, 404))
-def export_equipment_csv(equipment_type: str, db: DBSession, user: CurrentUser):
+def export_equipment_csv(equipment_type: str, db: DBSession, user: ExportUser, _view: FleetView):
     """Export one fleet equipment table as CSV.
 
     Deliberately exports the whole table rather than whatever the Fleet page is
@@ -296,7 +315,8 @@ def export_equipment_csv(equipment_type: str, db: DBSession, user: CurrentUser):
 @router.get("/maintenance/csv")
 def export_maintenance_csv(
     db: DBSession,
-    user: CurrentUser,
+    user: ExportUser,
+    _view: MaintenanceView,
     date_from: date | None = None,
     date_to: date | None = None,
     entity_type: str | None = None):
@@ -330,7 +350,7 @@ def export_maintenance_csv(
 
 
 @router.get("/checklists/csv", responses=responses(401))
-def export_checklists_csv(db: DBSession, user: CurrentUser):
+def export_checklists_csv(db: DBSession, user: ExportUser, _view: ChecklistsView):
     from app.models.checklist import ChecklistCompletion, ChecklistTemplate
     completions = _cap_rows(
         db.query(ChecklistCompletion).order_by(ChecklistCompletion.completed_at.desc()).all(),
@@ -364,7 +384,8 @@ def export_checklists_csv(db: DBSession, user: CurrentUser):
 @router.get("/certifications/csv")
 def export_certifications_csv(
     db: DBSession,
-    user: CurrentUser,
+    user: ExportUser,
+    _view: CertificationsView,
     pilot_id: int | None = None,
     status: str | None = None):
     q = db.query(PilotCertification)
@@ -402,7 +423,8 @@ def export_certifications_csv(
 @router.get("/training-logs/csv")
 def export_training_logs_csv(
     db: DBSession,
-    user: CurrentUser,
+    user: ExportUser,
+    _view: LogsView,
     date_from: date | None = None,
     date_to: date | None = None,
     pilot_id: int | None = None,
@@ -446,7 +468,8 @@ def export_training_logs_csv(
 @router.get("/mission-logs/csv")
 def export_mission_logs_csv(
     db: DBSession,
-    user: CurrentUser,
+    user: ExportUser,
+    _view: LogsView,
     date_from: date | None = None,
     date_to: date | None = None,
     pilot_id: int | None = None):
@@ -500,7 +523,8 @@ def _incident_csv_row(inc, db):
 @router.get("/incidents/csv")
 def export_incidents_csv(
     db: DBSession,
-    user: CurrentUser,
+    user: ExportUser,
+    _view: IncidentsView,
     date_from: date | None = None,
     date_to: date | None = None,
     report_type: str | None = None):
@@ -548,7 +572,8 @@ def _flight_plan_csv_row(p, db):
 @router.get("/flight-plans/csv")
 def export_flight_plans_csv(
     db: DBSession,
-    user: CurrentUser,
+    user: ExportUser,
+    _view: FlightPlansView,
     date_from: date | None = None,
     date_to: date | None = None):
     from app.models.flight_approval import FlightPlan
@@ -579,7 +604,8 @@ def export_flight_plans_csv(
 @router.get("/audit/csv")
 def export_audit_csv(
     db: DBSession,
-    user: AdminUser,
+    user: ExportUser,
+    _view: AuditView,
     date_from: date | None = None,
     date_to: date | None = None):
     from app.models.audit_log import AuditLog
@@ -590,6 +616,7 @@ def export_audit_csv(
     if date_to:
         q = q.filter(stamped_on_or_before(AuditLog.created_at, date_to, local_tz))
     logs = q.order_by(AuditLog.created_at.desc()).limit(5000).all()
+    hide = hides_contacts(db, user)
 
     output = io.StringIO()
     writer = csv.writer(output)
@@ -602,7 +629,8 @@ def export_audit_csv(
             _csv_fmt_local(log.created_at, local_tz, "%Y-%m-%d %H:%M:%S"),
             _csv_safe(log.user_name or ""), _csv_safe(log.action), _csv_safe(log.entity_type),
             log.entity_id or "", _csv_safe(log.entity_name or ""),
-            _csv_safe(log.details or ""), _csv_safe(log.ip_address or ""),
+            _csv_safe((redact_audit_details(log.details) if hide else log.details) or ""),
+            _csv_safe(log.ip_address or ""),
         ])
     output.seek(0)
     return StreamingResponse(
@@ -630,7 +658,8 @@ def _equipment_checkout_csv_row(c, db, local_tz):
 @router.get("/equipment-checkouts/csv")
 def export_equipment_checkouts_csv(
     db: DBSession,
-    user: CurrentUser,
+    user: ExportUser,
+    _view: FleetView,
     date_from: date | None = None,
     date_to: date | None = None):
     from app.models.equipment_checkout import EquipmentCheckout
@@ -933,7 +962,8 @@ def _import_single_log(db, filename: str, content: bytes, format: str, user_id: 
 def export_flight_gpx(
     flight_id: int,
     db: DBSession,
-    user: CurrentUser,
+    user: ExportUser,
+    _view: FlightsView,
 ):
     """Export a flight's telemetry as a GPX file for Google Earth / GPS tools."""
     from app.database import get_telemetry_db
@@ -994,7 +1024,8 @@ def export_flight_gpx(
 def export_flight_kml(
     flight_id: int,
     db: DBSession,
-    user: CurrentUser,
+    user: ExportUser,
+    _view: FlightsView,
 ):
     """Export a flight's telemetry as a KML file for Google Earth."""
     from app.database import get_telemetry_db

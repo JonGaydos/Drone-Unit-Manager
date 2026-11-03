@@ -2,12 +2,19 @@ import { useState, useEffect, useMemo } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
+import { ownsPilot } from '@/lib/ownership'
 import { Plus, Edit, Trash2, Search, ChevronUp, ChevronDown, Download, Loader2, GitMerge } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Modal } from '@/components/ui/Modal'
 
-function PilotModal({ pilot, onSave, onClose }) {
+const CONTACT_FIELDS = new Set(['email', 'phone', 'phone_type', 'phone_work'])
+
+function withoutContacts(data) {
+  return Object.fromEntries(Object.entries(data).filter(([key]) => !CONTACT_FIELDS.has(key)))
+}
+
+function PilotModal({ pilot, canManage, canSeeContacts, onSave, onClose }) {
   const [form, setForm] = useState(pilot || {
     first_name: '', last_name: '', email: '', phone: '', phone_type: 'work', phone_work: '', badge_number: '', status: 'active', counts_toward_totals: true, notes: ''
   })
@@ -39,73 +46,81 @@ function PilotModal({ pilot, onSave, onClose }) {
             {field('First Name', 'first_name')}
             {field('Last Name', 'last_name')}
           </div>
-          {field('Email', 'email', 'email')}
-          <div>
-            <label htmlFor="personal-cell" className="block text-sm font-medium text-foreground mb-1">Personal Cell</label>
-            <input id="personal-cell"
-              type="tel"
-              value={form.phone || ''}
-              onChange={(e) => {
-                const digits = e.target.value.replaceAll(/\D/g, '').slice(0, 10)
-                let formatted = digits
-                if (digits.length > 3) formatted = digits.slice(0,3) + '-' + digits.slice(3)
-                if (digits.length > 6) formatted = digits.slice(0,3) + '-' + digits.slice(3,6) + '-' + digits.slice(6)
-                setForm({ ...form, phone: formatted })
-              }}
-              placeholder="###-###-####"
-              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-          </div>
-          <div>
-            <label htmlFor="work-cell" className="block text-sm font-medium text-foreground mb-1">Work Cell</label>
-            <input id="work-cell"
-              type="tel"
-              value={form.phone_work || ''}
-              onChange={(e) => {
-                const digits = e.target.value.replaceAll(/\D/g, '').slice(0, 10)
-                let formatted = digits
-                if (digits.length > 3) formatted = digits.slice(0,3) + '-' + digits.slice(3)
-                if (digits.length > 6) formatted = digits.slice(0,3) + '-' + digits.slice(3,6) + '-' + digits.slice(6)
-                setForm({ ...form, phone_work: formatted })
-              }}
-              placeholder="###-###-####"
-              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-          </div>
-          {field('Badge Number', 'badge_number')}
-          <div>
-            <label htmlFor="status" className="block text-sm font-medium text-foreground mb-1">Status</label>
-            <select id="status"
-              value={form.status}
-              onChange={(e) => setForm({ ...form, status: e.target.value })}
-              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
-            >
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
-          </div>
-          <div>
-            {/* Deliberately separate from Status. Somebody who leaves the unit
-                goes inactive but their flights were still the unit's work; a
-                vendor or guest operator's flights never were. */}
-            <div className="flex items-start gap-2 mt-6">
-              <input
-                id="counts-toward-totals"
-                type="checkbox"
-                checked={form.counts_toward_totals !== false}
-                onChange={(e) => setForm({ ...form, counts_toward_totals: e.target.checked })}
-                className="mt-0.5 rounded border-border"
-              />
+          {canSeeContacts && (
+            <>
+              {field('Email', 'email', 'email')}
               <div>
-                <label htmlFor="counts-toward-totals" className="block text-sm font-medium text-foreground cursor-pointer">
-                  Counts towards unit totals
-                </label>
-                <p className="text-xs text-muted-foreground">
-                  Turn off for a vendor or guest operator. Their flights stay on record but leave the unit&apos;s numbers.
-                </p>
+                <label htmlFor="personal-cell" className="block text-sm font-medium text-foreground mb-1">Personal Cell</label>
+                <input id="personal-cell"
+                  type="tel"
+                  value={form.phone || ''}
+                  onChange={(e) => {
+                    const digits = e.target.value.replaceAll(/\D/g, '').slice(0, 10)
+                    let formatted = digits
+                    if (digits.length > 3) formatted = digits.slice(0,3) + '-' + digits.slice(3)
+                    if (digits.length > 6) formatted = digits.slice(0,3) + '-' + digits.slice(3,6) + '-' + digits.slice(6)
+                    setForm({ ...form, phone: formatted })
+                  }}
+                  placeholder="###-###-####"
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
               </div>
-            </div>
-          </div>
+              <div>
+                <label htmlFor="work-cell" className="block text-sm font-medium text-foreground mb-1">Work Cell</label>
+                <input id="work-cell"
+                  type="tel"
+                  value={form.phone_work || ''}
+                  onChange={(e) => {
+                    const digits = e.target.value.replaceAll(/\D/g, '').slice(0, 10)
+                    let formatted = digits
+                    if (digits.length > 3) formatted = digits.slice(0,3) + '-' + digits.slice(3)
+                    if (digits.length > 6) formatted = digits.slice(0,3) + '-' + digits.slice(3,6) + '-' + digits.slice(6)
+                    setForm({ ...form, phone_work: formatted })
+                  }}
+                  placeholder="###-###-####"
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+            </>
+          )}
+          {field('Badge Number', 'badge_number')}
+          {canManage && (
+            <>
+              <div>
+                <label htmlFor="status" className="block text-sm font-medium text-foreground mb-1">Status</label>
+                <select id="status"
+                  value={form.status}
+                  onChange={(e) => setForm({ ...form, status: e.target.value })}
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
+                >
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </div>
+              <div>
+                {/* Deliberately separate from Status. Somebody who leaves the unit
+                    goes inactive but their flights were still the unit's work; a
+                    vendor or guest operator's flights never were. */}
+                <div className="flex items-start gap-2 mt-6">
+                  <input
+                    id="counts-toward-totals"
+                    type="checkbox"
+                    checked={form.counts_toward_totals !== false}
+                    onChange={(e) => setForm({ ...form, counts_toward_totals: e.target.checked })}
+                    className="mt-0.5 rounded border-border"
+                  />
+                  <div>
+                    <label htmlFor="counts-toward-totals" className="block text-sm font-medium text-foreground cursor-pointer">
+                      Counts towards unit totals
+                    </label>
+                    <p className="text-xs text-muted-foreground">
+                      Turn off for a vendor or guest operator. Their flights stay on record but leave the unit&apos;s numbers.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
           <div>
             <label htmlFor="notes" className="block text-sm font-medium text-foreground mb-1">Notes</label>
             <textarea id="notes"
@@ -195,7 +210,9 @@ export default function PilotsPage() {
   const [sortDir, setSortDir] = useState('asc')
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [mergeSource, setMergeSource] = useState(null)
-  const { isSupervisor } = useAuth()
+  const { user, can, canRecord } = useAuth()
+  const canManage = can('pilots.manage')
+  const canSeeContacts = can('pilots.contacts')
   const toast = useToast()
 
   const toggleSort = (key) => {
@@ -210,11 +227,14 @@ export default function PilotsPage() {
   useEffect(() => { loadPilots() }, [])
 
   const handleSave = async (data) => {
+    // Contact details reach this page masked without pilots.contacts, so they
+    // stay out of the save.
+    const body = canSeeContacts ? data : withoutContacts(data)
     try {
       if (data.id) {
-        await api.patch(`/pilots/${data.id}`, data)
+        await api.patch(`/pilots/${data.id}`, body)
       } else {
-        await api.post('/pilots', data)
+        await api.post('/pilots', body)
       }
       setModal(null)
       loadPilots()
@@ -290,7 +310,7 @@ export default function PilotsPage() {
             className="w-full pl-9 pr-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
-        {isSupervisor && (
+        {canManage && can('reports.export') && (
           <button
             onClick={() => api.download('/export/pilots/csv')}
             className="flex items-center justify-center gap-1.5 px-3 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90"
@@ -298,7 +318,7 @@ export default function PilotsPage() {
             <Download className="w-4 h-4" /> Export CSV
           </button>
         )}
-        {isSupervisor && (
+        {canManage && (
           <button
             onClick={() => setModal('add')}
             className="flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90"
@@ -349,19 +369,23 @@ export default function PilotsPage() {
                   </span>
                 </td>
                 <td className="px-4 py-3 text-right">
-                  {isSupervisor && (
-                    <div className="flex items-center justify-end gap-1">
+                  <div className="flex items-center justify-end gap-1">
+                    {canRecord('pilots.edit', ownsPilot(user, p.id)) && (
                       <button onClick={() => setModal(p)} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent" aria-label="Edit">
                         <Edit className="w-4 h-4" />
                       </button>
-                      <button onClick={() => setMergeSource(p)} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent" aria-label="Merge into another pilot" title="Merge into another pilot">
-                        <GitMerge className="w-4 h-4" />
-                      </button>
-                      <button onClick={() => setConfirmDelete(p)} className="p-1.5 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10" aria-label="Deactivate pilot" title="Deactivate">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  )}
+                    )}
+                    {canManage && (
+                      <>
+                        <button onClick={() => setMergeSource(p)} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent" aria-label="Merge into another pilot" title="Merge into another pilot">
+                          <GitMerge className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => setConfirmDelete(p)} className="p-1.5 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10" aria-label="Deactivate pilot" title="Deactivate">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -376,6 +400,8 @@ export default function PilotsPage() {
       {modal && (
         <PilotModal
           pilot={modal === 'add' ? null : modal}
+          canManage={canManage}
+          canSeeContacts={canSeeContacts}
           onSave={handleSave}
           onClose={() => setModal(null)}
         />

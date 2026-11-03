@@ -2,6 +2,8 @@ import { describe, it, expect, vi } from 'vitest'
 import { screen, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
+import { withPermissions } from '@/test/permissions'
+import { pilotOption } from '@/test/options'
 import { renderWithProviders } from '@/test/render'
 import MediaPage from './MediaPage'
 
@@ -19,12 +21,12 @@ const PHOTOS = [
 function mockMount(overrides = {}) {
   const base = {
     photos: () => HttpResponse.json(PHOTOS),
-    pilots: () => HttpResponse.json([{ id: 1, first_name: 'Jane', last_name: 'Doe', is_active: true }]),
+    pilots: () => HttpResponse.json([pilotOption(1, 'Jane Doe')]),
     ...overrides,
   }
   server.use(
     http.get('/api/photos', base.photos),
-    http.get('/api/pilots', base.pilots),
+    http.get('/api/pilots/options', base.pilots),
   )
 }
 
@@ -89,7 +91,7 @@ describe('MediaPage', () => {
     let body = null
     mockMount({ photos: () => HttpResponse.json([{ ...PHOTOS[0], legal_hold: true }, PHOTOS[1]]) })
     server.use(
-      http.get('/api/auth/me', () => HttpResponse.json({ id: 1, username: 's', display_name: 's', role: 'supervisor' })),
+      http.get('/api/auth/me', () => HttpResponse.json(withPermissions({ id: 1, username: 's', display_name: 's', role: 'supervisor' }))),
       http.put('/api/photos/1/hold', async ({ request }) => { body = await request.json(); return HttpResponse.json({ ok: true }) }),
     )
     const { user } = renderWithProviders(<MediaPage />, { role: 'supervisor' })
@@ -106,7 +108,7 @@ describe('MediaPage', () => {
 
   it('shows neither hold controls nor the deleted list to a pilot', async () => {
     mockMount()
-    server.use(http.get('/api/auth/me', () => HttpResponse.json({ id: 1, username: 'p', display_name: 'p', role: 'pilot' })))
+    server.use(http.get('/api/auth/me', () => HttpResponse.json(withPermissions({ id: 1, username: 'p', display_name: 'p', role: 'pilot' }))))
     renderWithProviders(<MediaPage />, { role: 'pilot' })
     await screen.findByText('Tower inspection')
     expect(screen.queryByRole('button', { name: /legal hold/ })).not.toBeInTheDocument()

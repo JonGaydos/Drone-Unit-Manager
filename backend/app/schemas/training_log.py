@@ -74,6 +74,7 @@ class TrainingLogOut(BaseModel):
     outcome: str = "completed"
     total_cost: float | None = None
     notes: str | None = None
+    created_by_id: int | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
     pilots: list[TrainingLogPilotOut] = []

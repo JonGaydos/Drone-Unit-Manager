@@ -74,6 +74,7 @@ class MissionLogOut(BaseModel):
     total_cost: float | None = None
     cost_breakdown: str | None = None
     notes: str | None = None
+    created_by_id: int | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
     pilots: list[MissionLogPilotOut] = []

@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react'
-import { api } from '@/api/client'
+import { api, getIfAllowed } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Modal } from '@/components/ui/Modal'
 import { useConfirm } from '@/hooks/useConfirm'
+import { ownsRecord } from '@/lib/ownership'
 import { sortVehicles, sortPilotsActiveFirst, vehicleDisplayName } from '@/lib/formatters'
 import { todayLocal } from '@/lib/utils'
 import { Link } from 'react-router-dom'
@@ -294,7 +295,8 @@ export default function IncidentPage() {
   const [resolveTarget, setResolveTarget] = useState(null)
   const [expandedId, setExpandedId] = useState(null)
   const [filters, setFilters] = useState({ status: '', severity: '', category: '', date_from: '', date_to: '', report_type: '' })
-  const { isPilot, isSupervisor } = useAuth()
+  const { user, can, canRecord } = useAuth()
+  const canSeeFlights = can('flights.view')
   const toast = useToast()
   const [confirmProps, requestConfirm] = useConfirm()
 
@@ -309,17 +311,17 @@ export default function IncidentPage() {
       if (filters.date_to) params.set('date_to', filters.date_to)
       if (filters.report_type) params.set('report_type', filters.report_type)
       const qs = params.toString() ? `?${params}` : ''
-      const [inc, st, p, v, f] = await Promise.all([
+      const [inc, st, p, fleet, f] = await Promise.all([
         api.get(`/incidents${qs}`),
         api.get('/incidents/stats'),
-        api.get('/pilots'),
-        api.get('/vehicles'),
-        api.get('/flights?limit=100'),
+        api.get('/pilots/options'),
+        api.get('/fleet/options'),
+        getIfAllowed(canSeeFlights, '/flights?limit=100', []),
       ])
       setIncidents(Array.isArray(inc) ? inc : inc.incidents || [])
       setStats(st)
-      setPilots(Array.isArray(p) ? p : p.pilots || [])
-      setVehicles(Array.isArray(v) ? v : v.vehicles || [])
+      setPilots(p)
+      setVehicles(fleet.vehicles)
       setFlights(Array.isArray(f) ? f : f.flights || [])
     } catch (err) {
       toast.error(err.message)
@@ -328,7 +330,7 @@ export default function IncidentPage() {
     }
   }
 
-  useEffect(() => { void load() }, [filters.status, filters.severity, filters.category, filters.report_type])
+  useEffect(() => { void load() }, [filters.status, filters.severity, filters.category, filters.report_type, canSeeFlights])
 
   const handleCreate = async (data) => {
     try {
@@ -440,11 +442,13 @@ export default function IncidentPage() {
           </select>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => api.download('/export/incidents/csv')}
-            className="flex items-center gap-2 px-3 py-2 bg-secondary border border-border text-secondary-foreground rounded-lg text-sm hover:bg-secondary/80">
-            <Download className="w-4 h-4" /> Export CSV
-          </button>
-          {isPilot && (
+          {can('reports.export') && (
+            <button onClick={() => api.download('/export/incidents/csv')}
+              className="flex items-center gap-2 px-3 py-2 bg-secondary border border-border text-secondary-foreground rounded-lg text-sm hover:bg-secondary/80">
+              <Download className="w-4 h-4" /> Export CSV
+            </button>
+          )}
+          {can('incidents.create') && (
             <button onClick={() => setShowAdd(true)}
               className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
               <Plus className="w-4 h-4" /> New Report
@@ -503,13 +507,13 @@ export default function IncidentPage() {
                           className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent" title="Details">
                           {expandedId === inc.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                         </button>
-                        {isSupervisor && inc.status !== 'closed' && (
+                        {can('incidents.resolve') && canRecord('incidents.edit', ownsRecord(user, inc.reported_by_id)) && inc.status !== 'closed' && (
                           <button onClick={() => setResolveTarget(inc)}
                             className="p-1.5 text-muted-foreground hover:text-emerald-400 rounded-lg hover:bg-emerald-500/10" title="Resolve">
                             <CheckCircle className="w-4 h-4" />
                           </button>
                         )}
-                        {isSupervisor && (
+                        {can('incidents.delete') && (
                           <button onClick={() => handleDelete(inc.id)}
                             className="p-1.5 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10" title="Delete">
                             <X className="w-4 h-4" />

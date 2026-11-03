@@ -1,5 +1,5 @@
 /**
- * Authentication context providing user state, login/logout, and role checks.
+ * Authentication context providing user state, login/logout, and permission checks.
  * Persists auth token in localStorage and validates on mount via /auth/me.
  */
 import { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react'
@@ -19,6 +19,12 @@ export const LAST_ACTIVITY_KEY = 'lastActivity'
 /** Set when the idle lock signs someone out, so the login page can say why. */
 export const IDLE_NOTICE_KEY = 'signedOutIdle'
 const ACTIVITY_EVENTS = ['pointerdown', 'keydown', 'touchstart', 'wheel', 'scroll']
+// Values of a permission that hold it at any level above the lowest.
+const GRANTED = new Set(['yes', 'own', 'all'])
+const LEVELS = new Set(['own', 'all'])
+// Permissions can change while someone is signed in, so they are fetched again
+// when the window regains focus, at most this often.
+const USER_REFRESH_MS = 60 * 1000
 
 function markActivity() {
   localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()))
@@ -34,6 +40,12 @@ function clearLocalSession() {
   localStorage.removeItem('user')
   localStorage.removeItem(LAST_ACTIVITY_KEY)
 }
+
+/** Keep the same object when nothing changed, so a focus does not reload pages
+ *  whose effects depend on the permission checks. */
+const replaceIfChanged = (next) => (current) => (
+  JSON.stringify(current) === JSON.stringify(next) ? current : next
+)
 
 /**
  * Provides authentication state and actions to the component tree.
@@ -96,6 +108,30 @@ export function AuthProvider({ children }) {
     }
   }, [signedIn])
 
+  // A failed or empty refresh keeps the current user unless the session itself has ended.
+  useEffect(() => {
+    if (!signedIn) return undefined
+    let active = true
+    let lastRefresh = Date.now()
+    const onSessionEnded = () => {
+      clearLocalSession()
+      setUser(null)
+    }
+    const refresh = () => {
+      const now = Date.now()
+      if (now - lastRefresh < USER_REFRESH_MS || idleExpired()) return
+      lastRefresh = now
+      api.get('/auth/me')
+        .then(next => { if (active && next?.id) setUser(replaceIfChanged(next)) })
+        .catch(err => { if (active && err.status === 401) onSessionEnded() })
+    }
+    globalThis.addEventListener('focus', refresh)
+    return () => {
+      active = false
+      globalThis.removeEventListener('focus', refresh)
+    }
+  }, [signedIn])
+
   /**
    * Authenticate with username and password, store the token, and set user state.
    * @param {string} username
@@ -132,6 +168,19 @@ export function AuthProvider({ children }) {
     setUser(prev => ({ ...prev, ...updates }))
   }, [])
 
+  // The checks fail closed: no user, no map or an unknown key denies. The map
+  // comes from the server on login and /auth/me.
+  const permissions = user?.permissions
+  const can = useCallback((key) => GRANTED.has(permissions?.[key]), [permissions])
+  const level = useCallback((key) => {
+    const value = permissions?.[key]
+    return LEVELS.has(value) ? value : 'none'
+  }, [permissions])
+  const canRecord = useCallback((key, owned) => {
+    const held = level(key)
+    return held === 'all' || (held === 'own' && owned === true)
+  }, [level])
+
   // Memoize the context value so consumers don't re-render on every provider
   // render. Functions are stabilized with useCallback above; the value only
   // changes when user or loading change.
@@ -142,11 +191,10 @@ export function AuthProvider({ children }) {
     logout,
     updateUser,
     isAdmin: user?.role === 'admin',
-    isSupervisor: user?.role === 'admin' || user?.role === 'supervisor',
-    isPilot: user?.role === 'admin' || user?.role === 'supervisor' || user?.role === 'pilot',
-    isManager: user?.role === 'admin' || user?.role === 'manager' || user?.role === 'supervisor' || user?.role === 'pilot',
-    isViewer: user?.role === 'viewer',
-  }), [user, loading, login, logout, updateUser])
+    can,
+    level,
+    canRecord,
+  }), [user, loading, login, logout, updateUser, can, level, canRecord])
 
   return (
     <AuthContext.Provider value={value}>
@@ -158,7 +206,7 @@ export function AuthProvider({ children }) {
 /**
  * Hook to access authentication context values.
  * Must be used within an AuthProvider.
- * @returns {{ user: Object|null, loading: boolean, login: Function, logout: Function, updateUser: Function, isAdmin: boolean, isSupervisor: boolean, isPilot: boolean, isManager: boolean, isViewer: boolean }}
+ * @returns {{ user: Object|null, loading: boolean, login: Function, logout: Function, updateUser: Function, isAdmin: boolean, can: (key: string) => boolean, level: (key: string) => 'none'|'own'|'all', canRecord: (key: string, owned: boolean) => boolean }}
  */
 export function useAuth() {
   const ctx = useContext(AuthContext)

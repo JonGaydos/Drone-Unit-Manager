@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
+import { withPermissions } from '@/test/permissions'
 import { renderWithProviders } from '@/test/render'
 import PilotsPage from './PilotsPage'
 
@@ -119,10 +120,29 @@ describe('PilotsPage', () => {
   })
 
   it('hides the Add Pilot control for a non-supervisor (pilot)', async () => {
-    server.use(http.get('/api/auth/me', () => HttpResponse.json({ id: 3, username: 'p', role: 'pilot' })))
+    server.use(http.get('/api/auth/me', () => HttpResponse.json(withPermissions({ id: 3, username: 'p', role: 'pilot' }))))
     mockMount()
     renderWithProviders(<PilotsPage />, { role: 'pilot' })
     await screen.findByRole('link', { name: /Ada Lovelace/ })
     expect(screen.queryByRole('button', { name: /Add Pilot/ })).toBeNull()
+  })
+
+  it('without pilots.contacts, hides the contact inputs and leaves them out of the save', async () => {
+    let body = null
+    mockMount({ pilots: () => HttpResponse.json([{ ...PILOTS[0], email: null, phone: null, phone_work: null, phone_type: null }]) })
+    server.use(http.patch('/api/pilots/:id', async ({ request }) => { body = await request.json(); return HttpResponse.json(PILOTS[0]) }))
+    const { user } = renderWithProviders(<PilotsPage />, {
+      user: { id: 3, username: 'p', role: 'pilot', pilot_id: 1 }, permissions: { 'pilots.contacts': 'no' },
+    })
+    await screen.findByRole('link', { name: /Ada Lovelace/ })
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await screen.findByLabelText('First Name')
+    expect(screen.queryByLabelText('Email')).toBeNull()
+    expect(screen.queryByLabelText(/Work Cell/i)).toBeNull()
+    await user.click(screen.getByRole('button', { name: /Save|Update/ }))
+    await waitFor(() => expect(body).not.toBeNull())
+    for (const field of ['email', 'phone', 'phone_type', 'phone_work']) {
+      expect(body).not.toHaveProperty(field)
+    }
   })
 })

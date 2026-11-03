@@ -6,34 +6,42 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '@/api/client'
+import { useAuth } from '@/contexts/AuthContext'
+import { canViewEntry, REPORT_KEYS } from '@/lib/sidebarNav'
 import { Search, CornerDownLeft } from 'lucide-react'
 
 /** Static navigation targets (mirror the sidebar). */
 const NAV = [
   { label: 'Dashboard', url: '/' },
-  { label: 'Analytics', url: '/analytics' },
-  { label: 'Flights', url: '/flights' },
-  { label: 'Flight Plans', url: '/flight-plans' },
-  { label: 'Checklists', url: '/checklists' },
-  { label: 'Mission Log', url: '/missions' },
-  { label: 'Training Log', url: '/training' },
-  { label: 'Pilots', url: '/pilots' },
-  { label: 'Fleet', url: '/fleet' },
-  { label: 'Fleet Health', url: '/fleet-health' },
-  { label: 'Certifications', url: '/certifications' },
-  { label: 'Maintenance', url: '/maintenance' },
-  { label: 'Photo Gallery', url: '/media' },
-  { label: 'Documents', url: '/documents' },
-  { label: 'Reports', url: '/reports' },
+  { label: 'Analytics', url: '/analytics', view: 'flights.view' },
+  { label: 'Flights', url: '/flights', view: 'flights.view' },
+  { label: 'Flight Plans', url: '/flight-plans', view: 'flight_plans.view' },
+  { label: 'Checklists', url: '/checklists', view: 'checklists.view' },
+  { label: 'Mission Log', url: '/missions', view: 'logs.view' },
+  { label: 'Training Log', url: '/training', view: 'logs.view' },
+  { label: 'Pilots', url: '/pilots', view: 'pilots.view' },
+  { label: 'Fleet', url: '/fleet', view: 'fleet.view' },
+  { label: 'Fleet Health', url: '/fleet-health', view: 'fleet.view' },
+  { label: 'Certifications', url: '/certifications', view: 'certifications.view' },
+  { label: 'Maintenance', url: '/maintenance', view: 'maintenance.view' },
+  { label: 'Photo Gallery', url: '/media', view: 'files.view' },
+  { label: 'Documents', url: '/documents', view: 'files.view' },
+  { label: 'Reports', url: '/reports', view: REPORT_KEYS },
   { label: 'Compliance', url: '/compliance' },
-  { label: 'Operating Authority', url: '/operating-authority' },
-  { label: 'Alerts', url: '/alerts' },
-  { label: 'Activity Reports', url: '/incidents' },
+  { label: 'Operating Authority', url: '/operating-authority', view: 'authority.view' },
+  { label: 'Alerts', url: '/alerts', view: 'alerts.view' },
+  { label: 'Activity Reports', url: '/incidents', view: 'incidents.view' },
   { label: 'Weather', url: '/weather' },
   { label: 'Airspace', url: '/airspace' },
   { label: 'Settings', url: '/settings' },
   { label: 'User Manual', url: '/manual' },
 ]
+
+/** The page a URL belongs to, by its path, so a remembered detail page follows
+ *  its list page's view key. */
+function navEntryFor(url) {
+  return NAV.find(n => n.url !== '/' && (url === n.url || url.startsWith(`${n.url}/`)))
+}
 
 const TYPE_STYLES = {
   pilot: 'bg-blue-500/15 text-blue-400',
@@ -72,6 +80,7 @@ export function CommandPalette() {
   const [recents, setRecents] = useState(loadRecents)
   const inputRef = useRef(null)
   const navigate = useNavigate()
+  const { can } = useAuth()
 
   const close = useCallback(() => { setOpen(false); setQuery(''); setResults([]); setTypeFilter(null); setActive(0) }, [])
 
@@ -113,14 +122,17 @@ export function CommandPalette() {
 
   const pages = useMemo(() => {
     const q = query.trim().toLowerCase()
-    const list = q ? NAV.filter(n => n.label.toLowerCase().includes(q)) : NAV
+    const allowed = NAV.filter(n => canViewEntry(n.view, can))
+    const list = q ? allowed.filter(n => n.label.toLowerCase().includes(q)) : allowed
     return list.map(n => ({ ...n, type: 'page', title: n.label }))
-  }, [query])
+  }, [query, can])
 
   // Recent jumps shown when the query is empty, rendered like other rows.
   const recentItems = useMemo(
-    () => recents.map(r => ({ ...r, type: 'recent', title: r.label })),
-    [recents],
+    () => recents
+      .filter(r => canViewEntry(navEntryFor(r.url)?.view, can))
+      .map(r => ({ ...r, type: 'recent', title: r.label })),
+    [recents, can],
   )
 
   // Active entity-type filter applied to search results (pages stay unfiltered).

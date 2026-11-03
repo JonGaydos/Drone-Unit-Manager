@@ -5,6 +5,7 @@ import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import listPlugin from '@fullcalendar/list'
 import interactionPlugin from '@fullcalendar/interaction'
+import { useAuth } from '@/contexts/AuthContext'
 import { api } from '@/api/client'
 import { useToast } from '@/contexts/ToastContext'
 import { Modal } from '@/components/ui/Modal'
@@ -25,6 +26,8 @@ const ALL_CATS = Object.keys(LABELS)
 const blankForm = () => ({ title: '', category: 'event', start_date: '', end_date: '', notes: '' })
 
 export default function CalendarPage() {
+  const { can } = useAuth()
+  const canSeeCalendar = can('calendar.view')
   const navigate = useNavigate()
   const toast = useToast()
   const [confirmProps, requestConfirm] = useConfirm()
@@ -39,12 +42,13 @@ export default function CalendarPage() {
 
   const fetchRange = useCallback(async (start, end) => {
     rangeRef.current = { start, end }
+    if (!canSeeCalendar) return
     try {
       const res = await api.get(`/calendar?start=${start}&end=${end}`)
       setEvents(res.events || [])
       setFlightCounts(res.flight_counts || {})
     } catch (err) { toast.error(err.message) }
-  }, [toast])
+  }, [toast, canSeeCalendar])
 
   const handleDatesSet = (arg) => {
     fetchRange(arg.startStr.slice(0, 10), arg.endStr.slice(0, 10))
@@ -122,7 +126,7 @@ export default function CalendarPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-xl font-semibold text-foreground">Calendar</h1>
-        <Button onClick={openCreate}>Add event / leave</Button>
+        {can('calendar.create') && <Button onClick={openCreate}>Add event / leave</Button>}
       </div>
 
       <div className="flex flex-wrap gap-3">

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
+import { withPermissions } from '@/test/permissions'
 import { renderWithProviders } from '@/test/render'
 import DocumentUpload from './DocumentUpload'
 
@@ -64,7 +65,7 @@ describe('DocumentUpload', () => {
 
   it('shows the upload affordance for a pilot (matches the pilot-gated API)', async () => {
     server.use(http.get('/api/auth/me', () =>
-      HttpResponse.json({ id: 1, username: 'p', display_name: 'p', role: 'pilot' })))
+      HttpResponse.json(withPermissions({ id: 1, username: 'p', display_name: 'p', role: 'pilot' }))))
 
     renderWithProviders(<DocumentUpload entityType="pilot" entityId={3} />, { role: 'pilot' })
     await screen.findByText('No documents uploaded')
@@ -73,10 +74,35 @@ describe('DocumentUpload', () => {
 
   it('hides the upload affordance for a viewer', async () => {
     server.use(http.get('/api/auth/me', () =>
-      HttpResponse.json({ id: 1, username: 'v', display_name: 'v', role: 'viewer' })))
+      HttpResponse.json(withPermissions({ id: 1, username: 'v', display_name: 'v', role: 'viewer' }))))
 
     renderWithProviders(<DocumentUpload entityType="pilot" entityId={3} />, { role: 'viewer' })
     await screen.findByText('No documents uploaded')
     expect(screen.queryByRole('button', { name: /Upload/ })).not.toBeInTheDocument()
+  })
+
+  it("at own, offers edit on a document on the user's own certification only", async () => {
+    server.use(http.get('/api/documents', () => HttpResponse.json([
+      { id: 1, title: 'Mine', filename: 'a.pdf', document_type: 'other', certification_id: 2, certification_pilot_id: 7 },
+      { id: 2, title: 'Theirs', filename: 'b.pdf', document_type: 'other', certification_id: 3, certification_pilot_id: 8 },
+    ])))
+    renderWithProviders(<DocumentUpload entityType="certification" entityId={2} />, {
+      user: { id: 3, username: 'p', role: 'pilot', pilot_id: 7 },
+    })
+    await screen.findByText('Mine')
+    expect(screen.getAllByTitle('Edit')).toHaveLength(1)
+  })
+
+  it('reports a failed list instead of showing it as empty', async () => {
+    server.use(http.get('/api/documents', () => HttpResponse.json({ detail: 'list failed' }, { status: 500 })))
+    renderWithProviders(<DocumentUpload entityType="pilot" entityId={3} />, { role: 'admin' })
+    expect(await screen.findByText('list failed')).toBeInTheDocument()
+  })
+
+  it('shows a refused list as empty, with no error', async () => {
+    server.use(http.get('/api/documents', () => HttpResponse.json({ detail: 'refused' }, { status: 403 })))
+    renderWithProviders(<DocumentUpload entityType="pilot" entityId={3} />, { role: 'admin' })
+    await screen.findByRole('button', { name: /Upload/ })
+    await waitFor(() => expect(screen.queryByText('refused')).toBeNull())
   })
 })

@@ -52,7 +52,8 @@ function formatTimestamp(iso) {
 }
 
 export default function AuditLogPage() {
-  const { isAdmin } = useAuth()
+  const { can } = useAuth()
+  const canView = can('audit.view')
   const navigate = useNavigate()
   const [logs, setLogs] = useState([])
   const [total, setTotal] = useState(0)
@@ -67,7 +68,7 @@ export default function AuditLogPage() {
   const [showFilters, setShowFilters] = useState(false)
 
   useEffect(() => {
-    if (!isAdmin) return
+    if (!canView) return
     setLoading(true)
     const params = new URLSearchParams()
     params.set('page', page)
@@ -82,12 +83,12 @@ export default function AuditLogPage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [isAdmin, page, perPage, entityType, action])
+  }, [canView, page, perPage, entityType, action])
 
-  if (!isAdmin) {
+  if (!canView) {
     return (
       <div className="flex items-center justify-center h-64">
-        <p className="text-muted-foreground">Admin access required to view audit logs.</p>
+        <p className="text-muted-foreground">You do not have access to the audit log.</p>
       </div>
     )
   }
@@ -106,12 +107,14 @@ export default function AuditLogPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => api.download('/export/audit/csv')}
-            className="flex items-center gap-2 px-3 py-2 bg-secondary border border-border rounded-lg text-sm text-foreground hover:bg-accent/30 transition-colors"
-          >
-            <Download className="w-4 h-4" /> Export CSV
-          </button>
+          {can('reports.export') && (
+            <button
+              onClick={() => api.download('/export/audit/csv')}
+              className="flex items-center gap-2 px-3 py-2 bg-secondary border border-border rounded-lg text-sm text-foreground hover:bg-accent/30 transition-colors"
+            >
+              <Download className="w-4 h-4" /> Export CSV
+            </button>
+          )}
           <button
             onClick={() => setShowFilters(!showFilters)}
             className="flex items-center gap-2 px-3 py-2 bg-secondary border border-border rounded-lg text-sm text-foreground hover:bg-accent/30 transition-colors"

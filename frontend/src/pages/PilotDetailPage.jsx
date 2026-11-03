@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { api } from '@/api/client'
+import { api, getSection } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
+import { ownsPilot } from '@/lib/ownership'
 import { formatHours, formatDuration } from '@/lib/utils'
 import { CERT_STATUS_COLORS } from '@/lib/constants'
 import { ArrowLeft, Clock, Calendar, ShieldCheck, Edit, Save, X, Camera, CheckCircle, XCircle, Target, GraduationCap, AlertTriangle, TrendingUp } from 'lucide-react'
@@ -13,19 +14,52 @@ import {
 } from 'recharts'
 import DocumentUpload from '@/components/DocumentUpload'
 
+/** Performance tiles whose values come from other features. The server leaves a
+ *  value null when the user's view of that feature is off, so its tile is hidden. */
+function FeatureGatedTiles({ performance }) {
+  return (
+    <>
+      {performance.training_hours != null && (
+        <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-violet-500/15 flex items-center justify-center text-violet-400"><GraduationCap className="w-5 h-5" /></div>
+          <div><p className="text-2xl font-bold text-foreground">{performance.training_hours}h</p><p className="text-xs text-muted-foreground">Training Hours</p></div>
+        </div>
+      )}
+      {performance.mission_hours != null && (
+        <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-amber-500/15 flex items-center justify-center text-amber-400"><Target className="w-5 h-5" /></div>
+          <div><p className="text-2xl font-bold text-foreground">{performance.mission_hours}h</p><p className="text-xs text-muted-foreground">Mission Hours</p></div>
+        </div>
+      )}
+      {performance.incidents != null && (
+        <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-red-500/15 flex items-center justify-center text-red-400"><AlertTriangle className="w-5 h-5" /></div>
+          <div><p className="text-2xl font-bold text-foreground">{performance.incidents}</p><p className="text-xs text-muted-foreground">Incidents</p></div>
+        </div>
+      )}
+    </>
+  )
+}
+
 export default function PilotDetailPage() {
   const { id } = useParams()
-  const { isAdmin, isPilot, isSupervisor, user } = useAuth()
+  const { isAdmin, can, canRecord, user } = useAuth()
+  const canSeeFlights = can('flights.view')
+  const canSeeCerts = can('certifications.view')
+  const canSeeFiles = can('files.view')
+  const canSeeContacts = can('pilots.contacts')
+  const isOwnPilot = ownsPilot(user, Number.parseInt(id, 10))
   const toast = useToast()
 
   // Auto-file documents to General folder
   const [generalFolderId, setGeneralFolderId] = useState(null)
   useEffect(() => {
-    api.get('/folders').then(folders => {
+    // Auto-filing is optional: with no folder list, documents simply stay unfiled.
+    getSection(canSeeFiles, '/folders', []).then(folders => {
       const f = (Array.isArray(folders) ? folders : folders.folders || []).find(f => f.name === 'General')
       if (f) setGeneralFolderId(f.id)
-    }).catch(() => {})
-  }, [])
+    })
+  }, [canSeeFiles])
 
   const [pilot, setPilot] = useState(null)
   const [stats, setStats] = useState(null)
@@ -42,12 +76,12 @@ export default function PilotDetailPage() {
   useEffect(() => {
     Promise.all([
       api.get(`/pilots/${id}`),
-      api.get(`/pilots/${id}/stats`),
-      api.get(`/flights?pilot_id=${id}&per_page=20`),
-      api.get(`/pilot-certifications?pilot_id=${id}`).catch(() => []),
-      api.get(`/currency/status/${id}`).catch(() => null),
-      api.get(`/dashboard/analytics/pilot-performance/${id}`).catch(() => null),
-      api.get(`/pilots/${id}/needs-attention`).catch(() => null),
+      getSection(canSeeFlights, `/pilots/${id}/stats`, null),
+      getSection(canSeeFlights, `/flights?pilot_id=${id}&per_page=20`, []),
+      getSection(canSeeCerts, `/pilot-certifications?pilot_id=${id}`, []),
+      getSection(canSeeCerts, `/currency/status/${id}`, null),
+      getSection(canSeeFlights, `/dashboard/analytics/pilot-performance/${id}`, null),
+      getSection(canSeeCerts, `/pilots/${id}/needs-attention`, null),
     ]).then(([p, s, fData, c, cur, perf, na]) => {
       setPilot(p)
       setStats(s)
@@ -57,19 +91,22 @@ export default function PilotDetailPage() {
       setPerformance(perf)
       setNeedsAttention(na)
     }).catch(() => {}).finally(() => setLoading(false))
-  }, [id])
+  }, [id, canSeeFlights, canSeeCerts])
 
-  // A pilot edits and attaches documents to their own record; supervisors to anyone's.
-  const canEdit = isSupervisor || (isPilot && user?.pilot_id === Number.parseInt(id, 10))
+  const canEdit = canRecord('pilots.edit', isOwnPilot)
 
   const startEditing = () => {
     setEditForm({
       first_name: pilot.first_name || '',
       last_name: pilot.last_name || '',
-      email: pilot.email || '',
-      phone: pilot.phone || '',
-      phone_type: pilot.phone_type || 'work',
-      phone_work: pilot.phone_work || '',
+      // Contact details stay out of the save without pilots.contacts: they reach
+      // this page masked, so sending them back would mean nothing.
+      ...(canSeeContacts ? {
+        email: pilot.email || '',
+        phone: pilot.phone || '',
+        phone_type: pilot.phone_type || 'work',
+        phone_work: pilot.phone_work || '',
+      } : {}),
       badge_number: pilot.badge_number || '',
       status: pilot.status || 'active',
       notes: pilot.notes || '',
@@ -148,53 +185,57 @@ export default function PilotDetailPage() {
                       className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label htmlFor="email" className="block text-xs font-medium text-muted-foreground mb-1">Email</label>
-                    <input id="email" type="email" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})}
-                      className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
-                  </div>
-                  <div>
-                    <label htmlFor="personal-cell" className="block text-xs font-medium text-muted-foreground mb-1">Personal Cell</label>
-                    <input id="personal-cell"
-                      type="tel"
-                      value={editForm.phone || ''}
-                      onChange={(e) => {
-                        const digits = e.target.value.replaceAll(/\D/g, '').slice(0, 10)
-                        let formatted = digits
-                        if (digits.length > 3) formatted = digits.slice(0,3) + '-' + digits.slice(3)
-                        if (digits.length > 6) formatted = digits.slice(0,3) + '-' + digits.slice(3,6) + '-' + digits.slice(6)
-                        setEditForm({...editForm, phone: formatted})
-                      }}
-                      placeholder="###-###-####"
-                      className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label htmlFor="work-cell" className="block text-xs font-medium text-muted-foreground mb-1">Work Cell</label>
-                  <input id="work-cell"
-                    type="tel"
-                    value={editForm.phone_work || ''}
-                    onChange={(e) => {
-                      const digits = e.target.value.replaceAll(/\D/g, '').slice(0, 10)
-                      let formatted = digits
-                      if (digits.length > 3) formatted = digits.slice(0,3) + '-' + digits.slice(3)
-                      if (digits.length > 6) formatted = digits.slice(0,3) + '-' + digits.slice(3,6) + '-' + digits.slice(6)
-                      setEditForm({...editForm, phone_work: formatted})
-                    }}
-                    placeholder="###-###-####"
-                    className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                  />
-                </div>
+                {canSeeContacts && (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label htmlFor="email" className="block text-xs font-medium text-muted-foreground mb-1">Email</label>
+                        <input id="email" type="email" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})}
+                          className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                      </div>
+                      <div>
+                        <label htmlFor="personal-cell" className="block text-xs font-medium text-muted-foreground mb-1">Personal Cell</label>
+                        <input id="personal-cell"
+                          type="tel"
+                          value={editForm.phone || ''}
+                          onChange={(e) => {
+                            const digits = e.target.value.replaceAll(/\D/g, '').slice(0, 10)
+                            let formatted = digits
+                            if (digits.length > 3) formatted = digits.slice(0,3) + '-' + digits.slice(3)
+                            if (digits.length > 6) formatted = digits.slice(0,3) + '-' + digits.slice(3,6) + '-' + digits.slice(6)
+                            setEditForm({...editForm, phone: formatted})
+                          }}
+                          placeholder="###-###-####"
+                          className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label htmlFor="work-cell" className="block text-xs font-medium text-muted-foreground mb-1">Work Cell</label>
+                      <input id="work-cell"
+                        type="tel"
+                        value={editForm.phone_work || ''}
+                        onChange={(e) => {
+                          const digits = e.target.value.replaceAll(/\D/g, '').slice(0, 10)
+                          let formatted = digits
+                          if (digits.length > 3) formatted = digits.slice(0,3) + '-' + digits.slice(3)
+                          if (digits.length > 6) formatted = digits.slice(0,3) + '-' + digits.slice(3,6) + '-' + digits.slice(6)
+                          setEditForm({...editForm, phone_work: formatted})
+                        }}
+                        placeholder="###-###-####"
+                        className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      />
+                    </div>
+                  </>
+                )}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label htmlFor="badge-number" className="block text-xs font-medium text-muted-foreground mb-1">Badge Number</label>
                     <input id="badge-number" type="text" value={editForm.badge_number} onChange={e => setEditForm({...editForm, badge_number: e.target.value})}
                       className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                   </div>
-                  {/* Status is a supervisor's decision; the API refuses it from a pilot. */}
-                  {isSupervisor && <div>
+                  {/* Status needs pilots.manage; the API refuses it otherwise. */}
+                  {can('pilots.manage') && <div>
                     <label htmlFor="status" className="block text-xs font-medium text-muted-foreground mb-1">Status</label>
                     <select id="status" value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})}
                       className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
@@ -292,18 +333,7 @@ export default function PilotDetailPage() {
               <div className="w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center text-emerald-400"><TrendingUp className="w-5 h-5" /></div>
               <div><p className="text-2xl font-bold text-foreground">{performance.avg_duration_min}m</p><p className="text-xs text-muted-foreground">Avg Duration</p></div>
             </div>
-            <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-violet-500/15 flex items-center justify-center text-violet-400"><GraduationCap className="w-5 h-5" /></div>
-              <div><p className="text-2xl font-bold text-foreground">{performance.training_hours}h</p><p className="text-xs text-muted-foreground">Training Hours</p></div>
-            </div>
-            <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/15 flex items-center justify-center text-amber-400"><Target className="w-5 h-5" /></div>
-              <div><p className="text-2xl font-bold text-foreground">{performance.mission_hours}h</p><p className="text-xs text-muted-foreground">Mission Hours</p></div>
-            </div>
-            <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-red-500/15 flex items-center justify-center text-red-400"><AlertTriangle className="w-5 h-5" /></div>
-              <div><p className="text-2xl font-bold text-foreground">{performance.incidents}</p><p className="text-xs text-muted-foreground">Incidents</p></div>
-            </div>
+            <FeatureGatedTiles performance={performance} />
           </div>
 
           {/* Charts Row */}
@@ -526,7 +556,7 @@ export default function PilotDetailPage() {
       )}
 
       {/* Documents */}
-      <DocumentUpload entityType="pilot" entityId={id} folderId={generalFolderId} canUpload={canEdit} />
+      <DocumentUpload entityType="pilot" entityId={id} folderId={generalFolderId} canUpload={canRecord('files.upload', isOwnPilot)} />
     </div>
   )
 }

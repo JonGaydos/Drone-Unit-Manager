@@ -4,6 +4,8 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { ThemeProvider } from '@/contexts/ThemeContext'
 import { ToastProvider } from '@/contexts/ToastContext'
+import { AuthSettled } from './AuthSettled'
+import { withPermissions } from './permissions'
 
 // Provider export names confirmed against source: AuthProvider, ThemeProvider,
 // ToastProvider — none require props beyond children.
@@ -12,17 +14,23 @@ function Providers({ children }) {
   return (
     <ThemeProvider>
       <ToastProvider>
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider><AuthSettled>{children}</AuthSettled></AuthProvider>
       </ToastProvider>
     </ThemeProvider>
   )
 }
 
-export function renderWithProviders(ui, { route = '/', user, role } = {}) {
-  if (user || role) {
-    localStorage.setItem('token', 'test-token')
-    localStorage.setItem('user', JSON.stringify(user || { id: 1, username: 'admin', role: role || 'admin' }))
-  }
+// Seed the signed-in user. GET /api/auth/me returns it (test/handlers.js), with
+// the role's default permissions plus any `permissions` overrides.
+function seedUser({ user, role, permissions }) {
+  if (!user && !role) return
+  localStorage.setItem('token', 'test-token')
+  const base = user || { id: 1, username: 'admin', role }
+  localStorage.setItem('user', JSON.stringify(withPermissions(base, permissions)))
+}
+
+export function renderWithProviders(ui, { route = '/', user, role, permissions } = {}) {
+  seedUser({ user, role, permissions })
   const result = render(
     <MemoryRouter initialEntries={[route]}>{ui}</MemoryRouter>,
     { wrapper: Providers },
@@ -31,11 +39,8 @@ export function renderWithProviders(ui, { route = '/', user, role } = {}) {
 }
 
 // For pages that read route params, e.g. /pilots/:id
-export function renderRoute(element, { path, route, user, role } = {}) {
-  if (user || role) {
-    localStorage.setItem('token', 'test-token')
-    localStorage.setItem('user', JSON.stringify(user || { id: 1, username: 'admin', role: role || 'admin' }))
-  }
+export function renderRoute(element, { path, route, user, role, permissions } = {}) {
+  seedUser({ user, role, permissions })
   return {
     user: userEvent.setup(),
     ...render(

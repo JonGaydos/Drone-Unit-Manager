@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
+import { withPermissions } from '@/test/permissions'
 import { renderWithProviders } from '@/test/render'
 import SettingsPage from './SettingsPage'
 
@@ -109,7 +110,7 @@ describe('SettingsPage', () => {
 
   it('admin-gates the page: viewers see no Save button and no admin sections', async () => {
     mockMount()
-    server.use(http.get('/api/auth/me', () => HttpResponse.json({ id: 9, username: 'v', role: 'viewer' })))
+    server.use(http.get('/api/auth/me', () => HttpResponse.json(withPermissions({ id: 9, username: 'v', role: 'viewer' }))))
     renderWithProviders(<SettingsPage />, { role: 'viewer' })
     expect(await screen.findByText('Organization')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Save Settings/ })).toBeNull()
@@ -396,5 +397,51 @@ describe('SettingsPage', () => {
     expect(saved).toEqual([
       { key: 'drone_location_places', value: JSON.stringify(['North', 'Harbour']) },
     ])
+  })
+})
+
+describe('SettingsPage role permissions', () => {
+  const PERMISSIONS = {
+    registry: [{ key: 'flights.view', feature: 'Flights', action: 'View', kind: 'bool', defaults: {}, viewer_locked: false, requires: null }],
+    values: Object.fromEntries(['admin', 'supervisor', 'pilot', 'viewer'].map(r => [r, { 'flights.view': 'yes' }])),
+  }
+
+  it('places the permissions grid directly below User Management', async () => {
+    mockMount()
+    server.use(http.get('/api/permissions', () => HttpResponse.json(PERMISSIONS)))
+    const { user } = renderWithProviders(<SettingsPage />, { role: 'admin' })
+    await user.click(await screen.findByRole('button', { name: 'Users' }))
+
+    const grid = await screen.findByRole('region', { name: 'Role Permissions' })
+    const management = screen.getByRole('heading', { name: 'User Management' }).closest('div.bg-card')
+    expect(management.nextElementSibling).toBe(grid)
+  })
+
+  it('says role permissions are configurable instead of listing fixed abilities', async () => {
+    mockMount()
+    server.use(http.get('/api/permissions', () => HttpResponse.json(PERMISSIONS)))
+    const { user } = renderWithProviders(<SettingsPage />, { role: 'admin' })
+    await user.click(await screen.findByRole('button', { name: 'Users' }))
+
+    expect(await screen.findByText(/set in Role Permissions below/)).toBeInTheDocument()
+    expect(screen.queryByText(/Read-only access to all data/)).not.toBeInTheDocument()
+  })
+
+  it('flags only pilot logins with no linked pilot', async () => {
+    mockMount({
+      users: () => HttpResponse.json([
+        { id: 1, username: 'admin', display_name: 'Admin User', role: 'admin', is_active: true },
+        { id: 2, username: 'unlinked', display_name: 'Unlinked Pilot', role: 'pilot', is_active: true, pilot_id: null },
+        { id: 3, username: 'linked', display_name: 'Linked Pilot', role: 'pilot', is_active: true, pilot_id: 10 },
+        { id: 4, username: 'watcher', display_name: 'Unlinked Viewer', role: 'viewer', is_active: true },
+      ]),
+    })
+    server.use(http.get('/api/permissions', () => HttpResponse.json(PERMISSIONS)))
+    const { user } = renderWithProviders(<SettingsPage />, { role: 'admin' })
+    await user.click(await screen.findByRole('button', { name: 'Users' }))
+
+    const badges = await screen.findAllByText('No linked pilot')
+    expect(badges).toHaveLength(1)
+    expect(badges[0].closest('tr')).toHaveTextContent('Unlinked Pilot')
   })
 })

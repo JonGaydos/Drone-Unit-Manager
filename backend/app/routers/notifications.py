@@ -17,6 +17,7 @@ from app.models.notification_preference import NotificationPreference
 from app.models.notification_log import NotificationLog
 from app.responses import responses
 from app.services.audit import log_action
+from app.services.permissions import can
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +111,7 @@ def get_preferences(
     }
 
 
-@router.put("/preferences", responses=responses(400))
+@router.put("/preferences", responses=responses(400, 403))
 def update_preferences(
     data: NotificationPrefUpdate,
     db: DBSession,
@@ -134,6 +135,8 @@ def update_preferences(
         override = data.email_override.strip()
         if not override:
             pref.email_override = None
+        elif not can(db, user, "digest.redirect"):
+            raise HTTPException(403, "You do not have permission to send the digest to another address")
         elif _CONTROL_CHARS_RE.search(override) or not EMAIL_RE.match(override):
             raise HTTPException(400, "email_override must be a valid email address")
         else:
@@ -164,17 +167,11 @@ def send_test_digest(
     user: CurrentUser,
 ):
     """Send a test digest email to the current user immediately."""
-    from app.services.email_digest import build_digest, render_digest_html, send_email
+    from app.services.email_digest import build_digest, digest_address, render_digest_html, send_email
     from app.models.setting import Setting
 
-    # Resolve email: preference override → user email → linked pilot email
     pref = _get_or_create_pref(db, user.id)
-    to_email = pref.email_override or user.email
-    if not to_email and user.pilot_id:
-        from app.models.pilot import Pilot
-        pilot = db.query(Pilot).filter(Pilot.id == user.pilot_id).first()
-        if pilot and pilot.email:
-            to_email = pilot.email
+    to_email = digest_address(db, user, pref)
     if not to_email:
         raise HTTPException(400, "No email address found. Add an email to your linked pilot profile or user account.")
 

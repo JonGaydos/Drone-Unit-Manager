@@ -1,12 +1,13 @@
 import calendar
 from datetime import date
-from typing import Literal, Optional
+from typing import Annotated, Literal, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.constants import SCHEDULE_NOT_FOUND
-from app.deps import CurrentUser, DBSession, PilotUser
+from app.deps import DBSession
+from app.routers.auth import require_permission
 from app.models.attachment import Attachment
 from app.models.battery import Battery
 from app.models.controller import Controller
@@ -16,11 +17,16 @@ from app.models.maintenance import MaintenanceRecord
 from app.models.other_equipment import OtherEquipment
 from app.models.pilot import Pilot
 from app.models.sensor import SensorPackage
+from app.models.user import User
 from app.models.vehicle import Vehicle
 from app.responses import responses
 from app.services.audit import compute_changes, log_action
 
 router = APIRouter(prefix="/api/maintenance/schedules", tags=["maintenance-schedules"])
+
+ViewUser = Annotated[User, Depends(require_permission("maintenance.view"))]
+ManageUser = Annotated[User, Depends(require_permission("schedules.manage"))]
+CompleteUser = Annotated[User, Depends(require_permission("schedules.complete"))]
 
 
 # entity_type -> model. "organization" is allowed but has no table, so its
@@ -110,7 +116,7 @@ def _calc_next_due(frequency: str, from_date: date | None = None) -> date:
 @router.get("")
 def list_schedules(
     db: DBSession,
-    user: CurrentUser,
+    user: ViewUser,
     all: bool = False):
     q = db.query(MaintenanceSchedule)
     if not all:
@@ -142,7 +148,7 @@ def list_schedules(
 def get_schedule(
     schedule_id: int,
     db: DBSession,
-    user: CurrentUser,
+    user: ViewUser,
 ):
     s = db.query(MaintenanceSchedule).filter(MaintenanceSchedule.id == schedule_id).first()
     if not s:
@@ -170,7 +176,7 @@ def get_schedule(
 def create_schedule(
     data: ScheduleCreate,
     db: DBSession,
-    user: PilotUser,
+    user: ManageUser,
 ):
     _validate_entity(db, data.entity_type, data.entity_id)
     if data.frequency == ONE_TIME and data.next_due is None:
@@ -199,7 +205,7 @@ def update_schedule(
     schedule_id: int,
     data: ScheduleUpdate,
     db: DBSession,
-    user: PilotUser,
+    user: ManageUser,
 ):
     schedule = db.query(MaintenanceSchedule).filter(MaintenanceSchedule.id == schedule_id).first()
     if not schedule:
@@ -230,7 +236,7 @@ def update_schedule(
 def delete_schedule(
     schedule_id: int,
     db: DBSession,
-    user: PilotUser,
+    user: ManageUser,
 ):
     schedule = db.query(MaintenanceSchedule).filter(MaintenanceSchedule.id == schedule_id).first()
     if not schedule:
@@ -245,7 +251,7 @@ def delete_schedule(
 def complete_schedule(
     schedule_id: int,
     db: DBSession,
-    user: PilotUser,
+    user: CompleteUser,
 ):
     schedule = db.query(MaintenanceSchedule).filter(MaintenanceSchedule.id == schedule_id).first()
     if not schedule:
@@ -270,6 +276,7 @@ def complete_schedule(
         performed_date=today,
         next_due_date=None if schedule.frequency == ONE_TIME else schedule.next_due,
         performed_by=user.display_name if user.display_name else user.username,
+        created_by_id=user.id,
     )
     db.add(record)
     log_action(db, user.id, user.display_name, "complete", "maintenance_schedule", schedule.id, schedule.name)

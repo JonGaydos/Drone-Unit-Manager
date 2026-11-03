@@ -182,13 +182,13 @@ def _send_user_digest(pref, db):
     """Build and send a digest email for a single user preference."""
     import json
     from app.models.user import User
-    from app.services.email_digest import build_digest, render_digest_html, send_email
+    from app.services.email_digest import build_digest, digest_address, render_digest_html, send_email
 
     user = db.query(User).filter(User.id == pref.user_id).first()
     if not user:
         return
 
-    to_email = pref.email_override or user.email
+    to_email = digest_address(db, user, pref)
     if not to_email:
         return
 

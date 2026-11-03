@@ -778,12 +778,11 @@ def test_generate_pdf_endpoint_renders_the_annual_report_with_charts(client, db,
     assert len(resp.content) > 1000
 
 
-def test_generate_pdf_endpoint_tolerates_an_unknown_report_type(client, db, pilot_headers):
-    """An unknown type still produces a (blank) PDF rather than erroring."""
+def test_generate_pdf_endpoint_refuses_an_unknown_report_type(client, db, pilot_headers):
+    """An unknown type has no view keys, so it is refused."""
     resp = client.post("/api/reports/generate/pdf",
                        json={"report_type": "does_not_exist"}, headers=pilot_headers)
-    assert resp.status_code == 200, resp.text
-    assert resp.content.startswith(b"%PDF")
+    assert resp.status_code == 400, resp.text
 
 
 def test_per_pilot_zip_returns_one_pdf_per_pilot(client, db, pilot_headers):

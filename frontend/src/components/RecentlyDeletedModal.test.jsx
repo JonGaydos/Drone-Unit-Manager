@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { screen, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
+import { withPermissions } from '@/test/permissions'
 import { renderWithProviders } from '@/test/render'
 import { RecentlyDeletedModal } from './RecentlyDeletedModal'
 
@@ -16,7 +17,7 @@ function mockList(rows = DELETED) {
 
 // The provider takes the role from GET /api/auth/me, not the stored user.
 function asRole(role) {
-  server.use(http.get('/api/auth/me', () => HttpResponse.json({ id: 1, username: role, display_name: role, role })))
+  server.use(http.get('/api/auth/me', () => HttpResponse.json(withPermissions({ id: 1, username: role, display_name: role, role }))))
 }
 
 describe('RecentlyDeletedModal', () => {

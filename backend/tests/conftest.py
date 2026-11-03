@@ -28,6 +28,7 @@ import app.database as database
 from app.database import Base, get_db, get_telemetry_db
 import app.models  # noqa: F401 - register all ORM models on Base.metadata
 from app.models.telemetry import TelemetryBase
+from app.models.pilot import Pilot
 from app.models.user import User
 from app.main import app
 from app.routers.auth import hash_password, create_token
@@ -155,6 +156,8 @@ def _seed_user(session, *, username, role, password):
 # same credentials can be reused for live login tests.
 ADMIN_PASSWORD = "AdminPassw0rd!"
 PILOT_PASSWORD = "PilotPassw0rd!"
+SUPERVISOR_PASSWORD = "SupervisorPassw0rd!"
+VIEWER_PASSWORD = "ViewerPassw0rd!"
 
 
 @pytest.fixture
@@ -168,6 +171,28 @@ def pilot_user(db):
 
 
 @pytest.fixture
+def supervisor_user(db):
+    return _seed_user(db, username="supervisor", role="supervisor", password=SUPERVISOR_PASSWORD)
+
+
+@pytest.fixture
+def viewer_user(db):
+    return _seed_user(db, username="viewer", role="viewer", password=VIEWER_PASSWORD)
+
+
+@pytest.fixture
+def linked_pilot(db, pilot_user):
+    """A Pilot row linked to pilot_user through user.pilot_id."""
+    pilot = Pilot(first_name="Linked", last_name="Pilot")
+    db.add(pilot)
+    db.commit()
+    pilot_user.pilot_id = pilot.id
+    db.commit()
+    db.refresh(pilot)
+    return pilot
+
+
+@pytest.fixture
 def admin_headers(admin_user):
     token = create_token(admin_user.id)
     return {"Authorization": f"Bearer {token}"}
@@ -176,6 +201,18 @@ def admin_headers(admin_user):
 @pytest.fixture
 def pilot_headers(pilot_user):
     token = create_token(pilot_user.id)
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+def supervisor_headers(supervisor_user):
+    token = create_token(supervisor_user.id)
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+def viewer_headers(viewer_user):
+    token = create_token(viewer_user.id)
     return {"Authorization": f"Bearer {token}"}
 
 

@@ -3,6 +3,7 @@ import { api } from '@/api/client'
 import { inSequence } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
+import { ownsRecord } from '@/lib/ownership'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Modal } from '@/components/ui/Modal'
 import { useConfirm } from '@/hooks/useConfirm'
@@ -42,7 +43,9 @@ export default function MediaPage() {
   const [showEdit, setShowEdit] = useState(null)
   const [lightbox, setLightbox] = useState(null)
   const [showDeleted, setShowDeleted] = useState(false)
-  const { isPilot, isSupervisor } = useAuth()
+  const { user, can, canRecord } = useAuth()
+  const canUpload = can('files.upload')
+  const canCustody = can('files.custody')
   const toast = useToast()
   const [confirmProps, requestConfirm] = useConfirm()
 
@@ -50,7 +53,7 @@ export default function MediaPage() {
     setLoading(true)
     Promise.all([
       api.get('/photos'),
-      api.get('/pilots'),
+      api.get('/pilots/options'),
     ]).then(([p, pl]) => {
       setPhotos(p)
       setPilots(pl)
@@ -146,7 +149,7 @@ export default function MediaPage() {
               className="pl-9 pr-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring w-full sm:w-64"
             />
           </div>
-          {isSupervisor && (
+          {canCustody && (
             <button
               onClick={() => setShowDeleted(true)}
               className="flex items-center gap-2 px-3 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90"
@@ -154,7 +157,7 @@ export default function MediaPage() {
               <History className="w-4 h-4" /> Recently deleted
             </button>
           )}
-          {isPilot && (
+          {canUpload && (
             <button
               onClick={() => setShowUpload(true)}
               className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
@@ -173,7 +176,7 @@ export default function MediaPage() {
           <p className="text-muted-foreground max-w-md mx-auto mb-4">
             Upload photos from flights, training, or equipment inspections to build your gallery.
           </p>
-          {isPilot && (
+          {canUpload && (
             <button
               onClick={() => setShowUpload(true)}
               className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90"
@@ -228,38 +231,14 @@ export default function MediaPage() {
                             <span className="truncate">{photo.pilot_names.join(', ')}</span>
                           </div>
                         )}
-                        {isPilot && (
-                          <div className="flex items-center gap-1 pt-1">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setShowEdit(photo) }}
-                              className="p-1.5 text-muted-foreground hover:text-primary rounded-md hover:bg-primary/10 transition-colors"
-                              title="Edit"
-                              aria-label="Edit"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
-                            {isSupervisor && (
-                              <button
-                                onClick={(e) => { e.stopPropagation(); void toggleHold(photo) }}
-                                className={`p-1.5 rounded-md transition-colors hover:bg-amber-500/10 ${photo.legal_hold ? 'text-amber-500' : 'text-muted-foreground hover:text-amber-500'}`}
-                                title={photo.legal_hold ? 'Release legal hold' : 'Place on legal hold'}
-                                aria-label={photo.legal_hold ? 'Release legal hold' : 'Place on legal hold'}
-                              >
-                                <Lock className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                            {!photo.legal_hold && (
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleDelete(photo.id) }}
-                                className="p-1.5 text-muted-foreground hover:text-destructive rounded-md hover:bg-destructive/10 transition-colors"
-                                title="Delete"
-                                aria-label="Delete"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        )}
+                        <PhotoActions
+                          canEdit={canRecord('files.edit', ownsRecord(user, photo.uploaded_by_id))}
+                          canCustody={canCustody}
+                          legalHold={photo.legal_hold}
+                          onEdit={() => setShowEdit(photo)}
+                          onToggleHold={() => { void toggleHold(photo) }}
+                          onDelete={() => handleDelete(photo.id)}
+                        />
                       </div>
                     </div>
                   )
@@ -380,6 +359,47 @@ function LightboxModal({ photos, index, onClose, onPrev, onNext, formatDate, for
   )
 }
 
+// A photo card's controls. The bar holds whichever the user may use, and is
+// left out when there are none.
+function PhotoActions({ canEdit, canCustody, legalHold, onEdit, onToggleHold, onDelete }) {
+  if (!canEdit && !canCustody) return null
+  const act = (handler) => (e) => { e.stopPropagation(); handler() }
+  return (
+    <div className="flex items-center gap-1 pt-1">
+      {canEdit && (
+        <button
+          onClick={act(onEdit)}
+          className="p-1.5 text-muted-foreground hover:text-primary rounded-md hover:bg-primary/10 transition-colors"
+          title="Edit"
+          aria-label="Edit"
+        >
+          <Edit2 className="w-3.5 h-3.5" />
+        </button>
+      )}
+      {canCustody && (
+        <button
+          onClick={act(onToggleHold)}
+          className={`p-1.5 rounded-md transition-colors hover:bg-amber-500/10 ${legalHold ? 'text-amber-500' : 'text-muted-foreground hover:text-amber-500'}`}
+          title={legalHold ? 'Release legal hold' : 'Place on legal hold'}
+          aria-label={legalHold ? 'Release legal hold' : 'Place on legal hold'}
+        >
+          <Lock className="w-3.5 h-3.5" />
+        </button>
+      )}
+      {canEdit && !legalHold && (
+        <button
+          onClick={act(onDelete)}
+          className="p-1.5 text-muted-foreground hover:text-destructive rounded-md hover:bg-destructive/10 transition-colors"
+          title="Delete"
+          aria-label="Delete"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      )}
+    </div>
+  )
+}
+
 function UploadModal({ pilots, onClose, onSuccess }) {
   const toast = useToast()
   const [files, setFiles] = useState([])
@@ -485,7 +505,7 @@ function UploadModal({ pilots, onClose, onSuccess }) {
             <p className="block text-sm font-medium text-foreground mb-1">Associated Pilots</p>
             <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-2 bg-secondary border border-border rounded-lg">
               {sortPilotsActiveFirst(pilots).map(p => {
-                const name = `${p.first_name} ${p.last_name}`.trim()
+                const name = p.full_name
                 const sel = selectedPilots.includes(p.id)
                 return (
                   <button
@@ -599,7 +619,7 @@ function EditModal({ photo, pilots, onClose, onSuccess }) {
             <p className="block text-sm font-medium text-foreground mb-1">Associated Pilots</p>
             <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-2 bg-secondary border border-border rounded-lg">
               {sortPilotsActiveFirst(pilots).map(p => {
-                const name = `${p.first_name} ${p.last_name}`.trim()
+                const name = p.full_name
                 const sel = selectedPilots.includes(p.id)
                 return (
                   <button

@@ -8,23 +8,32 @@ import hashlib
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse
+from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
 
 from app.config import settings
 from app.constants import DOCUMENT_NOT_FOUND, ACCESS_DENIED
-from app.deps import AdminUser, DBSession, CurrentUser, PilotUser, SupervisorUser
+from app.deps import AdminUser, DBSession
 from app.models.certification import PilotCertification
 from app.models.document import Document
 from app.models.user import User
 from app.schemas.document import DocumentOut
 from app.responses import responses
+from app.routers.auth import require_permission
 from app.services import evidence
+from app.services import permissions as permissions_service
 from app.services.audit import compute_changes, log_action
 from app.services.file_validation import is_inline_safe, mime_for_filename, user_file_headers
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
+
+FILES_EDIT = "files.edit"
+ViewUser = Annotated[User, Depends(require_permission("files.view"))]
+UploadUser = Annotated[User, Depends(require_permission("files.upload"))]
+EditUser = Annotated[User, Depends(require_permission(FILES_EDIT))]
+CustodyUser = Annotated[User, Depends(require_permission("files.custody"))]
 
 # Whitelist of permitted file extensions for document uploads
 ALLOWED_DOCUMENT_EXTENSIONS = {
@@ -49,6 +58,7 @@ ALLOWED_ENTITY_TYPES = {
 def _doc_to_out(doc: Document) -> DocumentOut:
     """Convert a Document ORM instance to its API response schema with a view URL."""
     out = DocumentOut.model_validate(doc)
+    out.certification_pilot_id = doc.certification.pilot_id if doc.certification else None
     out.view_url = f"/api/documents/{doc.id}/view"
     return out
 
@@ -98,22 +108,24 @@ def _validate_document_request(entity_type: str, entity_id, ext: str) -> None:
 
 
 def _check_own_record(db, user, entity_type: str, entity_id) -> None:
-    """A pilot attaches documents to their own pilot record and certifications
-    only; supervisors and admins attach to anyone's. Raises 403 otherwise."""
-    if user.role != "pilot" or entity_type not in ("pilot", "certification"):
+    """At Own, a user attaches documents to their own pilot record and
+    certifications only; at All, to anyone's. Raises 403 otherwise."""
+    if entity_type not in ("pilot", "certification"):
+        return
+    if permissions_service.level(db, user, "files.upload") == permissions_service.ALL:
         return
     owner = entity_id
     if entity_type == "certification":
         cert = db.get(PilotCertification, entity_id)
         owner = cert.pilot_id if cert else None
     if owner is None or owner != user.pilot_id:
-        raise HTTPException(403, "Pilots can only attach documents to their own record")
+        raise HTTPException(403, "You can only attach documents to your own record")
 
 
 @router.post("/upload", response_model=DocumentOut, responses=responses(400, 403, 413))
 async def upload_document(
     db: DBSession,
-    admin: PilotUser,
+    admin: UploadUser,
     file: Annotated[UploadFile, File()],
     entity_type: Annotated[str, Form()],
     document_type: Annotated[str, Form()],
@@ -135,7 +147,7 @@ async def upload_document(
         notes: Optional free-text notes.
         folder_id: Optional folder for organization.
         db: Database session.
-        admin: Authenticated user (pilot role or higher).
+        admin: Authenticated user holding the upload permission.
 
     Returns:
         The created document record.
@@ -200,6 +212,7 @@ async def upload_document(
         sha256=hashlib.sha256(contents).hexdigest(),
         notes=notes,
         folder_id=folder_id,
+        uploaded_by_id=admin.id,
     )
     db.add(doc)
     db.flush()
@@ -215,7 +228,7 @@ async def upload_document(
 @router.get("", response_model=list[DocumentOut])
 def list_documents(
     db: DBSession,
-    user: CurrentUser,
+    user: ViewUser,
     entity_type: str | None = None,
     entity_id: int | None = None):
     """List documents with optional filtering by entity type and ID.
@@ -232,7 +245,7 @@ def list_documents(
         q = q.filter(Document.entity_type == entity_type)
     if entity_id:
         q = q.filter(Document.entity_id == entity_id)
-    rows = q.order_by(Document.uploaded_at.desc()).all()
+    rows = q.options(selectinload(Document.certification)).order_by(Document.uploaded_at.desc()).all()
     return [_doc_to_out(r) for r in rows]
 
 
@@ -240,7 +253,7 @@ def list_documents(
 def view_document(
     doc_id: int,
     db: DBSession,
-    user: CurrentUser,
+    user: ViewUser,
 ):
     """Serve a document file for viewing or download.
 
@@ -293,7 +306,7 @@ def update_document(
     doc_id: int,
     data: DocumentUpdate,
     db: DBSession,
-    user: PilotUser,
+    user: EditUser,
 ):
     """Update a document's metadata (title, type, notes, folder).
 
@@ -305,6 +318,7 @@ def update_document(
         The updated document record.
     """
     doc = _live_document(db, doc_id)
+    permissions_service.require_record_access(db, user, FILES_EDIT, permissions_service.owns_document(db, user, doc))
     update_fields = data.model_dump(exclude_unset=True)
     changes = compute_changes(doc, update_fields, list(update_fields))
     for key, value in update_fields.items():
@@ -321,11 +335,12 @@ def update_document(
 def delete_document(
     doc_id: int,
     db: DBSession,
-    admin: PilotUser,
+    admin: EditUser,
 ):
-    """Move a document to Recently deleted. The file stays, so a supervisor can
-    restore it; only an admin purge removes it for good."""
+    """Move a document to Recently deleted. The file stays, so a role holding
+    files.custody can restore it; only an admin purge removes it for good."""
     doc = _live_document(db, doc_id)
+    permissions_service.require_record_access(db, admin, FILES_EDIT, permissions_service.owns_document(db, admin, doc))
     evidence.soft_delete(doc, admin)
     log_action(db, admin.id, admin.display_name, "delete", "document", doc_id, doc.title or doc.filename)
     db.commit()
@@ -333,7 +348,7 @@ def delete_document(
 
 
 @router.get("/deleted", responses=responses(401, 403))
-def list_deleted_documents(db: DBSession, _user: SupervisorUser):
+def list_deleted_documents(db: DBSession, _user: CustodyUser):
     """Deleted documents, newest deletion first."""
     docs = (db.query(Document).filter(Document.deleted_at.is_not(None))
             .order_by(Document.deleted_at.desc()).all())
@@ -343,7 +358,7 @@ def list_deleted_documents(db: DBSession, _user: SupervisorUser):
 
 
 @router.post("/{doc_id}/restore", responses=responses(401, 403, 404, 409))
-def restore_document(doc_id: int, db: DBSession, user: SupervisorUser):
+def restore_document(doc_id: int, db: DBSession, user: CustodyUser):
     """Bring a deleted document back where it was."""
     doc = _document_or_404(db, doc_id)
     evidence.restore(doc)
@@ -353,7 +368,7 @@ def restore_document(doc_id: int, db: DBSession, user: SupervisorUser):
 
 
 @router.put("/{doc_id}/hold", responses=responses(401, 403, 404))
-def set_document_hold(doc_id: int, data: evidence.HoldUpdate, db: DBSession, user: SupervisorUser):
+def set_document_hold(doc_id: int, data: evidence.HoldUpdate, db: DBSession, user: CustodyUser):
     """Place or release a legal hold. A held document cannot be deleted or purged."""
     doc = _document_or_404(db, doc_id)
     if doc.legal_hold != data.legal_hold:

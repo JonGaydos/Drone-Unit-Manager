@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { api } from '@/api/client'
+import { api, getSection } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
+import { ownsPilot } from '@/lib/ownership'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Modal } from '@/components/ui/Modal'
 import { useConfirm } from '@/hooks/useConfirm'
@@ -82,6 +83,7 @@ function CertTypeModal({ certType, onSave, onClose }) {
 }
 
 function AssignCertModal({ pilots, certTypes, existingCert, defaults, onSave, onRenew, onDelete, onClose, certFolderId }) {
+  const { user, canRecord } = useAuth()
   const [form, setForm] = useState(existingCert ? {
     pilot_id: String(existingCert.pilot_id || ''),
     certification_type_id: String(existingCert.certification_type_id || ''),
@@ -266,7 +268,8 @@ function AssignCertModal({ pilots, certTypes, existingCert, defaults, onSave, on
         {/* Document Upload */}
         {isEditing && existingCert?.id && !showRenew && (
           <div className="mt-4">
-            <DocumentUpload entityType="certification" entityId={existingCert.id} folderId={certFolderId} />
+            <DocumentUpload entityType="certification" entityId={existingCert.id} folderId={certFolderId}
+              canUpload={canRecord('files.upload', ownsPilot(user, existingCert.pilot_id))} />
           </div>
         )}
 
@@ -290,6 +293,18 @@ function AssignCertModal({ pilots, certTypes, existingCert, defaults, onSave, on
   )
 }
 
+/** The read-only view of an existing certification: its documents. Changing the
+ *  certification itself needs certifications.manage. */
+function CertDocumentsModal({ cert, folderId, onClose }) {
+  const { user, canRecord } = useAuth()
+  return (
+    <Modal open onClose={onClose} title="Certification Documents">
+      <DocumentUpload entityType="certification" entityId={cert.id} folderId={folderId}
+        canUpload={canRecord('files.upload', ownsPilot(user, cert.pilot_id))} />
+    </Modal>
+  )
+}
+
 export default function CertificationsPage() {
   const [tab, setTab] = useState('matrix')
   const [certTypes, setCertTypes] = useState([])
@@ -298,18 +313,42 @@ export default function CertificationsPage() {
   const [modal, setModal] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const { isSupervisor } = useAuth()
+  const { can } = useAuth()
+  const canManage = can('certifications.manage')
+  const canSeeFiles = can('files.view')
   const toast = useToast()
   const [confirmProps, requestConfirm] = useConfirm()
 
   // Auto-file documents to Certifications folder
   const [certFolderId, setCertFolderId] = useState(null)
   useEffect(() => {
-    api.get('/folders').then(folders => {
+    // Auto-filing is optional: with no folder list, documents simply stay unfiled.
+    getSection(canSeeFiles, '/folders', []).then(folders => {
       const f = (Array.isArray(folders) ? folders : folders.folders || []).find(f => f.name === 'Certifications')
       if (f) setCertFolderId(f.id)
-    }).catch(() => {})
-  }, [])
+    })
+  }, [canSeeFiles])
+
+  const openCertCell = (row, ct, cert) => {
+    if (cert) {
+      setEditCert({
+        id: cert.id,
+        pilot_id: row.pilot_id,
+        certification_type_id: ct.id,
+        status: cert.status,
+        issue_date: cert.issue_date || '',
+        expiration_date: cert.expiration_date || '',
+        certificate_number: cert.certificate_number || '',
+        nist_level: cert.nist_level,
+        notes: cert.notes || '',
+      })
+      setModal('editCert')
+    } else {
+      setEditCert(null)
+      setAssignDefaults({ pilot_id: row.pilot_id, certification_type_id: ct.id })
+      setModal('assign')
+    }
+  }
 
   // Custom cert status labels
   const [certStatusLabels, setCertStatusLabels] = useState({})
@@ -324,7 +363,7 @@ export default function CertificationsPage() {
     Promise.all([
       api.get('/certification-types'),
       api.get('/certifications/matrix'),
-      api.get('/pilots'),
+      api.get('/pilots/options'),
       api.get('/settings/cert_status_labels').catch(() => ({ value: '' })),
     ]).then(([ct, mx, p, labels]) => {
       setCertTypes(ct); setMatrix(mx.matrix || []); setPilots(p)
@@ -503,18 +542,20 @@ export default function CertificationsPage() {
           Cert Types
         </button>
         <div className="flex-1" />
-        <button
-          onClick={() => api.download('/export/certifications/csv')}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90"
-        >
-          <Download className="w-4 h-4" /> Export CSV
-        </button>
-        {isSupervisor && tab === 'types' && (
+        {can('reports.export') && (
+          <button
+            onClick={() => api.download('/export/certifications/csv')}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90"
+          >
+            <Download className="w-4 h-4" /> Export CSV
+          </button>
+        )}
+        {canManage && tab === 'types' && (
           <button onClick={() => setModal('addType')} className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
             <Plus className="w-4 h-4" /> Add Type
           </button>
         )}
-        {isSupervisor && tab === 'matrix' && (
+        {canManage && tab === 'matrix' && (
           <button onClick={() => { setAssignDefaults(null); setModal('assign') }} className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
             <Plus className="w-4 h-4" /> Assign Cert
           </button>
@@ -590,7 +631,7 @@ export default function CertificationsPage() {
           </div>
 
           {/* Bulk renewal action bar */}
-          {isSupervisor && selectedCerts.size > 0 && (
+          {canManage && selectedCerts.size > 0 && (
             <div className="flex items-center gap-3 bg-primary/10 border border-primary/30 rounded-lg px-4 py-2">
               <span className="text-sm font-medium text-foreground">{selectedCerts.size} selected</span>
               <button
@@ -614,7 +655,7 @@ export default function CertificationsPage() {
                   {filteredCertTypes.map((ct, idx) => (
                     <th key={ct.id} className="text-center px-3 py-3 font-medium text-muted-foreground min-w-[100px] bg-card">
                       <div className="flex items-center justify-center gap-0.5">
-                        {isSupervisor && (
+                        {canManage && (
                           <button
                             onClick={() => handleReorderCertType(ct.id, 'left')}
                             disabled={idx === 0}
@@ -625,7 +666,7 @@ export default function CertificationsPage() {
                           </button>
                         )}
                         <span className="text-xs">{ct.name}</span>
-                        {isSupervisor && (
+                        {canManage && (
                           <button
                             onClick={() => handleReorderCertType(ct.id, 'right')}
                             disabled={idx === filteredCertTypes.length - 1}
@@ -651,30 +692,12 @@ export default function CertificationsPage() {
                     {filteredCertTypes.map(ct => {
                       const cert = row.certs?.[ct.id]
                       const status = cert?.status || 'not_started'
+                      const opensModal = canManage || (Boolean(cert) && canSeeFiles)
                       return (
-                        <td key={ct.id} className="relative px-3 py-2 text-center cursor-pointer hover:bg-accent/40 transition-colors"
-                          tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.click() } }}
-                          onClick={() => {
-                            if (cert) {
-                              setEditCert({
-                                id: cert.id,
-                                pilot_id: row.pilot_id,
-                                certification_type_id: ct.id,
-                                status: cert.status,
-                                issue_date: cert.issue_date || '',
-                                expiration_date: cert.expiration_date || '',
-                                certificate_number: cert.certificate_number || '',
-                                nist_level: cert.nist_level,
-                                notes: cert.notes || '',
-                              })
-                              setModal('editCert')
-                            } else {
-                              setEditCert(null)
-                              setAssignDefaults({ pilot_id: row.pilot_id, certification_type_id: ct.id })
-                              setModal('assign')
-                            }
-                          }}>
-                          {isSupervisor && cert && ct.has_expiration && (
+                        <td key={ct.id} className={`relative px-3 py-2 text-center ${opensModal ? 'cursor-pointer hover:bg-accent/40 transition-colors' : ''}`}
+                          tabIndex={opensModal ? 0 : undefined} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.click() } }}
+                          onClick={opensModal ? () => openCertCell(row, ct, cert) : undefined}>
+                          {canManage && cert && ct.has_expiration && (
                             <input
                               type="checkbox"
                               checked={selectedCerts.has(cert.id)}
@@ -721,7 +744,7 @@ export default function CertificationsPage() {
                     <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-zinc-500/15 text-zinc-400">Hidden</span>
                   )}
                 </div>
-                {isSupervisor && (
+                {canManage && (
                   <div className="flex gap-1">
                     <button onClick={() => handleToggleCertTypeHidden(ct)} className="p-1 text-muted-foreground hover:text-foreground"
                       aria-label={ct.is_active ? 'Hide' : 'Unhide'} title={ct.is_active ? 'Hide from the matrix (keeps records)' : 'Show on the matrix again'}>
@@ -748,7 +771,8 @@ export default function CertificationsPage() {
       {/* Modals */}
       {modal === 'addType' && <CertTypeModal onSave={handleSaveCertType} onClose={() => setModal(null)} />}
       {modal === 'assign' && <AssignCertModal pilots={pilots} certTypes={certTypes} defaults={assignDefaults} onSave={handleAssignCert} onClose={() => { setModal(null); setEditCert(null); setAssignDefaults(null) }} certFolderId={certFolderId} />}
-      {modal === 'editCert' && editCert && <AssignCertModal pilots={pilots} certTypes={certTypes} existingCert={editCert} onSave={handleAssignCert} onRenew={handleRenewCert} onDelete={isSupervisor ? handleDeleteCert : null} onClose={() => { setModal(null); setEditCert(null) }} certFolderId={certFolderId} />}
+      {modal === 'editCert' && editCert && canManage && <AssignCertModal pilots={pilots} certTypes={certTypes} existingCert={editCert} onSave={handleAssignCert} onRenew={handleRenewCert} onDelete={handleDeleteCert} onClose={() => { setModal(null); setEditCert(null) }} certFolderId={certFolderId} />}
+      {modal === 'editCert' && editCert && !canManage && <CertDocumentsModal cert={editCert} folderId={certFolderId} onClose={() => { setModal(null); setEditCert(null) }} />}
       {modal && typeof modal === 'object' && modal.name && <CertTypeModal certType={modal} onSave={handleSaveCertType} onClose={() => setModal(null)} />}
       {bulkRenewOpen && (
         <Modal

@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { screen } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
+import { withPermissions } from '@/test/permissions'
+import { pilotOption } from '@/test/options'
 import { renderRoute } from '@/test/render'
 import ControllerDetailPage from './ControllerDetailPage'
 
@@ -19,14 +21,14 @@ function mockMount(overrides = {}) {
   const base = {
     controller: () => HttpResponse.json(CONTROLLER),
     maintenance: () => HttpResponse.json([]),
-    pilots: () => HttpResponse.json([{ id: 5, full_name: 'Jane Doe' }]),
+    pilots: () => HttpResponse.json([pilotOption(5, 'Jane Doe')]),
     documents: () => HttpResponse.json([]),
     ...overrides,
   }
   server.use(
     http.get('/api/controllers/:id', base.controller),
     http.get('/api/maintenance', base.maintenance),
-    http.get('/api/pilots', base.pilots),
+    http.get('/api/pilots/options', base.pilots),
     http.get('/api/documents', base.documents),
   )
 }
@@ -61,13 +63,13 @@ describe('ControllerDetailPage', () => {
     expect(await screen.findByText('Controller not found')).toBeInTheDocument()
   })
 
-  it('hides the edit control for a non-admin (supervisor)', async () => {
-    server.use(http.get('/api/auth/me', () => HttpResponse.json({ id: 2, username: 'sup', role: 'supervisor' })))
+  it('hides the edit control without fleet.manage (pilot)', async () => {
+    server.use(http.get('/api/auth/me', () => HttpResponse.json(withPermissions({ id: 2, username: 'pil', role: 'pilot' }))))
     mockMount()
-    renderRoute(<ControllerDetailPage />, { path: '/fleet/controllers/:id', route: '/fleet/controllers/3', role: 'supervisor' })
+    renderRoute(<ControllerDetailPage />, { path: '/fleet/controllers/:id', route: '/fleet/controllers/3', role: 'pilot' })
     await screen.findByRole('heading', { name: 'RC Pro' })
-    // Documents upload is intentionally visible for pilot+ roles; the page's
-    // own (unnamed icon) edit control must not render for a supervisor.
+    // Documents upload is intentionally visible with files.upload; the page's
+    // own (unnamed icon) edit control must not render without fleet.manage.
     const buttons = screen.getAllByRole('button')
     expect(buttons).toHaveLength(1)
     expect(buttons[0]).toHaveAccessibleName(/Upload/)

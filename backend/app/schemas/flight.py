@@ -146,6 +146,7 @@ class FlightOut(BaseModel):
     notes: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    created_by_id: int | None = None
     pilot_name: str | None = None
     vehicle_name: str | None = None
     can_refresh: bool = False

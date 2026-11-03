@@ -2,20 +2,22 @@ import { describe, it, expect } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
+import { withPermissions } from '@/test/permissions'
+import { fleetOptions, pilotOption, serialOption, vehicleOption } from '@/test/options'
 import { renderWithProviders } from '@/test/render'
 import { addDays, todayLocal } from '@/lib/utils'
 import MaintenancePage from './MaintenancePage'
 
 // Mount endpoints. Entity-list effect:
-//   GET /vehicles /batteries /controllers /docks /pilots
+//   GET /fleet/options /pilots/options
 // loadAll() (MSW ignores query strings, so all three /maintenance* requests
 // match a single handler unless given distinct paths):
 //   GET /maintenance?upcoming=true   -> http.get('/api/maintenance')
 //   GET /maintenance                 -> http.get('/api/maintenance')
 //   GET /maintenance/schedules?all=true -> http.get('/api/maintenance/schedules')
 const VEHICLES = [
-  { id: 1, nickname: 'Falcon', model: 'Mavic 3', serial_number: 'SN-001', status: 'active' },
-  { id: 9, nickname: 'OldBird', model: 'Mavic 2', serial_number: 'SN-OLD', status: 'retired' },
+  vehicleOption({ id: 1, nickname: 'Falcon', model: 'Mavic 3', serialNumber: 'SN-001' }),
+  vehicleOption({ id: 9, nickname: 'OldBird', model: 'Mavic 2', serialNumber: 'SN-OLD', status: 'retired' }),
 ]
 
 const HISTORY = [
@@ -30,12 +32,9 @@ const SCHEDULES = [
 
 function mockMount(overrides = {}) {
   const base = {
-    vehicles: () => HttpResponse.json(VEHICLES),
-    batteries: () => HttpResponse.json([]),
-    controllers: () => HttpResponse.json([]),
-    docks: () => HttpResponse.json([]),
-    otherEquipment: () => HttpResponse.json([]),
-    pilots: () => HttpResponse.json([{ id: 5, full_name: 'Jane Doe', is_active: true }]),
+    vehicles: VEHICLES,
+    batteries: [],
+    pilots: () => HttpResponse.json([pilotOption(5, 'Jane Doe')]),
     // Returns upcoming when ?upcoming=true present, else history.
     maintenance: ({ request }) =>
       HttpResponse.json(new URL(request.url).searchParams.get('upcoming') ? UPCOMING : HISTORY),
@@ -43,12 +42,8 @@ function mockMount(overrides = {}) {
     ...overrides,
   }
   server.use(
-    http.get('/api/vehicles', base.vehicles),
-    http.get('/api/batteries', base.batteries),
-    http.get('/api/controllers', base.controllers),
-    http.get('/api/docks', base.docks),
-    http.get('/api/other-equipment', base.otherEquipment),
-    http.get('/api/pilots', base.pilots),
+    http.get('/api/fleet/options', () => HttpResponse.json(fleetOptions({ vehicles: base.vehicles, batteries: base.batteries }))),
+    http.get('/api/pilots/options', base.pilots),
     http.get('/api/maintenance/schedules', base.schedules),
     http.get('/api/maintenance', base.maintenance),
   )
@@ -163,7 +158,7 @@ describe('MaintenancePage', () => {
     expect(await screen.findByRole('button', { name: /Add Schedule/ })).toBeInTheDocument()
     unmount()
 
-    server.use(http.get('/api/auth/me', () => HttpResponse.json({ id: 7, username: 'pilot', role: 'pilot' })))
+    server.use(http.get('/api/auth/me', () => HttpResponse.json(withPermissions({ id: 7, username: 'pilot', role: 'pilot' }))))
     mockMount()
     renderWithProviders(<MaintenancePage />, { role: 'pilot' })
     await screen.findByText('Monthly check')
@@ -221,7 +216,7 @@ describe('MaintenancePage', () => {
 
   it('sends the new entity when editing a record to a different type', async () => {
     let patched = null
-    mockMount({ batteries: () => HttpResponse.json([{ id: 2, nickname: 'Batt A', serial_number: 'B-001' }]) })
+    mockMount({ batteries: [serialOption(2, 'Batt A', 'B-001')] })
     server.use(http.patch('/api/maintenance/:id', async ({ request, params }) => {
       patched = { id: params.id, body: await request.json() }
       return HttpResponse.json({ ok: true })
@@ -244,7 +239,7 @@ describe('MaintenancePage', () => {
 
   it('blocks submitting an edit with a changed type but no entity selected', async () => {
     let patchHit = false
-    mockMount({ batteries: () => HttpResponse.json([{ id: 2, nickname: 'Batt A', serial_number: 'B-001' }]) })
+    mockMount({ batteries: [serialOption(2, 'Batt A', 'B-001')] })
     server.use(http.patch('/api/maintenance/:id', () => { patchHit = true; return HttpResponse.json({ ok: true }) }))
     const { user } = renderWithProviders(<MaintenancePage />, { role: 'admin' })
 
@@ -267,5 +262,22 @@ describe('MaintenancePage', () => {
     await screen.findByText('Prop swap')
     await user.click(screen.getAllByTitle('Documents')[0])
     expect(await screen.findByText('No documents uploaded')).toBeInTheDocument()
+  })
+
+  it('labels schedule picker rows without empty or repeated serials', async () => {
+    mockMount({ batteries: [serialOption(2, 'Batt A', 'B-001'), serialOption(3, 'B-002')] })
+    server.use(http.get('/api/fleet/options', () => HttpResponse.json(fleetOptions({
+      batteries: [serialOption(2, 'Batt A', 'B-001'), serialOption(3, 'B-002')],
+      controllers: [{ id: 4, name: 'Pad', status: 'active' }],
+    }))))
+    const { user } = renderWithProviders(<MaintenancePage />, { role: 'admin' })
+    await user.click(await screen.findByRole('button', { name: /Add Schedule \/ Task/ }))
+    await screen.findByRole('heading', { name: 'Add Schedule / Task' })
+    const type = screen.getByLabelText(/Type/)
+    await user.selectOptions(type, 'battery')
+    expect(await screen.findByRole('option', { name: 'Batt A (B-001)' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'B-002' })).toBeInTheDocument()
+    await user.selectOptions(type, 'controller')
+    expect(await screen.findByRole('option', { name: 'Pad' })).toBeInTheDocument()
   })
 })

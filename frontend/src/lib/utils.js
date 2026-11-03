@@ -295,3 +295,25 @@ export function zonedInputToUtcIso(wall, tz = getDisplayTimezone()) {
 export function inSequence(items, fn) {
   return items.reduce((prev, item, i) => prev.then(() => fn(item, i)), Promise.resolve())
 }
+
+/** The message after saving a flight. An edit that sent a reviewed flight back to
+ *  the queue says so, since the flight stops counting toward currency. */
+export function flightSavedMessage(before, after) {
+  const sentBack = before?.review_status === 'reviewed' && after?.review_status === 'needs_review'
+  return sentBack
+    ? 'Flight updated. It is back for review and does not count toward currency until reviewed.'
+    : 'Flight updated'
+}
+
+/**
+ * The fields of an edit form whose value differs from what it was seeded with.
+ * Compares as text, since a select or input turns 5 into "5".
+ * @param {Object} initial - The form as first seeded.
+ * @param {Object} current - The form as it is now.
+ * @returns {Object} Only the changed fields, with their current values.
+ */
+export function changedFields(initial, current) {
+  return Object.fromEntries(
+    Object.entries(current).filter(([key, value]) => String(value) !== String(initial[key])),
+  )
+}

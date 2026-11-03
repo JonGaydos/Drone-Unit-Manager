@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { screen, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
+import { fleetOptions, pilotOption, vehicleOption } from '@/test/options'
 import { renderWithProviders } from '@/test/render'
 import ChecklistPage from './ChecklistPage'
 
@@ -25,8 +26,8 @@ function mockMount(overrides = {}) {
   server.use(
     http.get('/api/checklists/templates', base.templates),
     http.get('/api/checklists/completions', base.completions),
-    http.get('/api/pilots', () => HttpResponse.json([{ id: 5, first_name: 'Jane', last_name: 'Doe', full_name: 'Jane Doe', is_active: true }])),
-    http.get('/api/vehicles', () => HttpResponse.json([{ id: 2, nickname: 'Falcon', model: 'Mavic 3', manufacturer: 'DJI' }])),
+    http.get('/api/pilots/options', () => HttpResponse.json([pilotOption(5, 'Jane Doe')])),
+    http.get('/api/fleet/options', () => HttpResponse.json(fleetOptions({ vehicles: [vehicleOption({ id: 2, nickname: 'Falcon', model: 'Mavic 3', manufacturer: 'DJI' })] }))),
   )
 }
 
@@ -92,5 +93,12 @@ describe('ChecklistPage', () => {
     expect(within(dialog).getByText('Battery charged')).toBeInTheDocument()
     // Required items unchecked surfaces the warning.
     expect(within(dialog).getByText('Some required items are not checked')).toBeInTheDocument()
+  })
+
+  it("labels the Complete Checklist pilot picker with the option's full name", async () => {
+    mockMount()
+    const { user } = renderWithProviders(<ChecklistPage />, { role: 'pilot' })
+    await user.click(await screen.findByRole('button', { name: /Complete Checklist/ }))
+    expect(await screen.findByRole('option', { name: 'Jane Doe' })).toBeInTheDocument()
   })
 })

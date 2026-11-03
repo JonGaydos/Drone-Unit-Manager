@@ -63,6 +63,8 @@ class UserOut(BaseModel):
     pilot_id: Optional[int] = None
     email: Optional[str] = None
     created_at: datetime
+    # Resolved values, filled in on the signed-in user's own responses only.
+    permissions: dict[str, str] = Field(default_factory=dict)
 
     model_config = {"from_attributes": True}
 

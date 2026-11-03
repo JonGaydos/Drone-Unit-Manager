@@ -60,6 +60,14 @@ describe('sortByField', () => {
 })
 
 describe('sortPilotsActiveFirst', () => {
+  it('sorts options rows by full_name', () => {
+    const result = sortPilotsActiveFirst([
+      { status: 'active', full_name: 'Zed Last' },
+      { status: 'active', full_name: 'Amy First' },
+    ])
+    expect(result.map(p => p.full_name)).toEqual(['Amy First', 'Zed Last'])
+  })
+
   it('puts active pilots before inactive ones', () => {
     const result = sortPilotsActiveFirst([
       { status: 'inactive', first_name: 'Alice' },

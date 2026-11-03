@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '@/contexts/AuthContext'
 import { api } from '@/api/client'
 import { useToast } from '@/contexts/ToastContext'
 import {
@@ -146,7 +147,7 @@ function buildAttentionItems(data) {
   return items
 }
 
-function CurrencyStatusSection({ data, onSendReminders, sending }) {
+function CurrencyStatusSection({ data, onSendReminders, sending, canSendReminders }) {
   const [filter, setFilter] = useState('lapsed-and-soon')  // 'all' | 'lapsed' | 'lapsed-and-soon'
   const [expanded, setExpanded] = useState(false)
   const navigate = useNavigate()
@@ -217,15 +218,17 @@ function CurrencyStatusSection({ data, onSendReminders, sending }) {
             <option value="lapsed">Lapsed only</option>
             <option value="all">All pilots</option>
           </select>
-          <button
-            onClick={onSendReminders}
-            disabled={sending || data.pilots_lapsed === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded-lg disabled:opacity-50 hover:opacity-90"
-            title={data.pilots_lapsed === 0 ? 'No lapsed pilots to remind' : 'Email a reminder to every lapsed pilot with an email on file'}
-          >
-            {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-            Send Reminders
-          </button>
+          {canSendReminders && (
+            <button
+              onClick={onSendReminders}
+              disabled={sending || data.pilots_lapsed === 0}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded-lg disabled:opacity-50 hover:opacity-90"
+              title={data.pilots_lapsed === 0 ? 'No lapsed pilots to remind' : 'Email a reminder to every lapsed pilot with an email on file'}
+            >
+              {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+              Send Reminders
+            </button>
+          )}
         </div>
       </div>
       {filtered.length === 0 ? (
@@ -312,6 +315,7 @@ function currencyCompliance(data) {
 }
 
 export default function CompliancePage() {
+  const { can } = useAuth()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
@@ -393,13 +397,15 @@ export default function CompliancePage() {
           <h1 className="text-2xl font-bold text-foreground">Compliance Dashboard</h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={() => api.download('/export/equipment-checkouts/csv')}
-            className="flex items-center gap-2 px-3 py-2 text-sm bg-secondary border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors"
-          >
-            {/* The equipment checkout log: there is no compliance export. */}
-            <Download className="w-4 h-4" /> Export checkouts CSV
-          </button>
+          {can('reports.export') && can('fleet.view') && (
+            <button
+              onClick={() => api.download('/export/equipment-checkouts/csv')}
+              className="flex items-center gap-2 px-3 py-2 text-sm bg-secondary border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {/* The equipment checkout log: there is no compliance export. */}
+              <Download className="w-4 h-4" /> Export checkouts CSV
+            </button>
+          )}
           <button
             onClick={load}
             className="flex items-center gap-2 px-3 py-2 text-sm bg-secondary border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors"
@@ -532,6 +538,7 @@ export default function CompliancePage() {
         data={data}
         sending={sending}
         onSendReminders={handleSendReminders}
+        canSendReminders={can('certifications.manage')}
       />
 
       {/* Attention Items Table */}

@@ -185,8 +185,10 @@ def test_currency_loads_only_flights_inside_the_longest_period(db):
     db.add(pilot)
     db.commit()
     db.add_all([
-        Flight(pilot_id=pilot.id, date=date.today() - timedelta(days=10), duration_seconds=600),
-        Flight(pilot_id=pilot.id, date=date.today() - timedelta(days=400), duration_seconds=600),
+        Flight(pilot_id=pilot.id, date=date.today() - timedelta(days=10), duration_seconds=600,
+               review_status="reviewed"),
+        Flight(pilot_id=pilot.id, date=date.today() - timedelta(days=400), duration_seconds=600,
+               review_status="reviewed"),
     ])
     rules = [CurrencyRule(name="90-day", required_hours=1, period_days=90),
              CurrencyRule(name="180-day", required_hours=1, period_days=180)]

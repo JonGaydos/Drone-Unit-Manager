@@ -220,21 +220,21 @@ def test_photo_upload_edit_and_links_are_audited(client, db, pilot_user, supervi
     assert [e.action for e in _audit(db, "photo") if e.action in ("link", "unlink")] == ["link", "unlink"]
 
 
-def test_folder_changes_are_audited(client, db, pilot_user):
-    folder_id = client.post("/api/folders", headers=_bearer(pilot_user), json={"name": "Case 12"}).json()["id"]
-    client.patch(f"/api/folders/{folder_id}", headers=_bearer(pilot_user), json={"name": "Case 12A"})
-    client.delete(f"/api/folders/{folder_id}", headers=_bearer(pilot_user))
+def test_folder_changes_are_audited(client, db, supervisor_user):
+    folder_id = client.post("/api/folders", headers=_bearer(supervisor_user), json={"name": "Case 12"}).json()["id"]
+    client.patch(f"/api/folders/{folder_id}", headers=_bearer(supervisor_user), json={"name": "Case 12A"})
+    client.delete(f"/api/folders/{folder_id}", headers=_bearer(supervisor_user))
     assert [e.action for e in _audit(db, "folder")] == ["create", "update", "delete"]
 
 
-def test_maintenance_schedule_changes_are_audited(client, db, pilot_user):
+def test_maintenance_schedule_changes_are_audited(client, db, supervisor_user):
     url = "/api/maintenance/schedules"
-    sid = client.post(url, headers=_bearer(pilot_user), json={
+    sid = client.post(url, headers=_bearer(supervisor_user), json={
         "name": "Annual audit", "entity_type": "organization", "entity_id": None, "frequency": "yearly",
     }).json()["id"]
-    client.patch(f"{url}/{sid}", headers=_bearer(pilot_user), json={"name": "Annual review"})
-    client.post(f"{url}/{sid}/complete", headers=_bearer(pilot_user))
-    client.delete(f"{url}/{sid}", headers=_bearer(pilot_user))
+    client.patch(f"{url}/{sid}", headers=_bearer(supervisor_user), json={"name": "Annual review"})
+    client.post(f"{url}/{sid}/complete", headers=_bearer(supervisor_user))
+    client.delete(f"{url}/{sid}", headers=_bearer(supervisor_user))
     assert [e.action for e in _audit(db, "maintenance_schedule")] == ["create", "update", "complete", "delete"]
 
 
@@ -275,8 +275,8 @@ def test_test_digest_sends_are_rate_limited(client, db, pilot_user, monkeypatch)
     assert len(_audit(db, "notification", "send_test")) == 3
 
 
-def test_digest_redirect_address_is_audited(client, db, pilot_user):
-    client.put("/api/notifications/preferences", headers=_bearer(pilot_user),
+def test_digest_redirect_address_is_audited(client, db, supervisor_user):
+    client.put("/api/notifications/preferences", headers=_bearer(supervisor_user),
                json={"email_override": "someone@elsewhere.example"})
     entries = _audit(db, "notification_preference", "update")
     assert entries

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { api } from '@/api/client'
+import { api, getSection } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { formatDuration } from '@/lib/utils'
@@ -15,7 +15,10 @@ import EditActions from '@/components/EditActions'
 
 export default function BatteryDetailPage() {
   const { id } = useParams()
-  const { isAdmin } = useAuth()
+  const { can } = useAuth()
+  const canManage = can('fleet.manage')
+  const canSeeFlights = can('flights.view')
+  const canSeeMaintenance = can('maintenance.view')
   const toast = useToast()
   const [battery, setBattery] = useState(null)
   const [stats, setStats] = useState(null)
@@ -35,12 +38,12 @@ export default function BatteryDetailPage() {
   useEffect(() => {
     Promise.all([
       api.get(`/batteries/${id}`),
-      api.get(`/batteries/${id}/stats`),
-      api.get(`/batteries/${id}/flights`).catch(() => []),
-      api.get(`/maintenance?entity_type=battery&entity_id=${id}`).catch(() => []),
+      getSection(canSeeFlights, `/batteries/${id}/stats`, null),
+      getSection(canSeeFlights, `/batteries/${id}/flights`, []),
+      getSection(canSeeMaintenance, `/maintenance?entity_type=battery&entity_id=${id}`, []),
       api.get('/vehicles').catch(() => []),
       api.get(`/batteries/${id}/health-history`).catch(() => []),
-      api.get(`/batteries/${id}/pilots`).catch(() => []),
+      getSection(canSeeFlights, `/batteries/${id}/pilots`, []),
     ]).then(([b, s, batteryFlights, m, v, healthData, pilotsData]) => {
       setBattery(b)
       setStats(s)
@@ -50,7 +53,7 @@ export default function BatteryDetailPage() {
       setHealthHistory(healthData)
       setBatteryPilots(Array.isArray(pilotsData) ? pilotsData : [])
     }).catch(() => {}).finally(() => setLoading(false))
-  }, [id])
+  }, [id, canSeeFlights, canSeeMaintenance])
 
   const startEditing = () => {
     setEditForm({
@@ -184,7 +187,7 @@ export default function BatteryDetailPage() {
               <>
                 <div className="flex items-center gap-3">
                   <h2 className="text-xl font-bold text-foreground">{displayName}</h2>
-                  {isAdmin && (
+                  {canManage && (
                     <button onClick={startEditing} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent">
                       <Edit className="w-4 h-4" />
                     </button>
@@ -314,7 +317,7 @@ export default function BatteryDetailPage() {
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="flex items-center justify-between p-5 border-b border-border">
           <h3 className="font-semibold text-foreground">Health History</h3>
-          {isAdmin && (
+          {canManage && (
             <button
               onClick={() => setShowReadingForm(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90"

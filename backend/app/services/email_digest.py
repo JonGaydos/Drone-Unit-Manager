@@ -16,9 +16,11 @@ from email.mime.text import MIMEText
 from sqlalchemy.orm import Session
 
 from app.constants import APP_TITLE
+from app.models.pilot import Pilot
 from app.models.user import User
 from app.models.setting import Setting
 from app.models.notification_preference import NotificationPreference
+from app.services.permissions import can
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +34,18 @@ def _get_setting(db: Session, key: str, default: str = "") -> str:
 def _is_category_enabled(enabled_categories: list | None, category: str) -> bool:
     """Check if a digest category is enabled (None means all enabled)."""
     return not enabled_categories or category in enabled_categories
+
+
+def digest_address(db: Session, user: User, pref: NotificationPreference) -> str | None:
+    """Where this user's digest goes: the stored override while the role holds
+    digest.redirect, otherwise the account address, otherwise the linked pilot's
+    email. The override stays stored."""
+    if pref.email_override and can(db, user, "digest.redirect"):
+        return pref.email_override
+    if user.email:
+        return user.email
+    pilot = db.get(Pilot, user.pilot_id) if user.pilot_id else None
+    return pilot.email if pilot else None
 
 
 def _build_pending_approvals(db: Session) -> list[dict] | None:
@@ -143,7 +157,7 @@ def _build_recent_incidents(db: Session, pref) -> list[dict] | None:
 
 
 def build_digest(db: Session, user: User) -> dict | None:
-    """Build a digest of actionable items for a user based on their role.
+    """Build a digest of actionable items, each section following a permission.
 
     Args:
         db: Database session.
@@ -166,21 +180,19 @@ def build_digest(db: Session, user: User) -> dict | None:
     thirty_days = today + timedelta(days=30)
     sections = {}
 
-    is_supervisor = user.role in ("admin", "supervisor")
-
-    # Define all possible digest sections with their builders and access requirements
+    # Define all possible digest sections with their permissions and builders
     section_defs = [
-        ("pending_approvals", is_supervisor, lambda: _build_pending_approvals(db)),
-        ("needs_review", is_supervisor, lambda: _build_needs_review(db)),
-        ("expiring_certs", True, lambda: _build_expiring_certs(db, today, thirty_days)),
-        ("expiring_registrations", True, lambda: _build_expiring_registrations(db, today, thirty_days)),
-        ("overdue_maintenance", True, lambda: _build_overdue_maintenance(db, today)),
-        ("overdue_checkouts", True, lambda: _build_overdue_checkouts(db)),
-        ("recent_incidents", True, lambda: _build_recent_incidents(db, pref)),
+        ("pending_approvals", "flight_plans.approve", lambda: _build_pending_approvals(db)),
+        ("needs_review", "flights.review", lambda: _build_needs_review(db)),
+        ("expiring_certs", "certifications.view", lambda: _build_expiring_certs(db, today, thirty_days)),
+        ("expiring_registrations", "registrations.view", lambda: _build_expiring_registrations(db, today, thirty_days)),
+        ("overdue_maintenance", "maintenance.view", lambda: _build_overdue_maintenance(db, today)),
+        ("overdue_checkouts", "fleet.view", lambda: _build_overdue_checkouts(db)),
+        ("recent_incidents", "incidents.view", lambda: _build_recent_incidents(db, pref)),
     ]
 
-    for key, has_access, builder in section_defs:
-        if has_access and _is_category_enabled(enabled_categories, key):
+    for key, permission, builder in section_defs:
+        if can(db, user, permission) and _is_category_enabled(enabled_categories, key):
             items = builder()
             if items:
                 sections[key] = items

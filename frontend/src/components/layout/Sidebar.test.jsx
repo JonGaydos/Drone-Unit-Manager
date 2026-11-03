@@ -2,15 +2,16 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { screen } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
+import { withPermissions } from '@/test/permissions'
 import { renderWithProviders } from '@/test/render'
 import { Sidebar } from './Sidebar'
 
 // The Sidebar reads its role from the authenticated user, which AuthProvider
 // loads from GET /api/auth/me on mount — so role gating is driven by that
 // handler, not by the localStorage seed alone.
-function authAs(role) {
+function authAs(role, permissions) {
   server.use(http.get('/api/auth/me', () =>
-    HttpResponse.json({ id: 1, username: role, display_name: `User ${role}`, role })))
+    HttpResponse.json(withPermissions({ id: 1, username: role, display_name: `User ${role}`, role }, permissions))))
 }
 
 beforeEach(() => {
@@ -48,6 +49,34 @@ describe('Sidebar role gating', () => {
     await screen.findByRole('link', { name: /Dashboard/ })
     expect(await screen.findByText('viewer')).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /Audit Log/ })).not.toBeInTheDocument()
+  })
+})
+
+describe('Sidebar view permissions', () => {
+  it('hides an entry with its view off and keeps the others', async () => {
+    authAs('pilot', { 'pilots.view': 'no' })
+    renderWithProviders(<Sidebar mobileOpen={false} onMobileClose={() => {}} />, { role: 'pilot' })
+
+    await screen.findByText('pilot')
+    expect(screen.queryByRole('link', { name: /Pilots/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Fleet/ })).toBeInTheDocument()
+  })
+
+  it('shows the Audit Log to a role granted audit.view', async () => {
+    authAs('supervisor', { 'audit.view': 'yes' })
+    renderWithProviders(<Sidebar mobileOpen={false} onMobileClose={() => {}} />, { role: 'supervisor' })
+
+    expect(await screen.findByRole('link', { name: /Audit Log/ })).toBeInTheDocument()
+  })
+
+  it('does not ask for the review count with flights.view off', async () => {
+    let asked = false
+    authAs('pilot', { 'flights.view': 'no' })
+    server.use(http.get('/api/flights/count', () => { asked = true; return HttpResponse.json({ count: 3 }) }))
+    renderWithProviders(<Sidebar mobileOpen={false} onMobileClose={() => {}} />, { role: 'pilot' })
+
+    await screen.findByText('pilot')
+    expect(asked).toBe(false)
   })
 })
 

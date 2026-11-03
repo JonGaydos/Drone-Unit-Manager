@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { api } from '@/api/client'
+import { api, getIfAllowed } from '@/api/client'
+import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/contexts/ToastContext'
 import { X, Filter } from 'lucide-react'
 import { FlightLocationsMap } from '@/components/FlightMap'
 import { localDateOf } from '@/lib/utils'
@@ -125,6 +127,10 @@ function createFilteredBarHRenderer(color) {
 }
 
 export default function AnalyticsPage() {
+  const { can } = useAuth()
+  const toast = useToast()
+  const canSeeFlights = can('flights.view')
+  const canSeeFleet = can('fleet.view')
   // Raw data from API
   const [byPurpose, setByPurpose] = useState([])
   const [byYear, setByYear] = useState([])
@@ -154,15 +160,21 @@ export default function AnalyticsPage() {
 
   // Fetch all data on mount
   useEffect(() => {
+    // One failed section leaves the others on screen and is reported once.
+    let failure = null
+    const section = (allowed, path) => getIfAllowed(allowed, path, []).catch((err) => {
+      failure = err
+      return []
+    })
     Promise.all([
-      api.get('/dashboard/analytics/flights-by-purpose'),
-      api.get('/dashboard/analytics/flights-by-year'),
-      api.get('/dashboard/analytics/flights-by-pilot'),
-      api.get('/dashboard/analytics/avg-duration-by-year'),
-      api.get('/dashboard/analytics/monthly-flights'),
-      api.get('/dashboard/analytics/vehicle-hours'),
-      api.get('/dashboard/analytics/pilot-hours'),
-      fetchAllFlights(),
+      section(canSeeFlights, '/dashboard/analytics/flights-by-purpose'),
+      section(canSeeFlights, '/dashboard/analytics/flights-by-year'),
+      section(canSeeFlights, '/dashboard/analytics/flights-by-pilot'),
+      section(canSeeFlights, '/dashboard/analytics/avg-duration-by-year'),
+      section(canSeeFlights, '/dashboard/analytics/monthly-flights'),
+      section(canSeeFleet, '/dashboard/analytics/vehicle-hours'),
+      section(canSeeFlights, '/dashboard/analytics/pilot-hours'),
+      canSeeFlights ? fetchAllFlights() : [],
     ]).then(([purpose, year, pilot, dur, mon, veh, pil, flights]) => {
       setByPurpose(purpose)
       setByYear(year)
@@ -172,8 +184,9 @@ export default function AnalyticsPage() {
       setVehicleHours(veh)
       setPilotHours(pil)
       setAllFlights(flights)
+      if (failure) toast.error(failure.message)
     }).catch(() => {}).finally(() => setLoading(false))
-  }, [])
+  }, [canSeeFlights, canSeeFleet, toast])
 
   // Compute filtered subsets from allFlights when filters change
   const filteredFlights = useMemo(() => {

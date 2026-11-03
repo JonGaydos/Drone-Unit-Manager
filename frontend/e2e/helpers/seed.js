@@ -6,15 +6,24 @@ const API = 'http://localhost:8000/api'
 // Prefer getAdminToken() over apiLogin() in specs — the suite shares a per-IP
 // 5-logins/60s rate limit; only global-setup and auth.spec should spend real logins.
 // Reads the admin JWT straight from the storageState global-setup wrote; no HTTP.
-export function getAdminToken() {
-  const file = path.resolve(process.cwd(), 'e2e/.auth/admin.json')
+function tokenFromState(name) {
+  const file = path.resolve(process.cwd(), `e2e/.auth/${name}.json`)
   const state = JSON.parse(readFileSync(file, 'utf8'))
   for (const origin of state.origins ?? []) {
     for (const item of origin.localStorage ?? []) {
       if (item.name === 'token') return item.value
     }
   }
-  throw new Error(`getAdminToken: no localStorage 'token' in ${file}`)
+  throw new Error(`tokenFromState: no localStorage 'token' in ${file}`)
+}
+
+export function getAdminToken() {
+  return tokenFromState('admin')
+}
+
+// The pilot-role login global-setup saved, read the same way.
+export function getPilotToken() {
+  return tokenFromState('pilot')
 }
 
 export async function apiLogin(request, username, password) {

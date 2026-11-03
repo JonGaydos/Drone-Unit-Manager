@@ -54,7 +54,7 @@ export function sortByField(items, field = 'name') {
 export function sortPilotsActiveFirst(pilots) {
   return [...pilots].sort((a, b) => {
     if (a.status !== b.status) return a.status === 'active' ? -1 : 1
-    return (a.first_name || '').localeCompare(b.first_name || '')
+    return (a.full_name || a.first_name || '').localeCompare(b.full_name || b.first_name || '')
   })
 }
 

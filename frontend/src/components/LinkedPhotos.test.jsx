@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
+import { withPermissions } from '@/test/permissions'
 import { renderWithProviders } from '@/test/render'
 import LinkedPhotos from './LinkedPhotos'
 
@@ -50,7 +51,7 @@ describe('LinkedPhotos', () => {
 
   it('hides attach/unlink controls for a viewer (not a supervisor)', async () => {
     server.use(http.get('/api/auth/me', () =>
-      HttpResponse.json({ id: 1, username: 'v', display_name: 'v', role: 'viewer' })))
+      HttpResponse.json(withPermissions({ id: 1, username: 'v', display_name: 'v', role: 'viewer' }))))
 
     renderWithProviders(<LinkedPhotos entityType="flight" entityId={5} />, { role: 'viewer' })
 
@@ -80,5 +81,12 @@ describe('LinkedPhotos', () => {
 
     await user.click(screen.getByAltText('South field'))
     expect(attach).toHaveTextContent('Attach 2')
+  })
+
+  it('reports a failed list and stops loading', async () => {
+    server.use(http.get('/api/photos', () => HttpResponse.json({ detail: 'photos failed' }, { status: 500 })))
+    renderWithProviders(<LinkedPhotos entityType="flight" entityId={5} />, { role: 'admin' })
+    expect(await screen.findByText('photos failed')).toBeInTheDocument()
+    expect(await screen.findByText('No photos linked.')).toBeInTheDocument()
   })
 })
