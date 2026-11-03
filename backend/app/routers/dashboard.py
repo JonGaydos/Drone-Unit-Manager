@@ -689,18 +689,21 @@ def compliance_dashboard(db: DBSession, user: CurrentUser):
 
     # The score and counts are unit-wide. The lists name records, so they follow
     # their features' view permissions.
-    shows_certifications = can(db, user, "certifications.view")
-    shows_authorities = can(db, user, "authority.view")
+    visible_certifications = []
+    visible_currency = []
+    if can(db, user, "certifications.view"):
+        visible_certifications = [_certification_brief(c, today) for c in expiring_soon]
+        visible_currency = pilot_currency_status
+    visible_expired_authorities = []
+    visible_expiring_authorities = []
+    if can(db, user, "authority.view"):
+        visible_expired_authorities = [_authority_brief(a, today) for a in expired_authorities]
+        visible_expiring_authorities = [_authority_brief(a, today) for a in expiring_authorities]
 
     return {
         "total_pilots": total_pilots,
         "expired_certifications": expired_certs,
-        "expiring_certifications": [{
-            "pilot_id": c.pilot_id,
-            "cert_type_id": c.certification_type_id,
-            "expiration_date": c.expiration_date.isoformat() if c.expiration_date else None,
-            "days_remaining": (c.expiration_date - today).days if c.expiration_date else None,
-        } for c in expiring_soon] if shows_certifications else [],
+        "expiring_certifications": visible_certifications,
         "total_vehicles": total_vehicles,
         "expired_registrations": expired_regs,
         "overdue_maintenance": overdue_maintenance,
@@ -710,10 +713,10 @@ def compliance_dashboard(db: DBSession, user: CurrentUser):
         "currency_rules_active": currency_rules_active,
         "pilots_current": pilots_current,
         "pilots_lapsed": pilots_lapsed,
-        "pilot_currency_status": pilot_currency_status if shows_certifications else [],
+        "pilot_currency_status": visible_currency,
         "operating_authorities_tracked": len(authorities),
-        "expired_authorities": [_authority_brief(a, today) for a in expired_authorities] if shows_authorities else [],
-        "expiring_authorities": [_authority_brief(a, today) for a in expiring_authorities] if shows_authorities else [],
+        "expired_authorities": visible_expired_authorities,
+        "expiring_authorities": visible_expiring_authorities,
         "score_cap_reason": score_cap_reason,
         "compliance_score": _calc_compliance_score(
             total_pilots, expired_certs, total_vehicles, expired_regs,
@@ -721,6 +724,16 @@ def compliance_dashboard(db: DBSession, user: CurrentUser):
             pilots_lapsed, currency_rules_active,
             len(expiring_authorities), len(advisory_expired), bool(grounding_expired),
         ),
+    }
+
+
+def _certification_brief(c, today) -> dict:
+    """Compact expiring-certification payload for the compliance dashboard."""
+    return {
+        "pilot_id": c.pilot_id,
+        "cert_type_id": c.certification_type_id,
+        "expiration_date": c.expiration_date.isoformat() if c.expiration_date else None,
+        "days_remaining": (c.expiration_date - today).days if c.expiration_date else None,
     }
 
 

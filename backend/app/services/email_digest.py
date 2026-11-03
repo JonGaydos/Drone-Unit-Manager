@@ -35,10 +35,10 @@ def _is_category_enabled(enabled_categories: list | None, category: str) -> bool
     return not enabled_categories or category in enabled_categories
 
 
-def digest_address(db: Session, user: User, pref: NotificationPreference | None) -> str | None:
+def digest_address(db: Session, user: User, pref: NotificationPreference) -> str | None:
     """Where this user's digest goes: the stored override while the role holds
     digest.redirect, otherwise the account address. The override stays stored."""
-    if pref and pref.email_override and can(db, user, "digest.redirect"):
+    if pref.email_override and can(db, user, "digest.redirect"):
         return pref.email_override
     return user.email
 
