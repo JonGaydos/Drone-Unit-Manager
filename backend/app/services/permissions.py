@@ -345,6 +345,38 @@ def apply_changes(db: Session, changes: Iterable[Mapping[str, str]]) -> None:
         db.flush()
 
 
+def _is_restorable(row: Mapping[str, object]) -> bool:
+    """True when a stored row passes the same single-change checks as the API."""
+    role, key, value = row.get("role"), row.get("permission_key"), row.get("value")
+    if not all(isinstance(part, str) for part in (role, key, value)):
+        return False
+    return validate_change(role, key, value) is None
+
+
+def restorable_overrides(rows: list[Mapping[str, object]]) -> tuple[list[dict], int]:
+    """Filter rows from a backup to those the write API would accept.
+
+    Returns the kept rows and the number dropped. Needs no database, because a
+    restore has just emptied the table: a missing row means the default. A
+    repeated role and key keeps the last row. A change permission is dropped
+    when its view key resolves to the lowest value in the grid the kept rows
+    produce, unless the row itself holds the lowest value.
+    """
+    latest = {(row["role"], row["permission_key"]): dict(row) for row in rows if _is_restorable(row)}
+
+    def held(role: str, key: str) -> str:
+        row = latest.get((role, key))
+        return row["value"] if row else REGISTRY[key].defaults[role]
+
+    kept = []
+    for (role, key), row in latest.items():
+        definition = REGISTRY[key]
+        needs_view = definition.requires and held(role, definition.requires) == _lowest(REGISTRY[definition.requires])
+        if not (needs_view and row["value"] != _lowest(definition)):
+            kept.append(row)
+    return kept, len(rows) - len(kept)
+
+
 def reset(db: Session) -> None:
     """Remove every stored change without committing."""
     db.query(RolePermission).delete()
