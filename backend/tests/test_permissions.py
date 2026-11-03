@@ -203,10 +203,12 @@ def test_admin_always_highest(db):
     assert permissions.resolved_for(db, ADMIN)[FLIGHTS_VIEW] == YES
 
 
-def test_locked_viewer_ignores_stored_row(db):
-    _store(db, VIEWER, FLIGHTS_EDIT, ALL)
-    assert permissions.get_value(db, VIEWER, FLIGHTS_EDIT) == NONE
-    assert permissions.resolved_for(db, VIEWER)[FLIGHTS_EDIT] == NONE
+@pytest.mark.parametrize("key", [key for key, d in permissions.REGISTRY.items() if d.viewer_locked])
+def test_locked_viewer_ignores_stored_row(db, key):
+    lowest, *_, highest = permissions.OPTIONS[permissions.REGISTRY[key].kind]
+    _store(db, VIEWER, key, highest)
+    assert permissions.get_value(db, VIEWER, key) == lowest
+    assert permissions.resolved_for(db, VIEWER)[key] == lowest
 
 
 def test_stored_row_wins_over_default(db):

@@ -146,6 +146,7 @@ def test_search_omits_group_when_view_off(client, db, admin_headers, pilot_heade
 # Dashboard -------------------------------------------------------------------
 
 DASHBOARD_LISTS = [
+    ("/api/dashboard/activity-by-month", FLIGHTS_VIEW),
     ("/api/dashboard/top-pilots-30d", FLIGHTS_VIEW),
     ("/api/dashboard/analytics/flights-by-purpose", FLIGHTS_VIEW),
     ("/api/dashboard/analytics/flights-by-year", FLIGHTS_VIEW),
@@ -242,14 +243,14 @@ def test_unit_totals_stay_visible(client, db, admin_headers, pilot_headers):
     _cert(db, pilot.id)
     _authority(db, days=-5)
     _add(db, CurrencyRule(name="Rule", required_hours=50, period_days=30, is_active=True))
-    urls = ["/api/dashboard/stats", "/api/dashboard/trends", "/api/dashboard/activity-by-month", COMPLIANCE_URL]
+    urls = ["/api/dashboard/stats", "/api/dashboard/trends", COMPLIANCE_URL]
     before = {url: client.get(url, headers=pilot_headers).json() for url in urls}
 
     for view_key in (FLIGHTS_VIEW, FLEET_VIEW, PILOTS_VIEW, CERTIFICATIONS_VIEW, AUTHORITY_VIEW,
                      MAINTENANCE_VIEW, INCIDENTS_VIEW):
         _key_off(client, admin_headers, PILOT_ROLE, view_key)
 
-    for url in urls[:3]:
+    for url in urls[:2]:
         resp = client.get(url, headers=pilot_headers)
         assert resp.status_code == 200
         assert resp.json() == before[url]

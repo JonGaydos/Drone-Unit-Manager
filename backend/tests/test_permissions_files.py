@@ -175,6 +175,17 @@ def test_pilot_edit_and_soft_delete_own_only(client, db, pilot_headers, pilot_us
     assert client.delete(f"{PHOTOS_URL}/{my_photo.id}", headers=pilot_headers).status_code == 200
 
 
+def test_document_on_a_certification_follows_its_pilot(client, db, pilot_headers, supervisor_user, linked_pilot):
+    def on_certification_of(pilot_id):
+        cert_id = _certification(db, pilot_id).id
+        return _doc(db, supervisor_user.id, entity_type="certification", certification_id=cert_id)
+
+    mine = on_certification_of(linked_pilot.id)
+    theirs = on_certification_of(_other_pilot(db).id)
+    assert client.patch(f"{DOCS_URL}/{mine.id}", headers=pilot_headers, json={"title": "X"}).status_code == 200
+    assert client.patch(f"{DOCS_URL}/{theirs.id}", headers=pilot_headers, json={"title": "X"}).status_code == 403
+
+
 def test_edit_none_refuses_own_records(client, db, admin_headers, pilot_headers, pilot_user):
     _grid(client, admin_headers, ("pilot", "files.edit", "none"))
     doc = _doc(db, pilot_user.id)

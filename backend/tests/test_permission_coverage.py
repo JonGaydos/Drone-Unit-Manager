@@ -56,7 +56,6 @@ SIGNED_IN_ROUTES = frozenset({
     # Unit-wide totals with no names.
     "GET /api/dashboard/stats",
     "GET /api/dashboard/trends",
-    "GET /api/dashboard/activity-by-month",
     "GET /api/dashboard/compliance",
     # Media rows have no owner, so the handler's require_record_access needs
     # files.edit at All. Pinned by test_permissions_files.test_media_delete_needs_all.
@@ -76,7 +75,7 @@ PUBLIC_ROUTES = frozenset({
     "GET /api/settings/logo/view",
     "GET /api/health",
     "GET /{full_path:path}",
-    # _authorize_photo_request: a signed URL, or a login holding files.view.
+    # _authenticate_image_request: a signed URL, or a login holding files.view.
     # Pinned by test_photo_serving_needs_a_login_or_signature, the signed URL tests
     # in test_photos, and test_permissions_files.test_view_off_blocks_serving_by_login_token.
     "GET /api/photos/{photo_id}/view",
@@ -90,8 +89,9 @@ ALLOWLISTS = {
 }
 
 # Each route's permission keys, written from the Route Mapping in the plan. Only
-# keys a route declares as guards appear here. The matrix tests cover checks made
-# inside handlers, which a dependency walk cannot see:
+# keys a route declares as guards appear here. test_permission_matrix.py and the
+# test_permissions_*.py files cover checks made inside handlers, which a dependency
+# walk cannot see:
 #   Level checks with require_record_access:
 #     PATCH and DELETE on flights, maintenance records and calendar events
 #     PATCH and cancel on flight plans
@@ -407,6 +407,7 @@ EXPECTED_ROUTE_KEYS = {
     "GET /api/export/flight-plans/csv": {REPORTS_EXPORT, PLANS_VIEW},
     "GET /api/export/audit/csv": {REPORTS_EXPORT, AUDIT_VIEW},
     # dashboard
+    "GET /api/dashboard/activity-by-month": {FLIGHTS_VIEW},
     "GET /api/dashboard/top-pilots-30d": {FLIGHTS_VIEW},
     "GET /api/dashboard/analytics/flights-by-purpose": {FLIGHTS_VIEW},
     "GET /api/dashboard/analytics/flights-by-year": {FLIGHTS_VIEW},
@@ -546,6 +547,11 @@ def test_walk_reaches_included_routers_and_stacked_guards():
 # The gate itself -------------------------------------------------------------
 
 GUARDED_KEY = FLIGHTS_VIEW
+BARE_ROUTE = "GET /router/bare"
+NESTED_DEPENDENCY_ROUTE = "GET /router/nested"
+ROUTER_GUARD_ROUTE = "GET /router/guarded/handler"
+ADMIN_ROUTE = "GET /router/admin"
+SIGNED_IN_ROUTE = "GET /router/signed-in"
 GUARD = Annotated[object, Depends(require_permission(GUARDED_KEY))]
 
 
@@ -560,7 +566,9 @@ def _handler():
 def _scratch_app() -> FastAPI:
     router = APIRouter(prefix="/router")
     router.add_api_route("/bare", _handler)
-    router.add_api_route("/router-guard", _handler, dependencies=[Depends(require_permission(GUARDED_KEY))])
+    guarded = APIRouter(prefix="/guarded", dependencies=[Depends(require_permission(GUARDED_KEY))])
+    guarded.add_api_route("/handler", _handler)
+    router.include_router(guarded)
 
     def nested(user: Annotated[object, Depends(_nested_guard)]):
         return user
@@ -581,7 +589,7 @@ def _scratch_app() -> FastAPI:
 
 def test_gate_names_an_unguarded_route():
     problems = _problems(_route_table(_scratch_app()), {})
-    assert "GET /router/bare: has no permission key, no require_admin and no allowlist entry" in problems
+    assert f"{BARE_ROUTE}: has no permission key, no require_admin and no allowlist entry" in problems
 
 
 def test_gate_names_a_non_api_route():
@@ -590,38 +598,37 @@ def test_gate_names_a_non_api_route():
 
 def test_gate_finds_nested_and_router_level_guards():
     table = _route_table(_scratch_app())
-    assert table["GET /router/nested"].keys == {GUARDED_KEY}
-    assert table["GET /router/router-guard"].keys == {GUARDED_KEY}
-    assert table["GET /router/admin"].admin
+    assert table[NESTED_DEPENDENCY_ROUTE].keys == {GUARDED_KEY}
+    assert table[ROUTER_GUARD_ROUTE].keys == {GUARDED_KEY}
+    assert table[ADMIN_ROUTE].admin
 
 
 def test_gate_refuses_a_guarded_route_on_an_allowlist():
     table = _route_table(_scratch_app())
-    for name in ("GET /router/nested", "GET /router/admin"):
+    for name in (NESTED_DEPENDENCY_ROUTE, ADMIN_ROUTE):
         problems = _problems({name: table[name]}, {"SOME_LIST": frozenset({name})})
         assert len(problems) == 1
         assert problems[0].startswith(f"{name}: on SOME_LIST but also guarded")
 
 
 def test_gate_refuses_a_route_on_two_allowlists():
-    name = "GET /router/bare"
     table = _route_table(_scratch_app())
-    allowlists = {"FIRST": frozenset({name}), "SECOND": frozenset({name})}
-    assert _problems({name: table[name]}, allowlists) == [f"{name}: on more than one allowlist: FIRST, SECOND"]
+    allowlists = {"FIRST": frozenset({BARE_ROUTE}), "SECOND": frozenset({BARE_ROUTE})}
+    assert _problems({BARE_ROUTE: table[BARE_ROUTE]}, allowlists) == [
+        f"{BARE_ROUTE}: on more than one allowlist: FIRST, SECOND"]
 
 
 def test_gate_refuses_a_signed_in_entry_with_no_login():
-    name = "GET /router/bare"
     table = _route_table(_scratch_app())
-    assert len(_problems({name: table[name]}, {"SIGNED_IN_ROUTES": frozenset({name})})) == 1
-    signed_in = "GET /router/signed-in"
-    assert not _problems({signed_in: table[signed_in]}, {"SIGNED_IN_ROUTES": frozenset({signed_in})})
+    assert len(_problems({BARE_ROUTE: table[BARE_ROUTE]}, {"SIGNED_IN_ROUTES": frozenset({BARE_ROUTE})})) == 1
+    allowlists = {"SIGNED_IN_ROUTES": frozenset({SIGNED_IN_ROUTE})}
+    assert not _problems({SIGNED_IN_ROUTE: table[SIGNED_IN_ROUTE]}, allowlists)
 
 
 def test_gate_names_every_key_difference():
     table = _route_table(_scratch_app())
-    nested = "GET /router/nested"
-    guard = "GET /router/router-guard"
+    nested = NESTED_DEPENDENCY_ROUTE
+    guard = ROUTER_GUARD_ROUTE
     assert _route_key_problems(table, {nested: {GUARDED_KEY}, guard: {GUARDED_KEY}}) == []
     assert _route_key_problems(table, {nested: {GUARDED_KEY}}) == [
         f"{guard}: declares ['{GUARDED_KEY}'] but is missing from the expected table"]
@@ -673,7 +680,7 @@ def test_backup_import_is_admin_only(client, pilot_headers, admin_headers):
     assert client.post(url, headers=admin_headers, data=body).status_code == 400
 
 
-def test_photo_serving_needs_a_login_or_signature(client, db, admin_user):
+def test_photo_serving_needs_a_login_or_signature(client, db):
     photo = Photo(filename="p.png", original_filename="p.png", mime_type="image/png")
     db.add(photo)
     db.commit()

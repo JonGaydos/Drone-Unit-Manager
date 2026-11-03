@@ -201,6 +201,17 @@ def test_calendar_viewer_creator_cannot_edit(client, db, viewer_user, viewer_hea
     assert client.delete(url, headers=viewer_headers).status_code == 403
 
 
+def test_calendar_delete_follows_own_level(client, db, pilot_user, pilot_headers, supervisor_user):
+    def event(created_by_id):
+        record = CalendarEvent(title="Old", category="event", start_date=date(2026, 3, 1), created_by_id=created_by_id)
+        db.add(record)
+        db.commit()
+        return f"{EVENTS_URL}/{record.id}"
+
+    assert client.delete(event(supervisor_user.id), headers=pilot_headers).status_code == 403
+    assert client.delete(event(pilot_user.id), headers=pilot_headers).status_code == 200
+
+
 def test_calendar_edit_levels_and_editable_flag(client, db, pilot_user, pilot_headers, supervisor_headers):
     body = {"title": "Mine", "start_date": "2026-03-01"}
     mine = client.post(EVENTS_URL, headers=pilot_headers, json=body).json()

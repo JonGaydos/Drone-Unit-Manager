@@ -180,7 +180,7 @@ def get_trends(db: DBSession, user: CurrentUser):
 
 
 @router.get("/activity-by-month", responses=responses(401))
-def activity_by_month(db: DBSession, user: CurrentUser, months: int = 12):
+def activity_by_month(db: DBSession, user: FlightsUser, months: int = 12):
     """Flight count + hours grouped by month for the activity chart on the
     bento dashboard. Default last 12 months."""
     today_date = date.today()

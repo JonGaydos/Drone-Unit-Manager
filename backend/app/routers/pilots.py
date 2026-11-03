@@ -186,7 +186,7 @@ def update_pilot(pilot_id: int, data: PilotUpdate, db: DBSession, user: EditUser
     if not permissions_service.can(db, user, MANAGE_KEY) and any(
         f in update_data and update_data[f] != getattr(pilot, f) for f in SUPERVISOR_ONLY_PILOT_FIELDS
     ):
-        raise HTTPException(status_code=403, detail="Only a supervisor can change status, unit totals, or photo URL")
+        raise HTTPException(status_code=403, detail="Status, unit totals and photo URL need the pilots.manage permission")
     changes = compute_changes(pilot, update_data, list(update_data.keys()))
     for key, value in update_data.items():
         setattr(pilot, key, value)

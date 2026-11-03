@@ -291,8 +291,8 @@ BOOL_CASES: dict[str, Builder] = {
     "calendar.view": lambda env, role: _get(f"{CALENDAR_URL}?start=2026-03-01&end=2026-03-31"),
     "calendar.create": lambda env, role: _post(f"{CALENDAR_URL}/events", {"title": "Event", "start_date": DAY}),
     "files.view": lambda env, role: _get(f"{PHOTOS_URL}/{_photo(env, None).id}/signed-urls"),
-    "files.custody": lambda env, role: _post(f"{DOCUMENTS_URL}/{_document(env, deleted_at=datetime(2026, 3, 2)).id}"
-                                             "/restore"),
+    "files.custody": lambda env, role: _post(
+        f"{DOCUMENTS_URL}/{_document(env, deleted_at=datetime(2026, 3, 2)).id}/restore"),
     "folders.manage": lambda env, role: _post("/api/folders", {"name": env.unique("Folder")}),
     "alerts.view": lambda env, role: _get(ALERTS_URL),
     "alerts.dismiss": lambda env, role: _patch(f"{ALERTS_URL}/{_alert(env).id}/read", {}),
