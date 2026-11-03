@@ -205,7 +205,7 @@ describe('RolePermissionsGrid narrow layout', () => {
     mockGet()
     const { user } = renderWithProviders(<RolePermissionsGrid />, { role: 'admin' })
     await screen.findByLabelText('Supervisor, Flights, Edit')
-    expect(screen.getAllByRole('group').map(g => g.getAttribute('aria-label')))
+    expect(screen.getAllByRole('group').map(g => g.querySelector('legend').textContent))
       .toEqual(['Flights', 'Fleet equipment', 'Equipment checkouts'])
     expect(screen.queryByLabelText('Pilot, Flights, Edit')).not.toBeInTheDocument()
 

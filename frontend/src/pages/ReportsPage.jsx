@@ -67,7 +67,7 @@ export default function ReportsPage() {
 
 
   // Form state
-  const [chosenType, setReportType] = useState('flight_summary')
+  const [chosenType, setChosenType] = useState('flight_summary')
   // A saved or default choice may name a report this role cannot see.
   const reportType = reportTypes.some(type => type.value === chosenType) ? chosenType : reportTypes[0]?.value
   const [dateFrom, setDateFrom] = useState('')
@@ -97,7 +97,7 @@ export default function ReportsPage() {
       try {
         const saved = JSON.parse(localStorage.getItem('dum_report_config') || 'null')
         if (saved) {
-          if (saved.reportType) setReportType(saved.reportType)
+          if (saved.reportType) setChosenType(saved.reportType)
           if (saved.dateFrom) setDateFrom(saved.dateFrom)
           if (saved.dateTo) setDateTo(saved.dateTo)
           if (Array.isArray(saved.selectedPilots)) setSelectedPilots(saved.selectedPilots)
@@ -302,7 +302,7 @@ export default function ReportsPage() {
                     <label htmlFor="report-type" className="block text-sm font-medium text-foreground mb-1">Report Type</label>
                     <select id="report-type"
                       value={reportType}
-                      onChange={(e) => setReportType(e.target.value)}
+                      onChange={(e) => setChosenType(e.target.value)}
                       className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
                     >
                       {reportTypes.map(rt => (

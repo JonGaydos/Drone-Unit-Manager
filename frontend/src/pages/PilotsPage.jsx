@@ -8,10 +8,10 @@ import { Link } from 'react-router-dom'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Modal } from '@/components/ui/Modal'
 
-const CONTACT_FIELDS = ['email', 'phone', 'phone_type', 'phone_work']
+const CONTACT_FIELDS = new Set(['email', 'phone', 'phone_type', 'phone_work'])
 
 function withoutContacts(data) {
-  return Object.fromEntries(Object.entries(data).filter(([key]) => !CONTACT_FIELDS.includes(key)))
+  return Object.fromEntries(Object.entries(data).filter(([key]) => !CONTACT_FIELDS.has(key)))
 }
 
 function PilotModal({ pilot, canManage, canSeeContacts, onSave, onClose }) {

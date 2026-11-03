@@ -114,8 +114,8 @@ function PermissionCards({ groups, values, registry, saving, onChange }) {
     <div className="space-y-4">
       <RoleSelector role={role} onChange={setRole} />
       {groups.map(group => (
-        <div key={group.feature} role="group" aria-label={group.feature} className="bg-card border border-border rounded-xl p-4">
-          <h4 className="text-sm font-semibold text-foreground mb-3">{group.feature}</h4>
+        <fieldset key={group.feature} className="min-w-0 m-0 bg-card border border-border rounded-xl p-4">
+          <legend className="text-sm font-semibold text-foreground mb-3 p-0">{group.feature}</legend>
           <div className="space-y-3">
             {group.rows.map(def => (
               <div key={def.key} className="grid grid-cols-2 gap-3 items-start">
@@ -124,7 +124,7 @@ function PermissionCards({ groups, values, registry, saving, onChange }) {
               </div>
             ))}
           </div>
-        </div>
+        </fieldset>
       ))}
     </div>
   )

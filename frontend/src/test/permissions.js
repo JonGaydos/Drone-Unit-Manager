@@ -74,5 +74,5 @@ export const DEFAULT_PERMISSIONS = {
 /** A user as /auth/me returns it: the role's default grid, then any overrides.
  *  A user that already carries a permissions map keeps it. */
 export function withPermissions(user, overrides = {}) {
-  return { ...user, permissions: { ...(user.permissions || DEFAULT_PERMISSIONS[user.role] || {}), ...overrides } }
+  return { ...user, permissions: { ...(user.permissions || DEFAULT_PERMISSIONS[user.role]), ...overrides } }
 }

@@ -691,7 +691,9 @@ def test_audit_api_redacts_contacts_without_the_permission(client, db, admin_hea
     resp = client.get(AUDIT_URL, headers=pilot_headers)
 
     assert resp.status_code == 200, resp.text
-    assert AUDIT_EMAIL not in resp.text and AUDIT_PHONE not in resp.text and "bob@example.org" not in resp.text
+    assert AUDIT_EMAIL not in resp.text
+    assert AUDIT_PHONE not in resp.text
+    assert "bob@example.org" not in resp.text
     logs = {entry["action"]: entry for entry in resp.json()["logs"]}
     assert logs["update"]["changes"]["first_name"] == {"old": "Jan", "new": "Jane"}
     assert logs["update"]["changes"]["email"] == {"old": CONTACT_HIDDEN, "new": CONTACT_HIDDEN}
@@ -707,7 +709,8 @@ def test_audit_csv_redacts_recipients_without_the_permission(client, db, admin_h
     resp = client.get("/api/export/audit/csv", headers=pilot_headers)
 
     assert resp.status_code == 200, resp.text
-    assert AUDIT_EMAIL not in resp.text and "bob@example.org" not in resp.text
+    assert AUDIT_EMAIL not in resp.text
+    assert "bob@example.org" not in resp.text
     assert "Jane Doe" in resp.text
 
 
