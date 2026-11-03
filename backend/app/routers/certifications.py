@@ -248,7 +248,7 @@ class CertBulkRenewRequest(BaseModel):
 def bulk_renew_pilot_certifications(data: CertBulkRenewRequest, db: DBSession, admin: ManageUser):
     """Renew many certifications at once (e.g. a training day): each selected
     cert is renewed with the same issue date, expiration auto-calculated per
-    cert type. Already-renewed certs are skipped. Supervisor or admin only."""
+    cert type. Already-renewed certs are skipped. Needs the certifications.manage permission."""
     from app.services.audit import log_action
     if not data.pilot_certification_ids:
         raise HTTPException(400, "No certifications selected")

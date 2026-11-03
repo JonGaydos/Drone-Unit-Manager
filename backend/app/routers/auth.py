@@ -168,13 +168,6 @@ def require_pilot(user: Annotated[User, Depends(get_current_user)]) -> User:
     return user
 
 
-def require_manager(user: Annotated[User, Depends(get_current_user)]) -> User:
-    """Legacy alias — allow admin, supervisor, or pilot roles."""
-    if user.role not in ("admin", "supervisor", "manager", "pilot"):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager access required")
-    return user
-
-
 def require_permission(key: str):
     """Build a dependency that allows users whose role holds the permission key.
 

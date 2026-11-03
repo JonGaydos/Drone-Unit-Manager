@@ -86,7 +86,7 @@ def _resolve_vehicle_location(v, co, names):
 @router.get("/locations", responses=responses(401))
 def vehicle_locations(db: DBSession, user: ViewUser):
     """Current location per active drone: the more recent of an active checkout
-    (with a pilot) or a manually-set location. Readable by any user."""
+    (with a pilot) or a manually-set location. Needs the fleet.view permission."""
     from app.models.pilot import Pilot
     vehicles = db.query(Vehicle).filter(Vehicle.status != "retired").all()
     active = _latest_vehicle_checkouts(db, [v.id for v in vehicles])
@@ -120,7 +120,7 @@ def merge_vehicles(target_id: int, merge_from_id: int, db: DBSession, admin: Man
     training logs, documents, registrations, components, checklist completions,
     equipment quals, and polymorphic equipment-checkout / maintenance / alert
     rows) from the source to the target, then deletes the source. Useful after a
-    bad Skydio re-sync creates a duplicate airframe. Supervisor or admin only.
+    bad Skydio re-sync creates a duplicate airframe. Needs the fleet.manage permission.
     """
     from app.services.audit import log_action
     from app.models.flight import Flight
@@ -217,7 +217,7 @@ def get_vehicle_stats(vehicle_id: int, db: DBSession, user: ViewUser, _flights: 
 
 @router.post("", response_model=VehicleOut, responses=responses(400, 401))
 def create_vehicle(data: VehicleCreate, db: DBSession, admin: ManageUser):
-    """Create a new vehicle record. Enforces unique serial numbers. Supervisor or admin only."""
+    """Create a new vehicle record. Enforces unique serial numbers. Needs the fleet.manage permission."""
     from app.services.audit import log_action
     if db.query(Vehicle).filter(Vehicle.serial_number == data.serial_number).first():
         raise HTTPException(status_code=400, detail="Vehicle with this serial number already exists")
@@ -234,7 +234,7 @@ def create_vehicle(data: VehicleCreate, db: DBSession, admin: ManageUser):
 
 @router.patch("/{vehicle_id}", response_model=VehicleOut, responses=responses(401, 404))
 def update_vehicle(vehicle_id: int, data: VehicleUpdate, db: DBSession, admin: ManageUser):
-    """Update a vehicle's details with audit-logged change tracking. Supervisor or admin only."""
+    """Update a vehicle's details with audit-logged change tracking. Needs the fleet.manage permission."""
     from app.services.audit import log_action, compute_changes
     vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
     if not vehicle:
@@ -252,7 +252,7 @@ def update_vehicle(vehicle_id: int, data: VehicleUpdate, db: DBSession, admin: M
 
 @router.patch("/{vehicle_id}/location", responses=responses(400, 401, 404))
 def set_vehicle_location(vehicle_id: int, data: VehicleLocationUpdate, db: DBSession, user: LocationUser):
-    """Manually set a drone's location to a pilot OR a named place. Pilots and above."""
+    """Manually set a drone's location to a pilot OR a named place. Needs the fleet.location permission."""
     from datetime import datetime, timezone
     from app.services.audit import log_action
     from app.models.pilot import Pilot
@@ -283,7 +283,7 @@ def set_vehicle_location(vehicle_id: int, data: VehicleLocationUpdate, db: DBSes
 
 @router.delete("/{vehicle_id}", responses=responses(401, 404))
 def delete_vehicle(vehicle_id: int, db: DBSession, admin: ManageUser):
-    """Soft-delete a vehicle by setting status to retired. Supervisor or admin only."""
+    """Soft-delete a vehicle by setting status to retired. Needs the fleet.manage permission."""
     from app.services.audit import log_action
     vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
     if not vehicle:

@@ -2,7 +2,8 @@
 
 The unit's own authority to fly, tracked the way a pilot's Part 107 certificate
 already is: issue and expiry dates, a derived status, attached documents, and a
-feed into the compliance score. Admin and Supervisor write; Pilot and Viewer read.
+feed into the compliance score. Reads need the authority.view permission, and
+writes need authority.manage.
 """
 
 from datetime import date
