@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.constants import USER_NOT_FOUND
 from app.services import api_tokens as api_tokens_service
+from app.services import permissions as permissions_service
 from app.database import get_db
 from app.models.user import User
 from app.schemas.user import LoginRequest, LoginResponse, UserOut, UserCreate, UserUpdate, ChangePasswordRequest, AdminResetPasswordRequest, SetupRequest
@@ -172,6 +173,28 @@ def require_manager(user: Annotated[User, Depends(get_current_user)]) -> User:
     if user.role not in ("admin", "supervisor", "manager", "pilot"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager access required")
     return user
+
+
+def require_permission(key: str):
+    """Build a dependency that allows users whose role holds the permission key.
+
+    An unknown key denies everyone. The returned callable carries the key as
+    ``permission_key``, so a route's permission can be read from its dependencies.
+    """
+    def check(user: Annotated[User, Depends(get_current_user)], db: DBSession) -> User:
+        if not permissions_service.can(db, user, key):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to do this")
+        return user
+
+    check.permission_key = key
+    return check
+
+
+def _own_user_out(db: Session, user: User) -> UserOut:
+    """The signed-in user's profile, with their resolved permissions."""
+    user_out = UserOut.model_validate(user)
+    user_out.permissions = permissions_service.resolved_for(db, user.role)
+    return user_out
 
 
 # Precomputed bcrypt hash used only to equalize timing on the missing-user login
@@ -554,7 +577,7 @@ def login(req: LoginRequest, request: Request, db: DBSession):
     log_action(db, user.id, user.display_name, "login", "auth",
                ip_address=client_ip, details="Successful login")
     db.commit()
-    return LoginResponse(token=token, user=UserOut.model_validate(user))
+    return LoginResponse(token=token, user=_own_user_out(db, user))
 
 
 @router.post("/logout", responses=responses(401))
@@ -570,9 +593,9 @@ def logout(user: Annotated[User, Depends(get_current_user)], db: DBSession):
 
 
 @router.get("/me", response_model=UserOut)
-def get_me(user: Annotated[User, Depends(get_current_user)]):
-    """Return the currently authenticated user's profile."""
-    return UserOut.model_validate(user)
+def get_me(user: Annotated[User, Depends(get_current_user)], db: DBSession):
+    """Return the currently authenticated user's profile and resolved permissions."""
+    return _own_user_out(db, user)
 
 
 @router.patch("/me", response_model=UserOut)
@@ -589,7 +612,7 @@ def update_me(data: UserUpdate, user: Annotated[User, Depends(get_current_user)]
         log_action(db, user.id, user.display_name, "update", "user", user.id, user.display_name, changes=changes)
     db.commit()
     db.refresh(user)
-    return UserOut.model_validate(user)
+    return _own_user_out(db, user)
 
 
 @router.post("/users", response_model=UserOut, responses=responses(409))

@@ -49,6 +49,7 @@ from app.routers import (
 from app.routers import vehicle_registrations, backup, search
 from app.routers import operating_authorities
 from app.routers import api_tokens as api_tokens_router
+from app.routers import permissions as permissions_router
 from app.routers import import_router
 from app.services.scheduler import start_scheduler, stop_scheduler
 from app.models.user import User
@@ -261,6 +262,7 @@ app.include_router(backup.router)
 app.include_router(search.router)
 app.include_router(import_router.router)
 app.include_router(calendar.router)
+app.include_router(permissions_router.router)
 
 
 # How old the last backup or clean sync may be before the health check warns.

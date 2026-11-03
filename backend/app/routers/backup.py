@@ -45,6 +45,7 @@ from app.models.battery_reading import BatteryReading
 from app.models.controller import Controller
 from app.models.other_equipment import OtherEquipment
 from app.models.api_token import ApiToken
+from app.models.role_permission import RolePermission
 from app.models.sensor import SensorPackage
 from app.models.attachment import Attachment
 from app.models.dock import Dock
@@ -102,6 +103,7 @@ EXPORT_ORDER = [
     ("currency_rules", CurrencyRule),
     ("geofences", Geofence),
     ("operating_authorities", OperatingAuthority),
+    ("role_permissions", RolePermission),
     # Tier 2: Base entities
     ("pilots", Pilot),
     ("users", User),

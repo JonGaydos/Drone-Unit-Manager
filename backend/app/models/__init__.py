@@ -37,7 +37,8 @@ from app.models.geofence import Geofence
 from app.models.notification_preference import NotificationPreference
 from app.models.notification_log import NotificationLog
 from app.models.battery_reading import BatteryReading
-from app.models.calendar_event import CalendarEvent  # noqa: F401
+from app.models.calendar_event import CalendarEvent
+from app.models.role_permission import RolePermission  # noqa: F401
 
 __all__ = [
     "User",
@@ -85,4 +86,5 @@ __all__ = [
     "NotificationLog",
     "BatteryReading",
     "CalendarEvent",
+    "RolePermission",
 ]

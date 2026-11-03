@@ -34,6 +34,8 @@ class Document(Base):
     deleted_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     legal_hold: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     sha256: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # Owner of the document. Null on documents uploaded before this was recorded.
+    uploaded_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
 
     pilot = relationship("Pilot", back_populates="documents", foreign_keys=[pilot_id])
     vehicle = relationship("Vehicle", back_populates="documents", foreign_keys=[vehicle_id])
