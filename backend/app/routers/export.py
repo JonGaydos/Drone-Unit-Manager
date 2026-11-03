@@ -13,7 +13,7 @@ from sqlalchemy.orm import joinedload
 
 from app.models.flight import Flight
 from app.services.local_time import display_zone, stamped_on_or_after, stamped_on_or_before
-from app.services.pilot_contacts import hides_contacts
+from app.services.pilot_contacts import hides_contacts, redact_audit_details
 from app.models.pilot import Pilot
 from app.models.vehicle import Vehicle
 from app.models.maintenance import MaintenanceRecord
@@ -616,6 +616,7 @@ def export_audit_csv(
     if date_to:
         q = q.filter(stamped_on_or_before(AuditLog.created_at, date_to, local_tz))
     logs = q.order_by(AuditLog.created_at.desc()).limit(5000).all()
+    hide = hides_contacts(db, user)
 
     output = io.StringIO()
     writer = csv.writer(output)
@@ -628,7 +629,8 @@ def export_audit_csv(
             _csv_fmt_local(log.created_at, local_tz, "%Y-%m-%d %H:%M:%S"),
             _csv_safe(log.user_name or ""), _csv_safe(log.action), _csv_safe(log.entity_type),
             log.entity_id or "", _csv_safe(log.entity_name or ""),
-            _csv_safe(log.details or ""), _csv_safe(log.ip_address or ""),
+            _csv_safe((redact_audit_details(log.details) if hide else log.details) or ""),
+            _csv_safe(log.ip_address or ""),
         ])
     output.seek(0)
     return StreamingResponse(

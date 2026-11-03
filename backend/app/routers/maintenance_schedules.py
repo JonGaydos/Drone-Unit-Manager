@@ -276,6 +276,7 @@ def complete_schedule(
         performed_date=today,
         next_due_date=None if schedule.frequency == ONE_TIME else schedule.next_due,
         performed_by=user.display_name if user.display_name else user.username,
+        created_by_id=user.id,
     )
     db.add(record)
     log_action(db, user.id, user.display_name, "complete", "maintenance_schedule", schedule.id, schedule.name)

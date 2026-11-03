@@ -19,6 +19,9 @@ Main-db rows are seeded via the ``db`` fixture; the app commits, so cross-sessio
 reads see committed rows after ``expire_all``.
 """
 
+from datetime import date
+
+from app.models.maintenance import MaintenanceRecord
 from app.models.maintenance_schedule import MaintenanceSchedule
 from app.models.vehicle import Vehicle
 
@@ -363,3 +366,20 @@ def test_create_multi_year_schedule_auto_calcs_next_due(client, db, admin_header
         year = today.year + years
         expected = date(year, today.month, min(today.day, calendar.monthrange(year, today.month)[1]))
         assert row.next_due == expected
+
+
+def test_completing_a_schedule_records_the_user_who_can_then_correct_it(client, db, pilot_user, pilot_headers):
+    vehicle = _seed_vehicle(db, serial="SCHED-OWN")
+    schedule = MaintenanceSchedule(name="Prop check", entity_type="vehicle", entity_id=vehicle.id,
+                                   frequency="monthly", next_due=date(2026, 1, 1))
+    db.add(schedule)
+    db.commit()
+
+    resp = client.post(f"/api/maintenance/schedules/{schedule.id}/complete", headers=pilot_headers)
+    assert resp.status_code == 200, resp.text
+
+    db.expire_all()
+    record = db.query(MaintenanceRecord).one()
+    assert record.created_by_id == pilot_user.id
+    fix = client.patch(f"/api/maintenance/{record.id}", headers=pilot_headers, json={"description": "Fixed wording"})
+    assert fix.status_code == 200, fix.text

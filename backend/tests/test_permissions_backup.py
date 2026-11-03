@@ -139,6 +139,18 @@ def test_restore_forces_a_dropped_explicit_row_to_lowest(client, db, admin_user,
     _assert_valid_grid(db)
 
 
+def test_restore_with_fleet_view_off_forces_checkouts_off(client, db, admin_user, admin_headers, tmp_path, monkeypatch):
+    rows = [_row("pilot", "fleet.view", "no", 1), _row("pilot", "checkouts.use", "yes", 2)]
+    archive = _archive(db, lambda tables: tables.update(role_permissions=rows))
+
+    _restore(client, admin_headers, archive, tmp_path, monkeypatch)
+
+    assert permissions.get_value(db, "pilot", "checkouts.use") == "no"
+    assert permissions.get_value(db, "pilot", "checkouts.delete") == "no"
+    assert permissions.get_value(db, "supervisor", "checkouts.use") == "yes"
+    _assert_valid_grid(db)
+
+
 def test_older_backup_documents_restore_without_uploader(client, db, admin_user, admin_headers, tmp_path, monkeypatch):
     db.add(Document(entity_type="general", document_type="other", title="T", filename="t.txt",
                     file_path="documents/t.txt", mime_type="text/plain", file_size_bytes=1,

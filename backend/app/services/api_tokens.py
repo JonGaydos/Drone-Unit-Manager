@@ -24,7 +24,7 @@ TOKEN_PREFIX = "dum_"
 # A request path must fall under one of the token's areas to be allowed.
 SCOPE_PREFIXES = {
     "fleet": [
-        "/api/vehicles", "/api/batteries", "/api/controllers", "/api/docks",
+        "/api/fleet", "/api/vehicles", "/api/batteries", "/api/controllers", "/api/docks",
         "/api/sensors", "/api/attachments", "/api/other-equipment",
         "/api/components", "/api/vehicle-registrations", "/api/equipment-checkouts",
     ],

@@ -11,6 +11,7 @@ from app.models.equipment_checkout import EquipmentCheckout
 from app.models.flight import Flight
 from app.models.flight_approval import FlightPlan
 from app.models.incident import Incident
+from app.models.audit_log import AuditLog
 from app.models.battery import Battery
 from app.models.attachment import Attachment
 from app.models.maintenance_schedule import MaintenanceSchedule
@@ -26,8 +27,10 @@ from app.models.vehicle_registration import VehicleRegistration
 from app.routers.reports import REPORT_VIEW_KEYS
 from app.services import email_digest, scheduler
 from app.services.permissions import REGISTRY
+from app.services.pilot_contacts import CONTACT_HIDDEN
 
 PERMISSIONS_URL = "/api/permissions"
+PILOT_ADDRESS = "pilot-record@example.org"
 SEARCH_URL = "/api/search"
 COMPLIANCE_URL = "/api/dashboard/compliance"
 PREFERENCES_URL = "/api/notifications/preferences"
@@ -519,6 +522,29 @@ def test_scheduled_digest_with_no_permitted_address_is_not_sent(db, pilot_user, 
     assert _stored_override(db, pilot_user) == OVERRIDE_ADDRESS
 
 
+def test_scheduled_digest_falls_back_to_the_linked_pilot_email(db, pilot_user, linked_pilot, sent):
+    linked_pilot.email = PILOT_ADDRESS
+    pref = _with_account_and_override(db, pilot_user, account=None)
+    scheduler._send_user_digest(pref, db)
+    assert sent == [PILOT_ADDRESS]
+    assert _stored_override(db, pilot_user) == OVERRIDE_ADDRESS
+
+
+def test_scheduled_digest_prefers_the_account_address_to_the_pilot_email(db, pilot_user, linked_pilot, sent):
+    linked_pilot.email = PILOT_ADDRESS
+    pref = _with_account_and_override(db, pilot_user)
+    scheduler._send_user_digest(pref, db)
+    assert sent == [ACCOUNT_ADDRESS]
+
+
+def test_send_test_uses_the_same_fallback_and_never_the_override(client, db, pilot_user, linked_pilot, pilot_headers, sent):
+    linked_pilot.email = PILOT_ADDRESS
+    _with_account_and_override(db, pilot_user, account=None)
+    resp = client.post(SEND_TEST_URL, headers=pilot_headers)
+    assert resp.status_code == 200, resp.text
+    assert sent == [PILOT_ADDRESS]
+
+
 def test_send_test_ignores_override_without_permission(client, db, pilot_user, pilot_headers, sent):
     _with_account_and_override(db, pilot_user)
     resp = client.post(SEND_TEST_URL, headers=pilot_headers)
@@ -634,3 +660,66 @@ def test_preflight_warnings_follow_view_keys(client, db, admin_headers, pilot_he
     assert "registration expired" in warnings()
     _key_off(client, admin_headers, PILOT_ROLE, REGISTRATIONS_VIEW)
     assert warnings() == ""
+
+
+# The audit log follows pilots.contacts -----------------------------------------
+
+AUDIT_PHONE = "555-0100"
+AUDIT_EMAIL = "jane@example.org"
+
+
+def _seed_contact_audit(db):
+    db.add(AuditLog(user_name="Admin", action="update", entity_type="pilot", entity_id=1, entity_name="Jane Doe",
+                    changes={"email": {"old": None, "new": AUDIT_EMAIL}, "phone": {"old": AUDIT_PHONE, "new": None},
+                             "first_name": {"old": "Jan", "new": "Jane"}}))
+    db.add(AuditLog(user_name="Admin", action="send_reminders", entity_type="currency",
+                    details=f"sent=1, failed=0; recipients=Jane Doe <{AUDIT_EMAIL}>; Bob Roy <bob@example.org>"))
+    db.add(AuditLog(user_name="Admin", action="send_test", entity_type="notification",
+                    details=f"to={AUDIT_EMAIL}, sent=True"))
+    db.commit()
+
+
+def _hide_contacts_with_audit(client, admin_headers, role="pilot"):
+    _grid(client, admin_headers, (role, "audit.view", "yes"), (role, "pilots.contacts", "no"))
+
+
+def test_audit_api_redacts_contacts_without_the_permission(client, db, admin_headers, pilot_headers):
+    _seed_contact_audit(db)
+    _hide_contacts_with_audit(client, admin_headers)
+
+    resp = client.get("/api/audit", headers=pilot_headers)
+
+    assert resp.status_code == 200, resp.text
+    assert AUDIT_EMAIL not in resp.text and AUDIT_PHONE not in resp.text and "bob@example.org" not in resp.text
+    logs = {entry["action"]: entry for entry in resp.json()["logs"]}
+    assert logs["update"]["changes"]["first_name"] == {"old": "Jan", "new": "Jane"}
+    assert logs["update"]["changes"]["email"] == {"old": CONTACT_HIDDEN, "new": CONTACT_HIDDEN}
+    assert logs["send_reminders"]["details"] == (
+        f"sent=1, failed=0; recipients=Jane Doe <{CONTACT_HIDDEN}>; Bob Roy <{CONTACT_HIDDEN}>")
+    assert logs["send_test"]["details"] == f"to={CONTACT_HIDDEN}, sent=True"
+
+
+def test_audit_csv_redacts_recipients_without_the_permission(client, db, admin_headers, pilot_headers):
+    _seed_contact_audit(db)
+    _hide_contacts_with_audit(client, admin_headers)
+
+    resp = client.get("/api/export/audit/csv", headers=pilot_headers)
+
+    assert resp.status_code == 200, resp.text
+    assert AUDIT_EMAIL not in resp.text and "bob@example.org" not in resp.text
+    assert "Jane Doe" in resp.text
+
+
+def test_audit_keeps_contacts_with_the_permission_and_stored_rows_intact(client, db, admin_headers, pilot_headers):
+    _seed_contact_audit(db)
+    _grid(client, admin_headers, ("pilot", "audit.view", "yes"))
+
+    assert AUDIT_EMAIL in client.get("/api/audit", headers=pilot_headers).text
+    assert AUDIT_EMAIL in client.get("/api/export/audit/csv", headers=pilot_headers).text
+    assert AUDIT_EMAIL in client.get("/api/audit", headers=admin_headers).text
+
+    _hide_contacts_with_audit(client, admin_headers)
+    client.get("/api/audit", headers=pilot_headers)
+    db.expire_all()
+    stored = db.query(AuditLog).filter(AuditLog.action == "update", AuditLog.entity_type == "pilot").first()
+    assert stored.changes["email"]["new"] == AUDIT_EMAIL

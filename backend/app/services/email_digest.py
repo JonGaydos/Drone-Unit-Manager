@@ -16,6 +16,7 @@ from email.mime.text import MIMEText
 from sqlalchemy.orm import Session
 
 from app.constants import APP_TITLE
+from app.models.pilot import Pilot
 from app.models.user import User
 from app.models.setting import Setting
 from app.models.notification_preference import NotificationPreference
@@ -37,10 +38,14 @@ def _is_category_enabled(enabled_categories: list | None, category: str) -> bool
 
 def digest_address(db: Session, user: User, pref: NotificationPreference) -> str | None:
     """Where this user's digest goes: the stored override while the role holds
-    digest.redirect, otherwise the account address. The override stays stored."""
+    digest.redirect, otherwise the account address, otherwise the linked pilot's
+    email. The override stays stored."""
     if pref.email_override and can(db, user, "digest.redirect"):
         return pref.email_override
-    return user.email
+    if user.email:
+        return user.email
+    pilot = db.get(Pilot, user.pilot_id) if user.pilot_id else None
+    return pilot.email if pilot else None
 
 
 def _build_pending_approvals(db: Session) -> list[dict] | None:

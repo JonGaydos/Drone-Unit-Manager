@@ -42,6 +42,12 @@ def test_token_reads_scoped_area(client, admin_headers):
     assert resp.status_code == 200, resp.text
 
 
+def test_fleet_token_reads_fleet_options(client, admin_headers):
+    token = _create_token(client, admin_headers, scopes=["fleet"])["token"]
+
+    assert client.get("/api/fleet/options", headers=_bearer(token)).status_code == 200
+
+
 def test_token_blocked_outside_scope(client, admin_headers):
     token = _create_token(client, admin_headers, scopes=["flights"])["token"]
 

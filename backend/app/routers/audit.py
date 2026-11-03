@@ -6,6 +6,7 @@ from app.deps import DBSession
 from app.models.audit_log import AuditLog
 from app.models.user import User
 from app.routers.auth import require_permission
+from app.services.pilot_contacts import hides_contacts, redact_audit_changes, redact_audit_details
 
 router = APIRouter(prefix="/api/audit", tags=["audit"])
 
@@ -33,6 +34,7 @@ def list_audit_logs(
         q = q.filter(AuditLog.action == action)
     total = q.count()
     logs = q.order_by(AuditLog.created_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
+    hide = hides_contacts(db, user)
     return {
         "logs": [
             {
@@ -43,8 +45,8 @@ def list_audit_logs(
                 "entity_type": entry.entity_type,
                 "entity_id": entry.entity_id,
                 "entity_name": entry.entity_name,
-                "changes": entry.changes,
-                "details": entry.details,
+                "changes": redact_audit_changes(entry.changes) if hide else entry.changes,
+                "details": redact_audit_details(entry.details) if hide else entry.details,
                 "created_at": entry.created_at.isoformat() if entry.created_at else None,
             }
             for entry in logs
