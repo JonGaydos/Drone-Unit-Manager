@@ -399,3 +399,31 @@ describe('SettingsPage', () => {
     ])
   })
 })
+
+describe('SettingsPage role permissions', () => {
+  const PERMISSIONS = {
+    registry: [{ key: 'flights.view', feature: 'Flights', action: 'View', kind: 'bool', defaults: {}, viewer_locked: false, requires: null }],
+    values: Object.fromEntries(['admin', 'supervisor', 'pilot', 'viewer'].map(r => [r, { 'flights.view': 'yes' }])),
+  }
+
+  it('places the permissions grid directly below User Management', async () => {
+    mockMount()
+    server.use(http.get('/api/permissions', () => HttpResponse.json(PERMISSIONS)))
+    const { user } = renderWithProviders(<SettingsPage />, { role: 'admin' })
+    await user.click(await screen.findByRole('button', { name: 'Users' }))
+
+    const grid = await screen.findByRole('region', { name: 'Role Permissions' })
+    const management = screen.getByRole('heading', { name: 'User Management' }).closest('div.bg-card')
+    expect(management.nextElementSibling).toBe(grid)
+  })
+
+  it('says role permissions are configurable instead of listing fixed abilities', async () => {
+    mockMount()
+    server.use(http.get('/api/permissions', () => HttpResponse.json(PERMISSIONS)))
+    const { user } = renderWithProviders(<SettingsPage />, { role: 'admin' })
+    await user.click(await screen.findByRole('button', { name: 'Users' }))
+
+    expect(await screen.findByText(/set in Role Permissions below/)).toBeInTheDocument()
+    expect(screen.queryByText(/Read-only access to all data/)).not.toBeInTheDocument()
+  })
+})
