@@ -43,6 +43,10 @@ Own is a fixed rule per record:
 
 A login with no linked pilot owns no pilot profile, and only the flights it logged. Records created before this feature have no recorded creator, so only a role with All can edit them (apart from a roster match on logs). Own edit on flights cannot reassign a flight to a different pilot.
 
+Link every pilot login to its pilot record (Settings, Users, Edit, Link to Pilot). Own depends on that link, so an unlinked login gets refused on the flights and profile that are really its own, and its edit buttons disappear. User Management shows a "No linked pilot" badge on any pilot login without a link.
+
+Bulk flight actions follow the same settings as single ones. Selecting flights and marking them reviewed needs the review permission. Bulk delete also needs Delete at All, and bulk reassign pilot and bulk set purpose also need Edit at All.
+
 Default settings:
 
 • **View**: Supervisor, Pilot and Viewer can all view every feature. Turning a view off hides that feature's pages, lists, search results, exports, report sections and navigation entry, and switches off the settings that depend on it.

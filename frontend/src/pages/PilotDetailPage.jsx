@@ -14,6 +14,33 @@ import {
 } from 'recharts'
 import DocumentUpload from '@/components/DocumentUpload'
 
+/** Performance tiles whose values come from other features. The server leaves a
+ *  value null when the user's view of that feature is off, so its tile is hidden. */
+function FeatureGatedTiles({ performance }) {
+  return (
+    <>
+      {performance.training_hours != null && (
+        <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-violet-500/15 flex items-center justify-center text-violet-400"><GraduationCap className="w-5 h-5" /></div>
+          <div><p className="text-2xl font-bold text-foreground">{performance.training_hours}h</p><p className="text-xs text-muted-foreground">Training Hours</p></div>
+        </div>
+      )}
+      {performance.mission_hours != null && (
+        <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-amber-500/15 flex items-center justify-center text-amber-400"><Target className="w-5 h-5" /></div>
+          <div><p className="text-2xl font-bold text-foreground">{performance.mission_hours}h</p><p className="text-xs text-muted-foreground">Mission Hours</p></div>
+        </div>
+      )}
+      {performance.incidents != null && (
+        <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-red-500/15 flex items-center justify-center text-red-400"><AlertTriangle className="w-5 h-5" /></div>
+          <div><p className="text-2xl font-bold text-foreground">{performance.incidents}</p><p className="text-xs text-muted-foreground">Incidents</p></div>
+        </div>
+      )}
+    </>
+  )
+}
+
 export default function PilotDetailPage() {
   const { id } = useParams()
   const { isAdmin, can, canRecord, user } = useAuth()
@@ -27,7 +54,8 @@ export default function PilotDetailPage() {
   // Auto-file documents to General folder
   const [generalFolderId, setGeneralFolderId] = useState(null)
   useEffect(() => {
-    getIfAllowed(canSeeFiles, '/folders', []).then(folders => {
+    // Auto-filing is optional: with no folder list, documents simply stay unfiled.
+    getIfAllowed(canSeeFiles, '/folders', []).catch(() => []).then(folders => {
       const f = (Array.isArray(folders) ? folders : folders.folders || []).find(f => f.name === 'General')
       if (f) setGeneralFolderId(f.id)
     })
@@ -305,18 +333,7 @@ export default function PilotDetailPage() {
               <div className="w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center text-emerald-400"><TrendingUp className="w-5 h-5" /></div>
               <div><p className="text-2xl font-bold text-foreground">{performance.avg_duration_min}m</p><p className="text-xs text-muted-foreground">Avg Duration</p></div>
             </div>
-            <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-violet-500/15 flex items-center justify-center text-violet-400"><GraduationCap className="w-5 h-5" /></div>
-              <div><p className="text-2xl font-bold text-foreground">{performance.training_hours}h</p><p className="text-xs text-muted-foreground">Training Hours</p></div>
-            </div>
-            <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/15 flex items-center justify-center text-amber-400"><Target className="w-5 h-5" /></div>
-              <div><p className="text-2xl font-bold text-foreground">{performance.mission_hours}h</p><p className="text-xs text-muted-foreground">Mission Hours</p></div>
-            </div>
-            <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-red-500/15 flex items-center justify-center text-red-400"><AlertTriangle className="w-5 h-5" /></div>
-              <div><p className="text-2xl font-bold text-foreground">{performance.incidents}</p><p className="text-xs text-muted-foreground">Incidents</p></div>
-            </div>
+            <FeatureGatedTiles performance={performance} />
           </div>
 
           {/* Charts Row */}

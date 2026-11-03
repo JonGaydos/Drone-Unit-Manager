@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { screen, within, waitFor } from '@testing-library/react'
-import { http, HttpResponse } from 'msw'
+import { http, HttpResponse, delay } from 'msw'
 import { server } from '@/test/server'
 import { renderWithProviders } from '@/test/render'
 import RolePermissionsGrid from './RolePermissionsGrid'
@@ -137,6 +137,35 @@ describe('RolePermissionsGrid wide layout', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('flights.edit: invalid value')
     expect(cell('Pilot', 'Flights', 'Edit')).toHaveValue('all')
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled()
+  })
+
+  it('disables cells and buttons while saving', async () => {
+    setWide(true)
+    server.use(http.put('/api/permissions', async () => {
+      await delay(50)
+      return HttpResponse.json({ registry: REGISTRY, values: VALUES })
+    }))
+    const { user } = await renderGrid()
+    await user.selectOptions(cell('Pilot', 'Flights', 'Edit'), 'all')
+    expect(cell('Supervisor', 'Flights', 'View')).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(cell('Pilot', 'Flights', 'Edit')).toBeDisabled()
+    expect(cell('Supervisor', 'Flights', 'View')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Discard' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Reset to defaults' })).toBeDisabled()
+    await waitFor(() => expect(cell('Supervisor', 'Flights', 'View')).toBeEnabled())
+  })
+
+  it('clears a save error on the next edit', async () => {
+    setWide(true)
+    server.use(http.put('/api/permissions', () => HttpResponse.json({ detail: 'refused' }, { status: 422 })))
+    const { user } = await renderGrid()
+    await user.selectOptions(cell('Pilot', 'Flights', 'Edit'), 'all')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('refused')
+    await user.selectOptions(cell('Pilot', 'Flights', 'Edit'), 'none')
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 
   it('asks before resetting and refreshes from the response', async () => {

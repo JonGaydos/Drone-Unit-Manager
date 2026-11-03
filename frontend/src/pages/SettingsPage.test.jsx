@@ -426,4 +426,22 @@ describe('SettingsPage role permissions', () => {
     expect(await screen.findByText(/set in Role Permissions below/)).toBeInTheDocument()
     expect(screen.queryByText(/Read-only access to all data/)).not.toBeInTheDocument()
   })
+
+  it('flags only pilot logins with no linked pilot', async () => {
+    mockMount({
+      users: () => HttpResponse.json([
+        { id: 1, username: 'admin', display_name: 'Admin User', role: 'admin', is_active: true },
+        { id: 2, username: 'unlinked', display_name: 'Unlinked Pilot', role: 'pilot', is_active: true, pilot_id: null },
+        { id: 3, username: 'linked', display_name: 'Linked Pilot', role: 'pilot', is_active: true, pilot_id: 10 },
+        { id: 4, username: 'watcher', display_name: 'Unlinked Viewer', role: 'viewer', is_active: true },
+      ]),
+    })
+    server.use(http.get('/api/permissions', () => HttpResponse.json(PERMISSIONS)))
+    const { user } = renderWithProviders(<SettingsPage />, { role: 'admin' })
+    await user.click(await screen.findByRole('button', { name: 'Users' }))
+
+    const badges = await screen.findAllByText('No linked pilot')
+    expect(badges).toHaveLength(1)
+    expect(badges[0].closest('tr')).toHaveTextContent('Unlinked Pilot')
+  })
 })

@@ -51,6 +51,18 @@ function buildSidebarItems(rawConfig) {
   }).sort((a, b) => a.order - b.order)
 }
 
+/** A pilot login with no linked pilot record owns no profile and only the flights
+ *  it logged, so Own settings do little for it until an admin links it. */
+function NoLinkedPilotBadge({ user }) {
+  if (user.role !== 'pilot' || user.pilot_id) return null
+  return (
+    <span title="Link this login to its pilot record so Own permissions cover that pilot's flights and profile"
+      className="inline-block mt-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-500/15 text-amber-400">
+      No linked pilot
+    </span>
+  )
+}
+
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('general')
   const [settings, setSettings] = useState({})
@@ -669,6 +681,7 @@ export default function SettingsPage() {
                       <td className="px-3 py-2">
                         <div className="font-medium text-foreground">{u.display_name}</div>
                         <div className="text-xs text-muted-foreground">{u.username}</div>
+                        <NoLinkedPilotBadge user={u} />
                       </td>
                       <td className="px-3 py-2">
                         <select value={u.role} onChange={e => handleChangeRole(u, e.target.value)}

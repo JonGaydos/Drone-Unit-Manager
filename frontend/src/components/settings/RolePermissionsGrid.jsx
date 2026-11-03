@@ -23,7 +23,7 @@ const PRIMARY_BUTTON = `${BUTTON} bg-primary text-primary-foreground hover:opaci
 const cellId = (role, key) => `perm-${role}-${key}`
 
 /** One setting for one role: a select plus its short reason when locked. */
-function PermissionCell({ def, role, values, registry, onChange }) {
+function PermissionCell({ def, role, values, registry, saving, onChange }) {
   const { disabled, reason } = cellState(def, role, values, registry)
   const id = cellId(role, def.key)
   const reasonId = `${id}-reason`
@@ -36,7 +36,7 @@ function PermissionCell({ def, role, values, registry, onChange }) {
         aria-label={`${ROLE_LABELS[role]}, ${def.feature}, ${def.action}`}
         aria-describedby={reason ? reasonId : undefined}
         value={values[role][def.key]}
-        disabled={disabled}
+        disabled={disabled || saving}
         onChange={e => onChange(role, def.key, e.target.value)}
         className="w-full min-h-10 px-2 py-1.5 bg-secondary border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
       >
@@ -53,7 +53,7 @@ function PermissionCell({ def, role, values, registry, onChange }) {
   )
 }
 
-function PermissionTable({ groups, values, registry, onChange }) {
+function PermissionTable({ groups, values, registry, saving, onChange }) {
   return (
     <div className="overflow-x-auto rounded-xl border border-border bg-card">
       <table className="w-full text-sm">
@@ -79,7 +79,7 @@ function PermissionTable({ groups, values, registry, onChange }) {
                 <th scope="row" className="px-3 py-2 text-left font-normal text-foreground">{def.action}</th>
                 {ROLES.map(role => (
                   <td key={role} className="px-3 py-2">
-                    <PermissionCell def={def} role={role} values={values} registry={registry} onChange={onChange} />
+                    <PermissionCell def={def} role={role} values={values} registry={registry} saving={saving} onChange={onChange} />
                   </td>
                 ))}
               </tr>
@@ -107,7 +107,7 @@ function RoleSelector({ role, onChange }) {
   )
 }
 
-function PermissionCards({ groups, values, registry, onChange }) {
+function PermissionCards({ groups, values, registry, saving, onChange }) {
   const [role, setRole] = useState(EDITABLE_ROLES[0])
 
   return (
@@ -120,7 +120,7 @@ function PermissionCards({ groups, values, registry, onChange }) {
             {group.rows.map(def => (
               <div key={def.key} className="grid grid-cols-2 gap-3 items-start">
                 <label htmlFor={cellId(role, def.key)} className="text-sm text-foreground pt-2">{def.action}</label>
-                <PermissionCell def={def} role={role} values={values} registry={registry} onChange={onChange} />
+                <PermissionCell def={def} role={role} values={values} registry={registry} saving={saving} onChange={onChange} />
               </div>
             ))}
           </div>
@@ -183,7 +183,10 @@ function usePermissionGrid() {
     }
   }
 
-  const edit = (role, key, value) => setDraft(current => setCell(current, grid.registry, role, key, value))
+  const edit = (role, key, value) => {
+    setSaveError('')
+    setDraft(current => setCell(current, grid.registry, role, key, value))
+  }
   const changes = grid ? diffChanges(grid.values, draft, grid.registry) : []
 
   return {
@@ -196,9 +199,9 @@ function usePermissionGrid() {
 
 function GridBody({ state }) {
   const wide = useMediaQuery(WIDE_QUERY)
-  const { grid, draft, edit } = state
+  const { grid, draft, saving, edit } = state
   const Layout = wide ? PermissionTable : PermissionCards
-  return <Layout groups={groupByFeature(grid.registry)} values={draft} registry={grid.registry} onChange={edit} />
+  return <Layout groups={groupByFeature(grid.registry)} values={draft} registry={grid.registry} saving={saving} onChange={edit} />
 }
 
 function LoadState({ error, onRetry }) {

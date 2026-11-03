@@ -151,4 +151,39 @@ describe('PilotDetailPage', () => {
       expect(body).not.toHaveProperty(field)
     }
   })
+
+  describe('performance tiles', () => {
+    const PERFORMANCE = {
+      total_flights: 4, total_flight_hours: 2, avg_duration_min: 30, vehicles_flown: 1,
+      training_hours: 5, mission_hours: 6, incidents: 2, flights_by_month: [], flights_by_purpose: [],
+    }
+
+    it('shows the log and incident tiles when the values are present', async () => {
+      mockMount({ performance: () => HttpResponse.json(PERFORMANCE) })
+      render()
+      expect(await screen.findByText('Training Hours')).toBeInTheDocument()
+      expect(screen.getByText('5h')).toBeInTheDocument()
+      expect(screen.getByText('Mission Hours')).toBeInTheDocument()
+      expect(screen.getByText('Incidents')).toBeInTheDocument()
+    })
+
+    it('shows a zero value rather than hiding the tile', async () => {
+      mockMount({ performance: () => HttpResponse.json({ ...PERFORMANCE, training_hours: 0, incidents: 0 }) })
+      render()
+      expect(await screen.findByText('0h')).toBeInTheDocument()
+      expect(screen.getByText('Incidents')).toBeInTheDocument()
+    })
+
+    it('hides the tiles whose view is off', async () => {
+      mockMount({
+        performance: () => HttpResponse.json({ ...PERFORMANCE, training_hours: null, mission_hours: null, incidents: null }),
+      })
+      render()
+      expect((await screen.findAllByText('Avg Duration')).length).toBeGreaterThan(0)
+      expect(screen.queryByText('Training Hours')).toBeNull()
+      expect(screen.queryByText('Mission Hours')).toBeNull()
+      expect(screen.queryByText('Incidents')).toBeNull()
+      expect(screen.queryByText('nullh')).toBeNull()
+    })
+  })
 })
