@@ -299,15 +299,18 @@ def validate_change(role: str, key: str, value: str) -> str | None:
     return None
 
 
+def _view_off(values: Mapping[str, str], definition: PermissionDef) -> bool:
+    """True when a change permission's view key is at its lowest value."""
+    return bool(definition.requires) and values[definition.requires] == _lowest(REGISTRY[definition.requires])
+
+
 def _missing_views(grid: Mapping[str, Mapping[str, str]]) -> list[str]:
     """Errors for every change permission held while its view key is off."""
     return [
         f"{key}: {role} needs {definition.requires} to hold this permission"
         for role, values in grid.items()
         for key, definition in REGISTRY.items()
-        if definition.requires
-        and values[definition.requires] == NO
-        and values[key] != _lowest(definition)
+        if _view_off(values, definition) and values[key] != _lowest(definition)
     ]
 
 
@@ -345,36 +348,41 @@ def apply_changes(db: Session, changes: Iterable[Mapping[str, str]]) -> None:
         db.flush()
 
 
-def _is_restorable(row: Mapping[str, object]) -> bool:
+def _is_restorable(row: object) -> bool:
     """True when a stored row passes the same single-change checks as the API."""
+    if not isinstance(row, Mapping):
+        return False
     role, key, value = row.get("role"), row.get("permission_key"), row.get("value")
     if not all(isinstance(part, str) for part in (role, key, value)):
         return False
     return validate_change(role, key, value) is None
 
 
-def restorable_overrides(rows: list[Mapping[str, object]]) -> tuple[list[dict], int]:
-    """Filter rows from a backup to those the write API would accept.
+def restorable_overrides(rows: list) -> tuple[list[dict], int]:
+    """Rows to restore from a backup, and how many input rows were dropped.
 
-    Returns the kept rows and the number dropped. Needs no database, because a
-    restore has just emptied the table: a missing row means the default. A
-    repeated role and key keeps the last row. A change permission is dropped
-    when its view key resolves to the lowest value in the grid the kept rows
-    produce, unless the row itself holds the lowest value.
+    Needs no database, because a restore has just emptied the table: a missing
+    row means the default. Rows the write API would refuse are dropped, and a
+    repeated role and key keeps the last row. Where a role's view key is at its
+    lowest value, every change permission that depends on it is forced to its
+    lowest value with an explicit row, whether the backup set it or left it at
+    the default, so the restored grid never grants a change without its view.
+    Forced rows are not counted as dropped. Rows carry no id, so the table
+    assigns them.
     """
-    latest = {(row["role"], row["permission_key"]): dict(row) for row in rows if _is_restorable(row)}
-
-    def held(role: str, key: str) -> str:
-        row = latest.get((role, key))
-        return row["value"] if row else REGISTRY[key].defaults[role]
-
-    kept = []
-    for (role, key), row in latest.items():
-        definition = REGISTRY[key]
-        needs_view = definition.requires and held(role, definition.requires) == _lowest(REGISTRY[definition.requires])
-        if not (needs_view and row["value"] != _lowest(definition)):
-            kept.append(row)
-    return kept, len(rows) - len(kept)
+    latest = {
+        (row["role"], row["permission_key"]): {k: row[k] for k in ("role", "permission_key", "value")}
+        for row in rows
+        if _is_restorable(row)
+    }
+    dropped = len(rows) - len(latest)
+    for role in EDITABLE_ROLES:
+        values = {key: definition.defaults[role] for key, definition in REGISTRY.items()}
+        values.update({key: row["value"] for (r, key), row in latest.items() if r == role})
+        for key, definition in REGISTRY.items():
+            if _view_off(values, definition) and values[key] != _lowest(definition):
+                latest[(role, key)] = {"role": role, "permission_key": key, "value": _lowest(definition)}
+    return list(latest.values()), dropped
 
 
 def reset(db: Session) -> None:

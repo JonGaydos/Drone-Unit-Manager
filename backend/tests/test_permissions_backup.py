@@ -106,22 +106,37 @@ def test_restore_drops_unknown_key_invalid_value_and_admin(client, db, admin_use
     assert _stored(db) == {("pilot", "flights.delete"): "own"}
 
 
-def test_restore_drops_change_without_view_row(client, db, admin_user, admin_headers, tmp_path, monkeypatch):
-    rows = [
-        _row("pilot", "flights.view", "no", 1),
-        _row("pilot", "flights.review", "yes", 2),
-        _row("pilot", "flights.create", "no", 3),
-        _row("supervisor", "flights.review", "no", 4),
-    ]
+def _flights_values(db, role):
+    return {key: permissions.get_value(db, role, key) for key in permissions.REGISTRY if key.startswith("flights.")}
+
+
+def _assert_valid_grid(db):
+    changes = [{"role": role, "key": key, "value": value} for (role, key), value in _stored(db).items()]
+    assert permissions.validate_grid(db, changes) == []
+
+
+def test_restore_forces_dependents_off_when_view_is_off(client, db, admin_user, admin_headers, tmp_path, monkeypatch):
+    rows = [_row("pilot", "flights.view", "no", 1), _row("pilot", "flights.create", "no", 2)]
     archive = _archive(db, lambda tables: tables.update(role_permissions=rows))
 
     _restore(client, admin_headers, archive, tmp_path, monkeypatch)
 
-    assert _stored(db) == {
-        ("pilot", "flights.view"): "no",
-        ("pilot", "flights.create"): "no",
-        ("supervisor", "flights.review"): "no",
-    }
+    values = _flights_values(db, "pilot")
+    assert values == {key: ("no" if key != "flights.edit" and key != "flights.delete" else "none") for key in values}
+    assert permissions.get_value(db, "pilot", "flights.edit") == "none"
+    assert _flights_values(db, "supervisor")["flights.edit"] == "all"
+    _assert_valid_grid(db)
+
+
+def test_restore_forces_a_dropped_explicit_row_to_lowest(client, db, admin_user, admin_headers, tmp_path, monkeypatch):
+    rows = [_row("supervisor", "flights.view", "no", 1), _row("supervisor", "flights.edit", "own", 2)]
+    archive = _archive(db, lambda tables: tables.update(role_permissions=rows))
+
+    _restore(client, admin_headers, archive, tmp_path, monkeypatch)
+
+    assert permissions.get_value(db, "supervisor", "flights.edit") == "none"
+    assert permissions.get_value(db, "supervisor", "flights.review") == "no"
+    _assert_valid_grid(db)
 
 
 def test_older_backup_documents_restore_without_uploader(client, db, admin_user, admin_headers, tmp_path, monkeypatch):
@@ -150,6 +165,11 @@ def test_restorable_overrides_keeps_valid_rows_and_counts_drops():
         _row("pilot", "flights.edit", "own", 4),
         {"id": 5, "role": None, "permission_key": ["x"], "value": "yes"},
     ]
-    kept, dropped = permissions.restorable_overrides(rows)
-    assert [r["id"] for r in kept] == [2, 3]
-    assert dropped == 3
+    kept, dropped = permissions.restorable_overrides(rows + ["not a row", None])
+    assert {(r["role"], r["permission_key"]): r["value"] for r in kept} == {
+        ("supervisor", "flights.delete"): "none",
+        ("pilot", "flights.view"): "no",
+        ("pilot", "flights.create"): "no",
+        ("pilot", "flights.edit"): "none",
+    }
+    assert dropped == 4
