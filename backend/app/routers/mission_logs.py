@@ -1,12 +1,15 @@
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.constants import MISSION_LOG_NOT_FOUND
-from app.deps import CurrentUser, DBSession, PilotUser
+from app.deps import DBSession
+from app.models.user import User
+from app.routers.auth import require_permission
+from app.services import permissions as permissions_service
 from app.responses import responses
 from app.models.mission_log import MissionLog
 from app.models.mission_log_pilot import MissionLogPilot
@@ -18,6 +21,17 @@ from app.schemas.mission_log import (
 )
 
 router = APIRouter(prefix="/api/mission-logs", tags=["mission-logs"])
+
+LOGS_EDIT = "logs.edit"
+
+ViewUser = Annotated[User, Depends(require_permission("logs.view"))]
+CreateUser = Annotated[User, Depends(require_permission("logs.create"))]
+EditUser = Annotated[User, Depends(require_permission(LOGS_EDIT))]
+
+
+def _require_edit(db: Session, user: User, log) -> None:
+    """Raise 403 unless the user's logs.edit level covers this log."""
+    permissions_service.require_record_access(db, user, LOGS_EDIT, permissions_service.owns_roster_log(user, log))
 
 
 def _vehicle_display(vehicle: Vehicle) -> str:
@@ -96,7 +110,7 @@ def list_mission_logs(
 
     db: DBSession,
 
-    user: CurrentUser,
+    user: ViewUser,
 
     date_from: date | None = None,
 
@@ -137,7 +151,7 @@ def list_mission_logs(
 
 
 @router.get("/{mission_id}", response_model=MissionLogOut, responses=responses(401, 404))
-def get_mission_log(mission_id: int, db: DBSession, user: CurrentUser):
+def get_mission_log(mission_id: int, db: DBSession, user: ViewUser):
     mission = db.query(MissionLog).filter(MissionLog.id == mission_id).first()
     if not mission:
         raise HTTPException(status_code=404, detail=MISSION_LOG_NOT_FOUND)
@@ -145,11 +159,11 @@ def get_mission_log(mission_id: int, db: DBSession, user: CurrentUser):
 
 
 @router.post("", response_model=MissionLogOut, responses=responses(401))
-def create_mission_log(data: MissionLogCreate, db: DBSession, admin: PilotUser):
+def create_mission_log(data: MissionLogCreate, db: DBSession, admin: CreateUser):
     from app.services.audit import log_action
     pilots_data = data.pilots
     mission_dict = data.model_dump(exclude={"pilots"})
-    mission = MissionLog(**mission_dict)
+    mission = MissionLog(**mission_dict, created_by_id=admin.id)
     db.add(mission)
     db.flush()
     for p in pilots_data:
@@ -166,10 +180,11 @@ def create_mission_log(data: MissionLogCreate, db: DBSession, admin: PilotUser):
 
 
 @router.patch("/{mission_id}", response_model=MissionLogOut, responses=responses(401, 404))
-def update_mission_log(mission_id: int, data: MissionLogUpdate, db: DBSession, admin: PilotUser):
+def update_mission_log(mission_id: int, data: MissionLogUpdate, db: DBSession, admin: EditUser):
     mission = db.query(MissionLog).filter(MissionLog.id == mission_id).first()
     if not mission:
         raise HTTPException(status_code=404, detail=MISSION_LOG_NOT_FOUND)
+    _require_edit(db, admin, mission)
     update_data = data.model_dump(exclude_unset=True)
     pilots_data = update_data.pop("pilots", None)
     for key, value in update_data.items():
@@ -184,11 +199,12 @@ def update_mission_log(mission_id: int, data: MissionLogUpdate, db: DBSession, a
 
 
 @router.delete("/{mission_id}", responses=responses(401, 404))
-def delete_mission_log(mission_id: int, db: DBSession, admin: PilotUser):
+def delete_mission_log(mission_id: int, db: DBSession, admin: EditUser):
     from app.services.audit import log_action
     mission = db.query(MissionLog).filter(MissionLog.id == mission_id).first()
     if not mission:
         raise HTTPException(status_code=404, detail=MISSION_LOG_NOT_FOUND)
+    _require_edit(db, admin, mission)
     log_action(db, admin.id, admin.display_name, "delete", "mission_log", mission.id, mission.title or f"Mission {mission.id}")
     db.delete(mission)
     db.commit()
@@ -196,10 +212,11 @@ def delete_mission_log(mission_id: int, db: DBSession, admin: PilotUser):
 
 
 @router.post("/{mission_id}/pilots", response_model=MissionLogPilotOut, responses=responses(401, 404))
-def add_pilot_to_mission(mission_id: int, data: MissionLogPilotIn, db: DBSession, admin: PilotUser):
+def add_pilot_to_mission(mission_id: int, data: MissionLogPilotIn, db: DBSession, admin: EditUser):
     mission = db.query(MissionLog).filter(MissionLog.id == mission_id).first()
     if not mission:
         raise HTTPException(status_code=404, detail=MISSION_LOG_NOT_FOUND)
+    _require_edit(db, admin, mission)
     mp = MissionLogPilot(
         mission_log_id=mission_id,
         pilot_id=data.pilot_id,
@@ -217,7 +234,11 @@ def add_pilot_to_mission(mission_id: int, data: MissionLogPilotIn, db: DBSession
 
 
 @router.delete("/{mission_id}/pilots/{pilot_id}", responses=responses(401, 404))
-def remove_pilot_from_mission(mission_id: int, pilot_id: int, db: DBSession, admin: PilotUser):
+def remove_pilot_from_mission(mission_id: int, pilot_id: int, db: DBSession, admin: EditUser):
+    mission = db.query(MissionLog).filter(MissionLog.id == mission_id).first()
+    if not mission:
+        raise HTTPException(status_code=404, detail=MISSION_LOG_NOT_FOUND)
+    _require_edit(db, admin, mission)
     mp = db.query(MissionLogPilot).filter(
         MissionLogPilot.mission_log_id == mission_id,
         MissionLogPilot.pilot_id == pilot_id,

@@ -1,12 +1,14 @@
 from datetime import datetime, timezone
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.constants import CHECKOUT_NOT_FOUND
-from app.deps import DBSession, CurrentUser, PilotUser, SupervisorUser
+from app.deps import DBSession
+from app.models.user import User
+from app.routers.auth import require_permission
 from app.models.attachment import Attachment
 from app.models.battery import Battery
 from app.models.controller import Controller
@@ -18,6 +20,10 @@ from app.models.vehicle import Vehicle
 from app.responses import responses
 
 router = APIRouter(prefix="/api/equipment-checkouts", tags=["equipment-checkouts"])
+
+ViewUser = Annotated[User, Depends(require_permission("fleet.view"))]
+UseUser = Annotated[User, Depends(require_permission("checkouts.use"))]
+DeleteUser = Annotated[User, Depends(require_permission("checkouts.delete"))]
 
 
 # entity_type -> model. Every allowed type has a table to verify against.
@@ -88,7 +94,7 @@ def list_checkouts(
 
     db: DBSession,
 
-    user: CurrentUser,
+    user: ViewUser,
 
     entity_type: Annotated[Optional[str], Query()] = None,
 
@@ -114,7 +120,7 @@ def list_checkouts(
 @router.get("/active")
 def list_active_checkouts(
     db: DBSession,
-    user: CurrentUser,
+    user: ViewUser,
 ):
     rows = (
         db.query(EquipmentCheckout)
@@ -129,7 +135,7 @@ def list_active_checkouts(
 def create_checkout(
     data: CheckoutCreate,
     db: DBSession,
-    user: PilotUser,
+    user: UseUser,
 ):
     """Create a checkout. The 'checked_out_by_id' (pilot who has the equipment)
     can be set to any pilot — the frontend defaults to the logged-in user but
@@ -179,7 +185,7 @@ def checkin_equipment(
     checkout_id: int,
     data: CheckinData,
     db: DBSession,
-    user: PilotUser,
+    user: UseUser,
 ):
     """Mark a checkout returned. Logs who entered the check-in (the JWT
     user) and which pilot returned the item (data.checked_in_by_id)."""
@@ -215,7 +221,7 @@ def checkin_equipment(
 def delete_checkout(
     checkout_id: int,
     db: DBSession,
-    user: SupervisorUser,
+    user: DeleteUser,
 ):
     from app.services.audit import log_action
     checkout = db.query(EquipmentCheckout).filter(EquipmentCheckout.id == checkout_id).first()

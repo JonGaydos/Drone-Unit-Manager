@@ -1,12 +1,14 @@
 from datetime import datetime, date
-from typing import Optional
+from typing import Annotated, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.constants import TEMPLATE_NOT_FOUND
-from app.deps import DBSession, CurrentUser, PilotUser, SupervisorUser
+from app.deps import DBSession
+from app.models.user import User
+from app.routers.auth import require_permission
 from app.models.checklist import ChecklistTemplate, ChecklistCompletion
 from app.models.pilot import Pilot
 from app.models.vehicle import Vehicle
@@ -15,6 +17,10 @@ from app.services.audit import log_action
 from app.services.local_time import display_zone, stamped_on_or_after, stamped_on_or_before
 
 router = APIRouter(prefix="/api/checklists", tags=["checklists"])
+
+ViewUser = Annotated[User, Depends(require_permission("checklists.view"))]
+CompleteUser = Annotated[User, Depends(require_permission("checklists.complete"))]
+ManageUser = Annotated[User, Depends(require_permission("checklists.manage"))]
 
 
 
@@ -57,7 +63,7 @@ class ChecklistCompleteIn(BaseModel):
 @router.get("/templates")
 def list_templates(
     db: DBSession,
-    user: CurrentUser,
+    user: ViewUser,
     active_only: bool = True):
     q = db.query(ChecklistTemplate)
     if active_only:
@@ -70,7 +76,7 @@ def list_templates(
 def get_template(
     template_id: int,
     db: DBSession,
-    user: CurrentUser,
+    user: ViewUser,
 ):
     t = db.query(ChecklistTemplate).filter(ChecklistTemplate.id == template_id).first()
     if not t:
@@ -82,7 +88,7 @@ def get_template(
 def create_template(
     data: ChecklistTemplateCreate,
     db: DBSession,
-    user: SupervisorUser,
+    user: ManageUser,
 ):
     if not data.items:
         raise HTTPException(status_code=400, detail="At least one checklist item is required")
@@ -103,7 +109,7 @@ def update_template(
     template_id: int,
     data: ChecklistTemplateUpdate,
     db: DBSession,
-    user: SupervisorUser,
+    user: ManageUser,
 ):
     t = db.query(ChecklistTemplate).filter(ChecklistTemplate.id == template_id).first()
     if not t:
@@ -122,7 +128,7 @@ def update_template(
 def delete_template(
     template_id: int,
     db: DBSession,
-    user: SupervisorUser,
+    user: ManageUser,
 ):
     t = db.query(ChecklistTemplate).filter(ChecklistTemplate.id == template_id).first()
     if not t:
@@ -142,7 +148,7 @@ def delete_template(
 def delete_completion(
     completion_id: int,
     db: DBSession,
-    user: SupervisorUser,
+    user: ManageUser,
 ):
     """Remove a submitted checklist, for one entered by mistake. Supervisors
     only, and on the record."""
@@ -161,7 +167,7 @@ def delete_completion(
 def complete_checklist(
     data: ChecklistCompleteIn,
     db: DBSession,
-    user: PilotUser,
+    user: CompleteUser,
 ):
     template = db.query(ChecklistTemplate).filter(ChecklistTemplate.id == data.template_id).first()
     if not template:
@@ -204,7 +210,7 @@ def complete_checklist(
 @router.get("/completions")
 def list_completions(
     db: DBSession,
-    user: CurrentUser,
+    user: ViewUser,
     pilot_id: Optional[int] = None,
     vehicle_id: Optional[int] = None,
     flight_plan_id: Optional[int] = None,
@@ -230,7 +236,7 @@ def list_completions(
 def get_completion(
     completion_id: int,
     db: DBSession,
-    user: CurrentUser,
+    user: ViewUser,
 ):
     c = db.query(ChecklistCompletion).filter(ChecklistCompletion.id == completion_id).first()
     if not c:

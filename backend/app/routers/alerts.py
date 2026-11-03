@@ -1,15 +1,20 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 
 from app.constants import ALERT_NOT_FOUND
-from app.deps import DBSession, CurrentUser, PilotUser
+from app.deps import DBSession
+from app.models.user import User
+from app.routers.auth import require_permission
 from app.models.alert import Alert
 from app.responses import responses
 from pydantic import BaseModel
 from datetime import datetime
-from typing import Optional
+from typing import Annotated, Optional
 
 router = APIRouter(prefix="/api/alerts", tags=["alerts"])
+
+ViewUser = Annotated[User, Depends(require_permission("alerts.view"))]
+DismissUser = Annotated[User, Depends(require_permission("alerts.dismiss"))]
 
 
 class AlertOut(BaseModel):
@@ -30,7 +35,7 @@ class AlertOut(BaseModel):
 @router.get("", response_model=list[AlertOut])
 def list_alerts(
     db: DBSession,
-    user: CurrentUser,
+    user: ViewUser,
     is_read: bool | None = None,
     severity: str | None = None,
     limit: int = 100):
@@ -43,7 +48,7 @@ def list_alerts(
 
 
 @router.get("/count", responses=responses(401))
-def count_alerts(db: DBSession, user: CurrentUser):
+def count_alerts(db: DBSession, user: ViewUser):
     return {
         "total": db.query(func.count(Alert.id)).filter(Alert.is_dismissed.is_(False)).scalar(),
         "unread": db.query(func.count(Alert.id)).filter(Alert.is_dismissed.is_(False), Alert.is_read.is_(False)).scalar(),
@@ -51,7 +56,7 @@ def count_alerts(db: DBSession, user: CurrentUser):
 
 
 @router.patch("/{alert_id}/read", responses=responses(401, 404))
-def mark_read(alert_id: int, db: DBSession, user: PilotUser):
+def mark_read(alert_id: int, db: DBSession, user: DismissUser):
     alert = db.query(Alert).filter(Alert.id == alert_id).first()
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
@@ -61,7 +66,7 @@ def mark_read(alert_id: int, db: DBSession, user: PilotUser):
 
 
 @router.patch("/{alert_id}/dismiss", responses=responses(401, 404))
-def dismiss_alert(alert_id: int, db: DBSession, user: PilotUser):
+def dismiss_alert(alert_id: int, db: DBSession, user: DismissUser):
     alert = db.query(Alert).filter(Alert.id == alert_id).first()
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
@@ -71,7 +76,7 @@ def dismiss_alert(alert_id: int, db: DBSession, user: PilotUser):
 
 
 @router.post("/dismiss-all", responses=responses(401))
-def dismiss_all(db: DBSession, user: PilotUser):
+def dismiss_all(db: DBSession, user: DismissUser):
     db.query(Alert).filter(Alert.is_dismissed.is_(False)).update({Alert.is_dismissed: True})
     db.commit()
     return {"ok": True}

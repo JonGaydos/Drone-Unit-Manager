@@ -1,11 +1,14 @@
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, selectinload
 
 from app.constants import TRAINING_LOG_NOT_FOUND
-from app.deps import DBSession, CurrentUser, PilotUser
+from app.deps import DBSession
+from app.models.user import User
+from app.routers.auth import require_permission
+from app.services import permissions as permissions_service
 from app.responses import responses
 from app.models.training_log import TrainingLog
 from app.models.training_log_pilot import TrainingLogPilot
@@ -18,12 +21,23 @@ from app.schemas.training_log import (
 
 router = APIRouter(prefix="/api/training-logs", tags=["training-logs"])
 
+LOGS_EDIT = "logs.edit"
+
+ViewUser = Annotated[User, Depends(require_permission("logs.view"))]
+CreateUser = Annotated[User, Depends(require_permission("logs.create"))]
+EditUser = Annotated[User, Depends(require_permission(LOGS_EDIT))]
+
 
 def _vehicle_display(vehicle: Vehicle) -> str:
     name = f"{vehicle.manufacturer} {vehicle.model}"
     if vehicle.nickname:
         name += f" ({vehicle.nickname})"
     return name
+
+
+def _require_edit(db: Session, user: User, log) -> None:
+    """Raise 403 unless the user's logs.edit level covers this log."""
+    permissions_service.require_record_access(db, user, LOGS_EDIT, permissions_service.owns_roster_log(user, log))
 
 
 def _training_to_out(training: TrainingLog, db: Session, vehicle_cache=None, pilot_cache=None) -> TrainingLogOut:
@@ -69,7 +83,7 @@ def list_training_logs(
 
     db: DBSession,
 
-    user: CurrentUser,
+    user: ViewUser,
 
     date_from: date | None = None,
 
@@ -117,7 +131,7 @@ def list_training_logs(
 
 
 @router.get("/{training_id}", response_model=TrainingLogOut, responses=responses(401, 404))
-def get_training_log(training_id: int, db: DBSession, user: CurrentUser):
+def get_training_log(training_id: int, db: DBSession, user: ViewUser):
     training = db.query(TrainingLog).filter(TrainingLog.id == training_id).first()
     if not training:
         raise HTTPException(status_code=404, detail=TRAINING_LOG_NOT_FOUND)
@@ -125,11 +139,11 @@ def get_training_log(training_id: int, db: DBSession, user: CurrentUser):
 
 
 @router.post("", response_model=TrainingLogOut, responses=responses(401))
-def create_training_log(data: TrainingLogCreate, db: DBSession, admin: PilotUser):
+def create_training_log(data: TrainingLogCreate, db: DBSession, admin: CreateUser):
     from app.services.audit import log_action
     pilots_data = data.pilots
     training_dict = data.model_dump(exclude={"pilots"})
-    training = TrainingLog(**training_dict)
+    training = TrainingLog(**training_dict, created_by_id=admin.id)
     db.add(training)
     db.flush()
     for p in pilots_data:
@@ -146,10 +160,11 @@ def create_training_log(data: TrainingLogCreate, db: DBSession, admin: PilotUser
 
 
 @router.patch("/{training_id}", response_model=TrainingLogOut, responses=responses(401, 404))
-def update_training_log(training_id: int, data: TrainingLogUpdate, db: DBSession, admin: PilotUser):
+def update_training_log(training_id: int, data: TrainingLogUpdate, db: DBSession, admin: EditUser):
     training = db.query(TrainingLog).filter(TrainingLog.id == training_id).first()
     if not training:
         raise HTTPException(status_code=404, detail=TRAINING_LOG_NOT_FOUND)
+    _require_edit(db, admin, training)
     update_data = data.model_dump(exclude_unset=True)
     pilots_data = update_data.pop("pilots", None)
     for key, value in update_data.items():
@@ -164,11 +179,12 @@ def update_training_log(training_id: int, data: TrainingLogUpdate, db: DBSession
 
 
 @router.delete("/{training_id}", responses=responses(401, 404))
-def delete_training_log(training_id: int, db: DBSession, admin: PilotUser):
+def delete_training_log(training_id: int, db: DBSession, admin: EditUser):
     from app.services.audit import log_action
     training = db.query(TrainingLog).filter(TrainingLog.id == training_id).first()
     if not training:
         raise HTTPException(status_code=404, detail=TRAINING_LOG_NOT_FOUND)
+    _require_edit(db, admin, training)
     log_action(db, admin.id, admin.display_name, "delete", "training_log", training.id, training.title or f"Training {training.id}")
     db.delete(training)
     db.commit()
@@ -176,10 +192,11 @@ def delete_training_log(training_id: int, db: DBSession, admin: PilotUser):
 
 
 @router.post("/{training_id}/pilots", response_model=TrainingLogPilotOut, responses=responses(401, 404))
-def add_pilot_to_training(training_id: int, data: TrainingLogPilotIn, db: DBSession, admin: PilotUser):
+def add_pilot_to_training(training_id: int, data: TrainingLogPilotIn, db: DBSession, admin: EditUser):
     training = db.query(TrainingLog).filter(TrainingLog.id == training_id).first()
     if not training:
         raise HTTPException(status_code=404, detail=TRAINING_LOG_NOT_FOUND)
+    _require_edit(db, admin, training)
     tp = TrainingLogPilot(
         training_log_id=training_id,
         pilot_id=data.pilot_id,
@@ -197,7 +214,11 @@ def add_pilot_to_training(training_id: int, data: TrainingLogPilotIn, db: DBSess
 
 
 @router.delete("/{training_id}/pilots/{pilot_id}", responses=responses(401, 404))
-def remove_pilot_from_training(training_id: int, pilot_id: int, db: DBSession, admin: PilotUser):
+def remove_pilot_from_training(training_id: int, pilot_id: int, db: DBSession, admin: EditUser):
+    training = db.query(TrainingLog).filter(TrainingLog.id == training_id).first()
+    if not training:
+        raise HTTPException(status_code=404, detail=TRAINING_LOG_NOT_FOUND)
+    _require_edit(db, admin, training)
     tp = db.query(TrainingLogPilot).filter(
         TrainingLogPilot.training_log_id == training_id,
         TrainingLogPilot.pilot_id == pilot_id,

@@ -259,6 +259,13 @@ def require_record_access(db: Session, user: User, key: str, owned: bool) -> Non
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to do this")
 
 
+def owns_roster_log(user: User, log) -> bool:
+    """True when the user created a mission or training log, or their linked pilot is on it."""
+    if log.created_by_id == user.id:
+        return True
+    return user.pilot_id is not None and any(entry.pilot_id == user.pilot_id for entry in log.pilots)
+
+
 def validate_change(role: str, key: str, value: str) -> str | None:
     """The reason a single change is not allowed, or None when it is."""
     if role not in EDITABLE_ROLES:

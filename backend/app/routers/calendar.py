@@ -2,10 +2,15 @@
 
 from datetime import date
 
-from fastapi import APIRouter, HTTPException
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 
-from app.deps import DBSession, CurrentUser, PilotUser
+from app.deps import DBSession
+from app.models.user import User
+from app.routers.auth import require_permission
+from app.services import permissions as permissions_service
 from app.responses import responses
 from app.models.calendar_event import CalendarEvent
 from app.models.training_log import TrainingLog
@@ -18,7 +23,11 @@ from app.schemas.calendar import CalendarEventCreate, CalendarEventUpdate, Calen
 
 router = APIRouter(prefix="/api/calendar", tags=["calendar"])
 
-SUPERVISOR_ROLES = {"admin", "supervisor"}
+CALENDAR_EDIT = "calendar.edit"
+
+ViewUser = Annotated[User, Depends(require_permission("calendar.view"))]
+CreateUser = Annotated[User, Depends(require_permission("calendar.create"))]
+EditUser = Annotated[User, Depends(require_permission(CALENDAR_EDIT))]
 
 
 def _iso(d):
@@ -26,7 +35,7 @@ def _iso(d):
 
 
 @router.get("", responses=responses(401))
-def get_calendar(db: DBSession, user: CurrentUser, start: date, end: date):
+def get_calendar(db: DBSession, user: ViewUser, start: date, end: date):
     """Aggregate calendar items in [start, end]. Returns {events: [...], flight_counts: {date: n}}."""
     events = []
 
@@ -61,23 +70,27 @@ def get_calendar(db: DBSession, user: CurrentUser, start: date, end: date):
     manual = db.query(CalendarEvent).filter(
         CalendarEvent.start_date <= end,
         func.coalesce(CalendarEvent.end_date, CalendarEvent.start_date) >= start).all()
+    edit_level = permissions_service.level(db, user, CALENDAR_EDIT)
     for e in manual:
-        editable = e.created_by_id == user.id or user.role in SUPERVISOR_ROLES
+        editable = edit_level == permissions_service.ALL or (
+            edit_level == permissions_service.OWN and e.created_by_id == user.id)
         events.append({"id": f"event-{e.id}", "event_id": e.id, "title": e.title,
                        "start": _iso(e.start_date), "end": _iso(e.end_date), "all_day": e.all_day,
                        "category": e.category, "source": "calendar_event", "link": None,
                        "notes": e.notes, "editable": editable})
-    # Per-day flight counts
-    rows = db.query(Flight.date, func.count(Flight.id)).filter(
-        Flight.date.isnot(None), Flight.date >= start, Flight.date <= end).group_by(Flight.date).all()
-    flight_counts = {_iso(d): n for d, n in rows}
+    # Per-day flight counts, only for users who may view flights
+    flight_counts = {}
+    if permissions_service.can(db, user, "flights.view"):
+        rows = db.query(Flight.date, func.count(Flight.id)).filter(
+            Flight.date.isnot(None), Flight.date >= start, Flight.date <= end).group_by(Flight.date).all()
+        flight_counts = {_iso(d): n for d, n in rows}
 
     return {"events": events, "flight_counts": flight_counts}
 
 
 @router.post("/events", response_model=CalendarEventOut, responses=responses(401, 403))
-def create_event(data: CalendarEventCreate, db: DBSession, user: PilotUser):
-    """Create a manual event or leave entry. Pilot role or higher (viewer is read-only)."""
+def create_event(data: CalendarEventCreate, db: DBSession, user: CreateUser):
+    """Create a manual event or leave entry. Needs the calendar.create permission."""
     from app.services.audit import log_action
     ev = CalendarEvent(**data.model_dump(), created_by_id=user.id)
     db.add(ev)
@@ -89,14 +102,13 @@ def create_event(data: CalendarEventCreate, db: DBSession, user: PilotUser):
 
 
 @router.patch("/events/{event_id}", response_model=CalendarEventOut, responses=responses(401, 403, 404))
-def update_event(event_id: int, data: CalendarEventUpdate, db: DBSession, user: CurrentUser):
-    """Update a manual event. Owner or supervisor+ only."""
+def update_event(event_id: int, data: CalendarEventUpdate, db: DBSession, user: EditUser):
+    """Update a manual event. Needs calendar.edit, at Own for the creator's events."""
     from app.services.audit import log_action
     ev = db.query(CalendarEvent).filter(CalendarEvent.id == event_id).first()
     if not ev:
         raise HTTPException(status_code=404, detail="Event not found")
-    if ev.created_by_id != user.id and user.role not in SUPERVISOR_ROLES:
-        raise HTTPException(status_code=403, detail="Not allowed to edit this event")
+    permissions_service.require_record_access(db, user, CALENDAR_EDIT, ev.created_by_id == user.id)
     for key, value in data.model_dump(exclude_unset=True).items():
         setattr(ev, key, value)
     log_action(db, user.id, user.display_name, "update", "calendar_event", ev.id, ev.title)
@@ -106,14 +118,13 @@ def update_event(event_id: int, data: CalendarEventUpdate, db: DBSession, user: 
 
 
 @router.delete("/events/{event_id}", responses=responses(401, 403, 404))
-def delete_event(event_id: int, db: DBSession, user: CurrentUser):
-    """Delete a manual event. Owner or supervisor+ only."""
+def delete_event(event_id: int, db: DBSession, user: EditUser):
+    """Delete a manual event. Needs calendar.edit, at Own for the creator's events."""
     from app.services.audit import log_action
     ev = db.query(CalendarEvent).filter(CalendarEvent.id == event_id).first()
     if not ev:
         raise HTTPException(status_code=404, detail="Event not found")
-    if ev.created_by_id != user.id and user.role not in SUPERVISOR_ROLES:
-        raise HTTPException(status_code=403, detail="Not allowed to delete this event")
+    permissions_service.require_record_access(db, user, CALENDAR_EDIT, ev.created_by_id == user.id)
     log_action(db, user.id, user.display_name, "delete", "calendar_event", ev.id, ev.title)
     db.delete(ev)
     db.commit()

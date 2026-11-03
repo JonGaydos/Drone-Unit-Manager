@@ -227,14 +227,14 @@ def test_folder_changes_are_audited(client, db, pilot_user):
     assert [e.action for e in _audit(db, "folder")] == ["create", "update", "delete"]
 
 
-def test_maintenance_schedule_changes_are_audited(client, db, pilot_user):
+def test_maintenance_schedule_changes_are_audited(client, db, supervisor_user):
     url = "/api/maintenance/schedules"
-    sid = client.post(url, headers=_bearer(pilot_user), json={
+    sid = client.post(url, headers=_bearer(supervisor_user), json={
         "name": "Annual audit", "entity_type": "organization", "entity_id": None, "frequency": "yearly",
     }).json()["id"]
-    client.patch(f"{url}/{sid}", headers=_bearer(pilot_user), json={"name": "Annual review"})
-    client.post(f"{url}/{sid}/complete", headers=_bearer(pilot_user))
-    client.delete(f"{url}/{sid}", headers=_bearer(pilot_user))
+    client.patch(f"{url}/{sid}", headers=_bearer(supervisor_user), json={"name": "Annual review"})
+    client.post(f"{url}/{sid}/complete", headers=_bearer(supervisor_user))
+    client.delete(f"{url}/{sid}", headers=_bearer(supervisor_user))
     assert [e.action for e in _audit(db, "maintenance_schedule")] == ["create", "update", "complete", "delete"]
 
 
