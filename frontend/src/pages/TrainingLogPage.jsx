@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
+import { ownsLog } from '@/lib/ownership'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Modal } from '@/components/ui/Modal'
 import { useConfirm } from '@/hooks/useConfirm'
@@ -197,7 +198,9 @@ export default function TrainingLogPage() {
   const [dateTo, setDateTo] = useState('')
   const [filterPilot, setFilterPilot] = useState('')
   const [filterType, setFilterType] = useState('')
-  const { isPilot } = useAuth()
+  const { user, isAdmin, can, level, canRecord } = useAuth()
+  const canEditSome = level('logs.edit') !== 'none'
+  const canEditLog = (log) => canRecord('logs.edit', ownsLog(user, log))
   const toast = useToast()
   const [confirmProps, requestConfirm] = useConfirm()
 
@@ -210,10 +213,10 @@ export default function TrainingLogPage() {
     const qs = params.toString() ? `?${params.toString()}` : ''
     Promise.all([
       api.get(`/training-logs${qs}`),
-      api.get('/pilots'),
-      api.get('/vehicles'),
-    ]).then(([t, p, v]) => {
-      setTrainings(t); setPilots(p); setVehicles(v)
+      api.get('/pilots/options'),
+      api.get('/fleet/options'),
+    ]).then(([t, p, fleet]) => {
+      setTrainings(t); setPilots(p); setVehicles(fleet.vehicles)
     }).catch(err => setError(err.message)).finally(() => setLoading(false))
   }
 
@@ -286,21 +289,23 @@ export default function TrainingLogPage() {
             <option value="">All Types</option>
             {TRAINING_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
-          <button
-            onClick={() => api.download('/export/training-logs/csv')}
-            className="flex items-center gap-1.5 px-3 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90"
-          >
-            <Download className="w-4 h-4" /> Export CSV
-          </button>
-          {isPilot && (
-            <>
-              <button onClick={() => setImportOpen(true)} className="flex items-center gap-2 px-3 py-2 bg-secondary text-foreground rounded-lg text-sm font-medium hover:bg-secondary/80">
-                <Upload className="w-4 h-4" /> Import
-              </button>
-              <button onClick={() => { setEditTraining(null); setModal(true) }} className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
-                <Plus className="w-4 h-4" /> Add Training
-              </button>
-            </>
+          {can('reports.export') && (
+            <button
+              onClick={() => api.download('/export/training-logs/csv')}
+              className="flex items-center gap-1.5 px-3 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90"
+            >
+              <Download className="w-4 h-4" /> Export CSV
+            </button>
+          )}
+          {isAdmin && (
+            <button onClick={() => setImportOpen(true)} className="flex items-center gap-2 px-3 py-2 bg-secondary text-foreground rounded-lg text-sm font-medium hover:bg-secondary/80">
+              <Upload className="w-4 h-4" /> Import
+            </button>
+          )}
+          {can('logs.create') && (
+            <button onClick={() => { setEditTraining(null); setModal(true) }} className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
+              <Plus className="w-4 h-4" /> Add Training
+            </button>
           )}
         </div>
       </div>
@@ -319,7 +324,7 @@ export default function TrainingLogPage() {
               <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden lg:table-cell">Pilots</th>
               <th className="text-right px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Man Hours</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Outcome</th>
-              {isPilot && <th className="w-10 px-2"></th>}
+              {canEditSome && <th className="w-10 px-2"></th>}
             </tr>
           </thead>
           <tbody>
@@ -348,17 +353,19 @@ export default function TrainingLogPage() {
                       {t.outcome?.replaceAll(/\b\w/g, l => l.toUpperCase())}
                     </span>
                   </td>
-                  {isPilot && (
+                  {canEditSome && (
                     <td className="px-2" onClick={e => e.stopPropagation()}>
-                      <button onClick={() => handleDelete(t.id)} className="text-muted-foreground hover:text-destructive p-1" aria-label="Delete">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {canEditLog(t) && (
+                        <button onClick={() => handleDelete(t.id)} className="text-muted-foreground hover:text-destructive p-1" aria-label="Delete">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </td>
                   )}
                 </tr>
                 {expanded === t.id && (
                   <tr key={`${t.id}-detail`} className="border-b border-border/50 bg-muted/10">
-                    <td colSpan={isPilot ? 10 : 9} className="px-8 py-4">
+                    <td colSpan={canEditSome ? 10 : 9} className="px-8 py-4">
                       <div className="grid grid-cols-2 gap-4 text-sm">
                         {t.description && <div><span className="text-muted-foreground">Description:</span> <span className="text-foreground">{t.description}</span></div>}
                         {t.vehicle_name && <div><span className="text-muted-foreground">Drone:</span> <span className="text-foreground">{t.vehicle_id ? <Link to={`/fleet/vehicles/${t.vehicle_id}`} className="text-primary hover:underline">{t.vehicle_name}</Link> : t.vehicle_name}</span></div>}
@@ -379,7 +386,7 @@ export default function TrainingLogPage() {
                           </div>
                         )}
                       </div>
-                      {isPilot && (
+                      {canEditLog(t) && (
                         <button onClick={() => handleEdit(t)} className="mt-3 px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-xs hover:opacity-90">
                           Edit Training
                         </button>
@@ -389,7 +396,7 @@ export default function TrainingLogPage() {
                 )}
               </React.Fragment>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={isPilot ? 10 : 9} className="px-4 py-12 text-center text-muted-foreground">No training logs found</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={canEditSome ? 10 : 9} className="px-4 py-12 text-center text-muted-foreground">No training logs found</td></tr>}
           </tbody>
         </table>
         </div>

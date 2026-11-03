@@ -7,20 +7,12 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { useConfirm } from '@/hooks/useConfirm'
 import { daysUntil, normalizeDateValue } from '@/lib/utils'
 import { FREQUENCY_COLORS, FREQUENCY_LABELS } from '@/lib/constants'
-import { sortPilotsActiveFirst, vehicleDisplayName, equipmentDisplayName } from '@/lib/formatters'
+import { sortPilotsActiveFirst, vehicleDisplayName } from '@/lib/formatters'
+import { ownsRecord } from '@/lib/ownership'
 import { Plus, Trash2, Search, Wrench, CalendarClock, History, Download, Edit, CheckCircle, Clock, Upload, Paperclip } from 'lucide-react'
 import { ImportMappingModal } from '@/components/ImportMappingModal'
 import { DocumentsModal } from '@/components/DocumentsModal'
 import { Modal } from '@/components/ui/Modal'
-
-// Map entity_type to API endpoint
-const ENTITY_ENDPOINTS = {
-  vehicle: '/vehicles',
-  battery: '/batteries',
-  controller: '/controllers',
-  dock: '/docks',
-  other: '/other-equipment',
-}
 
 // Get display name for an entity from its data
 /** Short note beside a due date: overdue, due today, or days left. */
@@ -33,10 +25,7 @@ function dueLabel(days) {
 function getEntityName(entity, entityType) {
   if (!entity) return '—'
   if (entityType === 'vehicle') return vehicleDisplayName(entity)
-  if (entityType === 'battery' || entityType === 'controller') return equipmentDisplayName(entity)
-  if (entityType === 'dock') return entity.name || entity.serial_number || `Dock #${entity.id}`
-  if (entityType === 'other') return entity.name || entity.serial_number || `Item #${entity.id}`
-  return `#${entity.id}`
+  return entity.name || `#${entity.id}`
 }
 
 // Only in-fleet entities are selectable for new maintenance/schedules.
@@ -206,7 +195,7 @@ function MaintenanceModal({ record, onSave, onClose, entityLists, pilots }) {
   )
 }
 
-function ScheduleModal({ schedule, onSave, onClose }) {
+function ScheduleModal({ schedule, onSave, onClose, entityLists }) {
   const [form, setForm] = useState(schedule || {
     name: '', entity_type: 'vehicle', entity_id: '', frequency: 'monthly',
     description: '', assigned_to_id: '', next_due: ''
@@ -215,7 +204,7 @@ function ScheduleModal({ schedule, onSave, onClose }) {
   const [entities, setEntities] = useState([])
 
   useEffect(() => {
-    api.get('/pilots').then(p => setPilots(Array.isArray(p) ? p : p.pilots || [])).catch(() => {})
+    api.get('/pilots/options').then(setPilots).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -223,15 +212,10 @@ function ScheduleModal({ schedule, onSave, onClose }) {
       setEntities([])
       return
     }
-    const endpoint = ENTITY_ENDPOINTS[form.entity_type]
-    if (endpoint) {
-      api.get(endpoint).then(d => {
-        const list = Array.isArray(d) ? d : d.items || []
-        const currentId = schedule && schedule.entity_type === form.entity_type ? schedule.entity_id : null
-        setEntities(selectableEntities(list, currentId))
-      }).catch(() => {})
-    }
-  }, [form.entity_type, schedule])
+    const list = entityLists[form.entity_type] || []
+    const currentId = schedule && schedule.entity_type === form.entity_type ? schedule.entity_id : null
+    setEntities(selectableEntities(list, currentId))
+  }, [form.entity_type, schedule, entityLists])
 
   const [submitting, setSubmitting] = useState(false)
   const submitLabel = schedule ? 'Update' : 'Add Schedule'
@@ -407,7 +391,9 @@ export default function MaintenancePage() {
   const [docsModal, setDocsModal] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showAllUpcoming, setShowAllUpcoming] = useState(false)
-  const { isPilot, isSupervisor } = useAuth()
+  const { user, isAdmin, can, canRecord } = useAuth()
+  const canManageSchedules = can('schedules.manage')
+  const canEditRecord = (record) => canRecord('maintenance.edit', ownsRecord(user, record.created_by_id))
   const toast = useToast()
   const [confirmProps, requestConfirm] = useConfirm()
 
@@ -418,22 +404,17 @@ export default function MaintenancePage() {
   // Load entity lists and pilots on mount
   useEffect(() => {
     void Promise.all([
-      api.get('/vehicles').catch(() => []),
-      api.get('/batteries').catch(() => []),
-      api.get('/controllers').catch(() => []),
-      api.get('/docks').catch(() => []),
-      api.get('/other-equipment').catch(() => []),
-      api.get('/pilots').catch(() => []),
-    ]).then(([vehicles, batteries, controllers, docks, other, pilotsData]) => {
-      const toArr = (d, key) => Array.isArray(d) ? d : d[key] || d.items || []
+      api.get('/fleet/options').catch(() => ({})),
+      api.get('/pilots/options').catch(() => []),
+    ]).then(([fleet, pilotsData]) => {
       setEntityLists({
-        vehicle: toArr(vehicles, 'vehicles'),
-        battery: toArr(batteries, 'batteries'),
-        controller: toArr(controllers, 'controllers'),
-        dock: toArr(docks, 'docks'),
-        other: toArr(other, 'other_equipment'),
+        vehicle: fleet.vehicles || [],
+        battery: fleet.batteries || [],
+        controller: fleet.controllers || [],
+        dock: fleet.docks || [],
+        other: fleet.other_equipment || [],
       })
-      setPilots(Array.isArray(pilotsData) ? pilotsData : pilotsData.pilots || [])
+      setPilots(pilotsData)
     })
   }, [])
 
@@ -576,23 +557,25 @@ export default function MaintenancePage() {
           />
         </div>
         <div className="flex-1" />
-        <button
-          onClick={() => api.download('/export/maintenance/csv')}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90"
-        >
-          <Download className="w-4 h-4" /> Export CSV
-        </button>
-        {isPilot && (
-          <>
-            <button onClick={() => setImportOpen(true)} className="flex items-center gap-2 px-3 py-1.5 bg-secondary text-foreground rounded-lg text-sm font-medium hover:bg-secondary/80">
-              <Upload className="w-4 h-4" /> Import
-            </button>
-            <button onClick={() => setModal('add')} className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
-              <Plus className="w-4 h-4" /> Add Maintenance
-            </button>
-          </>
+        {can('reports.export') && (
+          <button
+            onClick={() => api.download('/export/maintenance/csv')}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90"
+          >
+            <Download className="w-4 h-4" /> Export CSV
+          </button>
         )}
-        {isSupervisor && (
+        {isAdmin && (
+          <button onClick={() => setImportOpen(true)} className="flex items-center gap-2 px-3 py-1.5 bg-secondary text-foreground rounded-lg text-sm font-medium hover:bg-secondary/80">
+            <Upload className="w-4 h-4" /> Import
+          </button>
+        )}
+        {can('maintenance.create') && (
+          <button onClick={() => setModal('add')} className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
+            <Plus className="w-4 h-4" /> Add Maintenance
+          </button>
+        )}
+        {canManageSchedules && (
           <button onClick={() => setScheduleModal('add')} className="flex items-center gap-2 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
             <CalendarClock className="w-4 h-4" /> Add Schedule / Task
           </button>
@@ -627,7 +610,7 @@ export default function MaintenancePage() {
                         <Wrench className="w-4 h-4 text-primary" />
                         <h4 className="font-medium text-foreground text-sm">{r.description || 'Maintenance'}</h4>
                       </div>
-                      {isPilot && (
+                      {canEditRecord(r) && (
                         <button onClick={() => handleDelete(r.id)} className="p-1 text-muted-foreground hover:text-destructive">
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -736,17 +719,17 @@ export default function MaintenancePage() {
                         >
                           <Paperclip className="w-4 h-4" />
                         </button>
-                        {isSupervisor && (
+                        {s.is_active && can('schedules.complete') && (
+                          <button
+                            onClick={() => handleScheduleComplete(s.id)}
+                            title="Mark Complete"
+                            className="p-1.5 text-muted-foreground hover:text-emerald-400 rounded-lg hover:bg-emerald-500/10"
+                          >
+                            <CheckCircle className="w-4 h-4" />
+                          </button>
+                        )}
+                        {canManageSchedules && (
                           <>
-                            {s.is_active && (
-                              <button
-                                onClick={() => handleScheduleComplete(s.id)}
-                                title="Mark Complete"
-                                className="p-1.5 text-muted-foreground hover:text-emerald-400 rounded-lg hover:bg-emerald-500/10"
-                              >
-                                <CheckCircle className="w-4 h-4" />
-                              </button>
-                            )}
                             <button
                               onClick={() => setScheduleModal(s)}
                               className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent"
@@ -818,7 +801,7 @@ export default function MaintenancePage() {
                       >
                         <Paperclip className="w-4 h-4" />
                       </button>
-                      {isPilot && (
+                      {canEditRecord(r) && (
                         <>
                           <button
                             onClick={() => setModal(r)}
@@ -868,6 +851,7 @@ export default function MaintenancePage() {
       {scheduleModal && (
         <ScheduleModal
           schedule={scheduleModal === 'add' ? null : scheduleModal}
+          entityLists={entityLists}
           onSave={handleScheduleSave}
           onClose={() => setScheduleModal(null)}
         />

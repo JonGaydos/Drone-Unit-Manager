@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { screen, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
+import { withPermissions } from '@/test/permissions'
 import { renderWithProviders } from '@/test/render'
 import CertificationsPage from './CertificationsPage'
 
@@ -35,7 +36,7 @@ function mockMount(overrides = {}) {
   server.use(
     http.get('/api/certification-types', base.certTypes),
     http.get('/api/certifications/matrix', base.matrix),
-    http.get('/api/pilots', base.pilots),
+    http.get('/api/pilots/options', base.pilots),
     http.get('/api/settings/cert_status_labels', base.labels),
     http.get('/api/folders', base.folders),
   )
@@ -99,7 +100,7 @@ describe('CertificationsPage', () => {
   })
 
   it('hides supervisor-only controls for a non-supervisor (pilot)', async () => {
-    server.use(http.get('/api/auth/me', () => HttpResponse.json({ id: 3, username: 'p', role: 'pilot' })))
+    server.use(http.get('/api/auth/me', () => HttpResponse.json(withPermissions({ id: 3, username: 'p', role: 'pilot' }))))
     mockMount()
     renderWithProviders(<CertificationsPage />, { role: 'pilot' })
     await screen.findByRole('link', { name: 'Ada Lovelace' })

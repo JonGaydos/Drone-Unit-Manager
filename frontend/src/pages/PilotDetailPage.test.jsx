@@ -98,7 +98,6 @@ describe('PilotDetailPage', () => {
   it('lets a pilot edit and attach documents to their own record, without Status', async () => {
     mockMount()
     const me = { id: 3, username: 'ada', role: 'pilot', pilot_id: 7 }
-    server.use(http.get('/api/auth/me', () => HttpResponse.json(me)))
     const { user } = renderRoute(<PilotDetailPage />, { path: '/pilots/:id', route: '/pilots/7', user: me })
     await screen.findByRole('heading', { name: 'Ada Lovelace' })
     expect(screen.getByRole('button', { name: 'Upload' })).toBeInTheDocument()
@@ -110,10 +109,28 @@ describe('PilotDetailPage', () => {
   it("does not offer a pilot Upload or Edit on another pilot's record", async () => {
     mockMount()
     const me = { id: 4, username: 'sam', role: 'pilot', pilot_id: 9 }
-    server.use(http.get('/api/auth/me', () => HttpResponse.json(me)))
     renderRoute(<PilotDetailPage />, { path: '/pilots/:id', route: '/pilots/7', user: me })
     await screen.findByRole('heading', { name: 'Ada Lovelace' })
     expect(screen.queryByRole('button', { name: 'Upload' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Edit profile' })).toBeNull()
+  })
+
+  it('keeps the page when /stats is refused', async () => {
+    mockMount({ stats: () => HttpResponse.json({ detail: 'no' }, { status: 403 }) })
+    render()
+    expect(await screen.findByRole('heading', { name: 'Ada Lovelace' })).toBeInTheDocument()
+  })
+
+  it('does not ask for stats or flights with flights.view off', async () => {
+    const asked = []
+    mockMount({
+      stats: () => { asked.push('stats'); return HttpResponse.json({}) },
+      flights: () => { asked.push('flights'); return HttpResponse.json({ flights: [] }) },
+    })
+    renderRoute(<PilotDetailPage />, {
+      path: '/pilots/:id', route: '/pilots/7', role: 'pilot', permissions: { 'flights.view': 'no' },
+    })
+    expect(await screen.findByRole('heading', { name: 'Ada Lovelace' })).toBeInTheDocument()
+    expect(asked).toEqual([])
   })
 })

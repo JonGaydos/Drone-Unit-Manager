@@ -107,12 +107,13 @@ function ProtectedRoute({ children }) {
  * UI polish only — the backend already enforces admin on these endpoints.
  * @param {Object} props
  * @param {React.ReactNode} props.children - Admin-only page content.
+ * @param {string} [props.view] - A permission that also opens the page.
  */
-function AdminRoute({ children }) {
-  const { user, loading, isAdmin } = useAuth()
+function AdminRoute({ children, view }) {
+  const { user, loading, isAdmin, can } = useAuth()
   if (loading) return <div className="min-h-screen bg-background flex items-center justify-center"><Spinner /></div>
   if (!user) return <Navigate to="/login" replace />
-  if (!isAdmin) return <Navigate to="/" replace />
+  if (!isAdmin && !(view && can(view))) return <Navigate to="/" replace />
   return children
 }
 
@@ -191,7 +192,7 @@ function AppRoutes() {
           <Route path="/compliance" element={<CompliancePage />} />
           <Route path="/operating-authority" element={<OperatingAuthorityPage />} />
           <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/audit-log" element={<AdminRoute><AuditLogPage /></AdminRoute>} />
+          <Route path="/audit-log" element={<AdminRoute view="audit.view"><AuditLogPage /></AdminRoute>} />
           <Route path="/manual" element={<UserManualPage />} />
           <Route path="/checkouts" element={<CheckoutsPage />} />
         </Route>

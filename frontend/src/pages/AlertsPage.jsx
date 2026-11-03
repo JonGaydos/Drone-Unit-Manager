@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { api } from '@/api/client'
+import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { useConfirm } from '@/hooks/useConfirm'
@@ -17,6 +18,8 @@ export default function AlertsPage() {
   const [severityFilter, setSeverityFilter] = useState('')
   const [loading, setLoading] = useState(true)
   const toast = useToast()
+  const { can } = useAuth()
+  const canDismiss = can('alerts.dismiss')
   const [confirmProps, requestConfirm] = useConfirm()
 
   const load = () => {
@@ -90,7 +93,7 @@ export default function AlertsPage() {
           </div>
           <span className="text-sm text-muted-foreground">{count} total alerts</span>
         </div>
-        {alerts.length > 0 && (
+        {canDismiss && alerts.length > 0 && (
           <button
             onClick={handleDismissAll}
             className="flex items-center gap-2 px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm font-medium hover:opacity-90"
@@ -130,24 +133,26 @@ export default function AlertsPage() {
                       <p className="text-sm text-muted-foreground mt-1">{a.message || ''}</p>
                       <p className="text-xs text-muted-foreground mt-1.5">{a.created_at || ''}</p>
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      {!a.is_read && (
+                    {canDismiss && (
+                      <div className="flex items-center gap-1 shrink-0">
+                        {!a.is_read && (
+                          <button
+                            onClick={() => handleMarkRead(a.id)}
+                            className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent"
+                            title="Mark as read"
+                          >
+                            <CheckCircle className="w-4 h-4" />
+                          </button>
+                        )}
                         <button
-                          onClick={() => handleMarkRead(a.id)}
-                          className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent"
-                          title="Mark as read"
+                          onClick={() => handleDismiss(a.id)}
+                          className="p-1.5 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10"
+                          title="Dismiss"
                         >
-                          <CheckCircle className="w-4 h-4" />
+                          <X className="w-4 h-4" />
                         </button>
-                      )}
-                      <button
-                        onClick={() => handleDismiss(a.id)}
-                        className="p-1.5 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10"
-                        title="Dismiss"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

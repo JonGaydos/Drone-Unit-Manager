@@ -8,7 +8,7 @@ import ReportsPage from './ReportsPage'
 // Mount endpoints (Promise.all; whole chain .catch -> swallowed, /settings has
 // its own .catch -> []):
 //   GET /pilots    (array)
-//   GET /vehicles  (array)
+//   GET /fleet/options
 //   GET /settings  (array; checked for org_logo)
 // Generate: POST /reports/generate -> renders preview. PDF: downloadPost
 // /reports/generate/pdf. CSV: GET /export/:type/csv.
@@ -16,13 +16,13 @@ import ReportsPage from './ReportsPage'
 function mockMount(overrides = {}) {
   const base = {
     pilots: () => HttpResponse.json([{ id: 1, full_name: 'Jane Doe', is_active: true }]),
-    vehicles: () => HttpResponse.json([{ id: 5, manufacturer: 'Skydio', model: 'X10', nickname: 'Alpha' }]),
+    vehicles: [{ id: 5, manufacturer: 'Skydio', model: 'X10', nickname: 'Alpha' }],
     settings: () => HttpResponse.json([]),
     ...overrides,
   }
   server.use(
-    http.get('/api/pilots', base.pilots),
-    http.get('/api/vehicles', base.vehicles),
+    http.get('/api/pilots/options', base.pilots),
+    http.get('/api/fleet/options', () => HttpResponse.json({ vehicles: base.vehicles })),
     http.get('/api/settings', base.settings),
   )
 }
@@ -44,7 +44,7 @@ describe('ReportsPage', () => {
   })
 
   it('shows the empty selectors when there are no pilots or vehicles', async () => {
-    mockMount({ pilots: () => HttpResponse.json([]), vehicles: () => HttpResponse.json([]) })
+    mockMount({ pilots: () => HttpResponse.json([]), vehicles: [] })
     renderWithProviders(<ReportsPage />, { role: 'admin' })
     expect(await screen.findByText('No pilots available')).toBeInTheDocument()
     expect(screen.getByText('No vehicles available')).toBeInTheDocument()

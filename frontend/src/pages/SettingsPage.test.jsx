@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
+import { withPermissions } from '@/test/permissions'
 import { renderWithProviders } from '@/test/render'
 import SettingsPage from './SettingsPage'
 
@@ -109,7 +110,7 @@ describe('SettingsPage', () => {
 
   it('admin-gates the page: viewers see no Save button and no admin sections', async () => {
     mockMount()
-    server.use(http.get('/api/auth/me', () => HttpResponse.json({ id: 9, username: 'v', role: 'viewer' })))
+    server.use(http.get('/api/auth/me', () => HttpResponse.json(withPermissions({ id: 9, username: 'v', role: 'viewer' }))))
     renderWithProviders(<SettingsPage />, { role: 'viewer' })
     expect(await screen.findByText('Organization')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Save Settings/ })).toBeNull()

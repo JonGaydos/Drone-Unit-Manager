@@ -114,7 +114,7 @@ function EquipmentModal({ title, record, fields, onSave, onClose, vehicleModels 
 
 // ─── Generic Equipment Table ────────────────────────────────────────────────
 
-function EquipmentTable({ items, columns, isAdmin, onEdit, onDelete, onMerge, emptyMessage, sortKey, sortDir, onToggleSort }) {
+function EquipmentTable({ items, columns, canManage, onEdit, onDelete, onMerge, emptyMessage, sortKey, sortDir, onToggleSort }) {
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden">
       <div className="overflow-x-auto">
@@ -143,7 +143,7 @@ function EquipmentTable({ items, columns, isAdmin, onEdit, onDelete, onMerge, em
                 </td>
               ))}
               <td className="px-4 py-3 text-right">
-                {isAdmin && (
+                {canManage && (
                   <div className="flex items-center justify-end gap-1">
                     <button onClick={() => onEdit(item)} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent" aria-label="Edit">
                       <Edit className="w-4 h-4" />
@@ -455,7 +455,8 @@ export default function FleetPage() {
   const [sortKey, setSortKey] = useState('name')
   const [sortDir, setSortDir] = useState('asc')
   const [vehicleModels, setVehicleModels] = useState([])
-  const { isSupervisor } = useAuth()
+  const { can } = useAuth()
+  const canManage = can('fleet.manage')
   const toast = useToast()
   const [confirmProps, requestConfirm] = useConfirm()
   // Stale-response guard: each load() captures the current sequence number;
@@ -465,7 +466,7 @@ export default function FleetPage() {
 
   // Fetch unique vehicle models for combobox
   useEffect(() => {
-    api.get('/vehicles').then(vehicles => {
+    api.get('/fleet/options').then(({ vehicles }) => {
       const models = [...new Set(vehicles.map(v => v.model).filter(Boolean))]
       setVehicleModels([...models].sort((a, b) => a.localeCompare(b)))
     }).catch(() => {})
@@ -661,13 +662,15 @@ export default function FleetPage() {
               <option key={f.value} value={f.value}>{f.label}</option>
             ))}
           </select>
-          <button
-            onClick={() => api.download(config.exportPath)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90 whitespace-nowrap"
-          >
-            <Download className="w-4 h-4" /> Export CSV
-          </button>
-          {isSupervisor && (
+          {can('reports.export') && (
+            <button
+              onClick={() => api.download(config.exportPath)}
+              className="flex items-center gap-1.5 px-3 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90 whitespace-nowrap"
+            >
+              <Download className="w-4 h-4" /> Export CSV
+            </button>
+          )}
+          {canManage && (
             <button
               onClick={() => setModal('add')}
               /* Fixed width so the group's left edge does not shift between
@@ -689,10 +692,10 @@ export default function FleetPage() {
         <EquipmentTable
           items={filtered}
           columns={config.columns}
-          isAdmin={isSupervisor}
+          canManage={canManage}
           onEdit={(item) => setModal(item)}
           onDelete={handleDelete}
-          onMerge={['vehicles', 'batteries', 'sensors', 'attachments'].includes(activeTab) && isSupervisor ? (item) => { setMergeTarget(item); setMergeFromId('') } : null}
+          onMerge={['vehicles', 'batteries', 'sensors', 'attachments'].includes(activeTab) && canManage ? (item) => { setMergeTarget(item); setMergeFromId('') } : null}
           emptyMessage={`No ${config.label.toLowerCase()} found`}
           sortKey={sortKey}
           sortDir={sortDir}

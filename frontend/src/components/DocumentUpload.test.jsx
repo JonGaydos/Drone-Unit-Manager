@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
+import { withPermissions } from '@/test/permissions'
 import { renderWithProviders } from '@/test/render'
 import DocumentUpload from './DocumentUpload'
 
@@ -64,7 +65,7 @@ describe('DocumentUpload', () => {
 
   it('shows the upload affordance for a pilot (matches the pilot-gated API)', async () => {
     server.use(http.get('/api/auth/me', () =>
-      HttpResponse.json({ id: 1, username: 'p', display_name: 'p', role: 'pilot' })))
+      HttpResponse.json(withPermissions({ id: 1, username: 'p', display_name: 'p', role: 'pilot' }))))
 
     renderWithProviders(<DocumentUpload entityType="pilot" entityId={3} />, { role: 'pilot' })
     await screen.findByText('No documents uploaded')
@@ -73,7 +74,7 @@ describe('DocumentUpload', () => {
 
   it('hides the upload affordance for a viewer', async () => {
     server.use(http.get('/api/auth/me', () =>
-      HttpResponse.json({ id: 1, username: 'v', display_name: 'v', role: 'viewer' })))
+      HttpResponse.json(withPermissions({ id: 1, username: 'v', display_name: 'v', role: 'viewer' }))))
 
     renderWithProviders(<DocumentUpload entityType="pilot" entityId={3} />, { role: 'viewer' })
     await screen.findByText('No documents uploaded')

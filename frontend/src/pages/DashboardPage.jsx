@@ -6,7 +6,7 @@
  */
 import { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { api } from '@/api/client'
+import { api, getIfAllowed } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { daysUntil, formatHours } from '@/lib/utils'
@@ -266,7 +266,7 @@ function ListTile({ title, icon: Icon, items, emptyLabel, renderItem, link, link
   )
 }
 
-function LocationsTile({ items, pilots, places, onChange, colSpan = 'lg:col-span-4' }) {
+function LocationsTile({ items, pilots, places, onChange, canSetLocation, colSpan = 'lg:col-span-4' }) {
   return (
     <Tile className={`${colSpan} overflow-hidden`}>
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
@@ -282,19 +282,21 @@ function LocationsTile({ items, pilots, places, onChange, colSpan = 'lg:col-span
                 <p className="text-sm text-foreground truncate">{it.label}</p>
                 <p className="text-xs text-muted-foreground truncate">{it.location_text}</p>
               </div>
-              <select
-                className="h-8 rounded-md border border-border bg-secondary px-2 text-xs text-foreground max-w-[10rem]"
-                value=""
-                onChange={(e) => { if (e.target.value) onChange(it.vehicle_id, e.target.value) }}
-              >
-                <option value="">Set location…</option>
-                <optgroup label="Places">
-                  {places.map(pl => <option key={`place:${pl}`} value={`place:${pl}`}>{pl}</option>)}
-                </optgroup>
-                <optgroup label="Pilots">
-                  {pilots.map(p => <option key={`pilot:${p.id}`} value={`pilot:${p.id}`}>{p.first_name} {p.last_name}</option>)}
-                </optgroup>
-              </select>
+              {canSetLocation && (
+                <select
+                  className="h-8 rounded-md border border-border bg-secondary px-2 text-xs text-foreground max-w-[10rem]"
+                  value=""
+                  onChange={(e) => { if (e.target.value) onChange(it.vehicle_id, e.target.value) }}
+                >
+                  <option value="">Set location…</option>
+                  <optgroup label="Places">
+                    {places.map(pl => <option key={`place:${pl}`} value={`place:${pl}`}>{pl}</option>)}
+                  </optgroup>
+                  <optgroup label="Pilots">
+                    {pilots.map(p => <option key={`pilot:${p.id}`} value={`pilot:${p.id}`}>{p.full_name}</option>)}
+                  </optgroup>
+                </select>
+              )}
             </li>
           ))}
         </ul>
@@ -364,7 +366,11 @@ function parseLocationPlaces(placesRow) {
 /* ───────────────────── page ───────────────────── */
 
 export default function DashboardPage() {
-  const { user } = useAuth()
+  const { user, can } = useAuth()
+  const canSeeFlights = can('flights.view')
+  const canSeeFleet = can('fleet.view')
+  const canSeeMaintenance = can('maintenance.view')
+  const canSetLocation = can('fleet.location')
   const navigate = useNavigate()
   const [stats, setStats] = useState(null)
   const [trends, setTrends] = useState(null)
@@ -385,14 +391,14 @@ export default function DashboardPage() {
     void Promise.all([
       api.get('/dashboard/stats').catch(() => null),
       api.get('/dashboard/trends').catch(() => null),
-      api.get('/flights?per_page=10').catch(() => []),
-      api.get('/dashboard/maintenance-due').catch(() => []),
+      getIfAllowed(canSeeFlights, '/flights?per_page=10', []),
+      getIfAllowed(canSeeMaintenance, '/dashboard/maintenance-due', []),
       api.get('/dashboard/compliance').catch(() => null),
-      api.get('/dashboard/top-pilots-30d').catch(() => []),
-      api.get('/dashboard/top-vehicles-30d').catch(() => []),
-      api.get('/dashboard/activity-by-month').catch(() => []),
-      api.get('/vehicles/locations').catch(() => []),
-      api.get('/pilots').catch(() => []),
+      getIfAllowed(canSeeFlights, '/dashboard/top-pilots-30d', []),
+      getIfAllowed(canSeeFleet, '/dashboard/top-vehicles-30d', []),
+      getIfAllowed(canSeeFlights, '/dashboard/activity-by-month', []),
+      getIfAllowed(canSeeFleet, '/vehicles/locations', []),
+      getIfAllowed(canSetLocation, '/pilots/options', []),
       api.get('/settings').catch(() => []),
     ]).then(([s, t, f, m, c, tp, tv, ac, locs, pilotList, settingsList]) => {
       if (!alive) return
@@ -410,7 +416,7 @@ export default function DashboardPage() {
       setLocationPlaces(parseLocationPlaces(placesRow))
     }).finally(() => alive && setLoading(false))
     return () => { alive = false }
-  }, [])
+  }, [canSeeFlights, canSeeFleet, canSeeMaintenance, canSetLocation])
 
   if (loading) {
     return (
@@ -583,7 +589,7 @@ export default function DashboardPage() {
       />
 
       {/* Drone locations */}
-      <LocationsTile items={locations} pilots={pilots} places={locationPlaces} onChange={handleSetLocation} />
+      <LocationsTile items={locations} pilots={pilots} places={locationPlaces} onChange={handleSetLocation} canSetLocation={canSetLocation} />
     </div>
   )
 }

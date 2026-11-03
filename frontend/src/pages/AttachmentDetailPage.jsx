@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { api } from '@/api/client'
+import { api, getIfAllowed } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { formatDuration } from '@/lib/utils'
@@ -13,7 +13,10 @@ import EditActions from '@/components/EditActions'
 
 export default function AttachmentDetailPage() {
   const { id } = useParams()
-  const { isAdmin } = useAuth()
+  const { can } = useAuth()
+  const canManage = can('fleet.manage')
+  const canSeeFlights = can('flights.view')
+  const canSeeMaintenance = can('maintenance.view')
   const toast = useToast()
   const [attachment, setAttachment] = useState(null)
   const [stats, setStats] = useState(null)
@@ -27,16 +30,16 @@ export default function AttachmentDetailPage() {
   useEffect(() => {
     Promise.all([
       api.get(`/attachments/${id}`),
-      api.get(`/attachments/${id}/stats`).catch(() => null),
-      api.get(`/attachments/${id}/flights`).catch(() => []),
-      api.get(`/maintenance?entity_type=attachment&entity_id=${id}`).catch(() => []),
+      getIfAllowed(canSeeFlights, `/attachments/${id}/stats`, null),
+      getIfAllowed(canSeeFlights, `/attachments/${id}/flights`, []),
+      getIfAllowed(canSeeMaintenance, `/maintenance?entity_type=attachment&entity_id=${id}`, []),
     ]).then(([a, st, fl, m]) => {
       setAttachment(a)
       setStats(st)
       setFlights(Array.isArray(fl) ? fl : [])
       setMaintenance(Array.isArray(m) ? m : [])
     }).catch(() => {}).finally(() => setLoading(false))
-  }, [id])
+  }, [id, canSeeFlights, canSeeMaintenance])
 
   const startEditing = () => {
     setEditForm({
@@ -138,7 +141,7 @@ export default function AttachmentDetailPage() {
               <>
                 <div className="flex items-center gap-3">
                   <h2 className="text-xl font-bold text-foreground">{displayName}</h2>
-                  {isAdmin && (
+                  {canManage && (
                     <button onClick={startEditing} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent">
                       <Edit className="w-4 h-4" />
                     </button>

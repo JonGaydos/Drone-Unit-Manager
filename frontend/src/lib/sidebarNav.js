@@ -32,32 +32,44 @@ import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 /** Section order for the grouped (default) sidebar layout. */
 export const GROUP_ORDER = ['Overview', 'Flight Ops', 'Fleet & Crew', 'Compliance', 'Media & Reports', 'System']
 
-/** @type {Array<{to: string, icon: Function, label: string, group: string, badge?: string, adminOnly?: boolean}>} Navigation menu items. */
+/** The Reports page offers generating and exporting, so either key shows it. */
+export const REPORT_KEYS = ['reports.generate', 'reports.export']
+
+/** True when an entry's view keys let the user see it: no key means any signed-in
+ *  user, and a list means any one of its keys.
+ *  @param {string|string[]|undefined} view - The entry's view key or keys.
+ *  @param {(key: string) => boolean} can - The permission check from useAuth().
+ *  @returns {boolean} */
+export function canViewEntry(view, can) {
+  return !view || [view].flat().some(key => can(key))
+}
+
+/** @type {Array<{to: string, icon: Function, label: string, group: string, badge?: string, view?: string|string[]}>} Navigation menu items. */
 export const NAV_ITEMS = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard', group: 'Overview' },
-  { to: '/analytics', icon: BarChart3, label: 'Analytics', group: 'Overview' },
+  { to: '/analytics', icon: BarChart3, label: 'Analytics', group: 'Overview', view: 'flights.view' },
   { to: '/weather', icon: CloudSun, label: 'Weather', group: 'Flight Ops' },
   { to: '/airspace', icon: Radar, label: 'Airspace', group: 'Flight Ops' },
-  { to: '/flight-plans', icon: ClipboardCheck, label: 'Flight Plans', badge: 'pendingPlansCount', group: 'Flight Ops' },
-  { to: '/checklists', icon: ClipboardList, label: 'Checklists', group: 'Flight Ops' },
-  { to: '/flights', icon: QuadcopterIcon, label: 'Flights', badge: 'reviewCount', group: 'Flight Ops' },
-  { to: '/missions', icon: Target, label: 'Mission Log', group: 'Flight Ops' },
-  { to: '/training', icon: GraduationCap, label: 'Training Log', group: 'Flight Ops' },
-  { to: '/calendar', icon: Calendar, label: 'Calendar', group: 'Flight Ops' },
-  { to: '/pilots', icon: Users, label: 'Pilots', group: 'Fleet & Crew' },
-  { to: '/fleet', icon: Box, label: 'Fleet', group: 'Fleet & Crew' },
-  { to: '/certifications', icon: ShieldCheck, label: 'Certifications', group: 'Fleet & Crew' },
-  { to: '/maintenance', icon: Wrench, label: 'Maintenance', group: 'Fleet & Crew' },
-  { to: '/checkouts', icon: PackageCheck, label: 'Checkouts', group: 'Fleet & Crew' },
+  { to: '/flight-plans', icon: ClipboardCheck, label: 'Flight Plans', badge: 'pendingPlansCount', group: 'Flight Ops', view: 'flight_plans.view' },
+  { to: '/checklists', icon: ClipboardList, label: 'Checklists', group: 'Flight Ops', view: 'checklists.view' },
+  { to: '/flights', icon: QuadcopterIcon, label: 'Flights', badge: 'reviewCount', group: 'Flight Ops', view: 'flights.view' },
+  { to: '/missions', icon: Target, label: 'Mission Log', group: 'Flight Ops', view: 'logs.view' },
+  { to: '/training', icon: GraduationCap, label: 'Training Log', group: 'Flight Ops', view: 'logs.view' },
+  { to: '/calendar', icon: Calendar, label: 'Calendar', group: 'Flight Ops', view: 'calendar.view' },
+  { to: '/pilots', icon: Users, label: 'Pilots', group: 'Fleet & Crew', view: 'pilots.view' },
+  { to: '/fleet', icon: Box, label: 'Fleet', group: 'Fleet & Crew', view: 'fleet.view' },
+  { to: '/certifications', icon: ShieldCheck, label: 'Certifications', group: 'Fleet & Crew', view: 'certifications.view' },
+  { to: '/maintenance', icon: Wrench, label: 'Maintenance', group: 'Fleet & Crew', view: 'maintenance.view' },
+  { to: '/checkouts', icon: PackageCheck, label: 'Checkouts', group: 'Fleet & Crew', view: 'fleet.view' },
   { to: '/compliance', icon: Shield, label: 'Compliance', group: 'Compliance' },
-  { to: '/operating-authority', icon: Stamp, label: 'Operating Authority', group: 'Compliance' },
-  { to: '/alerts', icon: Bell, label: 'Alerts', group: 'Compliance' },
-  { to: '/incidents', icon: AlertTriangle, label: 'Activity Reports', group: 'Compliance' },
-  { to: '/media', icon: Camera, label: 'Photo Gallery', group: 'Media & Reports' },
-  { to: '/documents', icon: FolderOpen, label: 'Documents', group: 'Media & Reports' },
-  { to: '/reports', icon: FileText, label: 'Reports', group: 'Media & Reports' },
+  { to: '/operating-authority', icon: Stamp, label: 'Operating Authority', group: 'Compliance', view: 'authority.view' },
+  { to: '/alerts', icon: Bell, label: 'Alerts', group: 'Compliance', view: 'alerts.view' },
+  { to: '/incidents', icon: AlertTriangle, label: 'Activity Reports', group: 'Compliance', view: 'incidents.view' },
+  { to: '/media', icon: Camera, label: 'Photo Gallery', group: 'Media & Reports', view: 'files.view' },
+  { to: '/documents', icon: FolderOpen, label: 'Documents', group: 'Media & Reports', view: 'files.view' },
+  { to: '/reports', icon: FileText, label: 'Reports', group: 'Media & Reports', view: REPORT_KEYS },
   { to: '/settings', icon: Settings, label: 'Settings', group: 'System' },
-  { to: '/audit-log', icon: ScrollText, label: 'Audit Log', adminOnly: true, group: 'System' },
+  { to: '/audit-log', icon: ScrollText, label: 'Audit Log', group: 'System', view: 'audit.view' },
 ]
 
 /** {to, label, group} projection (no icons) for the Settings sidebar editor. */

@@ -464,23 +464,24 @@ export default function ChecklistPage() {
   const [editingTemplate, setEditingTemplate] = useState(null)
   const [showCompleteModal, setShowCompleteModal] = useState(false)
   const [viewCompletion, setViewCompletion] = useState(null)
-  const { isSupervisor, isPilot } = useAuth()
+  const { can } = useAuth()
+  const canManage = can('checklists.manage')
   const toast = useToast()
   const [confirmProps, requestConfirm] = useConfirm()
 
   const load = async () => {
     setLoading(true)
     try {
-      const [tpl, comp, p, v] = await Promise.all([
+      const [tpl, comp, p, fleet] = await Promise.all([
         api.get('/checklists/templates'),
         api.get('/checklists/completions'),
-        api.get('/pilots'),
-        api.get('/vehicles'),
+        api.get('/pilots/options'),
+        api.get('/fleet/options'),
       ])
       setTemplates(tpl)
       setCompletions(comp)
-      setPilots(Array.isArray(p) ? p : p.pilots || p.items || [])
-      setVehicles(Array.isArray(v) ? v : v.vehicles || v.items || [])
+      setPilots(p)
+      setVehicles(fleet.vehicles)
     } catch (err) {
       toast.error(err.message)
     } finally {
@@ -561,14 +562,16 @@ export default function ChecklistPage() {
           <h1 className="text-2xl font-bold text-foreground">Pre-Flight Checklists</h1>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => api.download('/export/checklists/csv')}
-            className="flex items-center gap-2 px-3 py-2 text-sm bg-secondary border border-border text-secondary-foreground rounded-lg hover:bg-secondary/80"
-          >
-            <Download className="w-4 h-4" />
-            Export CSV
-          </button>
-          {isPilot && (
+          {can('reports.export') && (
+            <button
+              onClick={() => api.download('/export/checklists/csv')}
+              className="flex items-center gap-2 px-3 py-2 text-sm bg-secondary border border-border text-secondary-foreground rounded-lg hover:bg-secondary/80"
+            >
+              <Download className="w-4 h-4" />
+              Export CSV
+            </button>
+          )}
+          {can('checklists.complete') && (
             <button
               onClick={() => setShowCompleteModal(true)}
               className="flex items-center gap-2 px-3 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
@@ -608,7 +611,7 @@ export default function ChecklistPage() {
       {!loading && tab === 'templates' && (
         /* ── Templates Tab ──────────────────────────── */
         <div className="space-y-4">
-          {isSupervisor && (
+          {canManage && (
             <div className="flex justify-end">
               <button
                 onClick={() => { setEditingTemplate(null); setShowTemplateModal(true) }}
@@ -636,7 +639,7 @@ export default function ChecklistPage() {
                         <span className="text-xs text-muted-foreground">{t.vehicle_model}</span>
                       )}
                     </div>
-                    {isSupervisor && (
+                    {canManage && (
                       <div className="flex items-center gap-1">
                         <button
                           onClick={() => { setEditingTemplate(t); setShowTemplateModal(true) }}
@@ -753,7 +756,7 @@ export default function ChecklistPage() {
         <ViewCompletionModal
           completion={viewCompletion}
           onClose={() => setViewCompletion(null)}
-          onDelete={isSupervisor ? handleDeleteCompletion : null}
+          onDelete={canManage ? handleDeleteCompletion : null}
         />
       )}
       <ConfirmDialog {...confirmProps} />

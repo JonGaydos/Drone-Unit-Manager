@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { useConfirm } from '@/hooks/useConfirm'
+import { ownsRecord } from '@/lib/ownership'
 import { sortVehicles, sortPilotsActiveFirst, vehicleDisplayName } from '@/lib/formatters'
 import {
   ClipboardCheck, Plus, Filter, X, Loader2, Check, Ban, Clock,
@@ -201,10 +202,10 @@ export default function FlightPlansPage() {
   const [expandedId, setExpandedId] = useState(null)
   const [viewMode, setViewMode] = useState('all') // 'all' or 'mine'
   const [statusFilter, setStatusFilter] = useState('')
-  const { user, isAdmin, isPilot } = useAuth()
+  const { user, isAdmin, can, canRecord } = useAuth()
+  const canApprove = can('flight_plans.approve')
   const toast = useToast()
   const [confirmProps, requestConfirm] = useConfirm()
-  const isSupervisor = user?.role === 'admin' || user?.role === 'supervisor'
 
   const load = async () => {
     setLoading(true)
@@ -213,15 +214,15 @@ export default function FlightPlansPage() {
       if (statusFilter) params.set('status', statusFilter)
       if (viewMode === 'mine' && user?.id) params.set('submitted_by_id', user.id)
       const qs = params.toString() ? `?${params}` : ''
-      const [p, pi, v, pc] = await Promise.all([
+      const [p, pi, fleet, pc] = await Promise.all([
         api.get(`/flight-plans${qs}`),
-        api.get('/pilots'),
-        api.get('/vehicles'),
+        api.get('/pilots/options'),
+        api.get('/fleet/options'),
         api.get('/flight-plans/pending/count'),
       ])
       setPlans(Array.isArray(p) ? p : p.plans || p.flight_plans || [])
-      setPilots(Array.isArray(pi) ? pi : pi.pilots || [])
-      setVehicles(Array.isArray(v) ? v : v.vehicles || [])
+      setPilots(pi)
+      setVehicles(fleet.vehicles)
       setPendingCount(pc.count)
     } catch (err) {
       toast.error(err.message)
@@ -359,11 +360,13 @@ export default function FlightPlansPage() {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => api.download('/export/flight-plans/csv')}
-            className="flex items-center gap-2 px-3 py-2 bg-secondary border border-border text-secondary-foreground rounded-lg text-sm hover:bg-secondary/80">
-            <Download className="w-4 h-4" /> Export CSV
-          </button>
-          {isPilot && (
+          {can('reports.export') && (
+            <button onClick={() => api.download('/export/flight-plans/csv')}
+              className="flex items-center gap-2 px-3 py-2 bg-secondary border border-border text-secondary-foreground rounded-lg text-sm hover:bg-secondary/80">
+              <Download className="w-4 h-4" /> Export CSV
+            </button>
+          )}
+          {can('flight_plans.create') && (
             <button onClick={() => setShowAdd(true)}
               className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
               <Plus className="w-4 h-4" /> Submit Plan
@@ -410,7 +413,7 @@ export default function FlightPlansPage() {
                           className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent" title="Details">
                           {expandedId === plan.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                         </button>
-                        {isSupervisor && plan.status === 'pending' && (
+                        {canApprove && plan.status === 'pending' && (
                           <>
                             {/* No self-approval: the server rejects approving a plan you submitted. */}
                             {plan.submitted_by_id !== user?.id && (
@@ -425,7 +428,7 @@ export default function FlightPlansPage() {
                             </button>
                           </>
                         )}
-                        {(plan.submitted_by_id === user?.id || isSupervisor) && (plan.status === 'pending' || plan.status === 'approved') && (
+                        {canRecord('flight_plans.edit', ownsRecord(user, plan.submitted_by_id)) && (plan.status === 'pending' || plan.status === 'approved') && (
                           <button onClick={() => handleCancel(plan.id)}
                             className="p-1.5 text-muted-foreground hover:text-amber-400 rounded-lg hover:bg-amber-500/10" title="Cancel">
                             <X className="w-4 h-4" />
@@ -437,7 +440,7 @@ export default function FlightPlansPage() {
                             <ClipboardCheck className="w-4 h-4" />
                           </button>
                         )}
-                        {isSupervisor && (
+                        {canApprove && (
                           <button onClick={() => handleDelete(plan.id)}
                             className="p-1.5 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10" title="Delete">
                             <X className="w-4 h-4" />

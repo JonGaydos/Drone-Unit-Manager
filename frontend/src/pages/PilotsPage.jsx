@@ -2,12 +2,13 @@ import { useState, useEffect, useMemo } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
+import { ownsPilot } from '@/lib/ownership'
 import { Plus, Edit, Trash2, Search, ChevronUp, ChevronDown, Download, Loader2, GitMerge } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Modal } from '@/components/ui/Modal'
 
-function PilotModal({ pilot, onSave, onClose }) {
+function PilotModal({ pilot, canManage, onSave, onClose }) {
   const [form, setForm] = useState(pilot || {
     first_name: '', last_name: '', email: '', phone: '', phone_type: 'work', phone_work: '', badge_number: '', status: 'active', counts_toward_totals: true, notes: ''
   })
@@ -73,39 +74,43 @@ function PilotModal({ pilot, onSave, onClose }) {
             />
           </div>
           {field('Badge Number', 'badge_number')}
-          <div>
-            <label htmlFor="status" className="block text-sm font-medium text-foreground mb-1">Status</label>
-            <select id="status"
-              value={form.status}
-              onChange={(e) => setForm({ ...form, status: e.target.value })}
-              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
-            >
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
-          </div>
-          <div>
-            {/* Deliberately separate from Status. Somebody who leaves the unit
-                goes inactive but their flights were still the unit's work; a
-                vendor or guest operator's flights never were. */}
-            <div className="flex items-start gap-2 mt-6">
-              <input
-                id="counts-toward-totals"
-                type="checkbox"
-                checked={form.counts_toward_totals !== false}
-                onChange={(e) => setForm({ ...form, counts_toward_totals: e.target.checked })}
-                className="mt-0.5 rounded border-border"
-              />
+          {canManage && (
+            <>
               <div>
-                <label htmlFor="counts-toward-totals" className="block text-sm font-medium text-foreground cursor-pointer">
-                  Counts towards unit totals
-                </label>
-                <p className="text-xs text-muted-foreground">
-                  Turn off for a vendor or guest operator. Their flights stay on record but leave the unit&apos;s numbers.
-                </p>
+                <label htmlFor="status" className="block text-sm font-medium text-foreground mb-1">Status</label>
+                <select id="status"
+                  value={form.status}
+                  onChange={(e) => setForm({ ...form, status: e.target.value })}
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
+                >
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
               </div>
-            </div>
-          </div>
+              <div>
+                {/* Deliberately separate from Status. Somebody who leaves the unit
+                    goes inactive but their flights were still the unit's work; a
+                    vendor or guest operator's flights never were. */}
+                <div className="flex items-start gap-2 mt-6">
+                  <input
+                    id="counts-toward-totals"
+                    type="checkbox"
+                    checked={form.counts_toward_totals !== false}
+                    onChange={(e) => setForm({ ...form, counts_toward_totals: e.target.checked })}
+                    className="mt-0.5 rounded border-border"
+                  />
+                  <div>
+                    <label htmlFor="counts-toward-totals" className="block text-sm font-medium text-foreground cursor-pointer">
+                      Counts towards unit totals
+                    </label>
+                    <p className="text-xs text-muted-foreground">
+                      Turn off for a vendor or guest operator. Their flights stay on record but leave the unit&apos;s numbers.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
           <div>
             <label htmlFor="notes" className="block text-sm font-medium text-foreground mb-1">Notes</label>
             <textarea id="notes"
@@ -195,7 +200,8 @@ export default function PilotsPage() {
   const [sortDir, setSortDir] = useState('asc')
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [mergeSource, setMergeSource] = useState(null)
-  const { isSupervisor } = useAuth()
+  const { user, can, canRecord } = useAuth()
+  const canManage = can('pilots.manage')
   const toast = useToast()
 
   const toggleSort = (key) => {
@@ -290,7 +296,7 @@ export default function PilotsPage() {
             className="w-full pl-9 pr-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
         </div>
-        {isSupervisor && (
+        {canManage && can('reports.export') && (
           <button
             onClick={() => api.download('/export/pilots/csv')}
             className="flex items-center justify-center gap-1.5 px-3 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90"
@@ -298,7 +304,7 @@ export default function PilotsPage() {
             <Download className="w-4 h-4" /> Export CSV
           </button>
         )}
-        {isSupervisor && (
+        {canManage && (
           <button
             onClick={() => setModal('add')}
             className="flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90"
@@ -349,19 +355,23 @@ export default function PilotsPage() {
                   </span>
                 </td>
                 <td className="px-4 py-3 text-right">
-                  {isSupervisor && (
-                    <div className="flex items-center justify-end gap-1">
+                  <div className="flex items-center justify-end gap-1">
+                    {canRecord('pilots.edit', ownsPilot(user, p.id)) && (
                       <button onClick={() => setModal(p)} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent" aria-label="Edit">
                         <Edit className="w-4 h-4" />
                       </button>
-                      <button onClick={() => setMergeSource(p)} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent" aria-label="Merge into another pilot" title="Merge into another pilot">
-                        <GitMerge className="w-4 h-4" />
-                      </button>
-                      <button onClick={() => setConfirmDelete(p)} className="p-1.5 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10" aria-label="Deactivate pilot" title="Deactivate">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  )}
+                    )}
+                    {canManage && (
+                      <>
+                        <button onClick={() => setMergeSource(p)} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent" aria-label="Merge into another pilot" title="Merge into another pilot">
+                          <GitMerge className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => setConfirmDelete(p)} className="p-1.5 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10" aria-label="Deactivate pilot" title="Deactivate">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -376,6 +386,7 @@ export default function PilotsPage() {
       {modal && (
         <PilotModal
           pilot={modal === 'add' ? null : modal}
+          canManage={canManage}
           onSave={handleSave}
           onClose={() => setModal(null)}
         />

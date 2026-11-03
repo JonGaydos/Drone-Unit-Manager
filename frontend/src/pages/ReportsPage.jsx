@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useAuth } from '@/contexts/AuthContext'
 import { api } from '@/api/client'
 import { addDays, normalizeDateValue, todayLocal } from '@/lib/utils'
 import { sortVehicles, sortPilotsActiveFirst } from '@/lib/formatters'
@@ -36,7 +37,19 @@ const REPORT_TYPES = [
   { value: 'per_pilot_annual_review', label: 'Per-Pilot Annual Review' },
 ]
 
+// Each quick export needs reports.export plus the permission for its content.
+const CSV_EXPORTS = [
+  { type: 'flights', label: 'Flights', needs: 'flights.view' },
+  { type: 'pilots', label: 'Pilots', needs: 'pilots.manage' },
+  { type: 'vehicles', label: 'Vehicles', needs: 'fleet.view' },
+  { type: 'incidents', label: 'Incidents', needs: 'incidents.view' },
+  { type: 'flight-plans', label: 'Flight Plans', needs: 'flight_plans.view' },
+]
+
 export default function ReportsPage() {
+  const { can } = useAuth()
+  const canGenerate = can('reports.generate')
+  const csvExports = can('reports.export') ? CSV_EXPORTS.filter(item => can(item.needs)) : []
   const [pilots, setPilots] = useState([])
   const [vehicles, setVehicles] = useState([])
   const [loading, setLoading] = useState(true)
@@ -60,12 +73,12 @@ export default function ReportsPage() {
 
   useEffect(() => {
     Promise.all([
-      api.get('/pilots'),
-      api.get('/vehicles'),
+      api.get('/pilots/options'),
+      api.get('/fleet/options'),
       api.get('/settings').catch(() => []),
-    ]).then(([p, v, s]) => {
+    ]).then(([p, fleet, s]) => {
       setPilots(p)
-      setVehicles(v)
+      setVehicles(fleet.vehicles)
       // Check if org logo exists in settings
       const logoSetting = s.find?.(item => item.key === 'org_logo')
       if (logoSetting?.value) {
@@ -431,60 +444,56 @@ export default function ReportsPage() {
                 </label>
               </div>
 
-              {/* Generate Buttons */}
-              <div className="flex gap-2">
-                <button
-                  onClick={handleGenerate}
-                  disabled={generating}
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50"
-                >
-                  {generating ? (
-                    <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</>
-                  ) : (
-                    <><FileBarChart className="w-4 h-4" /> Generate</>
+              {canGenerate && (
+                <>
+                  {/* Generate Buttons */}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleGenerate}
+                      disabled={generating}
+                      className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50"
+                    >
+                      {generating ? (
+                        <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</>
+                      ) : (
+                        <><FileBarChart className="w-4 h-4" /> Generate</>
+                      )}
+                    </button>
+                    <button
+                      onClick={handleDownloadPdf}
+                      disabled={generating}
+                      className="flex items-center justify-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50"
+                      title="Download PDF"
+                    >
+                      <FileDown className="w-4 h-4" /> PDF
+                    </button>
+                  </div>
+                  {reportType === 'per_pilot_annual_review' && (
+                    <button
+                      onClick={handleDownloadPilotZip}
+                      disabled={generating}
+                      className="w-full flex items-center justify-center gap-2 py-2 bg-secondary border border-border text-foreground rounded-lg text-xs font-medium hover:bg-accent disabled:opacity-50"
+                      title="One PDF per pilot, bundled as a zip"
+                    >
+                      <Download className="w-3.5 h-3.5" /> Download PDF Pack (one per pilot)
+                    </button>
                   )}
-                </button>
-                <button
-                  onClick={handleDownloadPdf}
-                  disabled={generating}
-                  className="flex items-center justify-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50"
-                  title="Download PDF"
-                >
-                  <FileDown className="w-4 h-4" /> PDF
-                </button>
-              </div>
-              {reportType === 'per_pilot_annual_review' && (
-                <button
-                  onClick={handleDownloadPilotZip}
-                  disabled={generating}
-                  className="w-full flex items-center justify-center gap-2 py-2 bg-secondary border border-border text-foreground rounded-lg text-xs font-medium hover:bg-accent disabled:opacity-50"
-                  title="One PDF per pilot, bundled as a zip"
-                >
-                  <Download className="w-3.5 h-3.5" /> Download PDF Pack (one per pilot)
-                </button>
+                </>
               )}
 
               {/* Quick CSV Exports */}
-              <div className="border-t border-border pt-3">
-                <p className="text-xs text-muted-foreground mb-2">Quick CSV Exports</p>
-                <div className="space-y-1">
-                  <button onClick={() => handleExportCSV('flights')} className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-foreground hover:bg-accent rounded-lg">
-                    <Download className="w-3.5 h-3.5" /> Export Flights CSV
-                  </button>
-                  <button onClick={() => handleExportCSV('pilots')} className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-foreground hover:bg-accent rounded-lg">
-                    <Download className="w-3.5 h-3.5" /> Export Pilots CSV
-                  </button>
-                  <button onClick={() => handleExportCSV('vehicles')} className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-foreground hover:bg-accent rounded-lg">
-                    <Download className="w-3.5 h-3.5" /> Export Vehicles CSV
-                  </button>
-                  <button onClick={() => handleExportCSV('incidents')} className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-foreground hover:bg-accent rounded-lg">
-                    <Download className="w-3.5 h-3.5" /> Export Incidents CSV
-                  </button>
-                  <button onClick={() => handleExportCSV('flight-plans')} className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-foreground hover:bg-accent rounded-lg">
-                    <Download className="w-3.5 h-3.5" /> Export Flight Plans CSV
-                  </button>
+              {csvExports.length > 0 && (
+                <div className="border-t border-border pt-3">
+                  <p className="text-xs text-muted-foreground mb-2">Quick CSV Exports</p>
+                  <div className="space-y-1">
+                    {csvExports.map(({ type, label }) => (
+                      <button key={type} onClick={() => handleExportCSV(type)} className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-foreground hover:bg-accent rounded-lg">
+                        <Download className="w-3.5 h-3.5" /> Export {label} CSV
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>

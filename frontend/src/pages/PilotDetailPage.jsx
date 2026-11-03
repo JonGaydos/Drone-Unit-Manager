@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { api } from '@/api/client'
+import { api, getIfAllowed } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
+import { ownsPilot } from '@/lib/ownership'
 import { formatHours, formatDuration } from '@/lib/utils'
 import { CERT_STATUS_COLORS } from '@/lib/constants'
 import { ArrowLeft, Clock, Calendar, ShieldCheck, Edit, Save, X, Camera, CheckCircle, XCircle, Target, GraduationCap, AlertTriangle, TrendingUp } from 'lucide-react'
@@ -15,17 +16,21 @@ import DocumentUpload from '@/components/DocumentUpload'
 
 export default function PilotDetailPage() {
   const { id } = useParams()
-  const { isAdmin, isPilot, isSupervisor, user } = useAuth()
+  const { isAdmin, can, canRecord, user } = useAuth()
+  const canSeeFlights = can('flights.view')
+  const canSeeCerts = can('certifications.view')
+  const canSeeFiles = can('files.view')
+  const isOwnPilot = ownsPilot(user, Number.parseInt(id, 10))
   const toast = useToast()
 
   // Auto-file documents to General folder
   const [generalFolderId, setGeneralFolderId] = useState(null)
   useEffect(() => {
-    api.get('/folders').then(folders => {
+    getIfAllowed(canSeeFiles, '/folders', []).then(folders => {
       const f = (Array.isArray(folders) ? folders : folders.folders || []).find(f => f.name === 'General')
       if (f) setGeneralFolderId(f.id)
-    }).catch(() => {})
-  }, [])
+    })
+  }, [canSeeFiles])
 
   const [pilot, setPilot] = useState(null)
   const [stats, setStats] = useState(null)
@@ -42,12 +47,12 @@ export default function PilotDetailPage() {
   useEffect(() => {
     Promise.all([
       api.get(`/pilots/${id}`),
-      api.get(`/pilots/${id}/stats`),
-      api.get(`/flights?pilot_id=${id}&per_page=20`),
-      api.get(`/pilot-certifications?pilot_id=${id}`).catch(() => []),
-      api.get(`/currency/status/${id}`).catch(() => null),
-      api.get(`/dashboard/analytics/pilot-performance/${id}`).catch(() => null),
-      api.get(`/pilots/${id}/needs-attention`).catch(() => null),
+      getIfAllowed(canSeeFlights, `/pilots/${id}/stats`, null),
+      getIfAllowed(canSeeFlights, `/flights?pilot_id=${id}&per_page=20`, []),
+      getIfAllowed(canSeeCerts, `/pilot-certifications?pilot_id=${id}`, []),
+      getIfAllowed(canSeeCerts, `/currency/status/${id}`, null),
+      getIfAllowed(canSeeFlights, `/dashboard/analytics/pilot-performance/${id}`, null),
+      getIfAllowed(canSeeCerts, `/pilots/${id}/needs-attention`, null),
     ]).then(([p, s, fData, c, cur, perf, na]) => {
       setPilot(p)
       setStats(s)
@@ -57,10 +62,9 @@ export default function PilotDetailPage() {
       setPerformance(perf)
       setNeedsAttention(na)
     }).catch(() => {}).finally(() => setLoading(false))
-  }, [id])
+  }, [id, canSeeFlights, canSeeCerts])
 
-  // A pilot edits and attaches documents to their own record; supervisors to anyone's.
-  const canEdit = isSupervisor || (isPilot && user?.pilot_id === Number.parseInt(id, 10))
+  const canEdit = canRecord('pilots.edit', isOwnPilot)
 
   const startEditing = () => {
     setEditForm({
@@ -193,8 +197,8 @@ export default function PilotDetailPage() {
                     <input id="badge-number" type="text" value={editForm.badge_number} onChange={e => setEditForm({...editForm, badge_number: e.target.value})}
                       className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                   </div>
-                  {/* Status is a supervisor's decision; the API refuses it from a pilot. */}
-                  {isSupervisor && <div>
+                  {/* Status needs pilots.manage; the API refuses it otherwise. */}
+                  {can('pilots.manage') && <div>
                     <label htmlFor="status" className="block text-xs font-medium text-muted-foreground mb-1">Status</label>
                     <select id="status" value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})}
                       className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
@@ -526,7 +530,7 @@ export default function PilotDetailPage() {
       )}
 
       {/* Documents */}
-      <DocumentUpload entityType="pilot" entityId={id} folderId={generalFolderId} canUpload={canEdit} />
+      <DocumentUpload entityType="pilot" entityId={id} folderId={generalFolderId} canUpload={canRecord('files.upload', isOwnPilot)} />
     </div>
   )
 }

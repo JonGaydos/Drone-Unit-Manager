@@ -3,8 +3,9 @@
  * Supports upload, inline editing of title/type, viewing, and deletion.
  */
 import { useState, useEffect, useCallback } from 'react'
-import { api } from '@/api/client'
+import { api, getIfAllowed } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
+import { ownsDocument } from '@/lib/ownership'
 import { useToast } from '@/contexts/ToastContext'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { useConfirm } from '@/hooks/useConfirm'
@@ -29,14 +30,14 @@ export default function DocumentUpload({ entityType, entityId, folderId, canUplo
   const [editingDoc, setEditingDoc] = useState(null)
   const [editForm, setEditForm] = useState({ title: '', document_type: '' })
   const [editSaving, setEditSaving] = useState(false)
-  const { isPilot } = useAuth()
+  const { user, can, canRecord } = useAuth()
+  const showUploadControl = canUpload && can('files.upload')
+  const canSeeFiles = can('files.view')
   const [confirmProps, requestConfirm] = useConfirm()
 
   const fetchDocs = useCallback(() => {
-    api.get(`/documents?entity_type=${entityType}&entity_id=${entityId}`)
-      .then(setDocuments)
-      .catch(() => {})
-  }, [entityType, entityId])
+    getIfAllowed(canSeeFiles, `/documents?entity_type=${entityType}&entity_id=${entityId}`, []).then(setDocuments)
+  }, [entityType, entityId, canSeeFiles])
 
   useEffect(() => {
     fetchDocs()
@@ -92,7 +93,7 @@ export default function DocumentUpload({ entityType, entityId, folderId, canUplo
           <h3 className="font-semibold text-foreground">Documents</h3>
           <span className="text-xs text-muted-foreground">({documents.length})</span>
         </div>
-        {isPilot && canUpload && (
+        {showUploadControl && (
           <button
             onClick={() => setShowUpload(!showUpload)}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:opacity-90"
@@ -102,7 +103,7 @@ export default function DocumentUpload({ entityType, entityId, folderId, canUplo
         )}
       </div>
 
-      {showUpload && isPilot && canUpload && (
+      {showUpload && showUploadControl && (
         <div className="px-4 py-3 border-b border-border bg-muted/20">
           <DocumentUploadForm
             entityType={entityType}
@@ -178,7 +179,7 @@ export default function DocumentUpload({ entityType, entityId, folderId, canUplo
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
                 </button>
-                {isPilot && (
+                {canRecord('files.edit', ownsDocument(user, doc)) && (
                   <>
                     <button
                       onClick={() => startEditDoc(doc)}

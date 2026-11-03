@@ -160,17 +160,13 @@ describe('updateUser', () => {
   })
 })
 
-describe('role booleans', () => {
-  // Expected matrix derived directly from the source memoized value.
-  const cases = [
-    ['admin', { isAdmin: true, isSupervisor: true, isPilot: true, isManager: true, isViewer: false }],
-    ['supervisor', { isAdmin: false, isSupervisor: true, isPilot: true, isManager: true, isViewer: false }],
-    ['pilot', { isAdmin: false, isSupervisor: false, isPilot: true, isManager: true, isViewer: false }],
-    ['manager', { isAdmin: false, isSupervisor: false, isPilot: false, isManager: true, isViewer: false }],
-    ['viewer', { isAdmin: false, isSupervisor: false, isPilot: false, isManager: false, isViewer: true }],
-  ]
-
-  it.each(cases)('role %s yields the correct booleans', async (role, expected) => {
+describe('isAdmin', () => {
+  it.each([
+    ['admin', true],
+    ['supervisor', false],
+    ['pilot', false],
+    ['viewer', false],
+  ])('role %s yields isAdmin %s, even with no permissions map', async (role, expected) => {
     server.use(http.post('/api/auth/login', () =>
       HttpResponse.json({ token: 't', user: { id: 1, username: 'u', role } })))
 
@@ -179,22 +175,95 @@ describe('role booleans', () => {
       await result.current.login('u', 'p')
     })
 
-    expect(result.current.isAdmin).toBe(expected.isAdmin)
-    expect(result.current.isSupervisor).toBe(expected.isSupervisor)
-    expect(result.current.isPilot).toBe(expected.isPilot)
-    expect(result.current.isManager).toBe(expected.isManager)
-    expect(result.current.isViewer).toBe(expected.isViewer)
+    expect(result.current.isAdmin).toBe(expected)
   })
 
-  it('all role booleans are false when there is no user', async () => {
+  it('is false when there is no user', async () => {
     const { result } = renderAuth()
     await waitFor(() => expect(result.current.loading).toBe(false))
     expect(result.current.user).toBeNull()
     expect(result.current.isAdmin).toBe(false)
-    expect(result.current.isSupervisor).toBe(false)
-    expect(result.current.isPilot).toBe(false)
-    expect(result.current.isManager).toBe(false)
-    expect(result.current.isViewer).toBe(false)
+  })
+
+  it('removes the old role helpers', async () => {
+    const { result } = renderAuth()
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    for (const helper of ['isManager', 'isSupervisor', 'isPilot', 'isViewer']) {
+      expect(result.current).not.toHaveProperty(helper)
+    }
+  })
+})
+
+describe('permission helpers', () => {
+  async function signedInWith(permissions) {
+    server.use(http.post('/api/auth/login', () =>
+      HttpResponse.json({ token: 't', user: { id: 1, username: 'u', role: 'pilot', permissions } })))
+    const view = renderAuth()
+    await act(async () => { await view.result.current.login('u', 'p') })
+    return view.result
+  }
+
+  it('can follows the map at every value', async () => {
+    const result = await signedInWith({ a: 'yes', b: 'no', c: 'none', d: 'own', e: 'all' })
+    expect(result.current.can('a')).toBe(true)
+    expect(result.current.can('b')).toBe(false)
+    expect(result.current.can('c')).toBe(false)
+    expect(result.current.can('d')).toBe(true)
+    expect(result.current.can('e')).toBe(true)
+  })
+
+  it('can is false for an unknown key, an invalid value and inherited names', async () => {
+    const result = await signedInWith({ a: 'maybe' })
+    expect(result.current.can('missing')).toBe(false)
+    expect(result.current.can('a')).toBe(false)
+    expect(result.current.can('constructor')).toBe(false)
+  })
+
+  it('a missing map grants nothing, even to an admin', async () => {
+    server.use(http.post('/api/auth/login', () =>
+      HttpResponse.json({ token: 't', user: { id: 1, username: 'a', role: 'admin' } })))
+    const { result } = renderAuth()
+    await act(async () => { await result.current.login('a', 'p') })
+    expect(result.current.can('flights.view')).toBe(false)
+    expect(result.current.level('flights.edit')).toBe('none')
+    expect(result.current.canRecord('flights.edit', true)).toBe(false)
+  })
+
+  it('every helper denies when nobody is signed in', async () => {
+    const { result } = renderAuth()
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.can('flights.view')).toBe(false)
+    expect(result.current.level('flights.edit')).toBe('none')
+    expect(result.current.canRecord('flights.edit', true)).toBe(false)
+  })
+
+  it('level returns own or all, and none for anything else', async () => {
+    const result = await signedInWith({ a: 'own', b: 'all', c: 'none', d: 'yes', e: 'no' })
+    expect(result.current.level('a')).toBe('own')
+    expect(result.current.level('b')).toBe('all')
+    expect(result.current.level('c')).toBe('none')
+    expect(result.current.level('d')).toBe('none')
+    expect(result.current.level('e')).toBe('none')
+    expect(result.current.level('missing')).toBe('none')
+  })
+
+  it('canRecord handles none, own and all', async () => {
+    const result = await signedInWith({ n: 'none', o: 'own', a: 'all' })
+    expect(result.current.canRecord('n', true)).toBe(false)
+    expect(result.current.canRecord('n', false)).toBe(false)
+    expect(result.current.canRecord('o', true)).toBe(true)
+    expect(result.current.canRecord('o', false)).toBe(false)
+    expect(result.current.canRecord('a', true)).toBe(true)
+    expect(result.current.canRecord('a', false)).toBe(true)
+    expect(result.current.canRecord('missing', true)).toBe(false)
+  })
+
+  it('loads the permissions the first time from /auth/me', async () => {
+    localStorage.setItem('token', 'stored-token')
+    server.use(http.get('/api/auth/me', () =>
+      HttpResponse.json({ id: 9, username: 'me', role: 'pilot', permissions: { 'flights.view': 'yes' } })))
+    const { result } = renderAuth()
+    await waitFor(() => expect(result.current.can('flights.view')).toBe(true))
   })
 })
 

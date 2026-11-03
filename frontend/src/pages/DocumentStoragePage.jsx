@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
+import { ownsDocument } from '@/lib/ownership'
 import {
   FolderOpen, FolderPlus, FileText, ChevronRight, ChevronDown,
   Trash2, Edit2, X, File, Search, Home,
@@ -32,7 +33,10 @@ export default function DocumentStoragePage() {
   const [confirmDeleteFolder, setConfirmDeleteFolder] = useState(null)
   const [confirmDeleteDoc, setConfirmDeleteDoc] = useState(null)
   const [showDeleted, setShowDeleted] = useState(false)
-  const { isPilot, isSupervisor } = useAuth()
+  const { user, can, canRecord } = useAuth()
+  const canUpload = can('files.upload')
+  const canManageFolders = can('folders.manage')
+  const canCustody = can('files.custody')
   const toast = useToast()
 
   const loadFolders = useCallback(async () => {
@@ -315,7 +319,7 @@ export default function DocumentStoragePage() {
           <FolderOpen className={`w-4 h-4 shrink-0 ${isSelected ? 'text-primary' : 'text-yellow-500'}`} />
           <span className="text-sm truncate flex-1">{folder.name}</span>
           <span className="text-xs text-muted-foreground shrink-0">{folder.document_count}</span>
-          {isSupervisor && !folder.is_system && (
+          {canManageFolders && !folder.is_system && (
             <div className="hidden group-hover:flex items-center gap-0.5 shrink-0">
               <button
                 onClick={(e) => { e.stopPropagation(); setEditingFolder(folder.id); setEditName(folder.name) }}
@@ -351,7 +355,7 @@ export default function DocumentStoragePage() {
       <div className="w-64 shrink-0 bg-card border border-border rounded-xl flex flex-col overflow-hidden">
         <div className="flex items-center justify-between p-3 border-b border-border">
           <h2 className="text-sm font-semibold text-foreground">Folders</h2>
-          {isSupervisor && (
+          {canManageFolders && (
             <button
               onClick={() => { setShowCreateFolder(true); setNewFolderParent(selectedFolder) }}
               className="p-1 text-muted-foreground hover:text-primary transition-colors"
@@ -467,7 +471,7 @@ export default function DocumentStoragePage() {
             )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {isSupervisor && (
+            {canCustody && (
               <button
                 onClick={() => setShowDeleted(true)}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-xs hover:opacity-90"
@@ -487,7 +491,7 @@ export default function DocumentStoragePage() {
                 />
               </div>
             )}
-            {isPilot && (
+            {canUpload && (
               <button
                 onClick={() => setShowUpload(!showUpload)}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:opacity-90"
@@ -499,7 +503,7 @@ export default function DocumentStoragePage() {
         </div>
 
         {/* Upload panel */}
-        {showUpload && isPilot && (
+        {showUpload && canUpload && (
           <div className="px-4 py-3 border-b border-border bg-muted/20">
             <p className="text-xs text-muted-foreground mb-2">
               Uploading to: <span className="text-foreground font-medium">
@@ -613,7 +617,7 @@ export default function DocumentStoragePage() {
                         >
                           View
                         </button>
-                        {isSupervisor && (
+                        {canCustody && (
                           <button
                             onClick={() => toggleHold(doc)}
                             className={`p-1 rounded hover:bg-amber-500/10 ${doc.legal_hold ? 'text-amber-500' : 'text-muted-foreground hover:text-amber-500'}`}
@@ -623,7 +627,7 @@ export default function DocumentStoragePage() {
                             <Lock className="w-3.5 h-3.5" />
                           </button>
                         )}
-                        {isPilot && (
+                        {canRecord('files.edit', ownsDocument(user, doc)) && (
                           <>
                             <button
                               onClick={() => { setEditingDoc(doc.id); setEditDocTitle(doc.title || doc.filename || '') }}

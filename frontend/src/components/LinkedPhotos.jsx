@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { api } from '@/api/client'
+import { api, getIfAllowed } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { Image as ImageIcon, Plus, X, Loader2 } from 'lucide-react'
@@ -15,23 +15,24 @@ function thumbSrc(photo) {
 
 /**
  * Linked-photos section for a flight or incident. Shows attached photo
- * thumbnails and, for supervisors and above, lets you attach existing photos
+ * thumbnails and, with files.custody, lets you attach existing photos
  * (from the Media gallery) or unlink them.
  * @param {{ entityType: 'flight'|'incident', entityId: number|string }} props
  */
 export default function LinkedPhotos({ entityType, entityId }) {
-  const { isSupervisor } = useAuth()
+  const { can } = useAuth()
+  const canLink = can('files.custody')
+  const canSeeFiles = can('files.view')
   const toast = useToast()
   const [linked, setLinked] = useState([])
   const [loading, setLoading] = useState(true)
   const [pickerOpen, setPickerOpen] = useState(false)
 
   const loadLinked = useCallback(() => {
-    api.get(`/photos?${entityType}_id=${entityId}`)
+    getIfAllowed(canSeeFiles, `/photos?${entityType}_id=${entityId}`, [])
       .then(p => setLinked(Array.isArray(p) ? p : []))
-      .catch(() => setLinked([]))
       .finally(() => setLoading(false))
-  }, [entityType, entityId])
+  }, [entityType, entityId, canSeeFiles])
 
   useEffect(() => { loadLinked() }, [loadLinked])
 
@@ -48,7 +49,7 @@ export default function LinkedPhotos({ entityType, entityId }) {
         <ImageIcon className="w-4 h-4 text-primary" />
         <h3 className="font-semibold text-foreground">Photos</h3>
         {linked.length > 0 && <span className="text-xs text-muted-foreground">({linked.length})</span>}
-        {isSupervisor && (
+        {canLink && (
           <button onClick={() => setPickerOpen(true)}
             className="ml-auto flex items-center gap-1 px-2.5 py-1 bg-secondary text-secondary-foreground rounded-lg text-xs font-medium hover:opacity-90">
             <Plus className="w-3.5 h-3.5" /> Attach photos
@@ -56,7 +57,7 @@ export default function LinkedPhotos({ entityType, entityId }) {
         )}
       </div>
       <div className="p-4">
-        {linkedBody({ loading, linked, isSupervisor, unlink })}
+        {linkedBody({ loading, linked, canLink, unlink })}
       </div>
       {pickerOpen && (
         <PhotoPicker entityType={entityType} entityId={entityId} linkedIds={linked.map(p => p.id)}
@@ -67,7 +68,7 @@ export default function LinkedPhotos({ entityType, entityId }) {
 }
 
 // Loading, then nothing attached, then the grid.
-function linkedBody({ loading, linked, isSupervisor, unlink }) {
+function linkedBody({ loading, linked, canLink, unlink }) {
   if (loading) {
     return <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
   }
@@ -81,7 +82,7 @@ function linkedBody({ loading, linked, isSupervisor, unlink }) {
           <img src={thumbSrc(photo)}
             alt={photo.title || photo.filename}
             className="w-full h-28 object-cover rounded-lg border border-border" />
-          {isSupervisor && (
+          {canLink && (
             <button onClick={() => unlink(photo.id)} title="Unlink" aria-label="Unlink photo"
               className="absolute top-1 right-1 p-1 bg-black/60 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80">
               <X className="w-3.5 h-3.5" />

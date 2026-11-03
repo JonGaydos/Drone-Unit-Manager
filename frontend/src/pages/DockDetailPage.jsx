@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { api } from '@/api/client'
+import { api, getIfAllowed } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { STATUS_COLORS } from '@/lib/constants'
@@ -28,7 +28,9 @@ function hasValidCoords(dock) {
 
 export default function DockDetailPage() {
   const { id } = useParams()
-  const { isAdmin } = useAuth()
+  const { can } = useAuth()
+  const canManage = can('fleet.manage')
+  const canSeeMaintenance = can('maintenance.view')
   const toast = useToast()
   const [dock, setDock] = useState(null)
   const [maintenance, setMaintenance] = useState([])
@@ -40,12 +42,12 @@ export default function DockDetailPage() {
   useEffect(() => {
     Promise.all([
       api.get(`/docks/${id}`),
-      api.get(`/maintenance?entity_type=dock&entity_id=${id}`).catch(() => []),
+      getIfAllowed(canSeeMaintenance, `/maintenance?entity_type=dock&entity_id=${id}`, []),
     ]).then(([d, m]) => {
       setDock(d)
       setMaintenance(Array.isArray(m) ? m : [])
     }).catch(() => {}).finally(() => setLoading(false))
-  }, [id])
+  }, [id, canSeeMaintenance])
 
   const startEditing = () => {
     setEditForm({
@@ -158,7 +160,7 @@ export default function DockDetailPage() {
               <>
                 <div className="flex items-center gap-3">
                   <h2 className="text-xl font-bold text-foreground">{displayName}</h2>
-                  {isAdmin && (
+                  {canManage && (
                     <button onClick={startEditing} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent">
                       <Edit className="w-4 h-4" />
                     </button>

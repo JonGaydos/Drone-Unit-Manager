@@ -111,4 +111,12 @@ describe('AlertsPage', () => {
     await screen.findByText('Cert expiring')
     expect(dismissAllCalled).toBe(true)
   })
+
+  it('hides the mark-read and dismiss controls without alerts.dismiss', async () => {
+    mockMount()
+    renderWithProviders(<AlertsPage />, { role: 'pilot' })
+    await screen.findByText('Battery low')
+    expect(screen.queryByTitle('Dismiss')).toBeNull()
+    expect(screen.queryByRole('button', { name: /Dismiss All/ })).toBeNull()
+  })
 })

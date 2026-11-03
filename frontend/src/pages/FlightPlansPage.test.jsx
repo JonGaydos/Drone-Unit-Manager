@@ -23,8 +23,8 @@ function mockMount(overrides = {}) {
   server.use(
     http.get('/api/flight-plans/pending/count', base.count),
     http.get('/api/flight-plans', base.plans),
-    http.get('/api/pilots', () => HttpResponse.json([{ id: 5, full_name: 'Jane Doe', is_active: true }])),
-    http.get('/api/vehicles', () => HttpResponse.json([{ id: 2, nickname: 'Falcon', model: 'Mavic 3' }])),
+    http.get('/api/pilots/options', () => HttpResponse.json([{ id: 5, full_name: 'Jane Doe', is_active: true }])),
+    http.get('/api/fleet/options', () => HttpResponse.json({ vehicles: [{ id: 2, nickname: 'Falcon', model: 'Mavic 3' }], batteries: [], controllers: [], sensors: [], attachments: [], docks: [], other_equipment: [] })),
   )
 }
 

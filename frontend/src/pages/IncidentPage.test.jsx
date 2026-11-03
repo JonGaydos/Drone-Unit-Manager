@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { screen, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
+import { withPermissions } from '@/test/permissions'
 import { renderWithProviders } from '@/test/render'
 import IncidentPage from './IncidentPage'
 
@@ -25,8 +26,8 @@ function mockMount(overrides = {}) {
   server.use(
     http.get('/api/incidents/stats', base.stats),
     http.get('/api/incidents', base.incidents),
-    http.get('/api/pilots', () => HttpResponse.json([{ id: 5, full_name: 'Jane Doe', is_active: true }])),
-    http.get('/api/vehicles', () => HttpResponse.json([{ id: 2, nickname: 'Falcon', model: 'Mavic 3' }])),
+    http.get('/api/pilots/options', () => HttpResponse.json([{ id: 5, full_name: 'Jane Doe', is_active: true }])),
+    http.get('/api/fleet/options', () => HttpResponse.json({ vehicles: [{ id: 2, nickname: 'Falcon', model: 'Mavic 3' }], batteries: [], controllers: [], sensors: [], attachments: [], docks: [], other_equipment: [] })),
     http.get('/api/flights', () => HttpResponse.json([])),
   )
 }
@@ -85,10 +86,19 @@ describe('IncidentPage', () => {
   })
 
   it('hides the New Report button from a viewer', async () => {
-    server.use(http.get('/api/auth/me', () => HttpResponse.json({ id: 9, username: 'viewer', role: 'viewer' })))
+    server.use(http.get('/api/auth/me', () => HttpResponse.json(withPermissions({ id: 9, username: 'viewer', role: 'viewer' }))))
     mockMount()
     renderWithProviders(<IncidentPage />, { role: 'viewer' })
     await screen.findByText('Hard Landing')
     expect(screen.queryByRole('button', { name: /New Report/ })).toBeNull()
+  })
+
+  it('keeps the page with flights.view off, and does not ask for flights', async () => {
+    let asked = false
+    mockMount()
+    server.use(http.get('/api/flights', () => { asked = true; return HttpResponse.json({ flights: [] }) }))
+    renderWithProviders(<IncidentPage />, { role: 'pilot', permissions: { 'flights.view': 'no' } })
+    expect(await screen.findByRole('button', { name: /New Report/ })).toBeInTheDocument()
+    expect(asked).toBe(false)
   })
 })

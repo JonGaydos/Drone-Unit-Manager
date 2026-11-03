@@ -3,8 +3,9 @@ import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { formatDuration, normalizeDateValue } from '@/lib/utils'
+import { ownsFlight } from '@/lib/ownership'
 import { sortByName, sortVehicles, sortPilotsActiveFirst, vehicleDisplayName, telemetryLabel } from '@/lib/formatters'
-import { Plus, Search, CheckCircle, ChevronUp, ChevronDown, Pencil, X, Check, Download, Loader2, Copy } from 'lucide-react'
+import { Plus, Search, CheckCircle, ChevronUp, ChevronDown, Pencil, X, Check, Download, Loader2, Copy, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Modal } from '@/components/ui/Modal'
@@ -125,7 +126,7 @@ function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachmen
                 placeholder="Select or type..."
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               <datalist id="battery-list">
-                {(batteries || []).map(b => <option key={b.id} value={b.serial_number}>{b.nickname || b.serial_number}</option>)}
+                {(batteries || []).map(b => <option key={b.id} value={b.serial_number}>{b.name}</option>)}
               </datalist>
             </div>
             <div>
@@ -135,7 +136,7 @@ function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachmen
                 placeholder="Select or type..."
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               <datalist id="sensor-list">
-                {(sensors || []).map(s => <option key={s.id} value={s.serial_number}>{s.name || s.serial_number}</option>)}
+                {(sensors || []).map(s => <option key={s.id} value={s.serial_number}>{s.name}</option>)}
               </datalist>
             </div>
             <div>
@@ -145,7 +146,7 @@ function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachmen
                 placeholder="Select or type..."
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               <datalist id="attach-list">
-                {(attachments || []).map(a => <option key={a.id} value={a.serial_number}>{a.name || a.serial_number}</option>)}
+                {(attachments || []).map(a => <option key={a.id} value={a.serial_number}>{a.name}</option>)}
               </datalist>
             </div>
             <div>
@@ -228,7 +229,9 @@ export default function FlightsPage() {
   const [error, setError] = useState(null)
   const [sortKey, setSortKey] = useState('date')
   const [sortDir, setSortDir] = useState('desc')
-  const { isPilot, isSupervisor } = useAuth()
+  const { user, can, level, canRecord } = useAuth()
+  const canReview = can('flights.review')
+  const canCreate = can('flights.create')
   const toast = useToast()
 
   // Status filter: 'all' | 'needs_review' | 'reviewed'
@@ -253,10 +256,12 @@ export default function FlightsPage() {
   const [editingId, setEditingId] = useState(null)
   const [editForm, setEditForm] = useState({})
   const [showBulkApproveConfirm, setShowBulkApproveConfirm] = useState(false)
-  // Bulk selection (supervisor-only): a Set of selected flight ids + action state.
+  // Bulk selection (needs flights.review): a Set of selected flight ids + action state.
   const [selectedIds, setSelectedIds] = useState(() => new Set())
   const [bulkBusy, setBulkBusy] = useState(false)
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
+  // The flight a row's delete control is asking to confirm.
+  const [deleteTarget, setDeleteTarget] = useState(null)
   // A bulk edit staged for confirmation: {title, message, confirmLabel, body}.
   const [bulkConfirm, setBulkConfirm] = useState(null)
 
@@ -289,21 +294,18 @@ export default function FlightsPage() {
 
     Promise.all([
       api.get(path, { signal }),
-      api.get('/pilots', { signal }),
-      api.get('/vehicles', { signal }),
+      api.get('/pilots/options', { signal }),
+      api.get('/fleet/options', { signal }),
       api.get('/flights/purposes/list', { signal }),
       api.get('/flights/count?review_status=needs_review', { signal }),
-      api.get('/batteries', { signal }).catch(() => []),
-      api.get('/sensors', { signal }).catch(() => []),
-      api.get('/attachments', { signal }).catch(() => []),
-    ]).then(([data, p, v, pu, rc, bats, sens, atts]) => {
+    ]).then(([data, p, fleet, pu, rc]) => {
       // Guard against a request that resolved just before being superseded: only
       // the most recent load is allowed to write state.
       if (abortRef.current !== controller) return
       setFlights(data.flights || [])
       setTotal(data.total || 0)
       setTotalPages(data.total_pages || 1)
-      setPilots(p); setVehicles(v); setPurposes(pu); setBatteries(bats); setSensors(sens); setAttachments(atts)
+      setPilots(p); setVehicles(fleet.vehicles); setPurposes(pu); setBatteries(fleet.batteries); setSensors(fleet.sensors); setAttachments(fleet.attachments)
       setReviewCount(rc.count || 0)
     }).catch(err => {
       // A superseded load rejects with AbortError; ignore it (a newer load owns the UI).
@@ -342,8 +344,8 @@ export default function FlightsPage() {
       purpose: flight.purpose || '',
       date: flight.date || '',
       duration_seconds: flight.duration_seconds || '',
-      // Review status is a supervisor decision; a pilot's edit does not carry it.
-      ...(isSupervisor ? { review_status: flight.review_status || 'needs_review' } : {}),
+      // Review status needs flights.review; other edits do not carry it.
+      ...(canReview ? { review_status: flight.review_status || 'needs_review' } : {}),
     })
   }
 
@@ -460,6 +462,14 @@ export default function FlightsPage() {
     } catch (err) { toast.error(err.message) } finally { setBulkBusy(false) }
   }
 
+  const runDelete = async () => {
+    try {
+      await api.delete(`/flights/${deleteTarget.id}`, { timeout: 120000 })
+      toast.success('Flight deleted')
+      load()
+    } catch (err) { toast.error(err.message) }
+  }
+
   const selectCls = "px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
   const inputCls = "px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
 
@@ -524,11 +534,13 @@ export default function FlightsPage() {
             className="w-full pl-9 pr-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
         </div>
         <div className="flex gap-2">
-          <button onClick={handleExport}
-            className="flex items-center gap-2 px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm font-medium hover:opacity-90">
-            <Download className="w-4 h-4" /> Export CSV
-          </button>
-          {needsReview.length > 0 && isSupervisor && (
+          {can('reports.export') && (
+            <button onClick={handleExport}
+              className="flex items-center gap-2 px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm font-medium hover:opacity-90">
+              <Download className="w-4 h-4" /> Export CSV
+            </button>
+          )}
+          {needsReview.length > 0 && canReview && (
             <button
               onClick={() => setShowBulkApproveConfirm(true)}
               className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:opacity-90"
@@ -536,7 +548,7 @@ export default function FlightsPage() {
               <CheckCircle className="w-4 h-4" /> Approve Page ({needsReview.length})
             </button>
           )}
-          {isPilot && (
+          {canCreate && (
             <button onClick={() => setModal(true)} className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
               <Plus className="w-4 h-4" /> Add Flight
             </button>
@@ -544,7 +556,7 @@ export default function FlightsPage() {
         </div>
       </div>
 
-      {isSupervisor && selectedIds.size > 0 && (
+      {canReview && selectedIds.size > 0 && (
         <div className="flex items-center gap-3 flex-wrap bg-primary/10 border border-primary/30 rounded-lg px-4 py-2">
           <span className="text-sm font-medium text-foreground">{selectedIds.size} selected</span>
           <select disabled={bulkBusy} value="" aria-label="Reassign pilot for selected flights"
@@ -572,7 +584,7 @@ export default function FlightsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/30">
-              {isSupervisor && (
+              {canReview && (
                 <th className="px-4 py-3 w-10">
                   <input type="checkbox" aria-label="Select all flights on this page"
                     checked={filtered.length > 0 && filtered.every(f => selectedIds.has(f.id))}
@@ -605,11 +617,11 @@ export default function FlightsPage() {
           <tbody>
             {filtered.map(f => editingId === f.id ? (
               <FlightEditRow key={f.id} f={f} editForm={editForm} setEditForm={setEditForm}
-                pilots={pilots} purposes={purposes} onSave={saveEditing} onCancel={cancelEditing} selectable={isSupervisor}
-                canReview={isSupervisor} />
+                pilots={pilots} purposes={purposes} onSave={saveEditing} onCancel={cancelEditing} selectable={canReview}
+                canReview={canReview} canReassign={level('flights.edit') === 'all'} />
             ) : (
               <tr key={f.id} className="border-b border-border/50 hover:bg-accent/30 transition-colors">
-                {isSupervisor && (
+                {canReview && (
                   <td className="px-4 py-3">
                     <input type="checkbox" aria-label={`Select flight ${f.external_id || f.id}`}
                       checked={selectedIds.has(f.id)} onChange={() => toggleRow(f.id)} className="rounded border-border" />
@@ -635,7 +647,7 @@ export default function FlightsPage() {
                         f.review_status === 'needs_review' ? 'bg-amber-500/15 text-amber-400' : 'bg-emerald-500/15 text-emerald-400'
                       }`
                       const label = f.review_status === 'needs_review' ? 'Needs Review' : 'Reviewed'
-                      if (isSupervisor) {
+                      if (canReview) {
                         const next = f.review_status === 'reviewed' ? 'needs_review' : 'reviewed'
                         const nextLabel = next === 'reviewed' ? 'Reviewed' : 'Needs Review'
                         return (
@@ -649,15 +661,15 @@ export default function FlightsPage() {
                       const label = telemetryLabel(f)
                       if (!label) return null
                       const cls = `text-[10px] leading-none ${f.has_telemetry ? 'text-emerald-400' : 'text-muted-foreground'}`
-                      return isSupervisor
+                      return canReview
                         ? <button type="button" onClick={async (e) => { e.stopPropagation(); try { await api.patch(`/flights/${f.id}/telemetry-status`, { telemetry_synced: !f.telemetry_synced }); load() } catch (err) { toast.error(err.message) } }} className={`${cls} cursor-pointer hover:text-foreground`} title={f.telemetry_synced ? 'Click to let sync look for telemetry again' : 'Click to stop sync looking for telemetry'}>{label}</button>
                         : <span className={cls}>{label}</span>
                     })()}
                   </div>
                 </td>
                 <td className="px-4 py-3 text-right">
-                  {isPilot && (
-                    <div className="flex items-center justify-end gap-1">
+                  <div className="flex items-center justify-end gap-1">
+                    {canCreate && (
                       <button onClick={() => setModal({
                         pilot_id: f.pilot_id, vehicle_id: f.vehicle_id, purpose: f.purpose,
                         takeoff_address: f.takeoff_address, battery_serial: f.battery_serial,
@@ -667,15 +679,22 @@ export default function FlightsPage() {
                       })} title="Duplicate (same pilot, vehicle, purpose)" aria-label="Duplicate" className="p-1.5 text-muted-foreground hover:text-foreground rounded hover:bg-accent/30">
                         <Copy className="w-4 h-4" />
                       </button>
+                    )}
+                    {canRecord('flights.edit', ownsFlight(user, f)) && (
                       <button onClick={() => startEditing(f)} title="Edit" aria-label="Edit" className="p-1.5 text-muted-foreground hover:text-foreground rounded hover:bg-accent/30">
                         <Pencil className="w-4 h-4" />
                       </button>
-                    </div>
-                  )}
+                    )}
+                    {canRecord('flights.delete', ownsFlight(user, f)) && (
+                      <button onClick={() => setDeleteTarget(f)} title="Delete" aria-label={`Delete flight ${f.external_id || f.id}`} className="p-1.5 text-muted-foreground hover:text-destructive rounded hover:bg-destructive/10">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={isSupervisor ? 10 : 9} className="px-4 py-12 text-center text-muted-foreground">No flights found</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={canReview ? 10 : 9} className="px-4 py-12 text-center text-muted-foreground">No flights found</td></tr>}
           </tbody>
         </table>
         </div>
@@ -722,11 +741,21 @@ export default function FlightsPage() {
         confirmLabel="Delete"
         confirmVariant="danger"
       />
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={runDelete}
+        title="Delete Flight"
+        message="Permanently delete this flight? This also removes its telemetry and cannot be undone."
+        confirmLabel="Delete"
+        confirmVariant="danger"
+      />
     </div>
   )
 }
 
-function FlightEditRow({ f, editForm, setEditForm, pilots, purposes, onSave, onCancel, selectable, canReview }) {
+function FlightEditRow({ f, editForm, setEditForm, pilots, purposes, onSave, onCancel, selectable, canReview, canReassign }) {
   return (
     <tr className="border-b border-border/50 bg-accent/20">
       {selectable && <td className="px-4 py-2" />}
@@ -737,11 +766,15 @@ function FlightEditRow({ f, editForm, setEditForm, pilots, purposes, onSave, onC
           className="w-full px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm" />
       </td>
       <td className="px-4 py-2">
-        <select value={editForm.pilot_id} onChange={e => setEditForm({...editForm, pilot_id: e.target.value})}
-          className="w-full px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm">
-          <option value="">Unassigned</option>
-          {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
-        </select>
+        {canReassign ? (
+          <select aria-label="Pilot for this flight" value={editForm.pilot_id} onChange={e => setEditForm({...editForm, pilot_id: e.target.value})}
+            className="w-full px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm">
+            <option value="">Unassigned</option>
+            {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+          </select>
+        ) : (
+          <span className="text-foreground">{f.pilot_name || 'Unassigned'}</span>
+        )}
       </td>
       <td className="px-4 py-2 hidden md:table-cell text-foreground">{f.vehicle_name || '—'}</td>
       <td className="px-4 py-2 hidden md:table-cell">

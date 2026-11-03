@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { screen } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
+import { withPermissions } from '@/test/permissions'
 import { renderWithProviders } from '@/test/render'
 import AuditLogPage from './AuditLogPage'
 
@@ -60,10 +61,10 @@ describe('AuditLogPage', () => {
   it('shows the access-required guard for a non-admin user', async () => {
     // Override /auth/me so the resolved role is viewer, not the default admin.
     server.use(http.get('/api/auth/me', () =>
-      HttpResponse.json({ id: 2, username: 'view', role: 'viewer' })))
+      HttpResponse.json(withPermissions({ id: 2, username: 'view', role: 'viewer' }))))
     renderWithProviders(<AuditLogPage />, { role: 'viewer' })
 
-    expect(await screen.findByText('Admin access required to view audit logs.')).toBeInTheDocument()
+    expect(await screen.findByText('You do not have access to the audit log.')).toBeInTheDocument()
   })
 
   it('expands a row to reveal field-level changes', async () => {

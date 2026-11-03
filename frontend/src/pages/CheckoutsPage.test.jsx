@@ -2,19 +2,20 @@ import { describe, it, expect } from 'vitest'
 import { screen, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
+import { withPermissions } from '@/test/permissions'
 import { renderWithProviders } from '@/test/render'
 import CheckoutsPage from './CheckoutsPage'
 
 // Mount endpoints (Promise.all in load(), both .catch -> []):
 //   GET /equipment-checkouts
 //   GET /pilots
-// Check-out modal additionally loads the selected type's endpoint (default /vehicles).
+// Check-out modal additionally loads /fleet/options for the selected type's items.
 // Check-out action: POST /equipment-checkouts
 const CHECKOUTS = [
   { id: 1, entity_type: 'vehicle', entity_id: 10, entity_name: 'DJI Mavic 3 (Falcon)', checked_out_by_name: 'Ada Lovelace', checked_out_at: '2026-06-01T10:00:00', expected_return: '2026-06-10', checked_in_at: null },
 ]
 const PILOTS = [
-  { id: 5, first_name: 'Ada', last_name: 'Lovelace', status: 'active' },
+  { id: 5, full_name: 'Ada Lovelace', status: 'active' },
 ]
 const VEHICLES = [
   { id: 10, manufacturer: 'DJI', model: 'Mavic 3', nickname: 'Falcon' },
@@ -24,13 +25,13 @@ function mockMount(overrides = {}) {
   const base = {
     checkouts: () => HttpResponse.json(CHECKOUTS),
     pilots: () => HttpResponse.json(PILOTS),
-    vehicles: () => HttpResponse.json(VEHICLES),
+    vehicles: VEHICLES,
     ...overrides,
   }
   server.use(
     http.get('/api/equipment-checkouts', base.checkouts),
-    http.get('/api/pilots', base.pilots),
-    http.get('/api/vehicles', base.vehicles),
+    http.get('/api/pilots/options', base.pilots),
+    http.get('/api/fleet/options', () => HttpResponse.json({ vehicles: base.vehicles })),
   )
 }
 
@@ -79,7 +80,7 @@ describe('CheckoutsPage', () => {
     await user.click(screen.getByRole('button', { name: /Check Out/ }))
     const dialog = await screen.findByRole('dialog')
 
-    // Item options load from /vehicles once the modal opens.
+    // Item options load from /fleet/options once the modal opens.
     await within(dialog).findByRole('option', { name: 'DJI Mavic 3 (Falcon)' })
     // Modal selects (Type, Item, Pilot) lack label/for association; target by order.
     const [, itemSelect, pilotSelect] = within(dialog).getAllByRole('combobox')
@@ -92,7 +93,7 @@ describe('CheckoutsPage', () => {
   })
 
   it('hides the history delete control for a non-supervisor (pilot)', async () => {
-    server.use(http.get('/api/auth/me', () => HttpResponse.json({ id: 3, username: 'p', role: 'pilot' })))
+    server.use(http.get('/api/auth/me', () => HttpResponse.json(withPermissions({ id: 3, username: 'p', role: 'pilot' }))))
     // A returned record so the History table has a row to carry the delete action.
     const RETURNED = [{ id: 2, entity_type: 'vehicle', entity_id: 11, entity_name: 'DJI Air 2S', checked_out_by_name: 'Ada Lovelace', checked_out_at: '2026-05-01T10:00:00', checked_in_at: '2026-05-02T10:00:00', checked_in_by_name: 'Ada Lovelace' }]
     mockMount({ checkouts: () => HttpResponse.json(RETURNED) })

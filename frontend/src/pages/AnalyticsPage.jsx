@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { api } from '@/api/client'
+import { api, getIfAllowed } from '@/api/client'
+import { useAuth } from '@/contexts/AuthContext'
 import { X, Filter } from 'lucide-react'
 import { FlightLocationsMap } from '@/components/FlightMap'
 import { localDateOf } from '@/lib/utils'
@@ -125,6 +126,9 @@ function createFilteredBarHRenderer(color) {
 }
 
 export default function AnalyticsPage() {
+  const { can } = useAuth()
+  const canSeeFlights = can('flights.view')
+  const canSeeFleet = can('fleet.view')
   // Raw data from API
   const [byPurpose, setByPurpose] = useState([])
   const [byYear, setByYear] = useState([])
@@ -155,14 +159,14 @@ export default function AnalyticsPage() {
   // Fetch all data on mount
   useEffect(() => {
     Promise.all([
-      api.get('/dashboard/analytics/flights-by-purpose'),
-      api.get('/dashboard/analytics/flights-by-year'),
-      api.get('/dashboard/analytics/flights-by-pilot'),
-      api.get('/dashboard/analytics/avg-duration-by-year'),
-      api.get('/dashboard/analytics/monthly-flights'),
-      api.get('/dashboard/analytics/vehicle-hours'),
-      api.get('/dashboard/analytics/pilot-hours'),
-      fetchAllFlights(),
+      getIfAllowed(canSeeFlights, '/dashboard/analytics/flights-by-purpose', []),
+      getIfAllowed(canSeeFlights, '/dashboard/analytics/flights-by-year', []),
+      getIfAllowed(canSeeFlights, '/dashboard/analytics/flights-by-pilot', []),
+      getIfAllowed(canSeeFlights, '/dashboard/analytics/avg-duration-by-year', []),
+      getIfAllowed(canSeeFlights, '/dashboard/analytics/monthly-flights', []),
+      getIfAllowed(canSeeFleet, '/dashboard/analytics/vehicle-hours', []),
+      getIfAllowed(canSeeFlights, '/dashboard/analytics/pilot-hours', []),
+      canSeeFlights ? fetchAllFlights() : [],
     ]).then(([purpose, year, pilot, dur, mon, veh, pil, flights]) => {
       setByPurpose(purpose)
       setByYear(year)
@@ -173,7 +177,7 @@ export default function AnalyticsPage() {
       setPilotHours(pil)
       setAllFlights(flights)
     }).catch(() => {}).finally(() => setLoading(false))
-  }, [])
+  }, [canSeeFlights, canSeeFleet])
 
   // Compute filtered subsets from allFlights when filters change
   const filteredFlights = useMemo(() => {

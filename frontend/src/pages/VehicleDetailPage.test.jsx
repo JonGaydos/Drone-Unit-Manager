@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { screen } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
+import { withPermissions } from '@/test/permissions'
 import { renderRoute } from '@/test/render'
 import VehicleDetailPage from './VehicleDetailPage'
 
@@ -92,11 +93,40 @@ describe('VehicleDetailPage', () => {
     expect(await screen.findByText('Vehicle not found')).toBeInTheDocument()
   })
 
-  it('hides the edit control for a non-admin (supervisor)', async () => {
-    server.use(http.get('/api/auth/me', () => HttpResponse.json({ id: 2, username: 'sup', role: 'supervisor' })))
+  it('hides the edit control without fleet.manage (pilot)', async () => {
+    server.use(http.get('/api/auth/me', () => HttpResponse.json(withPermissions({ id: 2, username: 'pil', role: 'pilot' }))))
     mockMount()
-    renderRoute(<VehicleDetailPage />, { path: '/fleet/vehicles/:id', route: '/fleet/vehicles/7', role: 'supervisor' })
+    renderRoute(<VehicleDetailPage />, { path: '/fleet/vehicles/:id', route: '/fleet/vehicles/7', role: 'pilot' })
     await screen.findByRole('heading', { name: /DJI Mavic 3 \(Falcon\)/ })
     expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull()
+  })
+
+  it('keeps the page when /stats is refused', async () => {
+    mockMount({ stats: () => HttpResponse.json({ detail: 'no' }, { status: 403 }) })
+    renderRoute(<VehicleDetailPage />, { path: '/fleet/vehicles/:id', route: '/fleet/vehicles/7', role: 'admin' })
+    expect(await screen.findByRole('heading', { name: /DJI Mavic 3 \(Falcon\)/ })).toBeInTheDocument()
+  })
+
+  it('does not ask for flight stats with flights.view off', async () => {
+    let asked = false
+    mockMount({ stats: () => { asked = true; return HttpResponse.json({}) } })
+    renderRoute(<VehicleDetailPage />, {
+      path: '/fleet/vehicles/:id', route: '/fleet/vehicles/7', role: 'pilot', permissions: { 'flights.view': 'no' },
+    })
+    expect(await screen.findByRole('heading', { name: /DJI Mavic 3 \(Falcon\)/ })).toBeInTheDocument()
+    expect(asked).toBe(false)
+  })
+
+  it('offers Add Registration only with registrations.manage', async () => {
+    mockMount()
+    const { unmount } = renderRoute(<VehicleDetailPage />, { path: '/fleet/vehicles/:id', route: '/fleet/vehicles/7', role: 'supervisor' })
+    await screen.findByRole('heading', { name: /DJI Mavic 3 \(Falcon\)/ })
+    expect(screen.queryByRole('button', { name: /Add Registration/ })).toBeNull()
+    unmount()
+    renderRoute(<VehicleDetailPage />, {
+      path: '/fleet/vehicles/:id', route: '/fleet/vehicles/7', role: 'supervisor', permissions: { 'registrations.manage': 'yes' },
+    })
+    await screen.findByRole('heading', { name: /DJI Mavic 3 \(Falcon\)/ })
+    expect(screen.getByRole('button', { name: /Add Registration/ })).toBeInTheDocument()
   })
 })

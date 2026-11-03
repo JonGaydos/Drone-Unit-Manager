@@ -65,7 +65,8 @@ function statusBadge(authority) {
 }
 
 export default function OperatingAuthorityPage() {
-  const { isSupervisor } = useAuth()
+  const { can } = useAuth()
+  const canManage = can('authority.manage')
   const toast = useToast()
   const [confirmProps, requestConfirm] = useConfirm()
   const [rows, setRows] = useState([])
@@ -172,7 +173,7 @@ export default function OperatingAuthorityPage() {
             depends on caps the compliance score.
           </p>
         </div>
-        {isSupervisor && (
+        {canManage && (
           <Button onClick={openCreate}><Plus className="w-4 h-4 mr-1" /> Add Authority</Button>
         )}
       </div>
@@ -246,7 +247,7 @@ export default function OperatingAuthorityPage() {
                           >
                             <FileText className="w-4 h-4" />
                           </button>
-                          {isSupervisor && (
+                          {canManage && (
                             <>
                               <button
                                 onClick={() => openEdit(row)}

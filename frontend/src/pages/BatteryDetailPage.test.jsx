@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { screen } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
+import { withPermissions } from '@/test/permissions'
 import { renderRoute } from '@/test/render'
 import BatteryDetailPage from './BatteryDetailPage'
 
@@ -74,11 +75,37 @@ describe('BatteryDetailPage', () => {
     expect(await screen.findByText('Battery not found')).toBeInTheDocument()
   })
 
-  it('hides the edit control for a non-admin (supervisor)', async () => {
-    server.use(http.get('/api/auth/me', () => HttpResponse.json({ id: 2, username: 'sup', role: 'supervisor' })))
+  it('hides the edit control without fleet.manage (pilot)', async () => {
+    server.use(http.get('/api/auth/me', () => HttpResponse.json(withPermissions({ id: 2, username: 'pil', role: 'pilot' }))))
+    mockMount()
+    renderRoute(<BatteryDetailPage />, { path: '/fleet/batteries/:id', route: '/fleet/batteries/4', role: 'pilot' })
+    await screen.findByRole('heading', { name: 'Cell A' })
+    expect(screen.queryByText('Record Reading')).toBeNull()
+  })
+
+  it('keeps the page when /stats is refused', async () => {
+    mockMount({ stats: () => HttpResponse.json({ detail: 'no' }, { status: 403 }) })
+    render()
+    expect(await screen.findByRole('heading', { name: 'Cell A' })).toBeInTheDocument()
+  })
+
+  it('does not ask for stats or flights with flights.view off', async () => {
+    const asked = []
+    mockMount({
+      stats: () => { asked.push('stats'); return HttpResponse.json({}) },
+      flights: () => { asked.push('flights'); return HttpResponse.json([]) },
+    })
+    renderRoute(<BatteryDetailPage />, {
+      path: '/fleet/batteries/:id', route: '/fleet/batteries/4', role: 'pilot', permissions: { 'flights.view': 'no' },
+    })
+    expect(await screen.findByRole('heading', { name: 'Cell A' })).toBeInTheDocument()
+    expect(asked).toEqual([])
+  })
+
+  it('shows the edit control with fleet.manage', async () => {
     mockMount()
     renderRoute(<BatteryDetailPage />, { path: '/fleet/batteries/:id', route: '/fleet/batteries/4', role: 'supervisor' })
     await screen.findByRole('heading', { name: 'Cell A' })
-    expect(screen.queryByText('Record Reading')).toBeNull()
+    expect(screen.getByText('Record Reading')).toBeInTheDocument()
   })
 })

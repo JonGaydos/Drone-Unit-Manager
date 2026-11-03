@@ -26,12 +26,9 @@ function mockMount(overrides = {}) {
   server.use(
     http.get('/api/flights/:id', base.flight),
     http.get('/api/telemetry/flight/:id', () => HttpResponse.json([])),
-    http.get('/api/pilots', () => HttpResponse.json([{ id: 5, full_name: 'Jane Doe', is_active: true }])),
-    http.get('/api/vehicles', () => HttpResponse.json([{ id: 2, nickname: 'Falcon', model: 'Mavic 3' }])),
+    http.get('/api/pilots/options', () => HttpResponse.json([{ id: 5, full_name: 'Jane Doe', is_active: true }])),
+    http.get('/api/fleet/options', () => HttpResponse.json({ vehicles: [{ id: 2, nickname: 'Falcon', model: 'Mavic 3' }], batteries: [], controllers: [], sensors: [], attachments: [], docks: [], other_equipment: [] })),
     http.get('/api/flights/purposes/list', () => HttpResponse.json([{ id: 1, name: 'Patrol' }])),
-    http.get('/api/batteries', () => HttpResponse.json([])),
-    http.get('/api/sensors', () => HttpResponse.json([])),
-    http.get('/api/attachments', () => HttpResponse.json([])),
     http.get('/api/photos', () => HttpResponse.json([])),
   )
 }
@@ -194,5 +191,26 @@ describe('FlightDetailPage', () => {
 
       expect(patchBody.counts_toward_totals).toBe(false)
     })
+  })
+
+  it('at own edit, offers Edit on the own flight without Status, Unit totals or the pilot picker', async () => {
+    mockMount()
+    const { user } = renderRoute(<FlightDetailPage />, {
+      path: '/flights/:id', route: '/flights/1', user: { id: 3, username: 'p', role: 'pilot', pilot_id: 5 },
+    })
+    await user.click(await screen.findByRole('button', { name: 'Edit' }))
+    expect(screen.queryByLabelText('Status')).toBeNull()
+    expect(screen.queryByLabelText(/Counts/)).toBeNull()
+    expect(screen.queryByLabelText('Pilot')).toBeNull()
+    expect(screen.getByLabelText('Vehicle')).toBeInTheDocument()
+  })
+
+  it("does not offer Edit on another pilot's flight at own", async () => {
+    mockMount()
+    renderRoute(<FlightDetailPage />, {
+      path: '/flights/:id', route: '/flights/1', user: { id: 3, username: 'p', role: 'pilot', pilot_id: 99 },
+    })
+    await screen.findByText(/Flight on/)
+    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull()
   })
 })

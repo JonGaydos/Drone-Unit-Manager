@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
+import { withPermissions } from '@/test/permissions'
 import { renderWithProviders } from '@/test/render'
 import DocumentStoragePage from './DocumentStoragePage'
 
@@ -123,7 +124,7 @@ describe('DocumentStoragePage', () => {
 
   it('hides the upload button for a viewer', async () => {
     server.use(http.get('/api/auth/me', () =>
-      HttpResponse.json({ id: 1, username: 'v', display_name: 'v', role: 'viewer' })))
+      HttpResponse.json(withPermissions({ id: 1, username: 'v', display_name: 'v', role: 'viewer' }))))
     mockMount()
     renderWithProviders(<DocumentStoragePage />, { role: 'viewer' })
     await screen.findByText('Certifications')

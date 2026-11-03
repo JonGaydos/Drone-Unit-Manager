@@ -23,7 +23,7 @@ function mockDashboard({
     http.get('/api/dashboard/top-vehicles-30d', () => HttpResponse.json(topVehicles ?? [])),
     http.get('/api/dashboard/activity-by-month', () => HttpResponse.json(activity ?? [])),
     http.get('/api/vehicles/locations', () => HttpResponse.json(locations ?? [])),
-    http.get('/api/pilots', () => HttpResponse.json(pilots ?? [])),
+    http.get('/api/pilots/options', () => HttpResponse.json(pilots ?? [])),
     http.get('/api/settings', () => HttpResponse.json(settings ?? [])),
     http.get('/api/weather/briefing', () => HttpResponse.json(weather ?? null)),
   )
@@ -65,7 +65,7 @@ const POPULATED = {
   topVehicles: [{ vehicle_id: 2, label: 'Skydio X10', hours: 27 }],
   activity: [{ label: '2026-05', flights: 30, hours: 10 }],
   locations: [{ vehicle_id: 2, label: 'Skydio X10', location_text: 'North' }],
-  pilots: [{ id: 7, first_name: 'Active', last_name: 'Annie', status: 'active' }],
+  pilots: [{ id: 7, full_name: 'Active Annie', status: 'active' }],
   settings: [],
   // Object-valued nested fields — the regression bait.
   weather: {
@@ -312,5 +312,25 @@ describe('DashboardPage', () => {
     renderWithProviders(<DashboardPage />, { role: 'admin' })
 
     expect(await screen.findByText(expected)).toBeInTheDocument()
+  })
+
+  it('skips the flight requests with flights.view off, keeping signed-in totals', async () => {
+    const asked = []
+    mockDashboard(POPULATED)
+    server.use(
+      http.get('/api/dashboard/activity-by-month', () => { asked.push('activity'); return HttpResponse.json([]) }),
+      http.get('/api/dashboard/top-pilots-30d', () => { asked.push('top'); return HttpResponse.json([]) }),
+      http.get('/api/flights', () => { asked.push('flights'); return HttpResponse.json({ flights: [] }) }),
+    )
+    renderWithProviders(<DashboardPage />, { role: 'pilot', permissions: { 'flights.view': 'no' } })
+    expect(await screen.findByText(/6 of 7 pilots current/)).toBeInTheDocument()
+    expect(asked).toEqual([])
+  })
+
+  it('hides the location control without fleet.location', async () => {
+    mockDashboard(POPULATED)
+    renderWithProviders(<DashboardPage />, { role: 'viewer' })
+    await screen.findByText(/6 of 7 pilots current/)
+    expect(screen.queryByText('Set location…')).toBeNull()
   })
 })

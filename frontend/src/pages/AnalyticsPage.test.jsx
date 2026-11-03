@@ -74,13 +74,20 @@ describe('AnalyticsPage', () => {
     expect(await screen.findByText('No flight data yet')).toBeInTheDocument()
   })
 
-  it('renders chart chrome when a primary endpoint 500s (errors swallowed)', async () => {
-    // The whole Promise.all is wrapped in .catch(()=>{}), so a 500 leaves the
-    // page in its empty-but-rendered state rather than crashing.
+  it('keeps the other sections when one endpoint 500s', async () => {
     mockMount({ purpose: () => HttpResponse.json({ detail: 'boom' }, { status: 500 }) })
     renderWithProviders(<AnalyticsPage />, { role: 'admin' })
     expect(await screen.findByText('Pilot Hours Leaderboard')).toBeInTheDocument()
-    expect(screen.getByText('No flight data yet')).toBeInTheDocument()
+    expect(screen.getByText('Jane Doe')).toBeInTheDocument()
+  })
+
+  it('keeps the flight charts with fleet.view off, and does not ask for vehicle hours', async () => {
+    let asked = false
+    mockMount({ vehicle: () => { asked = true; return HttpResponse.json([]) } })
+    renderWithProviders(<AnalyticsPage />, { role: 'pilot', permissions: { 'fleet.view': 'no' } })
+    expect(await screen.findByText('Pilot Hours Leaderboard')).toBeInTheDocument()
+    expect(screen.getByText('Jane Doe')).toBeInTheDocument()
+    expect(asked).toBe(false)
   })
 
   it('applies a cross-filter chip when a leaderboard pilot row is clicked', async () => {

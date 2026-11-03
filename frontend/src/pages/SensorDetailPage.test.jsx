@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { screen } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
+import { withPermissions } from '@/test/permissions'
 import { renderRoute } from '@/test/render'
 import SensorDetailPage from './SensorDetailPage'
 
@@ -65,13 +66,13 @@ describe('SensorDetailPage', () => {
     expect(await screen.findByText('Sensor not found')).toBeInTheDocument()
   })
 
-  it('hides the edit control for a non-admin (supervisor)', async () => {
-    server.use(http.get('/api/auth/me', () => HttpResponse.json({ id: 2, username: 'sup', role: 'supervisor' })))
+  it('hides the edit control without fleet.manage (pilot)', async () => {
+    server.use(http.get('/api/auth/me', () => HttpResponse.json(withPermissions({ id: 2, username: 'pil', role: 'pilot' }))))
     mockMount()
-    renderRoute(<SensorDetailPage />, { path: '/fleet/sensors/:id', route: '/fleet/sensors/6', role: 'supervisor' })
+    renderRoute(<SensorDetailPage />, { path: '/fleet/sensors/:id', route: '/fleet/sensors/6', role: 'pilot' })
     await screen.findByRole('heading', { name: 'Thermal Cam' })
-    // Documents upload is intentionally visible for pilot+ roles; the page's
-    // own (unnamed icon) edit control must not render for a supervisor.
+    // Documents upload is intentionally visible with files.upload; the page's
+    // own (unnamed icon) edit control must not render without fleet.manage.
     const buttons = screen.getAllByRole('button')
     expect(buttons).toHaveLength(1)
     expect(buttons[0]).toHaveAccessibleName(/Upload/)

@@ -214,6 +214,21 @@ async function fetchWithTimeout(url, init, options = {}) {
 }
 
 /**
+ * GET a section of a page the user may be refused. Skips the request when the
+ * permission is already off, and gives the fallback on any failure, so the
+ * section shows its empty state and the rest of the page still works.
+ * @param {boolean} allowed - The result of the matching can() check.
+ * @param {string} path - GET endpoint.
+ * @param {*} fallback - Value to resolve with when skipped or refused.
+ * @param {RequestInit} [options] - Extra fetch options (e.g. { signal }).
+ * @returns {Promise<*>}
+ */
+export function getIfAllowed(allowed, path, fallback, options) {
+  if (!allowed) return Promise.resolve(fallback)
+  return request(path, options).catch(() => fallback)
+}
+
+/**
  * API client with convenience methods for each HTTP verb.
  * All methods automatically include auth tokens and handle errors.
  */
