@@ -10,6 +10,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Literal
 
+from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.models.role_permission import RolePermission
@@ -245,6 +246,17 @@ def level(db: Session, user: User, key: str) -> str:
 def can(db: Session, user: User, key: str) -> bool:
     """True when the user holds the key at any level above the lowest."""
     return level(db, user, key) in (YES, OWN, ALL)
+
+
+def require_record_access(db: Session, user: User, key: str, owned: bool) -> None:
+    """Raise 403 unless the user's level for the key covers this record.
+
+    All covers any record. Own covers only records the user owns. None never does.
+    """
+    held = level(db, user, key)
+    if held == ALL or (held == OWN and owned):
+        return
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to do this")
 
 
 def validate_change(role: str, key: str, value: str) -> str | None:

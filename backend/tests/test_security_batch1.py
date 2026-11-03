@@ -286,9 +286,9 @@ def test_pilot_cannot_change_flight_review_fields(client, db, pilot_headers, fie
     assert resp.status_code == 403
 
 
-def test_pilot_edit_echoing_review_status_still_saves(client, db, pilot_headers):
+def test_pilot_edit_echoing_review_status_still_saves(client, db, pilot_headers, linked_pilot):
     """An edit form that sends back the unchanged review state is not refused."""
-    flight = _flight(db)
+    flight = _flight(db, pilot_id=linked_pilot.id)
     resp = client.patch(f"/api/flights/{flight.id}", headers=pilot_headers,
                         json={"review_status": "needs_review", "purpose": "Search"})
     assert resp.status_code == 200
@@ -302,8 +302,8 @@ def test_supervisor_can_mark_flight_reviewed(client, db, supervisor_user):
     assert resp.json()["review_status"] == "reviewed"
 
 
-def test_every_changed_flight_field_is_audited(client, db, pilot_headers):
-    flight = _flight(db)
+def test_every_changed_flight_field_is_audited(client, db, pilot_headers, linked_pilot):
+    flight = _flight(db, pilot_id=linked_pilot.id)
     client.patch(f"/api/flights/{flight.id}", headers=pilot_headers,
                  json={"takeoff_address": "1 Main St", "case_number": "2026-001"})
     entry = db.query(AuditLog).filter(AuditLog.entity_type == "flight").order_by(AuditLog.id.desc()).first()
