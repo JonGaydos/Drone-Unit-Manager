@@ -13,6 +13,7 @@ from typing import Literal
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.models.certification import PilotCertification
 from app.models.role_permission import RolePermission
 from app.models.user import User
 
@@ -264,6 +265,24 @@ def owns_roster_log(user: User, log) -> bool:
     if log.created_by_id == user.id:
         return True
     return user.pilot_id is not None and any(entry.pilot_id == user.pilot_id for entry in log.pilots)
+
+
+def owns_photo(user: User, photo) -> bool:
+    """True when the user uploaded the photo."""
+    return photo.uploaded_by_id is not None and photo.uploaded_by_id == user.id
+
+
+def owns_document(db: Session, user: User, document) -> bool:
+    """True when the user uploaded the document, or it is attached to their own
+    pilot record or certification."""
+    if document.uploaded_by_id is not None and document.uploaded_by_id == user.id:
+        return True
+    if user.pilot_id is None:
+        return False
+    if document.pilot_id == user.pilot_id:
+        return True
+    cert = db.get(PilotCertification, document.certification_id) if document.certification_id else None
+    return cert is not None and cert.pilot_id == user.pilot_id
 
 
 def validate_change(role: str, key: str, value: str) -> str | None:
