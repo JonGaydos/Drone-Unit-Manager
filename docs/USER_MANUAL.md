@@ -491,7 +491,7 @@ A login with no linked pilot owns no pilot profile, and only the flights it logg
 | Delete checkouts | Yes | No | No |
 | Create, delete or merge pilots | Yes | No | No |
 | View pilot email and phone | Yes | Yes | No |
-| Manage certifications, send reminders | Yes | No | No |
+| Manage certifications, send reminders, change currency rules | Yes | No | No |
 | Complete checklists | Yes | Yes | No |
 | Manage checklist templates | Yes | No | No |
 | Restore documents, legal hold | Yes | No | No |

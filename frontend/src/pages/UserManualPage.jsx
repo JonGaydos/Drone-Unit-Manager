@@ -22,7 +22,7 @@ If you have a backup ZIP from another instance, choose "Restore from a backup in
 
 • **Viewer**: Can view every feature and export CSV, and can never change unit data. Pilot email addresses and phone numbers are hidden from viewers.
 • **Pilot**: Can view every feature and create records. Can edit only their own flights, plans, incidents, logs, maintenance records, events, profile, documents and photos. Cannot delete flights.
-• **Supervisor**: Can edit and delete any record, review and approve, manage pilots, fleet, certifications and checklists, and generate reports.
+• **Supervisor**: Can edit most records, review and approve, manage pilots, fleet, certifications and checklists, and generate reports.
 • **Admin**: Full access including user management, the permission grid, system settings, and backups. The audit log is admin-only by default.`
       },
       {
@@ -132,7 +132,7 @@ Each category has a colored checkbox above the calendar to show or hide that typ
         title: 'Adding Events and Leave',
         body: `Click "Add event / leave" to create a manual entry. Choose a category (Event or Leave), a title, a start date, an optional end date (for multi-day entries), and optional notes.
 
-Any signed-in user, including pilots, can add their own events and leave. You can edit or delete an entry you created; by default supervisors and admins can edit or delete any manual entry. The other aggregated items (flights, missions, training, maintenance, certifications) are read-only on the calendar and are managed from their own pages.`
+Users with the create permission (everyone except viewers by default) can add their own events and leave. You can edit or delete an entry you created; by default supervisors and admins can edit or delete any manual entry. The other aggregated items (flights, missions, training, maintenance, certifications) are read-only on the calendar and are managed from their own pages.`
       },
     ]
   },
@@ -258,7 +258,7 @@ The list of named places (for example North, Central, South) is configured by ad
         title: 'Pilot Currency',
         body: `Currency rules define how many flight hours (and optionally how many flights) a pilot must log within a rolling period to stay current (e.g., 5 hours in 90 days).
 
-Admins create rules from Settings → Currency Rules. Rules can be scoped to a specific vehicle model or apply across all aircraft. Once at least one active rule exists, each pilot's detail page shows a Currency Status section with per-rule progress, current/lapsed badge, and the projected expiry date (the date the pilot would lapse if they don't fly again).
+Admins create rules from Settings → General → Currency Rules. Changing rules needs the certifications manage permission, which supervisors hold by default, but the Settings page itself is admin-only. Rules can be scoped to a specific vehicle model or apply across all aircraft. Once at least one active rule exists, each pilot's detail page shows a Currency Status section with per-rule progress, current/lapsed badge, and the projected expiry date (the date the pilot would lapse if they don't fly again).
 
 Only reviewed flights count toward currency, from every source. A flight that still needs review, including one sent back to the queue after an edit, does not count until a supervisor reviews it, so a pilot can show as lapsed while their flights wait for review.`
       },
