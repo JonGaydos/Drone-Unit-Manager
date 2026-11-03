@@ -1,7 +1,6 @@
 from collections import Counter
 from datetime import date
 from math import ceil
-
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -29,8 +28,14 @@ from app.schemas.flight import (
 
 router = APIRouter(prefix="/api/flights", tags=["flights"])
 
+EDIT_KEY = "flights.edit"
+DELETE_KEY = "flights.delete"
+REVIEW_KEY = "flights.review"
+NEEDS_REVIEW = "needs_review"
+REVIEWED = "reviewed"
+
 ViewUser = Annotated[User, Depends(require_permission("flights.view"))]
-ReviewUser = Annotated[User, Depends(require_permission("flights.review"))]
+ReviewUser = Annotated[User, Depends(require_permission(REVIEW_KEY))]
 
 
 def _refresh_capable_providers() -> set[str]:
@@ -188,7 +193,7 @@ def list_review_queue(
     flights = db.query(Flight).options(
         joinedload(Flight.pilot), joinedload(Flight.vehicle)
     ).filter(
-        Flight.review_status == "needs_review"
+        Flight.review_status == NEEDS_REVIEW
     ).order_by(Flight.date.desc(), Flight.takeoff_time.desc()).all()
     return [_flight_to_out(f) for f in flights]
 
@@ -583,7 +588,7 @@ def create_flight(
     admin: Annotated[User, Depends(require_permission("flights.create"))],
 ):
     from app.services.audit import log_action
-    flight = Flight(**data.model_dump(), review_status="needs_review", pilot_confirmed=True,
+    flight = Flight(**data.model_dump(), review_status=NEEDS_REVIEW, pilot_confirmed=True,
                     data_source="manual", created_by_id=admin.id)
     db.add(flight)
     db.flush()
@@ -622,16 +627,17 @@ def _check_edit_allowed(db, user: User, flight: Flight, update_data: dict) -> No
     Values are compared with the stored ones, so a form that echoes unchanged
     fields back is not refused. Reassigning the pilot needs edit at All.
     """
-    permissions_service.require_record_access(db, user, "flights.edit", owns_flight(user, flight))
-    if _changed_fields(flight, update_data, REVIEW_FIELDS) and not permissions_service.can(db, user, "flights.review"):
+    permissions_service.require_record_access(db, user, EDIT_KEY, owns_flight(user, flight))
+    if _changed_fields(flight, update_data, REVIEW_FIELDS) and not permissions_service.can(db, user, REVIEW_KEY):
         raise HTTPException(status_code=403, detail="You do not have permission to change a flight's review fields")
-    if _changed_fields(flight, update_data, ("pilot_id",)) and permissions_service.level(db, user, "flights.edit") != permissions_service.ALL:
+    edit_level = permissions_service.level(db, user, EDIT_KEY)
+    if _changed_fields(flight, update_data, ("pilot_id",)) and edit_level != permissions_service.ALL:
         raise HTTPException(status_code=403, detail="You do not have permission to reassign a flight's pilot")
 
 
 def _returns_to_queue(db, user: User, flight: Flight, update_data: dict) -> bool:
     """True when a non-reviewer changes content on a reviewed flight."""
-    if flight.review_status != "reviewed" or permissions_service.can(db, user, "flights.review"):
+    if flight.review_status != REVIEWED or permissions_service.can(db, user, REVIEW_KEY):
         return False
     content = [f for f in update_data if f not in REVIEW_FIELDS]
     return bool(_changed_fields(flight, update_data, content))
@@ -642,7 +648,7 @@ def update_flight(
     flight_id: int,
     data: FlightUpdate,
     db: DBSession,
-    admin: Annotated[User, Depends(require_permission("flights.edit"))],
+    admin: Annotated[User, Depends(require_permission(EDIT_KEY))],
 ):
     from app.services.audit import log_action, compute_changes
     flight = db.query(Flight).filter(Flight.id == flight_id).first()
@@ -651,7 +657,7 @@ def update_flight(
     update_data = data.model_dump(exclude_unset=True)
     _check_edit_allowed(db, admin, flight, update_data)
     if _returns_to_queue(db, admin, flight, update_data):
-        update_data["review_status"] = "needs_review"
+        update_data["review_status"] = NEEDS_REVIEW
     # Flights are records of what happened, so every changed field is audited.
     changes = compute_changes(flight, update_data, list(update_data.keys()))
     for key, value in update_data.items():
@@ -738,7 +744,7 @@ def bulk_update_flights(
             touched = touched[:MAX_ID_DETAIL_CHARS].rsplit(", ", 1)[0] + ", ..."
         details += f" (ids {touched})"
 
-    action = "bulk_approve" if data.review_status == "reviewed" else "bulk_update"
+    action = "bulk_approve" if data.review_status == REVIEWED else "bulk_update"
     log_action(db, admin.id, admin.display_name, action, "flight",
                changes=changes or None, details=details)
     db.commit()
@@ -805,13 +811,13 @@ def update_review_status(
 ):
     """Toggle the review status flag on a flight."""
     from app.services.audit import log_action
-    if data.review_status not in ("reviewed", "needs_review"):
+    if data.review_status not in (REVIEWED, NEEDS_REVIEW):
         raise HTTPException(400, "review_status must be 'reviewed' or 'needs_review'")
     flight = db.query(Flight).filter(Flight.id == flight_id).first()
     if not flight:
         raise HTTPException(404, FLIGHT_NOT_FOUND)
     flight.review_status = data.review_status
-    action = "approve" if data.review_status == "reviewed" else "unapprove"
+    action = "approve" if data.review_status == REVIEWED else "unapprove"
     log_action(db, user.id, user.display_name, action, "flight", flight_id,
                details=f"Review status set to {data.review_status}")
     db.commit()
@@ -822,13 +828,13 @@ def update_review_status(
 def delete_flight(
     flight_id: int,
     db: DBSession,
-    admin: Annotated[User, Depends(require_permission("flights.delete"))],
+    admin: Annotated[User, Depends(require_permission(DELETE_KEY))],
 ):
     from app.services.audit import log_action
     flight = db.query(Flight).filter(Flight.id == flight_id).first()
     if not flight:
         raise HTTPException(status_code=404, detail=FLIGHT_NOT_FOUND)
-    permissions_service.require_record_access(db, admin, "flights.delete", owns_flight(admin, flight))
+    permissions_service.require_record_access(db, admin, DELETE_KEY, owns_flight(admin, flight))
     flight_name = f"Flight {flight.external_id or flight.id}"
     flight_id = flight.id
     # Telemetry lives in a separate DB and is not cascaded by the ORM, so purge
