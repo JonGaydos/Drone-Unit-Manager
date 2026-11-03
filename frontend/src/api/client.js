@@ -240,6 +240,20 @@ export function getIfAllowed(allowed, path, fallback, options) {
 }
 
 /**
+ * GET a secondary section of a page that must not take the page down with it.
+ * Like getIfAllowed, but any failure gives the fallback, so the section shows
+ * its empty state. A page's primary record stays a plain api.get.
+ * @param {boolean} allowed - The result of the matching can() check.
+ * @param {string} path - GET endpoint.
+ * @param {*} fallback - Value to resolve with when skipped or failed.
+ * @param {RequestInit} [options] - Extra fetch options (e.g. { signal }).
+ * @returns {Promise<*>}
+ */
+export function getSection(allowed, path, fallback, options) {
+  return getIfAllowed(allowed, path, fallback, options).catch(() => fallback)
+}
+
+/**
  * API client with convenience methods for each HTTP verb.
  * All methods automatically include auth tokens and handle errors.
  */

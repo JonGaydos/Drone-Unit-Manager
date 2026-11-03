@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { api, getIfAllowed } from '@/api/client'
+import { api, getSection } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { formatDuration } from '@/lib/utils'
@@ -30,9 +30,9 @@ export default function SensorDetailPage() {
   useEffect(() => {
     Promise.all([
       api.get(`/sensors/${id}`),
-      getIfAllowed(canSeeFlights, `/sensors/${id}/stats`, null),
-      getIfAllowed(canSeeFlights, `/sensors/${id}/flights`, []),
-      getIfAllowed(canSeeMaintenance, `/maintenance?entity_type=sensor&entity_id=${id}`, []),
+      getSection(canSeeFlights, `/sensors/${id}/stats`, null),
+      getSection(canSeeFlights, `/sensors/${id}/flights`, []),
+      getSection(canSeeMaintenance, `/maintenance?entity_type=sensor&entity_id=${id}`, []),
     ]).then(([s, st, fl, m]) => {
       setSensor(s)
       setStats(st)

@@ -6,7 +6,7 @@
  */
 import { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { api, getIfAllowed } from '@/api/client'
+import { api, getSection } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { daysUntil, formatHours } from '@/lib/utils'
@@ -392,14 +392,14 @@ export default function DashboardPage() {
     void Promise.all([
       api.get('/dashboard/stats').catch(() => null),
       api.get('/dashboard/trends').catch(() => null),
-      getIfAllowed(canSeeFlights, '/flights?per_page=10', []).catch(() => []),
-      getIfAllowed(canSeeMaintenance, '/dashboard/maintenance-due', []).catch(() => []),
+      getSection(canSeeFlights, '/flights?per_page=10', []),
+      getSection(canSeeMaintenance, '/dashboard/maintenance-due', []),
       api.get('/dashboard/compliance').catch(() => null),
-      getIfAllowed(canSeeFlights, '/dashboard/top-pilots-30d', []).catch(() => []),
-      getIfAllowed(canSeeFleet, '/dashboard/top-vehicles-30d', []).catch(() => []),
-      getIfAllowed(canSeeFlights, '/dashboard/activity-by-month', []).catch(() => []),
-      getIfAllowed(canSeeFleet, '/vehicles/locations', []).catch(() => []),
-      getIfAllowed(canSetLocation, '/pilots/options', []).catch(() => []),
+      getSection(canSeeFlights, '/dashboard/top-pilots-30d', []),
+      getSection(canSeeFleet, '/dashboard/top-vehicles-30d', []),
+      getSection(canSeeFlights, '/dashboard/activity-by-month', []),
+      getSection(canSeeFleet, '/vehicles/locations', []),
+      getSection(canSetLocation, '/pilots/options', []),
       api.get('/settings').catch(() => []),
     ]).then(([s, t, f, m, c, tp, tv, ac, locs, pilotList, settingsList]) => {
       if (!alive) return

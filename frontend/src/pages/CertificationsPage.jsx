@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { api, getIfAllowed } from '@/api/client'
+import { api, getSection } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { ownsPilot } from '@/lib/ownership'
@@ -323,7 +323,7 @@ export default function CertificationsPage() {
   const [certFolderId, setCertFolderId] = useState(null)
   useEffect(() => {
     // Auto-filing is optional: with no folder list, documents simply stay unfiled.
-    getIfAllowed(canSeeFiles, '/folders', []).catch(() => []).then(folders => {
+    getSection(canSeeFiles, '/folders', []).then(folders => {
       const f = (Array.isArray(folders) ? folders : folders.folders || []).find(f => f.name === 'Certifications')
       if (f) setCertFolderId(f.id)
     })

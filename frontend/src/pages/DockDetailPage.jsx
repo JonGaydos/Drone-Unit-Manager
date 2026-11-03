@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { api, getIfAllowed } from '@/api/client'
+import { api, getSection } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { STATUS_COLORS } from '@/lib/constants'
@@ -42,7 +42,7 @@ export default function DockDetailPage() {
   useEffect(() => {
     Promise.all([
       api.get(`/docks/${id}`),
-      getIfAllowed(canSeeMaintenance, `/maintenance?entity_type=dock&entity_id=${id}`, []),
+      getSection(canSeeMaintenance, `/maintenance?entity_type=dock&entity_id=${id}`, []),
     ]).then(([d, m]) => {
       setDock(d)
       setMaintenance(Array.isArray(m) ? m : [])

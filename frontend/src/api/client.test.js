@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { http, HttpResponse, delay } from 'msw'
 import { server } from '@/test/server'
-import { api, getIfAllowed, resetSessionExpired } from '@/api/client'
+import { api, getIfAllowed, getSection, resetSessionExpired } from '@/api/client'
 
 beforeEach(() => {
   // sessionExpired is module-level state; re-arm it so the 401 guard tests
@@ -489,6 +489,30 @@ describe('getIfAllowed', () => {
   it('lets a network failure reach the caller', async () => {
     server.use(http.get('/api/section', () => HttpResponse.error()))
     await expect(getIfAllowed(true, '/section', [])).rejects.toBeInstanceOf(Error)
+  })
+})
+
+describe('getSection', () => {
+  it('gives the fallback without a request when the permission is off', async () => {
+    let called = false
+    server.use(http.get('/api/section', () => { called = true; return HttpResponse.json([1]) }))
+    await expect(getSection(false, '/section', 'fallback')).resolves.toBe('fallback')
+    expect(called).toBe(false)
+  })
+
+  it('returns the data when allowed', async () => {
+    server.use(http.get('/api/section', () => HttpResponse.json([1])))
+    await expect(getSection(true, '/section', [])).resolves.toEqual([1])
+  })
+
+  it.each([403, 500])('gives the fallback on a %i', async (status) => {
+    server.use(http.get('/api/section', () => HttpResponse.json({ detail: 'no' }, { status })))
+    await expect(getSection(true, '/section', 'fallback')).resolves.toBe('fallback')
+  })
+
+  it('gives the fallback on a network failure', async () => {
+    server.use(http.get('/api/section', () => HttpResponse.error()))
+    await expect(getSection(true, '/section', 'fallback')).resolves.toBe('fallback')
   })
 })
 

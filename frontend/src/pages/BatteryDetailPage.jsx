@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { api, getIfAllowed } from '@/api/client'
+import { api, getSection } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { formatDuration } from '@/lib/utils'
@@ -38,12 +38,12 @@ export default function BatteryDetailPage() {
   useEffect(() => {
     Promise.all([
       api.get(`/batteries/${id}`),
-      getIfAllowed(canSeeFlights, `/batteries/${id}/stats`, null),
-      getIfAllowed(canSeeFlights, `/batteries/${id}/flights`, []),
-      getIfAllowed(canSeeMaintenance, `/maintenance?entity_type=battery&entity_id=${id}`, []),
+      getSection(canSeeFlights, `/batteries/${id}/stats`, null),
+      getSection(canSeeFlights, `/batteries/${id}/flights`, []),
+      getSection(canSeeMaintenance, `/maintenance?entity_type=battery&entity_id=${id}`, []),
       api.get('/vehicles').catch(() => []),
       api.get(`/batteries/${id}/health-history`).catch(() => []),
-      getIfAllowed(canSeeFlights, `/batteries/${id}/pilots`, []),
+      getSection(canSeeFlights, `/batteries/${id}/pilots`, []),
     ]).then(([b, s, batteryFlights, m, v, healthData, pilotsData]) => {
       setBattery(b)
       setStats(s)

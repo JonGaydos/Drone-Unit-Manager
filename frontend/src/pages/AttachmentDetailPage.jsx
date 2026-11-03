@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { api, getIfAllowed } from '@/api/client'
+import { api, getSection } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { formatDuration } from '@/lib/utils'
@@ -30,9 +30,9 @@ export default function AttachmentDetailPage() {
   useEffect(() => {
     Promise.all([
       api.get(`/attachments/${id}`),
-      getIfAllowed(canSeeFlights, `/attachments/${id}/stats`, null),
-      getIfAllowed(canSeeFlights, `/attachments/${id}/flights`, []),
-      getIfAllowed(canSeeMaintenance, `/maintenance?entity_type=attachment&entity_id=${id}`, []),
+      getSection(canSeeFlights, `/attachments/${id}/stats`, null),
+      getSection(canSeeFlights, `/attachments/${id}/flights`, []),
+      getSection(canSeeMaintenance, `/maintenance?entity_type=attachment&entity_id=${id}`, []),
     ]).then(([a, st, fl, m]) => {
       setAttachment(a)
       setStats(st)

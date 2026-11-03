@@ -186,4 +186,12 @@ describe('PilotDetailPage', () => {
       expect(screen.queryByText('nullh')).toBeNull()
     })
   })
+
+  it('stays rendered with the pilot when secondary requests 500', async () => {
+    const boom = () => HttpResponse.json({ detail: 'boom' }, { status: 500 })
+    mockMount({ stats: boom, flights: boom, certs: boom, currency: boom, performance: boom, needsAttention: boom, folders: boom })
+    render()
+    expect(await screen.findByRole('heading', { name: 'Ada Lovelace' })).toBeInTheDocument()
+    expect(screen.queryByText('Pilot not found')).toBeNull()
+  })
 })

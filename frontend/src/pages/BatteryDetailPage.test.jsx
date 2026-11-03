@@ -108,4 +108,12 @@ describe('BatteryDetailPage', () => {
     await screen.findByRole('heading', { name: 'Cell A' })
     expect(screen.getByText('Record Reading')).toBeInTheDocument()
   })
+
+  it('stays rendered with the battery when secondary requests 500', async () => {
+    const boom = () => HttpResponse.json({ detail: 'boom' }, { status: 500 })
+    mockMount({ stats: boom, flights: boom, maintenance: boom, pilots: boom })
+    render()
+    expect(await screen.findByRole('heading', { name: 'Cell A' })).toBeInTheDocument()
+    expect(screen.queryByText('Battery not found')).toBeNull()
+  })
 })

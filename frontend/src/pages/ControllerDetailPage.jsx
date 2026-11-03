@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { api, getIfAllowed } from '@/api/client'
+import { api, getSection } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { STATUS_COLORS } from '@/lib/constants'
@@ -27,7 +27,7 @@ export default function ControllerDetailPage() {
   useEffect(() => {
     Promise.all([
       api.get(`/controllers/${id}`),
-      getIfAllowed(canSeeMaintenance, `/maintenance?entity_type=controller&entity_id=${id}`, []),
+      getSection(canSeeMaintenance, `/maintenance?entity_type=controller&entity_id=${id}`, []),
       api.get('/pilots/options').catch(() => []),
     ]).then(([c, m, allPilots]) => {
       setController(c)

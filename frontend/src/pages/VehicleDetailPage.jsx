@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { api, getIfAllowed } from '@/api/client'
+import { api, getSection } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
@@ -66,14 +66,14 @@ export default function VehicleDetailPage() {
   useEffect(() => {
     Promise.all([
       api.get(`/vehicles/${id}`),
-      getIfAllowed(canSeeFlights, `/vehicles/${id}/stats`, null),
-      getIfAllowed(canSeeFlights, `/flights?vehicle_id=${id}&per_page=50`, []),
+      getSection(canSeeFlights, `/vehicles/${id}/stats`, null),
+      getSection(canSeeFlights, `/flights?vehicle_id=${id}&per_page=50`, []),
       api.get('/batteries').catch(() => []),
       api.get('/controllers').catch(() => []),
       api.get('/sensors').catch(() => []),
       api.get('/attachments').catch(() => []),
-      getIfAllowed(canSeeMaintenance, `/maintenance?entity_type=vehicle&entity_id=${id}`, []),
-      getIfAllowed(canSeeRegs, `/vehicles/${id}/registrations`, []),
+      getSection(canSeeMaintenance, `/maintenance?entity_type=vehicle&entity_id=${id}`, []),
+      getSection(canSeeRegs, `/vehicles/${id}/registrations`, []),
       api.get(`/components?vehicle_id=${id}`).catch(() => []),
     ]).then(([v, s, fData, bat, ctrl, sens, att, maint, regs, comp]) => {
       setVehicle(v)

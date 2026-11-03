@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { api, getIfAllowed } from '@/api/client'
+import { api, getSection } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { ownsPilot } from '@/lib/ownership'
@@ -55,7 +55,7 @@ export default function PilotDetailPage() {
   const [generalFolderId, setGeneralFolderId] = useState(null)
   useEffect(() => {
     // Auto-filing is optional: with no folder list, documents simply stay unfiled.
-    getIfAllowed(canSeeFiles, '/folders', []).catch(() => []).then(folders => {
+    getSection(canSeeFiles, '/folders', []).then(folders => {
       const f = (Array.isArray(folders) ? folders : folders.folders || []).find(f => f.name === 'General')
       if (f) setGeneralFolderId(f.id)
     })
@@ -76,12 +76,12 @@ export default function PilotDetailPage() {
   useEffect(() => {
     Promise.all([
       api.get(`/pilots/${id}`),
-      getIfAllowed(canSeeFlights, `/pilots/${id}/stats`, null),
-      getIfAllowed(canSeeFlights, `/flights?pilot_id=${id}&per_page=20`, []),
-      getIfAllowed(canSeeCerts, `/pilot-certifications?pilot_id=${id}`, []),
-      getIfAllowed(canSeeCerts, `/currency/status/${id}`, null),
-      getIfAllowed(canSeeFlights, `/dashboard/analytics/pilot-performance/${id}`, null),
-      getIfAllowed(canSeeCerts, `/pilots/${id}/needs-attention`, null),
+      getSection(canSeeFlights, `/pilots/${id}/stats`, null),
+      getSection(canSeeFlights, `/flights?pilot_id=${id}&per_page=20`, []),
+      getSection(canSeeCerts, `/pilot-certifications?pilot_id=${id}`, []),
+      getSection(canSeeCerts, `/currency/status/${id}`, null),
+      getSection(canSeeFlights, `/dashboard/analytics/pilot-performance/${id}`, null),
+      getSection(canSeeCerts, `/pilots/${id}/needs-attention`, null),
     ]).then(([p, s, fData, c, cur, perf, na]) => {
       setPilot(p)
       setStats(s)
