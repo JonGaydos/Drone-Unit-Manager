@@ -101,6 +101,8 @@ ALLOWLISTS = {
 #     DELETE /api/media/{media_id}, which holds no key here (see SIGNED_IN_ROUTES)
 #   POST /api/documents/upload: files.upload at All to attach to anyone's record
 #   PATCH /api/flights/{flight_id}: flights.review for the sign-off fields
+#   POST /api/flights/bulk-update: flights.edit at All to change pilot or purpose
+#   POST /api/flights/bulk-delete: flights.delete at All
 #   PATCH /api/incidents/{incident_id}: incidents.resolve for its fields
 #   PATCH /api/pilots/{pilot_id}: pilots.manage for the supervisor-only fields
 #   The /api/reports routes: the view keys for the report's content
@@ -153,7 +155,7 @@ EXPECTED_ROUTE_KEYS = {
     "PATCH /api/flights/{flight_id}": {"flights.edit"},
     "DELETE /api/flights/{flight_id}": {"flights.delete"},
     "POST /api/flights/bulk-update": {FLIGHTS_REVIEW},
-    "POST /api/flights/bulk-delete": {FLIGHTS_REVIEW},
+    "POST /api/flights/bulk-delete": {FLIGHTS_REVIEW, "flights.delete"},
     "PATCH /api/flights/{flight_id}/telemetry-status": {FLIGHTS_REVIEW},
     "PATCH /api/flights/{flight_id}/review-status": {FLIGHTS_REVIEW},
     # telemetry

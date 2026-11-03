@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
-import { changedFields, formatDuration, normalizeDateValue } from '@/lib/utils'
+import { changedFields, flightSavedMessage, formatDuration, normalizeDateValue } from '@/lib/utils'
 import { ownsFlight } from '@/lib/ownership'
 import { sortByName, sortVehicles, sortPilotsActiveFirst, vehicleDisplayName, telemetryLabel } from '@/lib/formatters'
 import { Plus, Search, CheckCircle, ChevronUp, ChevronDown, Pencil, X, Check, Download, Loader2, Copy, Trash2 } from 'lucide-react'
@@ -226,6 +226,16 @@ function rowEditForm(flight, canReview) {
   }
 }
 
+/** The PATCH body for an inline edit. A duration cannot be cleared, so an emptied
+ *  field drops out rather than being sent. */
+function rowEditPayload(changed) {
+  const data = { ...changed }
+  if ('pilot_id' in data) data.pilot_id = data.pilot_id ? Number.parseInt(data.pilot_id, 10) : null
+  if (data.duration_seconds) data.duration_seconds = Number.parseInt(data.duration_seconds, 10)
+  else delete data.duration_seconds
+  return data
+}
+
 export default function FlightsPage() {
   const [flights, setFlights] = useState([])
   const [pilots, setPilots] = useState([])
@@ -244,6 +254,8 @@ export default function FlightsPage() {
   const { user, can, level, canRecord } = useAuth()
   const canReview = can('flights.review')
   const canCreate = can('flights.create')
+  const canBulkEdit = level('flights.edit') === 'all'
+  const canBulkDelete = level('flights.delete') === 'all'
   const toast = useToast()
 
   // Status filter: 'all' | 'needs_review' | 'reviewed'
@@ -363,18 +375,14 @@ export default function FlightsPage() {
     // Only changed fields go: an edit that changes a reviewed flight sends it back
     // to the review queue, so an untouched form must change nothing.
     const flight = flights.find(f => f.id === editingId)
-    const data = changedFields(rowEditForm(flight, canReview), editForm)
+    const data = rowEditPayload(changedFields(rowEditForm(flight, canReview), editForm))
     if (Object.keys(data).length === 0) {
       cancelEditing()
       return
     }
     try {
-      if (data.pilot_id) data.pilot_id = Number.parseInt(data.pilot_id, 10)
-      else if ('pilot_id' in data) data.pilot_id = null
-      if (data.duration_seconds) data.duration_seconds = Number.parseInt(data.duration_seconds, 10)
-      else delete data.duration_seconds
-      await api.patch(`/flights/${editingId}`, data)
-      toast.success('Flight updated')
+      const updated = await api.patch(`/flights/${editingId}`, data)
+      toast.success(flightSavedMessage(flight, updated))
       setEditingId(null)
       setEditForm({})
       load()
@@ -571,22 +579,22 @@ export default function FlightsPage() {
       {canReview && selectedIds.size > 0 && (
         <div className="flex items-center gap-3 flex-wrap bg-primary/10 border border-primary/30 rounded-lg px-4 py-2">
           <span className="text-sm font-medium text-foreground">{selectedIds.size} selected</span>
-          <select disabled={bulkBusy} value="" aria-label="Reassign pilot for selected flights"
+          {canBulkEdit && <select disabled={bulkBusy} value="" aria-label="Reassign pilot for selected flights"
             onChange={e => { if (e.target.value) confirmBulkPilot(Number.parseInt(e.target.value, 10)) }}
             className="px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm">
             <option value="">Reassign pilot…</option>
             {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
-          </select>
-          <select disabled={bulkBusy} value="" aria-label="Set purpose for selected flights"
+          </select>}
+          {canBulkEdit && <select disabled={bulkBusy} value="" aria-label="Set purpose for selected flights"
             onChange={e => { if (e.target.value) confirmBulkPurpose(e.target.value) }}
             className="px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm">
             <option value="">Set purpose…</option>
             {sortByName(purposes, 'name').map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
-          </select>
+          </select>}
           <button disabled={bulkBusy} onClick={confirmBulkReviewed}
             className="px-3 py-1 bg-emerald-600 text-white rounded text-sm font-medium hover:opacity-90 disabled:opacity-50">Mark reviewed</button>
-          <button disabled={bulkBusy} onClick={() => setShowBulkDeleteConfirm(true)}
-            className="px-3 py-1 bg-destructive text-destructive-foreground rounded text-sm font-medium hover:opacity-90 disabled:opacity-50">Delete</button>
+          {canBulkDelete && <button disabled={bulkBusy} onClick={() => setShowBulkDeleteConfirm(true)}
+            className="px-3 py-1 bg-destructive text-destructive-foreground rounded text-sm font-medium hover:opacity-90 disabled:opacity-50">Delete</button>}
           <button disabled={bulkBusy} onClick={() => setSelectedIds(new Set())} className="ml-auto text-sm text-muted-foreground hover:text-foreground">Clear</button>
         </div>
       )}

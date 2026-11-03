@@ -161,20 +161,80 @@ def test_viewer_cannot_create_edit_delete(client, db, viewer_headers):
 def test_review_actions_follow_flights_review(client, db, admin_headers, pilot_headers, supervisor_headers):
     flight = _flight(db)
     calls = [
-        ("post", f"{FLIGHTS_URL}/bulk-update", {"flight_ids": [flight.id], "purpose": "X"}),
-        ("post", f"{FLIGHTS_URL}/bulk-delete", {"flight_ids": [flight.id]}),
+        ("post", f"{FLIGHTS_URL}/bulk-update", {"flight_ids": [flight.id], "review_status": REVIEWED}),
         ("patch", f"{FLIGHTS_URL}/{flight.id}/telemetry-status", {"telemetry_synced": True}),
         ("patch", f"{FLIGHTS_URL}/{flight.id}/review-status", {"review_status": REVIEWED}),
     ]
-    for method, url, body in calls:
+    delete_call = ("post", f"{FLIGHTS_URL}/bulk-delete", {"flight_ids": [flight.id]})
+    for method, url, body in calls + [delete_call]:
         assert getattr(client, method)(url, headers=pilot_headers, json=body).status_code == 403, url
     _grid(client, admin_headers, ("supervisor", "flights.review", "no"))
-    for method, url, body in calls:
+    for method, url, body in calls + [delete_call]:
         assert getattr(client, method)(url, headers=supervisor_headers, json=body).status_code == 403, url
     _grid(client, admin_headers, ("pilot", "flights.review", "yes"))
-    for method, url, body in calls[:1] + calls[2:]:
+    for method, url, body in calls:
         assert getattr(client, method)(url, headers=pilot_headers, json=body).status_code == 200, url
-    assert client.post(calls[1][1], headers=pilot_headers, json=calls[1][2]).status_code == 200
+
+
+def _bulk_delete(client, headers, flight_id):
+    return client.post(f"{FLIGHTS_URL}/bulk-delete", headers=headers, json={"flight_ids": [flight_id]})
+
+
+def _bulk_update(client, headers, flight, **fields):
+    return client.post(f"{FLIGHTS_URL}/bulk-update", headers=headers, json={"flight_ids": [flight.id], **fields})
+
+
+def test_bulk_delete_needs_delete_at_all(client, db, admin_headers, supervisor_headers):
+    flight_id = _flight(db).id
+    _grid(client, admin_headers, ("supervisor", "flights.delete", "none"))
+    assert _bulk_delete(client, supervisor_headers, flight_id).status_code == 403
+    _grid(client, admin_headers, ("supervisor", "flights.delete", "own"))
+    assert _bulk_delete(client, supervisor_headers, flight_id).status_code == 403
+    db.expire_all()
+    assert db.query(Flight).filter(Flight.id == flight_id).first() is not None
+    _grid(client, admin_headers, ("supervisor", "flights.delete", "all"))
+    assert _bulk_delete(client, supervisor_headers, flight_id).status_code == 200
+    db.expire_all()
+    assert db.query(Flight).filter(Flight.id == flight_id).first() is None
+
+
+def test_bulk_delete_with_delete_but_no_review_is_refused(client, db, admin_headers, pilot_headers):
+    flight_id = _flight(db).id
+    _grid(client, admin_headers, ("pilot", "flights.delete", "all"))
+    assert _bulk_delete(client, pilot_headers, flight_id).status_code == 403
+
+
+def test_bulk_pilot_and_purpose_changes_need_edit_at_all(client, db, admin_headers, supervisor_headers):
+    other = _other_pilot(db)
+    flight = _flight(db, purpose="Patrol")
+    for level in ("none", "own"):
+        _grid(client, admin_headers, ("supervisor", "flights.edit", level))
+        assert _bulk_update(client, supervisor_headers, flight, purpose="Search").status_code == 403
+        assert _bulk_update(client, supervisor_headers, flight, pilot_id=other.id).status_code == 403
+    db.expire_all()
+    stored = db.query(Flight).filter(Flight.id == flight.id).one()
+    assert (stored.purpose, stored.pilot_id) == ("Patrol", None)
+    _grid(client, admin_headers, ("supervisor", "flights.edit", "all"))
+    assert _bulk_update(client, supervisor_headers, flight, purpose="Search", pilot_id=other.id).status_code == 200
+    db.expire_all()
+    stored = db.query(Flight).filter(Flight.id == flight.id).one()
+    assert (stored.purpose, stored.pilot_id) == ("Search", other.id)
+
+
+def test_bulk_review_fields_need_only_review(client, db, admin_headers, supervisor_headers):
+    flight = _flight(db)
+    _grid(client, admin_headers, ("supervisor", "flights.edit", "none"))
+    resp = _bulk_update(client, supervisor_headers, flight, review_status=REVIEWED, pilot_confirmed=True,
+                        counts_toward_totals=False)
+    assert resp.status_code == 200, resp.text
+    db.expire_all()
+    assert db.query(Flight).filter(Flight.id == flight.id).one().review_status == REVIEWED
+
+
+def test_bulk_update_echoing_current_values_needs_only_review(client, db, admin_headers, supervisor_headers):
+    flight = _flight(db, purpose="Patrol")
+    _grid(client, admin_headers, ("supervisor", "flights.edit", "none"))
+    assert _bulk_update(client, supervisor_headers, flight, purpose="Patrol").status_code == 200
 
 
 def test_refresh_and_purpose_changes_stay_admin(client, db, supervisor_headers):

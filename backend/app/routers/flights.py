@@ -36,6 +36,7 @@ REVIEWED = "reviewed"
 
 ViewUser = Annotated[User, Depends(require_permission("flights.view"))]
 ReviewUser = Annotated[User, Depends(require_permission(REVIEW_KEY))]
+DeleteUser = Annotated[User, Depends(require_permission(DELETE_KEY))]
 
 
 def _refresh_capable_providers() -> set[str]:
@@ -692,6 +693,10 @@ def update_flight(
 BULK_FIELDS = ("pilot_id", "purpose", "review_status", "pilot_confirmed",
                "counts_toward_totals")
 
+# Changing these rewrites what a flight records rather than signing it off, so
+# they also need flights.edit at All. The other bulk fields need only flights.review.
+BULK_EDIT_FIELDS = ("pilot_id", "purpose")
+
 # Enough of the id list to identify what an edit touched without turning the
 # audit table into a wall of digits.
 MAX_ID_DETAIL_CHARS = 300
@@ -729,6 +734,13 @@ def _overwritten(flights, field, new_value) -> str:
     return summary
 
 
+def _changes_bulk_edit_field(flights, updates: dict) -> bool:
+    """Echoing the value a flight already holds is not a change."""
+    return any(getattr(flight, field) != updates[field]
+               for field in BULK_EDIT_FIELDS if field in updates
+               for flight in flights)
+
+
 @router.post("/bulk-update", responses=responses(401))
 def bulk_update_flights(
     data: FlightBulkUpdate,
@@ -738,6 +750,8 @@ def bulk_update_flights(
     flights = db.query(Flight).filter(Flight.id.in_(data.flight_ids)).all()
     updates = {field: value for field in BULK_FIELDS
                if (value := getattr(data, field)) is not None}
+    if _changes_bulk_edit_field(flights, updates):
+        permissions_service.require_record_access(db, admin, EDIT_KEY, owned=False)
 
     # Read the old values before writing over them.
     changes = {field: {"old": _overwritten(flights, field, value) or "(no change)",
@@ -772,11 +786,13 @@ def bulk_delete_flights(
     data: FlightBulkDelete,
     db: DBSession,
     admin: ReviewUser,
+    _delete: DeleteUser,
 ):
     """Delete multiple flights at once. Purges their telemetry (a separate DB,
-    not ORM-cascaded) in one pass and audit-logs the count. Needs the flights.review
-    permission; mirrors the single-flight delete."""
+    not ORM-cascaded) in one pass and audit-logs the count. Needs flights.review
+    plus flights.delete at All; mirrors the single-flight delete."""
     from app.services.audit import log_action
+    permissions_service.require_record_access(db, admin, DELETE_KEY, owned=False)
     flights = db.query(Flight).filter(Flight.id.in_(data.flight_ids)).all()
     if not flights:
         return {"ok": True, "deleted": 0}
@@ -840,7 +856,7 @@ def update_review_status(
 def delete_flight(
     flight_id: int,
     db: DBSession,
-    admin: Annotated[User, Depends(require_permission(DELETE_KEY))],
+    admin: DeleteUser,
 ):
     from app.services.audit import log_action
     flight = db.query(Flight).filter(Flight.id == flight_id).first()

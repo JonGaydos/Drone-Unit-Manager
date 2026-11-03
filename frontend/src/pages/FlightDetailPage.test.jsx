@@ -232,4 +232,17 @@ describe('FlightDetailPage', () => {
     await screen.findByRole('button', { name: 'Edit' })
     expect(patched).toBe(false)
   })
+
+  it('says a reviewed flight is back for review when an edit sends it there', async () => {
+    const reviewed = { ...FLIGHT, review_status: 'reviewed' }
+    mockMount({ flight: () => HttpResponse.json(reviewed) })
+    server.use(http.patch('/api/flights/:id', () => HttpResponse.json({ ...reviewed, case_number: 'C-9', review_status: 'needs_review' })))
+    const { user } = renderRoute(<FlightDetailPage />, {
+      path: '/flights/:id', route: '/flights/1', user: { id: 3, username: 'p', role: 'pilot', pilot_id: 5 },
+    })
+    await user.click(await screen.findByRole('button', { name: 'Edit' }))
+    await user.type(await screen.findByLabelText('Case #'), 'C-9')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText(/back for review.*does not count toward currency until reviewed/i)).toBeInTheDocument()
+  })
 })

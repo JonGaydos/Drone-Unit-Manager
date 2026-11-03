@@ -37,7 +37,7 @@ This table is the decision record for Tasks 3 to 7. "Level" means a None / Own /
 
 | Router | Reads | Writes |
 |---|---|---|
-| `flights` | list, count, review, detail, preflight-check: `flights.view`. `purposes/list`: signed-in. `purposes/usage`: `flights.review` | create: `flights.create`. PATCH: `flights.edit` level. DELETE: `flights.delete` level. bulk-update, bulk-delete, telemetry-status, review-status: `flights.review`. refresh, purposes: admin |
+| `flights` | list, count, review, detail, preflight-check: `flights.view`. `purposes/list`: signed-in. `purposes/usage`: `flights.review` | create: `flights.create`. PATCH: `flights.edit` level. DELETE: `flights.delete` level. bulk-delete: `flights.review` plus `flights.delete` at All. bulk-update: `flights.review`, plus `flights.edit` at All when it changes `pilot_id` or `purpose`. telemetry-status, review-status: `flights.review`. refresh, purposes: admin |
 | `telemetry` | `flights.view` | none |
 | `flight_plans` | `flight_plans.view` | create: `flight_plans.create`. PATCH, cancel: `flight_plans.edit` level. approve, deny, delete: `flight_plans.approve` |
 | `incidents` | `incidents.view` | create: `incidents.create`. PATCH: `incidents.edit` level plus `incidents.resolve` for its fields. DELETE: `incidents.delete` |

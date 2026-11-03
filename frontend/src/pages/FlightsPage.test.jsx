@@ -367,4 +367,76 @@ describe('FlightsPage', () => {
     await user.click(screen.getByTitle('Save'))
     await waitFor(() => expect(body).toEqual({ duration_seconds: 700 }))
   })
+
+  it('clearing the duration alone sends no PATCH and shows no update message', async () => {
+    let patched = false
+    mockMount()
+    server.use(http.patch('/api/flights/:id', () => { patched = true; return HttpResponse.json({}) }))
+    const { user } = renderWithProviders(<FlightsPage />, { user: { id: 7, username: 'pilot', role: 'pilot', pilot_id: 5 } })
+    await screen.findByRole('link', { name: 'Jane Doe' })
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.clear(screen.getByPlaceholderText('sec'))
+    await user.click(screen.getByTitle('Save'))
+    await waitFor(() => expect(screen.queryByTitle('Save')).toBeNull())
+    expect(patched).toBe(false)
+    expect(screen.queryByText('Flight updated')).toBeNull()
+  })
+
+  it('says a reviewed flight is back for review when an edit sends it there', async () => {
+    mockMount()
+    server.use(http.patch('/api/flights/:id', () => HttpResponse.json({ ...FLIGHTS[1], review_status: 'needs_review' })))
+    const { user } = renderWithProviders(<FlightsPage />, { user: { id: 7, username: 'pilot', role: 'pilot', pilot_id: 6 } })
+    await screen.findByRole('link', { name: 'Bob Roy' })
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.clear(screen.getByPlaceholderText('sec'))
+    await user.type(screen.getByPlaceholderText('sec'), '700')
+    await user.click(screen.getByTitle('Save'))
+    expect(await screen.findByText(/back for review.*does not count toward currency until reviewed/i)).toBeInTheDocument()
+  })
+
+  it('keeps the plain message when the flight stays where it was', async () => {
+    mockMount()
+    server.use(http.patch('/api/flights/:id', () => HttpResponse.json({ ...FLIGHTS[0], duration_seconds: 700 })))
+    const { user } = renderWithProviders(<FlightsPage />, { user: { id: 7, username: 'pilot', role: 'pilot', pilot_id: 5 } })
+    await screen.findByRole('link', { name: 'Jane Doe' })
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.clear(screen.getByPlaceholderText('sec'))
+    await user.type(screen.getByPlaceholderText('sec'), '700')
+    await user.click(screen.getByTitle('Save'))
+    expect(await screen.findByText('Flight updated')).toBeInTheDocument()
+  })
+
+  describe('bulk action gating', () => {
+    async function selectRowsWith(permissions) {
+      mockMount()
+      const { user } = renderWithProviders(<FlightsPage />, { role: 'supervisor', permissions })
+      await user.click(await screen.findByLabelText('Select all flights on this page'))
+      await screen.findByText(/\d+ selected/)
+    }
+    const bar = {
+      reassign: () => screen.queryByLabelText('Reassign pilot for selected flights'),
+      purpose: () => screen.queryByLabelText('Set purpose for selected flights'),
+      reviewed: () => screen.queryByRole('button', { name: 'Mark reviewed' }),
+      remove: () => screen.queryByRole('button', { name: 'Delete' }),
+    }
+
+    it('shows every action to a default supervisor', async () => {
+      await selectRowsWith()
+      for (const control of Object.values(bar)) expect(control()).toBeInTheDocument()
+    })
+
+    it('hides bulk delete unless flights.delete is All', async () => {
+      await selectRowsWith({ 'flights.delete': 'own' })
+      expect(bar.remove()).toBeNull()
+      expect(bar.reviewed()).toBeInTheDocument()
+    })
+
+    it('hides reassign and set purpose unless flights.edit is All', async () => {
+      await selectRowsWith({ 'flights.edit': 'own' })
+      expect(bar.reassign()).toBeNull()
+      expect(bar.purpose()).toBeNull()
+      expect(bar.reviewed()).toBeInTheDocument()
+      expect(bar.remove()).toBeInTheDocument()
+    })
+  })
 })

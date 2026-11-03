@@ -4,7 +4,7 @@ import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { ownsFlight } from '@/lib/ownership'
 import { useToast } from '@/contexts/ToastContext'
-import { formatDuration, normalizeDateValue, metersToFeet, mpsToMph, formatTime, utcIsoToZonedInput, zonedInputToUtcIso, changedFields } from '@/lib/utils'
+import { formatDuration, normalizeDateValue, metersToFeet, mpsToMph, formatTime, utcIsoToZonedInput, zonedInputToUtcIso, changedFields, flightSavedMessage } from '@/lib/utils'
 import { sortByName, sortVehicles, sortPilotsActiveFirst, vehicleDisplayName, telemetryLabel } from '@/lib/formatters'
 import { ArrowLeft, MapPin, Save, RefreshCw, Loader2, Download } from 'lucide-react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
@@ -554,7 +554,7 @@ export default function FlightDetailPage() {
     }
     try {
       const updated = await api.patch(`/flights/${id}`, payload)
-      toast.success('Flight updated')
+      toast.success(flightSavedMessage(flight, updated))
       setFlight(updated)
       setEditing(false)
     } catch (err) { toast.error(err.message) }
