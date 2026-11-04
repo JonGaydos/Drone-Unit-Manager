@@ -74,9 +74,15 @@ export default function SettingsPage() {
   const [backupStatus, setBackupStatus] = useState(null)
   const [backupForm, setBackupForm] = useState({ enabled: true, retention: 7, hour: 3 })
   const [savingBackup, setSavingBackup] = useState(false)
-  const { isAdmin, can, user: currentUser } = useAuth()
+  const { isAdmin, can, user: currentUser, updateUser } = useAuth()
   const toast = useToast()
   const [confirmProps, requestConfirm] = useConfirm()
+
+  // Own profile: only an admin may change a display name
+  const [profile, setProfile] = useState({
+    display_name: currentUser?.display_name || '', email: currentUser?.email || '',
+  })
+  const [savingProfile, setSavingProfile] = useState(false)
 
   // User management state
   const [users, setUsers] = useState([])
@@ -212,6 +218,16 @@ export default function SettingsPage() {
       toast.success('User updated')
     } catch (err) { toast.error(err.message) }
     finally { setSavingEditUser(false) }
+  }
+
+  const handleSaveProfile = async () => {
+    setSavingProfile(true)
+    try {
+      const payload = isAdmin ? { display_name: profile.display_name, email: profile.email } : { email: profile.email }
+      updateUser(await api.patch('/auth/me', payload))
+      toast.success('Profile saved')
+    } catch (err) { toast.error(err.message) }
+    finally { setSavingProfile(false) }
   }
 
   // Reset password state
@@ -1195,6 +1211,31 @@ export default function SettingsPage() {
     )
   }
 
+  const renderProfile = () => (
+    <div className="bg-card border border-border rounded-xl p-6">
+      <h3 className="text-lg font-semibold text-foreground mb-4">My Profile</h3>
+      <div className="space-y-4">
+        <div>
+          <label htmlFor="profile-display-name" className="block text-sm font-medium text-foreground mb-1">Display Name</label>
+          {!isAdmin && <p className="text-xs text-muted-foreground mb-1.5">An administrator sets display names.</p>}
+          <input id="profile-display-name" type="text" value={profile.display_name} readOnly={!isAdmin}
+            onChange={e => setProfile({ ...profile, display_name: e.target.value })}
+            className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring read-only:opacity-70" />
+        </div>
+        <div>
+          <label htmlFor="profile-email" className="block text-sm font-medium text-foreground mb-1">Email</label>
+          <input id="profile-email" type="email" value={profile.email}
+            onChange={e => setProfile({ ...profile, email: e.target.value })}
+            className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+        </div>
+        <button onClick={handleSaveProfile} disabled={savingProfile}
+          className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium disabled:opacity-50">
+          {savingProfile ? 'Saving...' : 'Save Profile'}
+        </button>
+      </div>
+    </div>
+  )
+
   const renderOrganization = () => (
       <div className="bg-card border border-border rounded-xl p-6">
         <h3 className="text-lg font-semibold text-foreground mb-4">Organization</h3>
@@ -1584,6 +1625,7 @@ export default function SettingsPage() {
       {/* General Tab */}
       {activeTab !== 'integrations' && activeTab !== 'users' && (
       <div className="space-y-6 max-w-2xl">
+      {renderProfile()}
       {renderOrganization()}
       {renderCertLabels()}
       {renderWeatherThresholds()}

@@ -581,10 +581,13 @@ def get_me(user: Annotated[User, Depends(get_current_user)], db: DBSession):
     return _own_user_out(db, user)
 
 
-@router.patch("/me", response_model=UserOut)
+@router.patch("/me", response_model=UserOut, responses=responses(403))
 def update_me(data: UserUpdate, user: Annotated[User, Depends(get_current_user)], db: DBSession):
-    """Update the current user's own profile (theme, display name)."""
+    """Update the current user's own profile (theme, email). Only an admin may
+    change a display name; sending the current one back is accepted."""
     from app.services.audit import compute_changes, log_action
+    if data.display_name is not None and data.display_name != user.display_name and user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only an administrator can change a display name")
     updates = {k: v for k, v in (("theme", data.theme), ("display_name", data.display_name),
                                  ("email", data.email)) if v is not None}
     # Theme is a display preference, not worth a trail entry.

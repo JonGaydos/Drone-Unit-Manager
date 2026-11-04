@@ -471,4 +471,46 @@ describe('SettingsPage role permissions', () => {
     expect(badges).toHaveLength(1)
     expect(badges[0].closest('tr')).toHaveTextContent('Unlinked Pilot')
   })
+
+  describe('own profile', () => {
+    const ME = { id: 9, username: 'jpilot', role: 'pilot', display_name: 'Jamie Pilot', email: 'j@example.org' }
+
+    it('shows a non-admin their display name read-only and still saves the email', async () => {
+      mockMount()
+      let sent = null
+      server.use(http.patch('/api/auth/me', async ({ request }) => {
+        sent = await request.json()
+        return HttpResponse.json(withPermissions({ ...ME, ...sent }))
+      }))
+      const { user } = renderWithProviders(<SettingsPage />, { user: ME, role: 'pilot' })
+
+      const name = await screen.findByLabelText('Display Name')
+      expect(name).toHaveValue('Jamie Pilot')
+      expect(name).toHaveAttribute('readonly')
+      const email = screen.getByLabelText('Email')
+      await user.clear(email)
+      await user.type(email, 'new@example.org')
+      await user.click(screen.getByRole('button', { name: 'Save Profile' }))
+
+      await waitFor(() => expect(sent).toEqual({ email: 'new@example.org' }))
+    })
+
+    it('lets an admin edit their display name', async () => {
+      mockMount()
+      let sent = null
+      server.use(http.patch('/api/auth/me', async ({ request }) => {
+        sent = await request.json()
+        return HttpResponse.json(withPermissions({ ...ME, role: 'admin', ...sent }))
+      }))
+      const { user } = renderWithProviders(<SettingsPage />, { user: { ...ME, role: 'admin' }, role: 'admin' })
+
+      const name = await screen.findByLabelText('Display Name')
+      expect(name).not.toHaveAttribute('readonly')
+      await user.clear(name)
+      await user.type(name, 'Chief')
+      await user.click(screen.getByRole('button', { name: 'Save Profile' }))
+
+      await waitFor(() => expect(sent).toEqual({ display_name: 'Chief', email: 'j@example.org' }))
+    })
+  })
 })

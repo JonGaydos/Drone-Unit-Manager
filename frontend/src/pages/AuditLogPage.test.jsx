@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { withPermissions } from '@/test/permissions'
@@ -158,6 +158,61 @@ describe('AuditLogPage', () => {
       expect(screen.getByText('purpose:')).toBeInTheDocument()
       expect(screen.getByText('Search Warrant (4)')).toBeInTheDocument()
       expect(screen.getByText('Other Agency Assist')).toBeInTheDocument()
+    })
+  })
+
+  describe('usernames, imported entries and every changes shape', () => {
+    const entry = (over) => ({
+      id: 20, created_at: '2026-06-10T12:00:00Z', user_name: 'Jamie Pilot', user_username: 'jpilot',
+      action: 'update', entity_type: 'pilot', entity_id: null, entity_name: 'Row',
+      details: null, changes: null, imported: false, ...over,
+    })
+
+    it('shows the username beside the name and an Imported label', async () => {
+      server.use(http.get('/api/audit', () => HttpResponse.json({
+        total: 2,
+        logs: [entry({ id: 20, entity_name: 'New row' }), entry({ id: 21, entity_name: 'Old row', imported: true, user_username: null })],
+      })))
+      renderWithProviders(<AuditLogPage />, { role: 'admin' })
+
+      expect(await screen.findByText('(jpilot)')).toBeInTheDocument()
+      expect(screen.getAllByText('Imported')).toHaveLength(1)
+    })
+
+    it('renders plain, bulk and non-object changes without erroring', async () => {
+      server.use(http.get('/api/audit', () => HttpResponse.json({
+        total: 3,
+        logs: [
+          entry({ id: 30, entity_name: 'Plain', changes: { notes: 'plain text' } }),
+          entry({ id: 31, entity_name: 'Bulk', changes: {
+            records: { old: null, new: '2 records: 1, 2', ids: [1, 2], total_ids: 2 },
+            deleted: { old: '4: name=x', new: null },
+          } }),
+          entry({ id: 32, entity_name: 'Odd', changes: ['not', 'a', 'map'] }),
+        ],
+      })))
+      const { user } = renderWithProviders(<AuditLogPage />, { role: 'admin' })
+
+      await screen.findByText('Plain')
+      const buttons = screen.getAllByTitle('View changes')
+      expect(buttons).toHaveLength(2)
+      await user.click(buttons[0])
+      expect(screen.getByText('plain text')).toBeInTheDocument()
+      await user.click(screen.getAllByTitle('View changes')[1])
+      expect(screen.getByText('2 records: 1, 2')).toBeInTheDocument()
+      expect(screen.getByText('4: name=x')).toBeInTheDocument()
+    })
+
+    it('offers the newer actions and entity types as filters', async () => {
+      server.use(http.get('/api/audit', () => HttpResponse.json({ total: 0, logs: [] })))
+      const { user } = renderWithProviders(<AuditLogPage />, { role: 'admin' })
+
+      await user.click(await screen.findByRole('button', { name: /Filters/ }))
+      const actions = within(screen.getByLabelText('Action')).getAllByRole('option').map(o => o.value)
+      const types = within(screen.getByLabelText('Entity Type')).getAllByRole('option').map(o => o.value)
+
+      expect(actions).toEqual(expect.arrayContaining(['read', 'dismiss', 'dismiss_all', 'sync_run', 'telemetry_sync', 'import']))
+      expect(types).toEqual(expect.arrayContaining(['alert', 'api_token', 'operating_authority', 'document']))
     })
   })
 })

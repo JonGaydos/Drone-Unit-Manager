@@ -238,10 +238,10 @@ def test_maintenance_schedule_changes_are_audited(client, db, supervisor_user):
     assert [e.action for e in _audit(db, "maintenance_schedule")] == ["create", "update", "complete", "delete"]
 
 
-def test_own_profile_edit_is_audited_but_theme_is_not(client, db, pilot_user):
-    client.patch("/api/auth/me", headers=_bearer(pilot_user), json={"theme": "dark"})
+def test_own_profile_edit_is_audited_but_theme_is_not(client, db, admin_user):
+    client.patch("/api/auth/me", headers=_bearer(admin_user), json={"theme": "dark"})
     assert not _audit(db, "user", "update")
-    client.patch("/api/auth/me", headers=_bearer(pilot_user), json={"display_name": "Pilot One"})
+    client.patch("/api/auth/me", headers=_bearer(admin_user), json={"display_name": "Pilot One"})
     assert _audit(db, "user", "update")[0].changes["display_name"]["new"] == "Pilot One"
 
 

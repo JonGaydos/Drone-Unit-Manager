@@ -1,5 +1,6 @@
 import csv
 import io
+import json
 import logging
 import tempfile
 import xml.etree.ElementTree as ET
@@ -13,7 +14,7 @@ from sqlalchemy.orm import joinedload
 
 from app.models.flight import Flight
 from app.services.local_time import display_zone, stamped_on_or_after, stamped_on_or_before
-from app.services.pilot_contacts import hides_contacts, redact_audit_details
+from app.services.pilot_contacts import hides_contacts, redact_audit_changes, redact_audit_details
 from app.models.pilot import Pilot
 from app.models.vehicle import Vehicle
 from app.models.maintenance import MaintenanceRecord
@@ -602,6 +603,62 @@ def export_flight_plans_csv(
     )
 
 
+AUDIT_CSV_BATCH = 500
+_EMPTY = "(empty)"
+
+
+def _change_text(change):
+    """One field's change as text. Pairs read ``old -> new``; other values,
+    such as the bulk and machine summaries, are shown as they are."""
+    if isinstance(change, dict) and ("old" in change or "new" in change):
+        old, new = change.get("old"), change.get("new")
+        return f"{_EMPTY if old is None else old} -> {_EMPTY if new is None else new}"
+    if isinstance(change, (dict, list)):
+        return json.dumps(change, default=str)
+    return str(change)
+
+
+def _changes_text(changes):
+    """All of an entry's changes as one cell, whatever shape they were stored in."""
+    if not changes:
+        return ""
+    if not isinstance(changes, dict):
+        return _change_text(changes)
+    return "; ".join(f"{field}: {_change_text(change)}" for field, change in changes.items())
+
+
+def _audit_csv_row(log, local_tz, hide):
+    changes = redact_audit_changes(log.changes) if hide else log.changes
+    return [
+        _csv_fmt_local(log.created_at, local_tz, "%Y-%m-%d %H:%M:%S"),
+        _csv_safe(log.user_name or ""), _csv_safe(log.user_username or ""),
+        _csv_safe(log.action), _csv_safe(log.entity_type),
+        log.entity_id or "", _csv_safe(log.entity_name or ""),
+        _csv_safe((redact_audit_details(log.details) if hide else log.details) or ""),
+        _csv_safe(_changes_text(changes)),
+        _csv_safe(log.ip_address or ""),
+        "Yes" if log.imported else "No",
+    ]
+
+
+def _audit_csv_stream(query, local_tz, hide):
+    """The CSV in pieces, a batch of rows at a time, so the whole log is never
+    held in memory."""
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow([
+        "Timestamp", "User", "Username", "Action", COL_ENTITY_TYPE, COL_ENTITY_ID,
+        "Entity Name", "Details", "Changes", "IP Address", "Imported",
+    ])
+    for count, log in enumerate(query.yield_per(AUDIT_CSV_BATCH), start=1):
+        writer.writerow(_audit_csv_row(log, local_tz, hide))
+        if count % AUDIT_CSV_BATCH == 0:
+            yield buffer.getvalue()
+            buffer.seek(0)
+            buffer.truncate()
+    yield buffer.getvalue()
+
+
 @router.get("/audit/csv")
 def export_audit_csv(
     db: DBSession,
@@ -616,26 +673,9 @@ def export_audit_csv(
         q = q.filter(stamped_on_or_after(AuditLog.created_at, date_from, local_tz))
     if date_to:
         q = q.filter(stamped_on_or_before(AuditLog.created_at, date_to, local_tz))
-    logs = q.order_by(AuditLog.created_at.desc()).limit(5000).all()
-    hide = hides_contacts(db, user)
-
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow([
-        "Timestamp", "User", "Action", COL_ENTITY_TYPE, COL_ENTITY_ID,
-        "Entity Name", "Details", "IP Address",
-    ])
-    for log in logs:
-        writer.writerow([
-            _csv_fmt_local(log.created_at, local_tz, "%Y-%m-%d %H:%M:%S"),
-            _csv_safe(log.user_name or ""), _csv_safe(log.action), _csv_safe(log.entity_type),
-            log.entity_id or "", _csv_safe(log.entity_name or ""),
-            _csv_safe((redact_audit_details(log.details) if hide else log.details) or ""),
-            _csv_safe(log.ip_address or ""),
-        ])
-    output.seek(0)
+    q = q.order_by(AuditLog.created_at.desc(), AuditLog.id.desc()).execution_options(stream_results=True)
     return StreamingResponse(
-        iter([output.getvalue()]),
+        _audit_csv_stream(q, local_tz, hides_contacts(db, user)),
         media_type=CSV_MEDIA_TYPE,
         headers={"Content-Disposition": "attachment; filename=audit_log_export.csv"},
     )
