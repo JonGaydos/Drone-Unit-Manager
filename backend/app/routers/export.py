@@ -71,11 +71,13 @@ def _csv_safe(value):
     """Neutralize CSV formula injection in user-controlled text fields.
 
     Prefixes a leading apostrophe to any string cell beginning with a
-    formula trigger character (= + - @ tab CR LF). Non-string values pass
+    formula trigger character (= + - @ tab CR LF), also after leading spaces. Non-string values pass
     through unchanged.
     """
-    if isinstance(value, str) and value and value[0] in _CSV_INJECTION_PREFIXES:
-        return "'" + value
+    if isinstance(value, str):
+        stripped = value.lstrip(" ")
+        if stripped and stripped[0] in _CSV_INJECTION_PREFIXES:
+            return "'" + value
     return value
 
 

@@ -94,11 +94,13 @@ def test_credentials_trimmed_on_save(client, db, admin_headers):
     r = client.put(f"{SETTINGS_URL}/bulk", headers=admin_headers, json=[
         {"key": "skydio_token_id", "value": " id-1 \n"},
         {"key": "smtp_password", "value": "\tpw "},
+        {"key": "smtp_username", "value": " user "},
         {"key": "org_name", "value": " Unit "},
     ])
     assert r.status_code == 200
     assert _stored(db, "skydio_token_id") == "id-1"
-    assert _stored(db, "smtp_password") == "pw"
+    assert _stored(db, "smtp_password") == "\tpw "
+    assert _stored(db, "smtp_username") == " user "
     assert _stored(db, "org_name") == " Unit "
 
 
@@ -140,6 +142,36 @@ def test_connection_failure_message_is_fixed(db, caplog, monkeypatch):
 def test_csv_guard_covers_leading_newline():
     assert _csv_safe("\n=1+1") == "'\n=1+1"
     assert _csv_safe("plain") == "plain"
+
+
+def test_csv_guard_covers_spaced_formula():
+    assert _csv_safe(" =1+1") == "' =1+1"
+    assert _csv_safe("  @cmd") == "'  @cmd"
+    assert _csv_safe(" hello") == " hello"
+    assert _csv_safe("   ") == "   "
+
+
+def test_reminder_subject_collapses_whitespace(monkeypatch):
+    from app.routers.currency import _send_one_reminder
+    import app.services.email_digest as ed
+    sent = {}
+    monkeypatch.setattr(ed, "send_email", lambda to, subj, html, db: sent.update(subject=subj) or True)
+    monkeypatch.setattr("app.routers.currency._evaluate_currency", lambda rules, flights: [{
+        "is_current": False, "rule_name": "r", "actual_hours": 0, "required_hours": 1, "period_days": 30}])
+    pilot = SimpleNamespace(first_name="A", full_name="A B", email="a@x.org")
+    assert _send_one_reminder(pilot, [], [], "Unit\r\nBcc: evil@x.org", "", None)[0] == "sent"
+    assert "\n" not in sent["subject"] and "\r" not in sent["subject"]
+    assert sent["subject"].endswith("Unit Bcc: evil@x.org")
+
+
+def test_fixed_error_adds_http_status_only():
+    from app.services.sync_manager import _fixed_error
+    request = httpx.Request("GET", "https://api.example.test/secret-path")
+    exc = httpx.HTTPStatusError("boom token", request=request,
+                                response=httpx.Response(401, text="secret body", request=request))
+    out = _fixed_error("Users sync error", exc)
+    assert out == "Users sync error: HTTPStatusError 401"
+    assert _fixed_error("X", RuntimeError("t")) == "X: RuntimeError"
 
 
 def _seed_pilot(db):

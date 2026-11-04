@@ -260,7 +260,8 @@ def _send_one_reminder(pilot, rules, flights, org_name: str, intro: str, db) -> 
     if not pilot.email:
         return "skipped_no_email", None
     html = _reminder_html(pilot, lapsed_rules, org_name, intro)
-    if send_email(pilot.email, f"Flight currency reminder — {org_name}", html, db):
+    subject_org = " ".join(org_name.split())
+    if send_email(pilot.email, f"Flight currency reminder — {subject_org}", html, db):
         return "sent", f"{pilot.full_name} <{pilot.email}>"
     return "failed", None
 

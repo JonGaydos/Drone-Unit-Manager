@@ -76,8 +76,9 @@ PUBLIC_KEYS = {
 }
 
 
-# Credentials pasted from a browser often carry a trailing space or newline.
-TRIMMED_KEYS = SECRET_KEYS | {"smtp_username"}
+# Skydio credentials pasted from a browser often carry a trailing space or
+# newline. Mail credentials are kept as typed.
+TRIMMED_KEYS = {"skydio_api_token", "skydio_token_id"}
 
 
 def _trimmed(key: str, value: str) -> str:

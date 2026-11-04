@@ -95,7 +95,10 @@ def _persist_last_sync_result(db: Session, result: "SyncResult"):
 def _fixed_error(message: str, exc: Exception) -> str:
     """A fixed message plus the exception type. Exception text can carry a
     request URL or credential, so it is never stored or shown."""
-    return f"{message}: {type(exc).__name__}"
+    text = f"{message}: {type(exc).__name__}"
+    if isinstance(exc, httpx.HTTPStatusError):
+        text += f" {exc.response.status_code}"
+    return text
 
 
 def _build_creds(db: Session, provider_name: str) -> ProviderCredentials:
