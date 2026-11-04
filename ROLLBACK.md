@@ -3,32 +3,26 @@
 ## Production
 
 Production runs a pinned version tag on Unraid (port 3014), not `:latest`.
-It moved from 3.2.1 straight to 3.2.3 (running on production, confirmed
-2026-10-13); 3.2.2 was released and tested on staging but never ran on
-production.
+It moved from 3.2.3 to 3.3.0 (running on production, confirmed by the owner
+2026-11-03). 3.3.0 has migration 0011, so rolling back needs the steps below, not just
+the older image.
 
 | | Current | Rollback target | Before 3.x migrations |
 | --- | --- | --- | --- |
-| Version | 3.2.3 | 3.2.1 | 3.0.17 |
-| Tag | `v3.2.3` | `v3.2.1` | `v3.0.17` |
-| Commit | 9455079 | 5ca1dfc | 42d83e9 |
-| Image | `ghcr.io/jongaydos/drone-unit-manager@sha256:7fb2fb7ca266a916779b301bbe2733fb3e966a36297371cfe4f85911af779aca` | `ghcr.io/jongaydos/drone-unit-manager@sha256:80e9b5d716563e012e1491cf2ff223eabbb93cc6f44b871e87beab2eaab68311` | `ghcr.io/jongaydos/drone-unit-manager@sha256:264f129219b17672bea90b6b3f9e04182dc9979fc6c7a3e198762d97c3055eb5` |
+| Version | 3.3.0 | 3.2.3 | 3.0.17 |
+| Tag | `v3.3.0` | `v3.2.3` | `v3.0.17` |
+| Commit | 48013c0 | 9455079 | 42d83e9 |
+| Image | `ghcr.io/jongaydos/drone-unit-manager@sha256:d65a9f731f24ec1b78ce8e75558db151a471d194f0da279c054fc71064dda1ec` | `ghcr.io/jongaydos/drone-unit-manager@sha256:7fb2fb7ca266a916779b301bbe2733fb3e966a36297371cfe4f85911af779aca` | `ghcr.io/jongaydos/drone-unit-manager@sha256:264f129219b17672bea90b6b3f9e04182dc9979fc6c7a3e198762d97c3055eb5` |
 | Extra Parameters | `--restart unless-stopped` | `--restart unless-stopped` | `--restart unless-stopped --user 99:100` |
 
-3.3.0 is prepared and tested on staging but is not on production yet. Once it
-is, its rollback target is 3.2.3, by the migration 0011 steps below. This table
-moves to 3.3.0 after the upgrade is confirmed.
-
-A version's image tag (`:3.2.3`) exists only after its `vX.Y.Z` git tag is
+A version's image tag (`:3.3.0`) exists only after its `vX.Y.Z` git tag is
 pushed and the release build has finished. Check it on ghcr.io before changing
 production's Repository; an Apply to a missing tag removes the running container
 and then fails to pull.
 
-## Roll production back to 3.2.1
+## Roll production back to 3.2.3
 
-3.2.2 and 3.2.3 have no migrations, so this is the image alone: set the
-Repository to `ghcr.io/jongaydos/drone-unit-manager:3.2.1` and Apply. The data
-folder and Extra Parameters stay as they are.
+Use the migration 0011 steps under "Roll back a release with migration 0011" below.
 
 ## Roll production back to 3.0.17
 
