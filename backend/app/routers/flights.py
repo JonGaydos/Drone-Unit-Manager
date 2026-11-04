@@ -17,6 +17,7 @@ from app.models.user import User
 from app.routers.auth import require_permission
 from app.responses import responses
 from app.services.audit import log_action
+from app.services.audit_capture import update_recorded
 from app.services.flight_delete import delete_flights, purge_flight_telemetry
 from app.services import permissions as permissions_service
 from app.services.local_time import display_zone, local_flight_date
@@ -868,8 +869,8 @@ def delete_flight(
     # Telemetry lives in a separate DB and is not cascaded by the ORM, so purge
     # it explicitly AFTER the main commit; otherwise it orphans and can collide
     # when an id is reused.
-    log_action(db, admin.id, admin.display_name, "delete", "flight", flight_id, flight_name)
     delete_flights(db, [flight])
+    log_action(db, admin.id, admin.display_name, "delete", "flight", flight_id, flight_name)
     db.commit()
     purge_flight_telemetry([flight_id])
     return {"ok": True}
@@ -917,9 +918,8 @@ def delete_purpose(purpose_id: int, db: DBSession, admin: AdminUser):
         raise HTTPException(status_code=404, detail="Purpose not found")
 
     name = purpose.name
-    flights_cleared = db.query(Flight).filter(Flight.purpose == name).update(
-        {Flight.purpose: None}, synchronize_session=False
-    )
+    flights_cleared = update_recorded(db, db.query(Flight).filter(Flight.purpose == name),
+                                      {Flight.purpose: (name, None)})
     missions_untouched = db.query(func.count(MissionLog.id)).filter(MissionLog.reason == name).scalar() or 0
 
     log_action(db, admin.id, admin.display_name, "delete", "flight_purpose", purpose_id, name,

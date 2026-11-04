@@ -137,6 +137,7 @@ def merge_vehicles(target_id: int, merge_from_id: int, db: DBSession, admin: Man
     from app.models.maintenance import MaintenanceRecord
     from app.models.maintenance_schedule import MaintenanceSchedule
     from app.models.alert import Alert
+    from app.services.audit_capture import update_recorded
 
     if merge_from_id == target_id:
         raise HTTPException(400, "Cannot merge a vehicle into itself")
@@ -148,17 +149,14 @@ def merge_vehicles(target_id: int, merge_from_id: int, db: DBSession, admin: Man
     def reassign(model, col):
         """Repoint a direct vehicle_id foreign key from source to target."""
         column = getattr(model, col)
-        moved = db.query(model).filter(column == merge_from_id).update(
-            {column: target_id}, synchronize_session=False
-        )
-        return moved
+        return update_recorded(db, db.query(model).filter(column == merge_from_id),
+                               {column: (merge_from_id, target_id)})
 
     def reassign_poly(model):
         """Repoint a polymorphic (entity_type='vehicle', entity_id) reference."""
-        moved = db.query(model).filter(
+        return update_recorded(db, db.query(model).filter(
             model.entity_type == "vehicle", model.entity_id == merge_from_id
-        ).update({model.entity_id: target_id}, synchronize_session=False)
-        return moved
+        ), {model.entity_id: (merge_from_id, target_id)})
 
     moved = (
         reassign(Flight, "vehicle_id")

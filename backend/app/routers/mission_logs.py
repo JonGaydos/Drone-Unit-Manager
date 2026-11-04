@@ -10,6 +10,7 @@ from app.deps import DBSession
 from app.models.user import User
 from app.routers.auth import require_permission
 from app.services import permissions as permissions_service
+from app.services.audit_capture import delete_recorded
 from app.responses import responses
 from app.models.mission_log import MissionLog
 from app.models.mission_log_pilot import MissionLogPilot
@@ -68,7 +69,7 @@ def _mission_to_out(mission: MissionLog, db: Session, vehicle_cache=None, pilot_
 
 
 def _sync_pilots(db: Session, mission: MissionLog, pilots_data: list[MissionLogPilotIn]):
-    db.query(MissionLogPilot).filter(MissionLogPilot.mission_log_id == mission.id).delete()
+    delete_recorded(db, db.query(MissionLogPilot).filter(MissionLogPilot.mission_log_id == mission.id))
     db.flush()
     for p in pilots_data:
         db.add(MissionLogPilot(

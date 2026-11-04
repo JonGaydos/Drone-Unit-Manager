@@ -27,11 +27,14 @@ def end_schedules(db, entity) -> int:
     entity_type = SCHEDULE_ENTITY_TYPES.get(entity.__tablename__)
     if entity_type is None or entity.id is None:
         return 0
-    return db.query(MaintenanceSchedule).filter(
+    schedules = db.query(MaintenanceSchedule).filter(
         MaintenanceSchedule.entity_type == entity_type,
         MaintenanceSchedule.entity_id == entity.id,
         MaintenanceSchedule.is_active.is_(True),
-    ).update({MaintenanceSchedule.is_active: False}, synchronize_session=False)
+    ).all()
+    for schedule in schedules:
+        schedule.is_active = False
+    return len(schedules)
 
 
 def set_fields_with_lifecycle(entity, updates: dict) -> None:

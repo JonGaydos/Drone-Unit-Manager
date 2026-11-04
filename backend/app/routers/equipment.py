@@ -17,6 +17,7 @@ from app.models.attachment import Attachment
 from app.models.other_equipment import OtherEquipment
 from app.models.vehicle import Vehicle
 from app.responses import responses
+from app.services.audit_capture import update_recorded
 from app.services.equipment_lifecycle import end_schedules
 from app.services.equipment_lifecycle import set_fields_with_lifecycle as _set_fields_with_lifecycle
 
@@ -216,18 +217,16 @@ def merge_batteries(bid: int, merge_from_id: int, db: DBSession, admin: ManageUs
     if target.id == source.id:
         raise HTTPException(400, "Cannot merge a battery with itself")
     # Update all flights referencing the source serial to use the target serial
-    updated = db.query(Flight).filter(Flight.battery_serial == source.serial_number).update(
-        {Flight.battery_serial: target.serial_number}, synchronize_session=False
-    )
+    updated = update_recorded(db, db.query(Flight).filter(Flight.battery_serial == source.serial_number),
+                              {Flight.battery_serial: (source.serial_number, target.serial_number)})
     # Repoint health readings from the source battery to the target.
-    db.query(BatteryReading).filter(BatteryReading.battery_id == source.id).update(
-        {BatteryReading.battery_id: target.id}, synchronize_session=False
-    )
+    update_recorded(db, db.query(BatteryReading).filter(BatteryReading.battery_id == source.id),
+                    {BatteryReading.battery_id: (source.id, target.id)})
     # Repoint polymorphic equipment-checkout rows (entity_type="battery").
-    db.query(EquipmentCheckout).filter(
+    update_recorded(db, db.query(EquipmentCheckout).filter(
         EquipmentCheckout.entity_type == "battery",
         EquipmentCheckout.entity_id == source.id,
-    ).update({EquipmentCheckout.entity_id: target.id}, synchronize_session=False)
+    ), {EquipmentCheckout.entity_id: (source.id, target.id)})
     db.delete(source)
     log_action(db, admin.id, admin.display_name, "merge", "battery", target.id, target.serial_number, details=f"{source.serial_number} -> {target.serial_number}")
     db.commit()
@@ -247,9 +246,9 @@ def merge_attachments(aid: int, merge_from_id: int, db: DBSession, admin: Manage
     from app.models.flight import Flight
     # Update all attachment fields across all flights
     for field in ["attachment_top", "attachment_bottom", "attachment_left", "attachment_right"]:
-        db.query(Flight).filter(getattr(Flight, field) == source.serial_number).update(
-            {getattr(Flight, field): target.serial_number}, synchronize_session=False
-        )
+        column = getattr(Flight, field)
+        update_recorded(db, db.query(Flight).filter(column == source.serial_number),
+                        {column: (source.serial_number, target.serial_number)})
     db.delete(source)
     log_action(db, admin.id, admin.display_name, "merge", "attachment", target.id, target.serial_number, details=f"{source.serial_number} -> {target.serial_number}")
     db.commit()
@@ -268,9 +267,8 @@ def merge_sensors(sid: int, merge_from_id: int, db: DBSession, admin: ManageUser
         raise HTTPException(404, SENSOR_NOT_FOUND)
     if target.id == source.id:
         raise HTTPException(400, "Cannot merge a sensor package with itself")
-    updated = db.query(Flight).filter(Flight.sensor_package == source.serial_number).update(
-        {Flight.sensor_package: target.serial_number}, synchronize_session=False
-    )
+    updated = update_recorded(db, db.query(Flight).filter(Flight.sensor_package == source.serial_number),
+                              {Flight.sensor_package: (source.serial_number, target.serial_number)})
     db.delete(source)
     log_action(db, admin.id, admin.display_name, "merge", "sensor", target.id, target.serial_number, details=f"{source.serial_number} -> {target.serial_number}")
     db.commit()

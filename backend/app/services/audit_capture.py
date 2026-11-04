@@ -3,7 +3,9 @@
 A session hook writes the entries in the same transaction as the change, so
 the change and its record commit together or not at all. ``log_action`` entries
 take the place of the automatic entry for the same record. Inside
-``machine_run`` the hook counts changes instead and keeps one summary row.
+``machine_run`` the hook counts changes instead and keeps one summary row,
+written at each commit. ``record_bulk`` records a query-level write, which
+the hook cannot see.
 
 The hook runs in three steps. ``before_flush`` reads old values while they are
 still available, ``after_flush`` adds foreign keys the flush itself set, and
@@ -275,7 +277,9 @@ def _entity_name(obj) -> str | None:
 
 def _record_key(obj) -> tuple | None:
     """``(entity_type, primary key)``, or None if the flush gave it no key."""
-    primary = inspect(obj).mapper.primary_key_from_instance(obj)[0]
+    obj_state = inspect(obj)
+    # The identity needs no query. Reading the key off an expired object would.
+    primary = obj_state.identity[0] if obj_state.identity else obj_state.mapper.primary_key_from_instance(obj)[0]
     return None if primary is None else (entity_type_of(type(obj)), primary)
 
 
@@ -411,7 +415,32 @@ def _load_keys_a_flush_will_set(obj_state) -> None:
                 getattr(obj_state.obj(), mapper.get_property_by_column(column).key)
 
 
+def _counts_as_update(obj) -> bool:
+    """Whether a run counts this object as updated. Reads only what is in memory,
+    so a value set while expired counts even if it matches the stored one."""
+    obj_state = inspect(obj)
+    for key in _recorded_keys(obj_state.mapper):
+        history = obj_state.attrs[key].history
+        if not history.has_changes():
+            continue
+        new = history.added[0] if history.added else None
+        if not history.deleted or str(history.deleted[0]) != str(new):
+            return True
+    return False
+
+
+def _collect_for_run(run, objects, action: str) -> list:
+    """A run keeps counts, not values, and spends no query per row finding them."""
+    return [
+        _Captured(obj, action, None, {})
+        for obj in objects
+        if _is_captured(obj, run) and (action != UPDATE or _counts_as_update(obj))
+    ]
+
+
 def _collect(session, run, objects, action: str) -> list:
+    if run is not None:
+        return _collect_for_run(run, objects, action)
     collected = []
     for obj in objects:
         if not _is_captured(obj, run):
@@ -462,6 +491,8 @@ def _after_flush(session, _flush_context) -> None:
         if not _is_captured(obj, state.run):
             continue
         captured = by_object.get(id(obj))
+        if captured and state.run is not None:
+            continue
         changes = _flush_set_changes(obj, captured.examined if captured else frozenset())
         if changes and captured:
             captured.changes = {**captured.changes, **changes}
@@ -492,19 +523,28 @@ def _settle_explicit_entries(state: _CaptureState) -> None:
 def _after_flush_postexec(session, _flush_context) -> None:
     state = _state(session)
     pending, state.pending = state.pending, []
-    for captured in pending:
-        action, changes = _settle(captured)
-        record_key = _record_key(captured.obj)
-        if record_key is None or (action == UPDATE and not changes):
-            continue
-        if state.run is not None:
-            state.run.tally(type(captured.obj).__name__, action, record_key[1])
-            continue
-        captured.action = action
-        _write_entry(session, state, record_key, captured, changes)
-    _settle_explicit_entries(state)
     if state.run is not None:
-        _refresh_run_entry(session, state.run)
+        _tally_flush(state.run, pending)
+    else:
+        for captured in pending:
+            action, changes = _settle(captured)
+            record_key = _record_key(captured.obj)
+            if record_key is None or (action == UPDATE and not changes):
+                continue
+            captured.action = action
+            _write_entry(session, state, record_key, captured, changes)
+    _settle_explicit_entries(state)
+
+
+def _tally_flush(run: _MachineRun, pending: list) -> None:
+    for captured in pending:
+        record_key = _record_key(captured.obj)
+        if record_key is None:
+            continue
+        action = captured.action
+        if action == UPDATE and inspect(captured.obj).was_deleted:
+            action = DELETE
+        run.tally(type(captured.obj).__name__, action, record_key[1])
 
 
 def _refresh_run_entry(session, run: _MachineRun) -> None:
@@ -516,6 +556,16 @@ def _refresh_run_entry(session, run: _MachineRun) -> None:
             session, run.action, run.entity_type, None, None, run.summary(), run.details))
     else:
         _update_row(session, run.entry_id, {"changes": run.summary()})
+
+
+def _before_commit(session) -> None:
+    """Bring a run's row up to date in the transaction about to commit. Only
+    here, not at each flush: importers flush for every row, some in savepoints."""
+    state = _state(session)
+    if state.run is None or session.in_nested_transaction():
+        return
+    session.flush()
+    _refresh_run_entry(session, state.run)
 
 
 def _after_transaction_create(session, transaction) -> None:
@@ -580,6 +630,7 @@ def install(sessionmaker) -> None:
     event.listen(sessionmaker, "after_flush", _after_flush)
     event.listen(sessionmaker, "after_flush_postexec", _after_flush_postexec)
     event.listen(sessionmaker, "after_transaction_create", _after_transaction_create)
+    event.listen(sessionmaker, "before_commit", _before_commit)
     event.listen(sessionmaker, "after_commit", _after_commit)
     event.listen(sessionmaker, "after_rollback", _after_rollback)
     event.listen(sessionmaker, "after_transaction_end", _after_transaction_end)
@@ -589,8 +640,8 @@ def install(sessionmaker) -> None:
 def machine_run(session, action: str, entity_type: str, details: str | None = None):
     """Record the writes in this block as one summary entry, not one per row.
 
-    The row joins the session's transaction and is kept current at each flush,
-    so each batch the block commits is on record along with the counts so far.
+    The row joins the session's transaction and is brought current at each
+    commit, so each batch the block commits is on record with the counts so far.
     Commit after the block for anything it left uncommitted, as with
     ``log_action``. If the block raises, what it committed stays reported and
     capture resumes. A run inside a run counts toward the outer one. Other
@@ -608,5 +659,83 @@ def machine_run(session, action: str, entity_type: str, details: str | None = No
         session.flush()
         run.stale = run.stale or run.entry_id is None
         _refresh_run_entry(session, run)
+    except BaseException:
+        # What the block flushed is still in the transaction, for a caller that
+        # commits anyway.
+        if session.is_active and any(run.frames[1:]):
+            _refresh_run_entry(session, run)
+        raise
     finally:
         state.run = None
+
+
+def _model_names() -> dict:
+    """Class name for each ``entity_type``. Run summaries are keyed by class."""
+    from app.database import Base
+
+    return {entity_type_of(mapper.class_): mapper.class_.__name__ for mapper in Base.registry.mappers}
+
+
+def _bulk_changes(ids: list[int], changes: dict | None) -> dict:
+    """The record IDs in full, and as text in the ``new`` slot for the log page."""
+    ordered = sorted(ids)
+    shown = ordered[:MACHINE_RUN_ID_CAP]
+    text = f"{len(ordered)} records: {', '.join(str(i) for i in shown)}"
+    if len(ordered) > len(shown):
+        text += f" (first {len(shown)} shown)"
+    records = {"old": None, "new": text, "ids": ordered, "total_ids": len(ordered)}
+    return {"records": records, **(changes or {})}
+
+
+def record_bulk(session, action: str, entity_type: str, ids: list[int], changes: dict | None) -> None:
+    """Record a query-level write, which the session hook cannot see.
+
+    Writes one entry in the session's transaction, or inside ``machine_run``
+    adds the IDs to the run's counts. Call it with IDs read before the write.
+    """
+    if not ids:
+        return
+    run = _state(session).run
+    if run is None:
+        _insert_row(session, _row_values(session, action, entity_type, None, None, _bulk_changes(ids, changes)))
+        return
+    model = _model_names().get(entity_type, entity_type)
+    for record_id in ids:
+        run.tally(model, action, record_id)
+
+
+def _query_model(query):
+    return query.column_descriptions[0]["entity"]
+
+
+def update_recorded(session, query, values: dict, action: str = UPDATE) -> int:
+    """Run ``query.update`` and record it. ``values`` maps each column to its
+    ``(old, new)`` pair, the same for every row. Returns how many rows matched."""
+    from app.services.audit import _fmt_change
+
+    model = _query_model(query)
+    ids = [row[0] for row in query.with_entities(model.id)]
+    if ids:
+        query.update({column: new for column, (_, new) in values.items()}, synchronize_session=False)
+        changes = {column.key: _fmt_change(old, new) for column, (old, new) in values.items()}
+        record_bulk(session, action, entity_type_of(model), ids, changes)
+    return len(ids)
+
+
+def delete_recorded(session, query) -> int:
+    """Run ``query.delete`` and record each row's values, since the rows are gone
+    after this. Returns how many rows matched."""
+    model = _query_model(query)
+    mapper = inspect(model)
+    keys = _recorded_keys(mapper)
+    rows = query.with_entities(model.id, *(mapper.get_property(key).columns[0] for key in keys)).all()
+    if not rows:
+        return 0
+    query.delete()
+    traces = (
+        f"{row[0]}: " + ", ".join(f"{key}={value}" for key, value in zip(keys, row[1:]) if value is not None)
+        for row in rows
+    )
+    record_bulk(session, DELETE, entity_type_of(model), [row[0] for row in rows],
+                {"deleted": {"old": "; ".join(traces), "new": None}})
+    return len(rows)

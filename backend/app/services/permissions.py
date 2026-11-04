@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.models.certification import PilotCertification
 from app.models.role_permission import RolePermission
+from app.services.audit_capture import delete_recorded
 from app.models.user import User
 
 ADMIN = "admin"
@@ -387,4 +388,4 @@ def restorable_overrides(rows: list) -> tuple[list[dict], int]:
 
 def reset(db: Session) -> None:
     """Remove every stored change without committing."""
-    db.query(RolePermission).delete()
+    delete_recorded(db, db.query(RolePermission))

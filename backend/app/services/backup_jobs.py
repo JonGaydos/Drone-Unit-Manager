@@ -7,6 +7,7 @@ a failed backup never crashes the scheduler.
 """
 
 import glob
+import json
 import logging
 import os
 from datetime import datetime, timedelta, timezone
@@ -15,6 +16,7 @@ from app.config import settings as app_settings
 from app.database import SessionLocal
 from app.models.setting import Setting
 from app.routers.backup import build_backup_archive
+from app.services.audit_capture import machine_run
 from app.services.sync_lock import restore_active
 
 logger = logging.getLogger(__name__)
@@ -96,14 +98,19 @@ def _rotate(directory: str, retention: int) -> None:
             logger.warning("Could not delete old backup %s: %s", old, exc)
 
 
+def _record_result(db, now_iso: str, result: dict, details: str) -> None:
+    with machine_run(db, "backup", "system", details=details):
+        _set_setting(db, "last_backup_at", now_iso)
+        _set_setting(db, "last_backup_result", json.dumps(result))
+    db.commit()
+
+
 def run_scheduled_backup() -> None:
     """Build a full backup, write it to disk, rotate, and record the result.
 
     Any failure is caught and logged, and a failure result is still recorded so
     the scheduler never crashes on a bad backup run.
     """
-    import json
-
     if restore_active.is_set():
         logger.warning("Scheduled backup skipped: a restore is in progress")
         return
@@ -142,9 +149,7 @@ def run_scheduled_backup() -> None:
 
         now_iso = datetime.now(timezone.utc).isoformat()
         result = {"at": now_iso, "file": filename, "bytes": size, "ok": True}
-        _set_setting(db, "last_backup_at", now_iso)
-        _set_setting(db, "last_backup_result", json.dumps(result))
-        db.commit()
+        _record_result(db, now_iso, result, f"Scheduled backup {filename}")
         logger.info("Scheduled backup complete: %s (%d bytes)", filename, size)
     except Exception as exc:
         logger.exception("Scheduled backup failed")
@@ -154,9 +159,7 @@ def run_scheduled_backup() -> None:
             db.rollback()
             now_iso = datetime.now(timezone.utc).isoformat()
             result = {"at": now_iso, "ok": False, "error": str(exc)}
-            _set_setting(db, "last_backup_at", now_iso)
-            _set_setting(db, "last_backup_result", json.dumps(result))
-            db.commit()
+            _record_result(db, now_iso, result, "Scheduled backup failed")
         except Exception:
             logger.exception("Could not record backup failure result")
     finally:

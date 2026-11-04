@@ -232,6 +232,7 @@ def _merge_certifications(db, source_id: int, target_id: int) -> int:
     source certifications that ended up on the target.
     """
     from app.models.document import Document
+    from app.services.audit_capture import update_recorded
     moved = 0
     for cert in db.query(PilotCertification).filter(PilotCertification.pilot_id == source_id).all():
         twin = db.query(PilotCertification).filter(
@@ -246,10 +247,10 @@ def _merge_certifications(db, source_id: int, target_id: int) -> int:
         keep.pilot_id = target_id
         if keep.renewed_from_id == drop.id:
             keep.renewed_from_id = None
-        db.query(Document).filter(Document.certification_id == drop.id).update(
-            {Document.certification_id: keep.id}, synchronize_session=False)
-        db.query(PilotCertification).filter(PilotCertification.renewed_from_id == drop.id).update(
-            {PilotCertification.renewed_from_id: keep.id}, synchronize_session=False)
+        update_recorded(db, db.query(Document).filter(Document.certification_id == drop.id),
+                        {Document.certification_id: (drop.id, keep.id)})
+        update_recorded(db, db.query(PilotCertification).filter(PilotCertification.renewed_from_id == drop.id),
+                        {PilotCertification.renewed_from_id: (drop.id, keep.id)})
         db.delete(drop)
         if keep is cert:
             moved += 1

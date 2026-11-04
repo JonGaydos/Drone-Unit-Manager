@@ -9,11 +9,12 @@ from pydantic import BaseModel
 from app.constants import UTC_OFFSET
 from app.deps import DBSession, AdminUser
 from app.models.setting import Setting
+from app.services.audit_capture import machine_run
 from app.services.flight_delete import delete_flights, purge_flight_telemetry
 from app.services.local_time import display_zone, local_flight_date
 from app.services import jobs
 from app.services.sync_lock import acquire_or_409, release, sync_guard_http
-from app.services.sync_manager import SyncManager, SyncResult
+from app.services.sync_manager import SYNC_RUN, SYSTEM_ENTITY, SyncManager, SyncResult
 from app.responses import responses
 
 logger = logging.getLogger(__name__)
@@ -65,23 +66,24 @@ def _run_sync(db, full: bool, sync_telemetry: bool, admin_id: int, admin_name: s
     """A manual sync, optionally followed by a telemetry batch. The caller
     holds the sync lock."""
     from app.services.audit import log_action
-    result = SyncManager.sync_all("skydio", db, full_sync=full)
+    with machine_run(db, SYNC_RUN, SYSTEM_ENTITY, details=f"Manual {'full' if full else 'incremental'} sync"):
+        result = SyncManager.sync_all("skydio", db, full_sync=full)
 
-    if full:
-        # After full sync, clean up any flights with no useful data
-        removed = _delete_empty_flights(db)
-        if removed:
-            logger.info("Auto-cleanup: removed %d empty flights", removed)
-            result.errors.append(f"Auto-cleaned {removed} flights with no data")
+        if full:
+            # After full sync, clean up any flights with no useful data
+            removed = _delete_empty_flights(db)
+            if removed:
+                logger.info("Auto-cleanup: removed %d empty flights", removed)
+                result.errors.append(f"Auto-cleaned {removed} flights with no data")
 
-    # Auto-fetch telemetry for flights that don't have it yet
-    if sync_telemetry:
-        try:
-            telemetry_result = SyncManager.batch_sync_telemetry(db, limit=10)
-            if telemetry_result > 0:
-                logger.info("Auto-synced telemetry for %d flights", telemetry_result)
-        except Exception as e:
-            logger.warning("Auto telemetry sync failed: %s", e)
+        # Auto-fetch telemetry for flights that don't have it yet
+        if sync_telemetry:
+            try:
+                telemetry_result = SyncManager.batch_sync_telemetry(db, limit=10)
+                if telemetry_result > 0:
+                    logger.info("Auto-synced telemetry for %d flights", telemetry_result)
+            except Exception as e:
+                logger.warning("Auto telemetry sync failed: %s", e)
 
     log_action(db, admin_id, admin_name, "sync", "system",
                details=f"{'Full' if full else 'Incremental'} sync: {result.flights_new} new flights, {result.vehicles_synced} vehicles")
@@ -340,11 +342,12 @@ def enrich_flights(
 
     logger.info("Found %d flights needing enrichment", len(empty_flights))
 
-    with sync_guard_http():
-        outcomes = {flight: _enrich_one(provider, creds, flight, db) for flight in empty_flights}
+    with machine_run(db, "enrich_run", "flight", details="Enrichment from Skydio"):
+        with sync_guard_http():
+            outcomes = {flight: _enrich_one(provider, creds, flight, db) for flight in empty_flights}
+        ids = delete_flights(db, [f for f, o in outcomes.items() if o == "empty"])
     enriched = sum(1 for o in outcomes.values() if o == "enriched")
     failed = sum(1 for o in outcomes.values() if o == "failed")
-    ids = delete_flights(db, [f for f, o in outcomes.items() if o == "empty"])
 
     from app.services.audit import log_action
     log_action(db, admin.id, admin.display_name, "enrich_flights", "flight",

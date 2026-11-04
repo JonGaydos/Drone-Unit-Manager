@@ -22,10 +22,16 @@ from app.models.attachment import Attachment
 from app.models.media import MediaFile
 from app.models.pilot import Pilot
 from app.models.setting import Setting
+from app.services.audit_capture import machine_run
 from app.services.flight_delete import delete_flights, purge_flight_telemetry
 from app.services.local_time import display_zone, local_flight_date
 
 logger = logging.getLogger(__name__)
+
+
+# How a sync appears in the audit log.
+SYNC_RUN = "sync_run"
+SYSTEM_ENTITY = "system"
 
 
 @dataclass
@@ -912,6 +918,15 @@ class SyncManager:
 
     @staticmethod
     def sync_all(provider_name: str, db: Session, full_sync: bool = False) -> SyncResult:
+        """Run a sync from the given provider as one machine run."""
+        kind = "Full" if full_sync else "Incremental"
+        with machine_run(db, SYNC_RUN, SYSTEM_ENTITY, details=f"{kind} {provider_name} sync"):
+            result = SyncManager._sync_all_steps(provider_name, db, full_sync)
+        db.commit()
+        return result
+
+    @staticmethod
+    def _sync_all_steps(provider_name: str, db: Session, full_sync: bool) -> SyncResult:
         """Run a full sync from the given provider into the local database."""
         result = SyncResult()
 
@@ -1024,6 +1039,14 @@ class SyncManager:
 
     @staticmethod
     def sync_all_deep(provider_name: str, db: Session) -> SyncResult:
+        """Run a deep sync as one machine run."""
+        with machine_run(db, SYNC_RUN, SYSTEM_ENTITY, details=f"Deep {provider_name} sync"):
+            result = SyncManager._sync_all_deep_steps(provider_name, db)
+        db.commit()
+        return result
+
+    @staticmethod
+    def _sync_all_deep_steps(provider_name: str, db: Session) -> SyncResult:
         """Deep sync: fetches ALL historical flights via windowed date pagination."""
         result = SyncResult()
 
@@ -1107,29 +1130,30 @@ class SyncManager:
         ).order_by(Flight.date.desc().nulls_last()).limit(limit).all()
 
         synced = 0
-        for flight in flights:
-            try:
-                telemetry_data = provider.get_flight_telemetry(creds, flight.external_id)
-            except httpx.HTTPStatusError as exc:
-                if exc.response.status_code >= 500:
+        with machine_run(db, "telemetry_sync", "flight"):
+            for flight in flights:
+                try:
+                    telemetry_data = provider.get_flight_telemetry(creds, flight.external_id)
+                except httpx.HTTPStatusError as exc:
+                    if exc.response.status_code >= 500:
+                        logger.warning("Telemetry sync failed for flight %s: %s", flight.external_id, exc)
+                        continue
+                    # A 4xx will not change on retry (429 is retried inside the
+                    # client): record the flight as checked, with no telemetry, so
+                    # it stops taking a slot in every batch.
+                    telemetry_data = []
+                except Exception as exc:
+                    # Network trouble: leave the flight for the next batch.
                     logger.warning("Telemetry sync failed for flight %s: %s", flight.external_id, exc)
                     continue
-                # A 4xx will not change on retry (429 is retried inside the
-                # client): record the flight as checked, with no telemetry, so
-                # it stops taking a slot in every batch.
-                telemetry_data = []
-            except Exception as exc:
-                # Network trouble: leave the flight for the next batch.
-                logger.warning("Telemetry sync failed for flight %s: %s", flight.external_id, exc)
-                continue
-            if telemetry_data:
-                _store_telemetry_points(flight, telemetry_data, TelemetrySessionLocal, TelemetryPoint)
-            flight.telemetry_synced = True
-            flight.has_telemetry = bool(telemetry_data)
-            synced += 1
+                if telemetry_data:
+                    _store_telemetry_points(flight, telemetry_data, TelemetrySessionLocal, TelemetryPoint)
+                flight.telemetry_synced = True
+                flight.has_telemetry = bool(telemetry_data)
+                synced += 1
 
-        _set_setting(db, "last_telemetry_sync_timestamp", datetime.now(timezone.utc).isoformat())
-        _set_setting(db, "last_telemetry_sync_result", json.dumps({"synced": synced}))
+            _set_setting(db, "last_telemetry_sync_timestamp", datetime.now(timezone.utc).isoformat())
+            _set_setting(db, "last_telemetry_sync_result", json.dumps({"synced": synced}))
         db.commit()
         return synced
 

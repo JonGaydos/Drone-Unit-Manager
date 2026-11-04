@@ -15,6 +15,7 @@ from app.models.vehicle import Vehicle
 from app.models.user import User
 from app.constants import INCIDENT_NOT_FOUND
 from app.services.audit import log_action
+from app.services.audit_capture import delete_recorded
 from app.responses import responses
 
 router = APIRouter(prefix="/api/incidents", tags=["incidents"])
@@ -337,7 +338,7 @@ def delete_incident(incident_id: int, db: DBSession, user: DeleteUser):
         raise HTTPException(status_code=404, detail=INCIDENT_NOT_FOUND)
     title = incident.title
     from app.models.photo import PhotoIncident
-    db.query(PhotoIncident).filter(PhotoIncident.incident_id == incident_id).delete()
+    delete_recorded(db, db.query(PhotoIncident).filter(PhotoIncident.incident_id == incident_id))
     log_action(db, user.id, user.display_name, "delete", "incident", incident_id, title,
                details=f"Deleted incident: {title}")
     db.delete(incident)

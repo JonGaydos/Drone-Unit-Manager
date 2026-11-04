@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session
 from app.models.flight import Flight
 from app.models.pilot import Pilot
 from app.models.vehicle import Vehicle
+from app.services.audit_capture import update_recorded
 from app.services.local_time import display_zone, local_flight_date
 
 logger = logging.getLogger(__name__)
@@ -298,12 +299,12 @@ def _backfill_coords(db: Session, coords: dict) -> int:
     """
     filled = 0
     for addr, (lat, lon) in coords.items():
-        filled += (
-            db.query(Flight)
-            .filter(Flight.data_source == "brinc_csv",
-                    Flight.takeoff_address == addr,
-                    Flight.takeoff_lat.is_(None))
-            .update({"takeoff_lat": lat, "takeoff_lon": lon}, synchronize_session=False)
+        filled += update_recorded(
+            db,
+            db.query(Flight).filter(Flight.data_source == "brinc_csv",
+                                    Flight.takeoff_address == addr,
+                                    Flight.takeoff_lat.is_(None)),
+            {Flight.takeoff_lat: (None, lat), Flight.takeoff_lon: (None, lon)},
         )
     return filled
 

@@ -127,10 +127,14 @@ def delete_folder(folder_id: int, db: DBSession, user: ManageUser):
         raise HTTPException(400, "Cannot delete system folders")
 
     # Move documents to no folder
-    moved = db.query(Document).filter(Document.folder_id == folder_id).update({"folder_id": None})
+    documents = db.query(Document).filter(Document.folder_id == folder_id).all()
+    for document in documents:
+        document.folder_id = None
+    moved = len(documents)
 
     # Move child folders to parent
-    db.query(Folder).filter(Folder.parent_id == folder_id).update({"parent_id": folder.parent_id})
+    for child in db.query(Folder).filter(Folder.parent_id == folder_id).all():
+        child.parent_id = folder.parent_id
 
     # The record stays, marked deleted, so the trail can still name it.
     folder.deleted_at = datetime.now(timezone.utc)

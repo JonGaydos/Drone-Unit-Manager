@@ -13,6 +13,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.deps import DBSession, AdminUser
 from app.responses import responses
+from app.services.audit_capture import machine_run
 from app.services.import_service import (
     parse_file, suggest_mapping, parse_date_value, parse_float_safe,
     split_members, parse_drone_list, resolve_pilot, find_unknown_pilot,
@@ -158,9 +159,21 @@ async def commit_import(
         _, rows, truncated = await run_in_threadpool(parse_file, content, file.filename or "")
     except Exception as e:
         raise HTTPException(400, f"Could not parse file: {e}") from e
-    commit = {"missions": _commit_missions, "training": _commit_training}.get(entity, _commit_maintenance)
-    result = await run_in_threadpool(commit, db, rows, mapping_dict, admin.id)
+    result = await run_in_threadpool(_import_run, db, entity, rows, mapping_dict, admin.id)
     result["truncated"] = truncated
+    return result
+
+
+def _import_run(db, entity: str, rows, mapping, user_id) -> dict:
+    """Run one file's import as one machine run. Each row's savepoint sits inside it."""
+    commit, entity_type = {
+        "missions": (_commit_missions, "mission_log"),
+        "training": (_commit_training, "training_log"),
+        "maintenance": (_commit_maintenance, "maintenance"),
+    }[entity]
+    with machine_run(db, "import", entity_type, details=f"{entity.capitalize()} file upload"):
+        result = commit(db, rows, mapping, user_id)
+    db.commit()
     return result
 
 

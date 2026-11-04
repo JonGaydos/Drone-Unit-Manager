@@ -34,6 +34,7 @@ from app.constants import APP_TITLE, FILE_TOO_LARGE
 from app.deps import DBSession, AdminUser
 from app.routers.auth import require_permission
 from app.services.audit import log_action
+from app.services.audit_capture import machine_run
 from app.responses import responses
 
 router = APIRouter(prefix="/api/export", tags=["export"])
@@ -724,6 +725,14 @@ def _parse_csv_flight_row(row: dict, db) -> Flight:
     return flight
 
 
+def _import_run(db, details: str, importer, *args) -> dict:
+    """Run an importer as one machine run: a file's rows get one summary entry."""
+    with machine_run(db, "import", "flight", details=details):
+        result = importer(*args)
+    db.commit()
+    return result
+
+
 def _import_flights_csv_content(db, content: bytes) -> dict:
     """Import a flights CSV: a Skydio flight-list export, or the app's own
     exported flights CSV. Synchronous; the route runs it off the event loop."""
@@ -766,7 +775,7 @@ async def import_flights_csv(
     content = await file.read()
     if len(content) > settings.MAX_UPLOAD_SIZE:
         raise HTTPException(413, f"File too large. Maximum size is {settings.MAX_UPLOAD_SIZE // (1024*1024)}MB")
-    return await run_in_threadpool(_import_flights_csv_content, db, content)
+    return await run_in_threadpool(_import_run, db, "Flights CSV upload", _import_flights_csv_content, db, content)
 
 
 @router.post("/excel/import", responses=responses(400, 413))
@@ -790,7 +799,7 @@ async def import_excel_file(
         spooled.close()
     from app.services.excel_import import import_excel, import_skydio_csv
     importer = import_skydio_csv if file.filename.endswith('.csv') else import_excel
-    return await run_in_threadpool(importer, db, content)
+    return await run_in_threadpool(_import_run, db, "Skydio export upload", importer, db, content)
 
 
 # Below this the upload stays in memory; above it, the spool writes to disk.
@@ -896,6 +905,7 @@ async def import_flight_log(
             # database work for a full export, and on the loop it would freeze
             # every other request in the app for the duration.
             return await run_in_threadpool(
+                _import_run, db, "Flight log archive upload",
                 _import_zip_flight_logs, spooled, db, do_import, get_telemetry_db, admin.id)
         finally:
             spooled.close()
@@ -904,7 +914,8 @@ async def import_flight_log(
         content = spooled.read()
     finally:
         spooled.close()
-    return await run_in_threadpool(_import_single_log, db, file.filename, content, format, admin.id)
+    return await run_in_threadpool(
+        _import_run, db, "Flight log upload", _import_single_log, db, file.filename, content, format, admin.id)
 
 
 def _import_single_log(db, filename: str, content: bytes, format: str, user_id: int) -> dict:

@@ -35,6 +35,7 @@ from app.routers.auth import require_permission
 from app.services import evidence
 from app.services import permissions as permissions_service
 from app.services.audit import compute_changes, log_action
+from app.services.audit_capture import delete_recorded
 from app.services.file_validation import mime_for_filename, user_file_headers
 
 logger = logging.getLogger(__name__)
@@ -510,7 +511,7 @@ def update_photo(
 
     if pilot_ids is not None:
         # Replace pilot associations
-        db.query(PhotoPilot).filter(PhotoPilot.photo_id == photo_id).delete()
+        delete_recorded(db, db.query(PhotoPilot).filter(PhotoPilot.photo_id == photo_id))
         _attach_photo_pilots(db, photo_id, pilot_ids)
 
     if changes or pilot_ids is not None:
@@ -538,7 +539,7 @@ def link_photo_flight(photo_id: int, flight_id: int, db: DBSession, user: Custod
 @router.delete("/{photo_id}/flight/{flight_id}", responses=responses(401, 404))
 def unlink_photo_flight(photo_id: int, flight_id: int, db: DBSession, user: CustodyUser):
     """Unlink a photo from a flight."""
-    if db.query(PhotoFlight).filter(PhotoFlight.photo_id == photo_id, PhotoFlight.flight_id == flight_id).delete():
+    if delete_recorded(db, db.query(PhotoFlight).filter(PhotoFlight.photo_id == photo_id, PhotoFlight.flight_id == flight_id)):
         log_action(db, user.id, user.display_name, "unlink", "photo", photo_id, details=f"Unlinked from flight {flight_id}")
     db.commit()
     return {"ok": True}
@@ -561,7 +562,7 @@ def link_photo_incident(photo_id: int, incident_id: int, db: DBSession, user: Cu
 @router.delete("/{photo_id}/incident/{incident_id}", responses=responses(401, 404))
 def unlink_photo_incident(photo_id: int, incident_id: int, db: DBSession, user: CustodyUser):
     """Unlink a photo from an incident."""
-    if db.query(PhotoIncident).filter(PhotoIncident.photo_id == photo_id, PhotoIncident.incident_id == incident_id).delete():
+    if delete_recorded(db, db.query(PhotoIncident).filter(PhotoIncident.photo_id == photo_id, PhotoIncident.incident_id == incident_id)):
         log_action(db, user.id, user.display_name, "unlink", "photo", photo_id, details=f"Unlinked from incident {incident_id}")
     db.commit()
     return {"ok": True}
@@ -618,9 +619,9 @@ def purge_photo(photo_id: int, db: DBSession, admin: AdminUser):
     photo = _photo_or_404(db, photo_id)
     evidence.check_purgeable(photo)
 
-    db.query(PhotoPilot).filter(PhotoPilot.photo_id == photo_id).delete()
-    db.query(PhotoFlight).filter(PhotoFlight.photo_id == photo_id).delete()
-    db.query(PhotoIncident).filter(PhotoIncident.photo_id == photo_id).delete()
+    delete_recorded(db, db.query(PhotoPilot).filter(PhotoPilot.photo_id == photo_id))
+    delete_recorded(db, db.query(PhotoFlight).filter(PhotoFlight.photo_id == photo_id))
+    delete_recorded(db, db.query(PhotoIncident).filter(PhotoIncident.photo_id == photo_id))
     files = [os.path.join(UPLOAD_DIR, photo.filename), photo.thumbnail_path]
     log_action(db, admin.id, admin.display_name, "purge", "photo", photo_id, photo.original_filename,
                details=f"sha256 {photo.sha256 or 'not recorded'}")
