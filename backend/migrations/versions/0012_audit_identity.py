@@ -2,7 +2,8 @@
 
 Adds audit_logs.user_username, the login name of whoever made the change, which
 stays fixed if their display name changes later, and audit_logs.imported, which
-marks entries that came from a restored backup.
+marks entries that came from a restored backup. Also indexes audit_logs.created_at,
+the order and date filter of the audit pages and export.
 
 Revision ID: 0012_audit_identity
 Revises: 0011_role_permissions
@@ -26,9 +27,11 @@ def upgrade() -> None:
     with op.batch_alter_table('audit_logs', schema=None) as batch_op:
         batch_op.add_column(sa.Column('user_username', sa.String(length=100), nullable=True))
         batch_op.add_column(sa.Column('imported', sa.Boolean(), nullable=False, server_default=sa.false()))
+        batch_op.create_index('ix_audit_logs_created_at', ['created_at'])
 
 
 def downgrade() -> None:
     with op.batch_alter_table('audit_logs', schema=None) as batch_op:
+        batch_op.drop_index('ix_audit_logs_created_at')
         batch_op.drop_column('imported')
         batch_op.drop_column('user_username')

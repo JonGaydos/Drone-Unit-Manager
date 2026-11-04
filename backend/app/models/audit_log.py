@@ -19,6 +19,6 @@ class AuditLog(Base):
     changes: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # {"field": {"old": x, "new": y}}
     ip_address: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)
     details: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow, index=True)
     # True for an entry that came from a restored backup.
     imported: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
