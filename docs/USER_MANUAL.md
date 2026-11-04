@@ -85,6 +85,8 @@ The Settings page is accessible to administrators only and controls organization
 
 Enter your organization name and upload a logo. The logo appears on generated PDF reports.
 
+The Idle lock setting chooses how long a browser can sit with no input before it signs out: 30 minutes (the default), 1, 2, 4, 6, 8 or 12 hours. It applies to every role. A change reaches each browser the next time it refreshes its permissions (when the window regains focus) or reloads. Sessions still end after 12 hours whatever is chosen. Signing out or locking in one tab signs out every other tab of the same browser, and typing in a locked tab does not extend the session.
+
 ### 3.2 Skydio API Configuration
 
 Connect to the Skydio Cloud API to automatically import flights, vehicles, batteries, and controllers.
@@ -99,7 +101,7 @@ Ensure all pilots have email addresses in their profiles before syncing. The sys
 
 ### 3.3 Importing Data from Excel
 
-Upload an Excel spreadsheet containing flight data exported from Skydio or another source. The spreadsheet must have a sheet named "Skydio" with specific column headers. Click the format requirements link below the upload button to see the required column names. An optional "Pilot Info" sheet imports certification data.
+Upload an Excel spreadsheet containing flight data exported from Skydio or another source. The spreadsheet must have a sheet named "Skydio" with specific column headers. Click the format requirements link below the upload button to see the required column names. A workbook with more than 100,000 rows, or one that unpacks to more than 512 MB, is refused and nothing is imported; split it into smaller files. An optional "Pilot Info" sheet imports certification data.
 
 ### 3.4 User Management
 
@@ -107,7 +109,7 @@ Create, edit, and manage user accounts.
 
 1. Click Add User and enter a username, password, display name, and role.
 2. Optionally link the user to a pilot profile so the system knows which pilot they are.
-3. Use the edit button on existing users to change their role, display name, or pilot link.
+3. Use the edit button on existing users to change their role, display name, or pilot link. Display names are changed by administrators only; other users can still change their own email address and theme under My Profile on the General tab.
 4. Toggle users active or inactive as needed.
 5. What each role can do is set in the Role Permissions card below (see section 18).
 
@@ -428,9 +430,11 @@ Use the action buttons on each document to rename it, move it to a different fol
 
 The Audit Log (administrators only by default; the Role Permissions grid can allow other roles to view it) shows a chronological record of every change made in the system: who did what, when, and what the old and new values were. This provides accountability and a complete audit trail.
 
+Every change to unit data is recorded automatically, including changes made by imports, syncs and scheduled jobs. Each entry shows the person's display name and their login name (the login name stays fixed if the display name changes later), and the full list of fields that changed with old and new values. Changes made in bulk or by a background job appear as one summary entry with counts and the record IDs, and name the person who started the job. Contact details such as email and phone numbers are hidden in the log. Entries that came from a restored backup are marked Imported.
+
 ### 17.2 Filtering and Exporting
 
-Filter the audit log by entity type (flight, pilot, vehicle, etc.) or action type (create, update, delete). Click Export CSV to download the filtered log.
+Filter the audit log by entity type (flight, pilot, vehicle, etc.) or action type (create, update, delete). Click Export CSV to download the filtered log. The export includes every matching entry, with the login name, the full changes and an Imported column.
 
 ---
 
@@ -555,4 +559,6 @@ For automated backups, schedule a cron job or use your hosting platform's backup
 2. Replace the database files and uploads directory with your backup copies.
 3. Start the container.
 
-The application will use the restored data immediately. All user accounts, flights, certifications, and uploaded files will be restored to the state of the backup.
+The application will use the restored data immediately.
+
+The setup screen restores only into a fresh install, which has no held items. On a live install, a restore is an API call: `POST /api/backup/import` with an admin token. A backup that would remove or change a photo or document under legal hold is refused with a 409 and a list of those items, and nothing changes. To go ahead, send the call again with the form field `confirm_holds` set to the exact text `RESTORE HELD ITEMS`. Each held item that is removed or changed gets its own audit entry. Audit entries from the backup are added to this install's own and marked Imported. All user accounts, flights, certifications, and uploaded files will be restored to the state of the backup.

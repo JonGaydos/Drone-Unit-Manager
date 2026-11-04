@@ -7,6 +7,7 @@ SQLite may later hand to a new flight.
 """
 
 from app.models.flight import Flight
+from app.services.audit_capture import delete_recorded
 
 
 def purge_flight_references(db, ids: list[int]) -> None:
@@ -18,11 +19,15 @@ def purge_flight_references(db, ids: list[int]) -> None:
     from app.models.flight_approval import FlightPlan
     from app.models.media import MediaFile
     from app.models.photo import PhotoFlight
-    db.query(Incident).filter(Incident.flight_id.in_(ids)).update({Incident.flight_id: None}, synchronize_session=False)
-    db.query(ChecklistCompletion).filter(ChecklistCompletion.flight_id.in_(ids)).update({ChecklistCompletion.flight_id: None}, synchronize_session=False)
-    db.query(FlightPlan).filter(FlightPlan.linked_flight_id.in_(ids)).update({FlightPlan.linked_flight_id: None}, synchronize_session=False)
-    db.query(MediaFile).filter(MediaFile.flight_id.in_(ids)).delete(synchronize_session=False)
-    db.query(PhotoFlight).filter(PhotoFlight.flight_id.in_(ids)).delete(synchronize_session=False)
+    for model, field in ((Incident, "flight_id"), (ChecklistCompletion, "flight_id"), (FlightPlan, "linked_flight_id")):
+        for row in db.query(model).filter(getattr(model, field).in_(ids)).all():
+            setattr(row, field, None)
+    for media in db.query(MediaFile).filter(MediaFile.flight_id.in_(ids)).all():
+        db.delete(media)
+    # These models have no relationship to Flight, so one flush could delete the
+    # flight first and break the foreign keys. Clear them before it goes.
+    db.flush()
+    delete_recorded(db, db.query(PhotoFlight).filter(PhotoFlight.flight_id.in_(ids)))
 
 
 def purge_flight_telemetry(ids: list[int]) -> None:

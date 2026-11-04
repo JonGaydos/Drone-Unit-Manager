@@ -68,6 +68,28 @@ the recorded uploader of each document are lost, and the older release goes back
 to its fixed role rules. To return to the new release later, run it again; it
 applies the migration on start and the permission grid starts at the defaults.
 
+## Roll back a release with migration 0012 (audit log identity)
+
+Migration 0012 adds `audit_logs.user_username` and `audit_logs.imported`. An
+older image cannot undo it, so run the downgrade inside the new image before
+switching back. If the release you are leaving also carries migration 0011,
+step back past both by following the 0011 section afterwards.
+
+1. In the app, take a backup first (Settings, General, Backup & Restore,
+   Export Backup), and copy the data folder as well.
+2. With the new image still running, step the schema back one revision:
+
+        docker exec -w /app <container> alembic downgrade 0011_role_permissions
+
+3. Check it reported `Running downgrade 0012_audit_identity -> 0011_role_permissions`.
+4. Set the Repository to the previous tag and Apply. The data folder and Extra
+   Parameters stay as they are.
+
+The downgrade drops the two columns. Audit entries stay, but the recorded
+login name of who made each change and the marker for entries that came from a
+restored backup are lost. To return to the new release later, run it again; it
+applies the migration on start, and older entries have no login name.
+
 ## Roll the code back
 
     git revert <commit>

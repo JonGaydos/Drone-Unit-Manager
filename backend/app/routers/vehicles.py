@@ -4,12 +4,12 @@ from pathlib import Path
 from typing import Annotated
 
 import anyio
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 
 from app.config import settings
 from app.constants import VEHICLE_NOT_FOUND, ACCESS_DENIED, FILE_TYPE_NOT_ALLOWED, FILE_TOO_LARGE
-from app.deps import DBSession, AdminUser
+from app.deps import AdminForm, DBSession
 from app.models.user import User
 from app.routers.auth import require_permission
 from app.models.vehicle import Vehicle
@@ -137,6 +137,7 @@ def merge_vehicles(target_id: int, merge_from_id: int, db: DBSession, admin: Man
     from app.models.maintenance import MaintenanceRecord
     from app.models.maintenance_schedule import MaintenanceSchedule
     from app.models.alert import Alert
+    from app.services.audit_capture import update_recorded
 
     if merge_from_id == target_id:
         raise HTTPException(400, "Cannot merge a vehicle into itself")
@@ -148,17 +149,14 @@ def merge_vehicles(target_id: int, merge_from_id: int, db: DBSession, admin: Man
     def reassign(model, col):
         """Repoint a direct vehicle_id foreign key from source to target."""
         column = getattr(model, col)
-        moved = db.query(model).filter(column == merge_from_id).update(
-            {column: target_id}, synchronize_session=False
-        )
-        return moved
+        return update_recorded(db, db.query(model).filter(column == merge_from_id),
+                               {column: (merge_from_id, target_id)})
 
     def reassign_poly(model):
         """Repoint a polymorphic (entity_type='vehicle', entity_id) reference."""
-        moved = db.query(model).filter(
+        return update_recorded(db, db.query(model).filter(
             model.entity_type == "vehicle", model.entity_id == merge_from_id
-        ).update({model.entity_id: target_id}, synchronize_session=False)
-        return moved
+        ), {model.entity_id: (merge_from_id, target_id)})
 
     moved = (
         reassign(Flight, "vehicle_id")
@@ -303,8 +301,9 @@ ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 
 
 @router.post("/{vehicle_id}/photo", responses=responses(400, 401, 404, 413))
-async def upload_vehicle_photo(vehicle_id: int, file: UploadFile, db: DBSession, user: AdminUser):
+async def upload_vehicle_photo(vehicle_id: int, upload: AdminForm, db: DBSession):
     """Upload or replace a vehicle's profile photo. Admin only."""
+    file = upload.file
     vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
     if not vehicle:
         raise HTTPException(404, VEHICLE_NOT_FOUND)

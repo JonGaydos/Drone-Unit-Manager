@@ -37,6 +37,7 @@ from app.models.equipment_checkout import EquipmentCheckout
 from app.models.flight import Flight
 from app.models.maintenance import MaintenanceRecord
 from app.models.maintenance_schedule import MaintenanceSchedule
+from app.services.audit_capture import machine_run, update_recorded
 
 logger = logging.getLogger(__name__)
 
@@ -59,13 +60,12 @@ def _fill_missing_fields(canonical: Battery, dup: Battery) -> None:
 
 
 def _merge_into(db: Session, canonical: Battery, dup: Battery) -> None:
-    db.query(Flight).filter(Flight.battery_serial == dup.serial_number).update(
-        {Flight.battery_serial: canonical.serial_number}, synchronize_session=False
-    )
+    update_recorded(db, db.query(Flight).filter(Flight.battery_serial == dup.serial_number),
+                    {Flight.battery_serial: (dup.serial_number, canonical.serial_number)})
     for model in _ENTITY_REFS:
-        db.query(model).filter(
+        update_recorded(db, db.query(model).filter(
             model.entity_type == "battery", model.entity_id == dup.id
-        ).update({model.entity_id: canonical.id}, synchronize_session=False)
+        ), {model.entity_id: (dup.id, canonical.id)})
     _fill_missing_fields(canonical, dup)
     db.delete(dup)
 
@@ -94,9 +94,8 @@ def _normalize_dash_serials(db: Session, batteries: list[Battery]) -> tuple[int,
             merged += 1
         else:
             logger.info("Normalizing battery serial %r to %r", serial, clean)
-            db.query(Flight).filter(Flight.battery_serial == dup.serial_number).update(
-                {Flight.battery_serial: clean}, synchronize_session=False
-            )
+            update_recorded(db, db.query(Flight).filter(Flight.battery_serial == dup.serial_number),
+                            {Flight.battery_serial: (dup.serial_number, clean)})
             dup.serial_number = clean
             by_serial[clean.lower()] = dup
             renamed += 1
@@ -104,6 +103,14 @@ def _normalize_dash_serials(db: Session, batteries: list[Battery]) -> tuple[int,
 
 
 def merge_duplicate_batteries(db: Session) -> int:
+    """Run the repair as one machine run. Returns the records folded away."""
+    with machine_run(db, "battery_repair", "battery"):
+        merged = _repair_batteries(db)
+    db.commit()
+    return merged
+
+
+def _repair_batteries(db: Session) -> int:
     """Normalize dash-prefixed serials, then fold short-form duplicates.
 
     Returns the number of duplicate records folded away. Commits when

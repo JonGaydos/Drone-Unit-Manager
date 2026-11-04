@@ -27,4 +27,5 @@
   <Config Name="App Data" Target="/app/data" Default="/mnt/user/appdata/drone-unit-manager" Mode="rw" Description="Application data directory (database, uploads, config)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/drone-unit-manager</Config>
   <Config Name="Timezone" Target="TZ" Default="America/Chicago" Mode="" Description="Timezone for the application (e.g., America/New_York, America/Los_Angeles)" Type="Variable" Display="always" Required="false" Mask="false">America/Chicago</Config>
   <Config Name="Secret Key" Target="SECRET_KEY" Default="" Mode="" Description="JWT signing secret key. Leave blank to auto-generate on first run." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="Trusted Proxies" Target="TRUSTED_PROXIES" Default="" Mode="" Description="Address or CIDR of your reverse proxy or tunnel whose X-Forwarded-For and CF-Connecting-IP headers are trusted. Leave blank if the app is reached directly." Type="Variable" Display="advanced" Required="false" Mask="false"/>
 </Container>

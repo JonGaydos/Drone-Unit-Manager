@@ -144,7 +144,7 @@ def test_restore_blanks_hashes_drops_tokens_and_keeps_the_audit_trail(db, admin_
 
     assert db.query(User).one().password_hash == ""
     assert db.query(ApiToken).count() == 0
-    entries = db.query(AuditLog).order_by(AuditLog.created_at).all()
+    entries = db.query(AuditLog).filter(AuditLog.entity_type != "backup").order_by(AuditLog.created_at).all()
     assert [(e.user_name, e.action) for e in entries] == [("Planted", "update"), ("Local Admin", "login")]
     local = entries[1]
     assert local.user_id is None  # detached from the replaced user id, name kept

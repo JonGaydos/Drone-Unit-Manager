@@ -1,3 +1,4 @@
+from collections import Counter
 from datetime import date
 from typing import Annotated
 
@@ -9,6 +10,7 @@ from app.deps import DBSession
 from app.models.user import User
 from app.routers.auth import require_permission
 from app.services import permissions as permissions_service
+from app.services.audit_capture import delete_recorded
 from app.responses import responses
 from app.models.training_log import TrainingLog
 from app.models.training_log_pilot import TrainingLogPilot
@@ -67,7 +69,11 @@ def _training_to_out(training: TrainingLog, db: Session, vehicle_cache=None, pil
 
 
 def _sync_pilots(db: Session, training: TrainingLog, pilots_data: list[TrainingLogPilotIn]):
-    db.query(TrainingLogPilot).filter(TrainingLogPilot.training_log_id == training.id).delete()
+    current = db.query(TrainingLogPilot).filter(TrainingLogPilot.training_log_id == training.id)
+    if Counter((p.pilot_id, p.role, p.hours) for p in current) == Counter(
+            (p.pilot_id, p.role, p.hours) for p in pilots_data):
+        return
+    delete_recorded(db, current)
     db.flush()
     for p in pilots_data:
         db.add(TrainingLogPilot(

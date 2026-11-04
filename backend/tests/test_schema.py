@@ -178,3 +178,34 @@ def test_alembic_upgrade_head_is_idempotent(tmp_path, monkeypatch):
 
     assert first == second
     assert second is not None
+
+
+def _audit_indexes(url):
+    engine = create_engine(url)
+    try:
+        return {tuple(index["column_names"]) for index in inspect(engine).get_indexes("audit_logs")}
+    finally:
+        engine.dispose()
+
+
+def test_audit_log_date_index_follows_upgrade_and_downgrade(tmp_path, monkeypatch):
+    url = f"sqlite:///{tmp_path / 'audit_index.db'}"
+    monkeypatch.setattr(app.config.settings, "DATABASE_URL", url)
+    cfg = _alembic_config(url)
+
+    command.upgrade(cfg, "head")
+    assert ("created_at",) in _audit_indexes(url)
+
+    command.downgrade(cfg, "0011_role_permissions")
+    assert ("created_at",) not in _audit_indexes(url)
+
+    command.upgrade(cfg, "head")
+    assert ("created_at",) in _audit_indexes(url)
+
+
+def test_audit_log_date_index_is_on_the_model(tmp_path):
+    url = f"sqlite:///{tmp_path / 'audit_model.db'}"
+    engine = create_engine(url)
+    Base.metadata.create_all(engine)
+    engine.dispose()
+    assert ("created_at",) in _audit_indexes(url)

@@ -7,6 +7,8 @@ from app.models.user import User
 from app.routers.auth import require_permission
 from app.models.alert import Alert
 from app.responses import responses
+from app.services.audit import compute_changes, log_action
+from app.services.audit_capture import update_recorded
 from pydantic import BaseModel
 from datetime import datetime
 from typing import Annotated, Optional
@@ -60,7 +62,10 @@ def mark_read(alert_id: int, db: DBSession, user: DismissUser):
     alert = db.query(Alert).filter(Alert.id == alert_id).first()
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
-    alert.is_read = True
+    changes = compute_changes(alert, {"is_read": True}, ["is_read"])
+    if changes:
+        alert.is_read = True
+        log_action(db, user.id, user.display_name, "read", "alert", alert.id, alert.title, changes=changes)
     db.commit()
     return {"ok": True}
 
@@ -70,13 +75,17 @@ def dismiss_alert(alert_id: int, db: DBSession, user: DismissUser):
     alert = db.query(Alert).filter(Alert.id == alert_id).first()
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
-    alert.is_dismissed = True
+    changes = compute_changes(alert, {"is_dismissed": True}, ["is_dismissed"])
+    if changes:
+        alert.is_dismissed = True
+        log_action(db, user.id, user.display_name, "dismiss", "alert", alert.id, alert.title, changes=changes)
     db.commit()
     return {"ok": True}
 
 
 @router.post("/dismiss-all", responses=responses(401))
 def dismiss_all(db: DBSession, user: DismissUser):
-    db.query(Alert).filter(Alert.is_dismissed.is_(False)).update({Alert.is_dismissed: True})
+    update_recorded(db, db.query(Alert).filter(Alert.is_dismissed.is_(False)),
+                    {Alert.is_dismissed: (False, True)}, action="dismiss_all")
     db.commit()
     return {"ok": True}

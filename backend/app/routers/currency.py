@@ -1,4 +1,5 @@
 from datetime import date, datetime, timedelta
+from html import escape
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -209,11 +210,15 @@ class ReminderRequest(BaseModel):
 
 
 def _reminder_html(pilot, lapsed_rules, org_name: str, intro: str) -> str:
-    """Build the HTML body of a currency-reminder email for one pilot."""
+    """Build the HTML body of a currency-reminder email for one pilot. Every
+    interpolated text value is escaped."""
+    org_name = escape(org_name)
+    greeting_name = escape(pilot.first_name or pilot.full_name)
+    intro = escape(intro) if intro else ""
     rule_rows_html = "".join(
-        f'<tr><td style="padding:6px 12px;border-bottom:1px solid #eee;">{r["rule_name"]}</td>'
+        f'<tr><td style="padding:6px 12px;border-bottom:1px solid #eee;">{escape(str(r["rule_name"]))}</td>'
         f'<td style="padding:6px 12px;border-bottom:1px solid #eee;text-align:right;color:#c62828;">'
-        f'{r["actual_hours"]}/{r["required_hours"]}h in {r["period_days"]}d</td></tr>'
+        f'{escape(str(r["actual_hours"]))}/{escape(str(r["required_hours"]))}h in {escape(str(r["period_days"]))}d</td></tr>'
         for r in lapsed_rules
     )
     intro_html = f'<p style="margin:0 0 16px;color:#555;">{intro}</p>' if intro else ""
@@ -225,7 +230,7 @@ def _reminder_html(pilot, lapsed_rules, org_name: str, intro: str) -> str:
     <p style="margin:4px 0 0;opacity:0.8;font-size:13px;">Flight Currency Reminder</p>
   </div>
   <div style="padding:24px;">
-    <p style="margin:0 0 16px;">Hi {pilot.first_name or pilot.full_name},</p>
+    <p style="margin:0 0 16px;">Hi {greeting_name},</p>
     {intro_html}
     <p style="margin:0 0 16px;color:#333;">
       Your flight currency status is below the minimum on the following rule{rule_plural}.
@@ -255,7 +260,8 @@ def _send_one_reminder(pilot, rules, flights, org_name: str, intro: str, db) -> 
     if not pilot.email:
         return "skipped_no_email", None
     html = _reminder_html(pilot, lapsed_rules, org_name, intro)
-    if send_email(pilot.email, f"Flight currency reminder — {org_name}", html, db):
+    subject_org = " ".join(org_name.split())
+    if send_email(pilot.email, f"Flight currency reminder — {subject_org}", html, db):
         return "sent", f"{pilot.full_name} <{pilot.email}>"
     return "failed", None
 

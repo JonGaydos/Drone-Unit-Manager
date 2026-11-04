@@ -132,8 +132,8 @@ The application runs as a single Docker container with no external dependencies.
 - Configurable role permissions: an admin sets what Supervisors, Pilots and Viewers can do from one grid in Settings (Yes/No, or None/Own/All for records with an owner), enforced by the backend on every request; viewers can never change unit data
 - First-run setup wizard (no default credentials)
 - Login rate limiting
-- File upload size limits with stream-checked size enforcement on the largest endpoints
-- Activity audit log tracking destructive admin actions (role changes, password resets, backup export/import, mass-delete operations, equipment checkouts)
+- Request body limit of 1 MB on ordinary routes, with larger limits only for uploads and backups, and Excel import limits of 100,000 rows and 512 MB unpacked
+- Activity audit log that records every change to unit data automatically, with the login name and full old and new values, plus summary entries for imports, syncs and scheduled jobs
 - Path traversal prevention on document uploads (entity_type allowlist + filename sanitization + realpath check) and backup ZIP extraction (zip-slip rejection)
 - JWT authentication with configurable secret key
 - Short-lived HMAC-signed photo URLs (10-minute TTL) for `<img>` tags — replaces the older JWT-in-query-param pattern
@@ -288,6 +288,10 @@ Import flight logs from DJI Go 4 (.txt files) or Litchi (.csv files). The applic
 ## API Documentation
 
 Interactive API documentation (`/docs` for Swagger UI, `/redoc` for ReDoc, and the OpenAPI schema) is off by default, so a production instance does not publish its API surface. Set the environment variable `EXPOSE_API_DOCS=true` to turn it on, for example in development.
+
+## Reverse Proxy
+
+By default the app identifies every client by the address it connects from and ignores `X-Forwarded-For` and `CF-Connecting-IP`. If the app sits behind a reverse proxy or tunnel, set `TRUSTED_PROXIES` to that proxy's address (comma-separated IPs or CIDR ranges) so the real client address is used for login rate limits and the audit log. Until it is set, clients behind the proxy share one rate limit and the app logs a warning.
 
 ## Backup and Restore
 

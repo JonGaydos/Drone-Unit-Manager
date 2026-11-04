@@ -1,3 +1,4 @@
+from collections import Counter
 from datetime import date
 from typing import Annotated
 
@@ -5,11 +6,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.constants import MISSION_LOG_NOT_FOUND
+from app.constants import MISSION_LOG_NOT_FOUND, MISSION_STATUSES
+from app.services.choices import require_choices
 from app.deps import DBSession
 from app.models.user import User
 from app.routers.auth import require_permission
 from app.services import permissions as permissions_service
+from app.services.audit_capture import delete_recorded
 from app.responses import responses
 from app.models.mission_log import MissionLog
 from app.models.mission_log_pilot import MissionLogPilot
@@ -23,6 +26,7 @@ from app.schemas.mission_log import (
 router = APIRouter(prefix="/api/mission-logs", tags=["mission-logs"])
 
 LOGS_EDIT = "logs.edit"
+MISSION_CHOICES = {"status": MISSION_STATUSES}
 
 ViewUser = Annotated[User, Depends(require_permission("logs.view"))]
 CreateUser = Annotated[User, Depends(require_permission("logs.create"))]
@@ -68,7 +72,11 @@ def _mission_to_out(mission: MissionLog, db: Session, vehicle_cache=None, pilot_
 
 
 def _sync_pilots(db: Session, mission: MissionLog, pilots_data: list[MissionLogPilotIn]):
-    db.query(MissionLogPilot).filter(MissionLogPilot.mission_log_id == mission.id).delete()
+    current = db.query(MissionLogPilot).filter(MissionLogPilot.mission_log_id == mission.id)
+    if Counter((p.pilot_id, p.role, p.hours) for p in current) == Counter(
+            (p.pilot_id, p.role, p.hours) for p in pilots_data):
+        return
+    delete_recorded(db, current)
     db.flush()
     for p in pilots_data:
         db.add(MissionLogPilot(
@@ -163,6 +171,7 @@ def create_mission_log(data: MissionLogCreate, db: DBSession, admin: CreateUser)
     from app.services.audit import log_action
     pilots_data = data.pilots
     mission_dict = data.model_dump(exclude={"pilots"})
+    require_choices(mission_dict, None, MISSION_CHOICES)
     mission = MissionLog(**mission_dict, created_by_id=admin.id)
     db.add(mission)
     db.flush()
@@ -187,6 +196,7 @@ def update_mission_log(mission_id: int, data: MissionLogUpdate, db: DBSession, a
     _require_edit(db, admin, mission)
     update_data = data.model_dump(exclude_unset=True)
     pilots_data = update_data.pop("pilots", None)
+    require_choices(update_data, mission, MISSION_CHOICES)
     for key, value in update_data.items():
         setattr(mission, key, value)
     if pilots_data is not None:

@@ -57,13 +57,15 @@ def test_log_provider_error_api_status_is_a_warning_without_traceback(caplog):
     assert "403" in recs[0].getMessage()
 
 
-def test_log_provider_error_unexpected_keeps_full_traceback(caplog):
+def test_log_provider_error_unexpected_logs_type_only(caplog):
     with caplog.at_level(logging.DEBUG):
         _log_provider_error("sync widgets", ValueError("boom"))
     recs = _records(caplog, "sync widgets")
     assert recs
     assert recs[0].levelno == logging.ERROR
-    assert recs[0].exc_info is not None
+    assert recs[0].exc_info is None
+    assert "ValueError" in recs[0].getMessage()
+    assert "boom" not in recs[0].getMessage()
 
 
 # --- telemetry unwrap / mapping helpers -------------------------------------

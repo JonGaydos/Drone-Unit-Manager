@@ -5,17 +5,18 @@ file-type validation and path-traversal protection.
 """
 
 import hashlib
+import uuid
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
 
 from app.config import settings
 from app.constants import DOCUMENT_NOT_FOUND, ACCESS_DENIED
-from app.deps import AdminUser, DBSession
+from app.deps import AdminUser, DBSession, UploadForm, require_form_user
 from app.models.certification import PilotCertification
 from app.models.document import Document
 from app.models.user import User
@@ -31,7 +32,7 @@ router = APIRouter(prefix="/api/documents", tags=["documents"])
 
 FILES_EDIT = "files.edit"
 ViewUser = Annotated[User, Depends(require_permission("files.view"))]
-UploadUser = Annotated[User, Depends(require_permission("files.upload"))]
+UploadPermissionForm = Annotated[UploadForm, Depends(require_form_user("files.upload"))]
 EditUser = Annotated[User, Depends(require_permission(FILES_EDIT))]
 CustodyUser = Annotated[User, Depends(require_permission("files.custody"))]
 
@@ -122,36 +123,34 @@ def _check_own_record(db, user, entity_type: str, entity_id) -> None:
         raise HTTPException(403, "You can only attach documents to your own record")
 
 
+class DocumentUploadFields(BaseModel):
+    """The text fields sent with a document upload."""
+
+    entity_type: str  # see ALLOWED_ENTITY_TYPES; "general" has no parent entity
+    document_type: str  # classification label, e.g. "insurance", "manual"
+    title: str
+    entity_id: int | None = None  # required unless entity_type is "general"
+    notes: str | None = None
+    folder_id: int | None = None
+
+
 @router.post("/upload", response_model=DocumentOut, responses=responses(400, 403, 413))
-async def upload_document(
-    db: DBSession,
-    admin: UploadUser,
-    file: Annotated[UploadFile, File()],
-    entity_type: Annotated[str, Form()],
-    document_type: Annotated[str, Form()],
-    title: Annotated[str, Form()],
-    entity_id: Annotated[int | None, Form()] = None,
-    notes: Annotated[str | None, Form()] = None,
-    folder_id: Annotated[int | None, Form()] = None,
-):
+async def upload_document(db: DBSession, upload: UploadPermissionForm):
     """Upload a document, optionally attached to a parent entity.
 
+    The form holds the file and DocumentUploadFields.
+
     Args:
-        file: The uploaded file.
-        entity_type: Parent entity type (see ALLOWED_ENTITY_TYPES); "general"
-            for standalone documents with no parent entity.
-        entity_id: ID of the parent entity (required unless entity_type is
-            "general").
-        document_type: Classification label (e.g., "insurance", "manual").
-        title: Human-readable document title.
-        notes: Optional free-text notes.
-        folder_id: Optional folder for organization.
         db: Database session.
-        admin: Authenticated user holding the upload permission.
+        upload: The form, read once the user is known to hold the upload permission.
 
     Returns:
         The created document record.
     """
+    admin = upload.user
+    file = upload.file
+    fields = upload.fields(DocumentUploadFields)
+    entity_type, entity_id = fields.entity_type, fields.entity_id
     # Strip any directory components from the client-supplied filename. A
     # filename like "../../etc/passwd" would otherwise let the upload land
     # outside upload_dir via path concatenation.
@@ -170,14 +169,9 @@ async def upload_document(
         upload_dir = upload_root / "documents" / entity_type / str(entity_id)
     upload_dir.mkdir(parents=True, exist_ok=True)
 
-    dest = upload_dir / safe_filename
-    # Deduplicate filenames by appending a counter suffix
-    counter = 1
-    while dest.exists():
-        stem = Path(safe_filename).stem
-        suffix = Path(safe_filename).suffix
-        dest = upload_dir / f"{stem}_{counter}{suffix}"
-        counter += 1
+    # A generated name keeps two uploads of the same file name apart; the name
+    # the user gave stays in Document.filename for display and download.
+    dest = upload_dir / f"{uuid.uuid4().hex}{ext}"
 
     # Final realpath check — even with sanitization above, defend in depth.
     resolved = dest.resolve()
@@ -203,21 +197,21 @@ async def upload_document(
         certification_id=certification_id,
         entity_type=entity_type,
         entity_id=entity_id,
-        document_type=document_type,
-        title=title,
-        filename=dest.name,
+        document_type=fields.document_type,
+        title=fields.title,
+        filename=safe_filename,
         file_path=str(dest),
         mime_type=mime_for_filename(dest.name),
         file_size_bytes=len(contents),
         sha256=hashlib.sha256(contents).hexdigest(),
-        notes=notes,
-        folder_id=folder_id,
+        notes=fields.notes,
+        folder_id=fields.folder_id,
         uploaded_by_id=admin.id,
     )
     db.add(doc)
     db.flush()
-    log_action(db, admin.id, admin.display_name, "upload", "document", doc.id, title,
-               details=f"{dest.name}, {len(contents)} bytes, {entity_type}"
+    log_action(db, admin.id, admin.display_name, "upload", "document", doc.id, fields.title,
+               details=f"{safe_filename}, {len(contents)} bytes, {entity_type}"
                        + (f" #{entity_id}" if entity_id is not None else "")
                        + f", sha256 {doc.sha256}")
     db.commit()

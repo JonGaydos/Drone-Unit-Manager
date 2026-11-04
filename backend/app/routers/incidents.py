@@ -13,8 +13,12 @@ from app.models.incident import Incident
 from app.models.pilot import Pilot
 from app.models.vehicle import Vehicle
 from app.models.user import User
-from app.constants import INCIDENT_NOT_FOUND
+from app.constants import (
+    INCIDENT_NOT_FOUND, INCIDENT_REPORT_TYPES, INCIDENT_SEVERITIES, INCIDENT_STATUSES,
+)
+from app.services.choices import require_choices
 from app.services.audit import log_action
+from app.services.audit_capture import delete_links
 from app.responses import responses
 
 router = APIRouter(prefix="/api/incidents", tags=["incidents"])
@@ -25,6 +29,11 @@ EditUser = Annotated[User, Depends(require_permission("incidents.edit"))]
 DeleteUser = Annotated[User, Depends(require_permission("incidents.delete"))]
 
 # Resolution fields. Changing them needs incidents.resolve on top of edit access.
+INCIDENT_CHOICES = {
+    "severity": INCIDENT_SEVERITIES,
+    "status": INCIDENT_STATUSES,
+    "report_type": INCIDENT_REPORT_TYPES,
+}
 RESOLVE_FIELDS = ("status", "resolution", "resolution_date", "corrective_actions")
 
 
@@ -255,6 +264,7 @@ def get_incident(incident_id: int, db: DBSession, user: ViewUser):
 
 @router.post("", response_model=IncidentOut, responses=responses(401, 422))
 def create_incident(data: IncidentCreate, db: DBSession, user: CreateUser):
+    require_choices(data.model_dump(), None, INCIDENT_CHOICES)
     try:
         parsed_date = date.fromisoformat(data.date)
     except ValueError:
@@ -319,6 +329,7 @@ def update_incident(incident_id: int, data: IncidentUpdate, db: DBSession, user:
             update_data["resolution_date"] = date.fromisoformat(update_data["resolution_date"])
         except ValueError:
             raise HTTPException(status_code=422, detail=f"Invalid resolution_date format: {update_data['resolution_date']}")
+    require_choices(update_data, incident, INCIDENT_CHOICES)
     _check_resolve_allowed(db, user, incident, update_data)
     for key, value in update_data.items():
         setattr(incident, key, value)
@@ -337,9 +348,9 @@ def delete_incident(incident_id: int, db: DBSession, user: DeleteUser):
         raise HTTPException(status_code=404, detail=INCIDENT_NOT_FOUND)
     title = incident.title
     from app.models.photo import PhotoIncident
-    db.query(PhotoIncident).filter(PhotoIncident.incident_id == incident_id).delete()
+    links = delete_links(db.query(PhotoIncident).filter(PhotoIncident.incident_id == incident_id))
     log_action(db, user.id, user.display_name, "delete", "incident", incident_id, title,
-               details=f"Deleted incident: {title}")
+               changes=links or None, details=f"Deleted incident: {title}")
     db.delete(incident)
     db.commit()
     return {"ok": True}

@@ -9,11 +9,12 @@ from pydantic import BaseModel
 from app.constants import UTC_OFFSET
 from app.deps import DBSession, AdminUser
 from app.models.setting import Setting
+from app.services.audit_capture import actor_fields, machine_run, set_actor
 from app.services.flight_delete import delete_flights, purge_flight_telemetry
 from app.services.local_time import display_zone, local_flight_date
 from app.services import jobs
 from app.services.sync_lock import acquire_or_409, release, sync_guard_http
-from app.services.sync_manager import SyncManager, SyncResult
+from app.services.sync_manager import SYNC_RUN, SYSTEM_ENTITY, SyncManager, SyncResult
 from app.responses import responses
 
 logger = logging.getLogger(__name__)
@@ -65,23 +66,25 @@ def _run_sync(db, full: bool, sync_telemetry: bool, admin_id: int, admin_name: s
     """A manual sync, optionally followed by a telemetry batch. The caller
     holds the sync lock."""
     from app.services.audit import log_action
-    result = SyncManager.sync_all("skydio", db, full_sync=full)
+    with machine_run(db, SYNC_RUN, SYSTEM_ENTITY, details=f"Manual {'full' if full else 'incremental'} sync"):
+        result = SyncManager.sync_all("skydio", db, full_sync=full)
 
-    if full:
-        # After full sync, clean up any flights with no useful data
-        removed = _delete_empty_flights(db)
-        if removed:
-            logger.info("Auto-cleanup: removed %d empty flights", removed)
-            result.errors.append(f"Auto-cleaned {removed} flights with no data")
+        if full:
+            # After full sync, clean up any flights with no useful data
+            removed = _delete_empty_flights(db)
+            if removed:
+                logger.info("Auto-cleanup: removed %d empty flights", removed)
+                result.errors.append(f"Auto-cleaned {removed} flights with no data")
 
-    # Auto-fetch telemetry for flights that don't have it yet
-    if sync_telemetry:
-        try:
-            telemetry_result = SyncManager.batch_sync_telemetry(db, limit=10)
-            if telemetry_result > 0:
-                logger.info("Auto-synced telemetry for %d flights", telemetry_result)
-        except Exception as e:
-            logger.warning("Auto telemetry sync failed: %s", e)
+        # Auto-fetch telemetry for flights that don't have it yet
+        if sync_telemetry:
+            try:
+                telemetry_result = SyncManager.batch_sync_telemetry(db, limit=10)
+                if telemetry_result > 0:
+                    logger.info("Auto-synced telemetry for %d flights", telemetry_result)
+            except Exception as e:
+                logger.warning("Auto telemetry sync failed (%s)", type(e).__name__)
+                db.rollback()
 
     log_action(db, admin_id, admin_name, "sync", "system",
                details=f"{'Full' if full else 'Incremental'} sync: {result.flights_new} new flights, {result.vehicles_synced} vehicles")
@@ -102,14 +105,16 @@ def _run_telemetry(db) -> dict:
     return {"synced": synced, "remaining": max(0, remaining)}
 
 
-def _start_job(kind: str, work) -> dict:
+def _start_job(kind: str, work, actor: dict) -> dict:
     """Take the sync lock here, so a busy lock is a 409 on this request, and
-    run work(db) as a job on its own session; the job releases the lock."""
+    run work(db) as a job on its own session; the job releases the lock.
+    ``actor`` is who started it, in plain values for the job's audit entries."""
     from app import database
     acquire_or_409()
 
     def run():
         db = database.SessionLocal()
+        set_actor(db, actor)
         try:
             return work(db)
         finally:
@@ -148,7 +153,7 @@ def start_sync(
     logger.info("Background sync started by admin (full=%s, sync_telemetry=%s)", full, sync_telemetry)
     # Plain values, not the ORM user: the job outlives this request's session.
     admin_id, admin_name = admin.id, admin.display_name
-    return _start_job("sync", lambda db: _run_sync(db, full, sync_telemetry, admin_id, admin_name))
+    return _start_job("sync", lambda db: _run_sync(db, full, sync_telemetry, admin_id, admin_name), actor_fields(admin))
 
 
 @router.post("/telemetry", responses=responses(401, 409))
@@ -161,7 +166,7 @@ def sync_telemetry_batch(db: DBSession, user: AdminUser):
 @router.post("/telemetry/start", responses=responses(401, 409))
 def start_telemetry(user: AdminUser):
     """Start a telemetry batch as a background job; poll /jobs/{id}."""
-    return _start_job("telemetry", _run_telemetry)
+    return _start_job("telemetry", _run_telemetry, actor_fields(user))
 
 
 @router.get("/jobs/{job_id}", responses=responses(401, 404))
@@ -288,7 +293,7 @@ def _enrich_one(provider, creds, flight, db) -> str:
     try:
         detail = provider.get_flight_detail(creds, flight.external_id)
     except Exception as exc:
-        logger.warning("Enrich lookup failed for %s: %s", flight.external_id, exc)
+        logger.warning("Enrich lookup failed for %s (%s)", flight.external_id, type(exc).__name__)
         return "failed"
     if detail is None:
         return "empty"
@@ -340,11 +345,12 @@ def enrich_flights(
 
     logger.info("Found %d flights needing enrichment", len(empty_flights))
 
-    with sync_guard_http():
-        outcomes = {flight: _enrich_one(provider, creds, flight, db) for flight in empty_flights}
+    with machine_run(db, "enrich_run", "flight", details="Enrichment from Skydio"):
+        with sync_guard_http():
+            outcomes = {flight: _enrich_one(provider, creds, flight, db) for flight in empty_flights}
+        ids = delete_flights(db, [f for f, o in outcomes.items() if o == "empty"])
     enriched = sum(1 for o in outcomes.values() if o == "enriched")
     failed = sum(1 for o in outcomes.values() if o == "failed")
-    ids = delete_flights(db, [f for f, o in outcomes.items() if o == "empty"])
 
     from app.services.audit import log_action
     log_action(db, admin.id, admin.display_name, "enrich_flights", "flight",

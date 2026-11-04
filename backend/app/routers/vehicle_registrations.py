@@ -54,10 +54,11 @@ def create_registration(
     if not expiry and data.registration_date:
         expiry = data.registration_date + timedelta(days=1095)
 
-    db.query(VehicleRegistration).filter(
+    for current in db.query(VehicleRegistration).filter(
         VehicleRegistration.vehicle_id == vehicle_id,
         VehicleRegistration.is_current.is_(True),
-    ).update({"is_current": False})
+    ).all():
+        current.is_current = False
 
     reg = VehicleRegistration(
         vehicle_id=vehicle_id,

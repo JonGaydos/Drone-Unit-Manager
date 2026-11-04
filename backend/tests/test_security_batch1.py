@@ -134,6 +134,9 @@ def test_global_csp_restricts_form_targets(client):
 
 # 2. Client IP resolution and login lockout -----------------------------------
 
+PRIVATE_PROXIES = "127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+
+
 def _req(peer, headers=None):
     return SimpleNamespace(client=SimpleNamespace(host=peer), headers={k.lower(): v for k, v in (headers or {}).items()})
 
@@ -144,12 +147,14 @@ def test_untrusted_peer_cannot_claim_an_address():
     assert auth_router._client_ip(req) == "203.0.113.9"
 
 
-def test_trusted_proxy_prefers_cf_connecting_ip():
+def test_trusted_proxy_prefers_cf_connecting_ip(monkeypatch):
+    monkeypatch.setattr(settings, "TRUSTED_PROXIES", PRIVATE_PROXIES)
     req = _req("172.17.0.1", {"X-Forwarded-For": "1.2.3.4, 198.51.100.7", "CF-Connecting-IP": "198.51.100.7"})
     assert auth_router._client_ip(req) == "198.51.100.7"
 
 
-def test_trusted_proxy_reads_x_forwarded_for_from_the_right():
+def test_trusted_proxy_reads_x_forwarded_for_from_the_right(monkeypatch):
+    monkeypatch.setattr(settings, "TRUSTED_PROXIES", PRIVATE_PROXIES)
     """The leftmost entry is whatever the client sent; the rightmost
     non-proxy hop is the address the proxy actually saw."""
     req = _req("172.17.0.1", {"X-Forwarded-For": "1.2.3.4, 198.51.100.7, 10.0.0.2"})

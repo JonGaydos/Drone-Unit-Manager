@@ -24,6 +24,7 @@ import pytest
 from app.config import settings
 from app.routers import photos as photos_router
 from app.routers.photos import _sign_photo, SIGNED_URL_TTL_SECONDS
+from app.models.audit_log import AuditLog
 from app.models.photo import Photo, PhotoFlight, PhotoIncident
 from app.models.flight import Flight
 from app.models.incident import Incident
@@ -204,3 +205,48 @@ def test_expired_signed_url_rejected(client, db, upload_dir):
     assert exp < int(time.time())
     resp = client.get(f"/api/photos/{photo.id}/view?sig={sig}&exp={exp}")
     assert resp.status_code == 401, resp.text
+
+
+# 4. Thumbnail fallback audit -----------------------------------------------
+
+def _view_entries(photo_id):
+    from app import database
+    from app.models.audit_log import AuditLog
+    s = database.SessionLocal()
+    try:
+        return s.query(AuditLog).filter(AuditLog.entity_type == "photo", AuditLog.entity_id == photo_id,
+                                        AuditLog.action == "view").count()
+    finally:
+        s.close()
+
+
+def test_thumbnail_fallback_writes_view_audit(client, db, upload_dir, admin_headers):
+    photo, _ = _photo_on_disk(db, upload_dir)
+    resp = client.get(f"/api/photos/{photo.id}/thumbnail", headers=admin_headers)
+    assert resp.status_code == 200
+    assert resp.content == _PNG_1x1
+    assert _view_entries(photo.id) == 1
+
+
+def test_real_thumbnail_writes_no_view_audit(client, db, upload_dir, admin_headers):
+    photo, _ = _photo_on_disk(db, upload_dir)
+    thumb = os.path.join(upload_dir, "thumb.jpg")
+    with open(thumb, "wb") as f:
+        f.write(_PNG_1x1)
+    photo.thumbnail_path = thumb
+    db.commit()
+    resp = client.get(f"/api/photos/{photo.id}/thumbnail", headers=admin_headers)
+    assert resp.status_code == 200
+    assert _view_entries(photo.id) == 0
+
+
+def test_signed_view_entry_names_the_known_viewer(client, db, upload_dir, pilot_user):
+    photo, _ = _photo_on_disk(db, upload_dir)
+    sig, exp = _sign_photo(photo.id, "view", viewer=pilot_user.id)
+
+    resp = client.get(f"/api/photos/{photo.id}/view?sig={sig}&exp={exp}&u={pilot_user.id}")
+
+    assert resp.status_code == 200, resp.text
+    entry = db.query(AuditLog).filter_by(action="view", entity_id=photo.id).one()
+    assert entry.user_id == pilot_user.id
+    assert entry.user_username == pilot_user.username

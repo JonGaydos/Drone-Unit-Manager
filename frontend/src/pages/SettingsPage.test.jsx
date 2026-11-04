@@ -208,6 +208,36 @@ describe('SettingsPage', () => {
     await waitFor(() => expect(bulkBody).not.toBeNull())
     expect(bulkBody).toEqual(expect.arrayContaining([{ key: 'display_timezone', value: 'America/Denver' }]))
   })
+  it('offers the idle lock choices and saves the minutes value', async () => {
+    let bulkBody = null
+    mockMount({
+      settings: () => HttpResponse.json([{ key: 'idle_lock_minutes', value: '120' }]),
+    })
+    server.use(
+      http.put('/api/settings/bulk', async ({ request }) => { bulkBody = await request.json(); return HttpResponse.json({ ok: true }) }),
+    )
+    const { user } = renderWithProviders(<SettingsPage />, { role: 'admin' })
+
+    await screen.findByText('Quarterly currency')
+    const select = await screen.findByLabelText('Idle lock')
+    expect(within(select).getAllByRole('option').map(o => o.textContent)).toEqual([
+      '30 minutes', '1 hour', '2 hours', '4 hours', '6 hours', '8 hours', '12 hours',
+    ])
+    await waitFor(() => expect(select).toHaveValue('120'))
+    await user.selectOptions(select, '480')
+    await user.click(screen.getByRole('button', { name: 'Save Settings' }))
+
+    await waitFor(() => expect(bulkBody).not.toBeNull())
+    expect(bulkBody).toEqual(expect.arrayContaining([{ key: 'idle_lock_minutes', value: '480' }]))
+  })
+
+  it('defaults the idle lock to 30 minutes when none is stored', async () => {
+    mockMount({ settings: () => HttpResponse.json([]) })
+    renderWithProviders(<SettingsPage />, { role: 'admin' })
+    await screen.findByText('Quarterly currency')
+    expect(await screen.findByLabelText('Idle lock')).toHaveValue('30')
+  })
+
   // --- Flight purposes ------------------------------------------------------
   //
   // Editing here wrote a mission_purposes setting while the flight pages read
@@ -470,5 +500,47 @@ describe('SettingsPage role permissions', () => {
     const badges = await screen.findAllByText('No linked pilot')
     expect(badges).toHaveLength(1)
     expect(badges[0].closest('tr')).toHaveTextContent('Unlinked Pilot')
+  })
+
+  describe('own profile', () => {
+    const ME = { id: 9, username: 'jpilot', role: 'pilot', display_name: 'Jamie Pilot', email: 'j@example.org' }
+
+    it('shows a non-admin their display name read-only and still saves the email', async () => {
+      mockMount()
+      let sent = null
+      server.use(http.patch('/api/auth/me', async ({ request }) => {
+        sent = await request.json()
+        return HttpResponse.json(withPermissions({ ...ME, ...sent }))
+      }))
+      const { user } = renderWithProviders(<SettingsPage />, { user: ME, role: 'pilot' })
+
+      const name = await screen.findByLabelText('Display Name')
+      expect(name).toHaveValue('Jamie Pilot')
+      expect(name).toHaveAttribute('readonly')
+      const email = screen.getByLabelText('Email')
+      await user.clear(email)
+      await user.type(email, 'new@example.org')
+      await user.click(screen.getByRole('button', { name: 'Save Profile' }))
+
+      await waitFor(() => expect(sent).toEqual({ email: 'new@example.org' }))
+    })
+
+    it('lets an admin edit their display name', async () => {
+      mockMount()
+      let sent = null
+      server.use(http.patch('/api/auth/me', async ({ request }) => {
+        sent = await request.json()
+        return HttpResponse.json(withPermissions({ ...ME, role: 'admin', ...sent }))
+      }))
+      const { user } = renderWithProviders(<SettingsPage />, { user: { ...ME, role: 'admin' }, role: 'admin' })
+
+      const name = await screen.findByLabelText('Display Name')
+      expect(name).not.toHaveAttribute('readonly')
+      await user.clear(name)
+      await user.type(name, 'Chief')
+      await user.click(screen.getByRole('button', { name: 'Save Profile' }))
+
+      await waitFor(() => expect(sent).toEqual({ display_name: 'Chief', email: 'j@example.org' }))
+    })
   })
 })

@@ -6,10 +6,12 @@ import csv
 import io
 import json
 import re
+import zipfile
 from datetime import date, datetime
 from typing import Optional
 
 import openpyxl
+from openpyxl.utils.exceptions import InvalidFileException
 from sqlalchemy.orm import Session
 
 from app.models.pilot import Pilot
@@ -26,13 +28,13 @@ def _xlsx_cell_to_str(cell) -> str:
 
 
 def _xlsx_row_to_dict(row, headers: list[str]) -> dict:
-    """Map one XLSX row's cells onto the header keys, stringifying values."""
-    d = {}
-    for i, cell in enumerate(row):
-        if i >= len(headers) or not headers[i]:
-            continue
-        d[headers[i]] = _xlsx_cell_to_str(cell)
-    return d
+    """Map one XLSX row's cells onto the header keys, stringifying values. A
+    read-only sheet's row stops at its last cell, so the rest read as blank."""
+    return {
+        header: _xlsx_cell_to_str(row[i] if i < len(row) else None)
+        for i, header in enumerate(headers)
+        if header
+    }
 
 
 # Rows read from one file. Each parser reads one past the cap, so the caller
@@ -40,20 +42,77 @@ def _xlsx_row_to_dict(row, headers: list[str]) -> dict:
 # silently.
 MAX_IMPORT_ROWS = 5000
 
+# What a workbook may unpack to. An upload is capped at 50 MB, but a zip can
+# hold far more than it weighs. This leaves room for 5 KB of cell markup on each
+# of 100,000 rows, more than any export this app has been fed.
+MAX_UNPACKED_BYTES = 512 * 1024 * 1024
+
+
+class ImportTooLarge(ValueError):
+    """A file over an import limit. The message says which, for the person importing."""
+
+
+NOT_A_WORKBOOK = "This file is not a readable Excel workbook."
+
+
+def _check_unpacked_size(content: bytes) -> None:
+    """Refuse a workbook on the sizes its zip declares. Reading an entry stops at
+    its declared size, so understating one does not get more past this."""
+    try:
+        with zipfile.ZipFile(io.BytesIO(content)) as archive:
+            unpacked = sum(entry.file_size for entry in archive.infolist())
+    except zipfile.BadZipFile:
+        return  # Not a workbook at all; the parser says so in its own words.
+    if unpacked > MAX_UNPACKED_BYTES:
+        raise ImportTooLarge(
+            f"This workbook unpacks to more than {MAX_UNPACKED_BYTES // (1024 * 1024)} MB, "
+            "so it was not read and nothing was imported."
+        )
+
+
+def open_workbook(content: bytes):
+    """Open a workbook to read row by row, after checking its unpacked size. The
+    caller closes it, and reads sheets through open_sheet."""
+    _check_unpacked_size(content)
+    try:
+        return openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    except zipfile.BadZipFile:
+        raise
+    except Exception as e:
+        # A ZIP that is not a workbook fails in many ways: a missing part, bad XML.
+        raise InvalidFileException(NOT_A_WORKBOOK) from e
+
+
+def open_sheet(ws):
+    """A read-only sheet ready to read. Read-only mode otherwise trusts the size
+    the file declares, and some tools declare a single cell whatever it holds."""
+    ws.reset_dimensions()
+    return ws
+
+
+def is_blank_row(row) -> bool:
+    return all(cell is None or str(cell) == "" for cell in row)
+
 
 def _parse_xlsx(content: bytes) -> tuple[list[str], list[dict]]:
-    """Parse XLSX bytes into (headers, rows)."""
-    wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
-    raw = list(wb.active.iter_rows(values_only=True))
-    if not raw:
-        return [], []
-    headers = [str(h) if h is not None else "" for h in raw[0]]
-    rows = [
-        _xlsx_row_to_dict(row, headers)
-        for row in raw[1:]
-        if any(cell is not None and str(cell) != "" for cell in row)
-    ]
-    return headers, rows[:MAX_IMPORT_ROWS + 1]
+    """Parse XLSX bytes into (headers, rows), reading no further than one row
+    past the cap."""
+    wb = open_workbook(content)
+    try:
+        raw = open_sheet(wb.active).iter_rows(values_only=True)
+        first = next(raw, None)
+        if first is None:
+            return [], []
+        headers = [str(h) if h is not None else "" for h in first]
+        rows = []
+        for row in raw:
+            if not is_blank_row(row):
+                rows.append(_xlsx_row_to_dict(row, headers))
+                if len(rows) > MAX_IMPORT_ROWS:
+                    break
+        return headers, rows
+    finally:
+        wb.close()
 
 
 def _parse_csv(content: bytes) -> tuple[list[str], list[dict]]:

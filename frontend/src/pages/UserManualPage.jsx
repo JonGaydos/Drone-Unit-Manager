@@ -489,7 +489,7 @@ The card also has a **Disconnect** button. Disconnecting clears the stored Skydi
         body: `Import flight data from multiple sources via Settings > Integrations tab:
 
 • **Skydio CSV** — Flight records exported from Skydio Cloud
-• **Excel** — Spreadsheets with "Skydio" and "Pilot Info" sheets
+• **Excel** — Spreadsheets with "Skydio" and "Pilot Info" sheets (up to 100,000 rows and 512 MB unpacked; a larger file is refused and nothing is imported)
 • **DJI .txt** — DJI Go 4 flight log text files
 • **Litchi CSV** — Litchi flight log exports
 • **Airdata CSV** — Rich 52-column exports with gimbal, RC inputs, battery temperature, flight mode
@@ -519,11 +519,11 @@ Format is auto-detected, or you can pick a specific format. Select multiple file
       },
       {
         title: 'API Tokens',
-        body: `The API Tokens tab (admin only) issues long-lived keys for external tools that call the Drone Unit Manager API. When creating a token, choose a name, read-only or read & write access, and a scope — either all areas or specific ones (Fleet, Flights, Pilots & Certifications, Maintenance, Operations, Documents & Media, Reports & Dashboard). The token value is shown once, so copy it immediately. Existing tokens list their prefix, access, areas, and last-used time, and can be revoked. Settings, users, backups, and sync are never reachable with an API token.`
+        body: `The API Tokens tab (admin only) issues long-lived keys for external tools that call the Drone Unit Manager API. When creating a token, choose a name, read-only or read & write access, and a scope — either all areas or specific ones (Fleet, Flights, Pilots & Certifications, Maintenance, Operations, Documents & Media, Reports & Dashboard, Audit Log). The Audit Log area is never part of all areas and must be chosen explicitly. The token value is shown once, so copy it immediately. Existing tokens list their prefix, access, areas, and last-used time, and can be revoked. Settings, users, backups, and sync are never reachable with an API token.`
       },
       {
         title: 'Organization Settings',
-        body: 'Configure your organization name, logo, and timezone from the Settings page.'
+        body: 'Configure your organization name, logo, timezone, and idle lock from the Settings page. The idle lock (30 minutes by default, up to 12 hours) signs a browser out after that long with no input, for every role; a change reaches each browser at its next refresh or reload. Sessions still end after 12 hours. Signing out or locking in one tab signs out all open tabs.'
       },
       {
         title: 'Default Location',
@@ -545,11 +545,13 @@ Click "Save Sidebar Config" to apply.`
       },
       {
         title: 'User Management',
-        body: 'Admins can create, edit, and deactivate user accounts from Settings > Users. Assign roles and link users to pilot profiles. What each role can do is set in the Role Permissions card below the user list.'
+        body: 'Admins can create, edit, and deactivate user accounts from Settings > Users. Assign roles and link users to pilot profiles. Only admins can change a display name; other users can change their own email address and theme under My Profile on the General tab. What each role can do is set in the Role Permissions card below the user list.'
       },
       {
         title: 'Audit Log',
-        body: 'The Audit Log (admin only by default) shows a complete history of all actions taken in the system: who did what, when, and what changed. Use it for accountability and compliance auditing.'
+        body: `The Audit Log (admin only by default) shows a complete history of all actions taken in the system: who did what, when, and what changed. Use it for accountability and compliance auditing.
+
+Every change to unit data is recorded automatically, including changes made by imports, syncs and scheduled jobs. Each entry shows the person's display name and login name, and the full list of fields that changed with old and new values. Bulk changes and background jobs appear as one summary entry with counts and record IDs, and name the person who started the job. Contact details such as email and phone numbers are hidden. Entries that came from a restored backup are marked Imported. Export CSV downloads every matching entry, including the login name, full changes and an Imported column.`
       },
     ]
   },
@@ -571,7 +573,9 @@ Click "Save Sidebar Config" to apply.`
 
 Passwords are never included in a backup, so right after a restore no one can sign in yet. The setup screen reopens in recovery mode ("Restored backup detected"): enter the username of an administrator from the restored data, a new password, and the install token to reactivate that admin. The token is required for this step (it proves host access) and is retired once an admin is reactivated. Other restored users keep blank passwords until that admin resets them from Settings → Users.
 
-Restoring into an install that already has working logins is an operator task done against the backup API with an admin token rather than through the app.`
+Audit entries from the backup are added to this install's own and marked Imported.
+
+Restoring into an install that already has working logins is an operator task done against the backup API (POST /api/backup/import) with an admin token rather than through the app. If the backup would remove or change a photo or document under legal hold, the API refuses it with a list of the held items and changes nothing. To go ahead, send the call again with the form field confirm_holds set to the exact text RESTORE HELD ITEMS. Each held item that is removed or changed gets its own audit entry.`
       },
       {
         title: 'Filesystem Backup (Fallback)',

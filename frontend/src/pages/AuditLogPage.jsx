@@ -4,14 +4,29 @@ import { useAuth } from '@/contexts/AuthContext'
 import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Filter, ScrollText, Download } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
+// Every entity type and action the backend records, so any entry can be filtered.
 const ENTITY_TYPES = [
-  '', 'flight', 'pilot', 'vehicle', 'certification_type', 'pilot_certification',
-  'maintenance', 'mission_log', 'training_log', 'user', 'auth', 'system',
+  '', 'alert', 'api_token', 'attachment', 'auth', 'backup', 'battery', 'battery_reading',
+  'calendar_event', 'certification_type', 'checklist_completion', 'checklist_template',
+  'component', 'controller', 'currency', 'currency_rule', 'dock', 'document', 'equipment',
+  'flight', 'flight_plan', 'flight_purpose', 'folder', 'geofence', 'incident', 'maintenance',
+  'maintenance_schedule', 'media_file', 'mission_log', 'mission_log_pilot', 'notification',
+  'notification_log', 'notification_preference', 'operating_authority', 'other_equipment', 'photo',
+  'photo_flight', 'photo_incident', 'photo_pilot', 'pilot', 'pilot_certification',
+  'pilot_equipment_qual', 'role_permission', 'role_permissions', 'saved_report', 'sensor',
+  'setting', 'system', 'training_log', 'training_log_pilot', 'user', 'vehicle',
+  'vehicle_registration',
 ]
 
 const ACTIONS = [
-  '', 'create', 'update', 'delete', 'deactivate', 'retire', 'login', 'login_failed',
-  'password_change', 'sync', 'bulk_approve', 'bulk_update',
+  '', 'alert_check', 'approve', 'backup', 'battery_repair', 'bulk_approve', 'bulk_delete',
+  'bulk_update', 'cancel', 'checkin', 'checkout', 'cleanup', 'complete', 'create', 'deactivate',
+  'delete', 'deny', 'digest', 'disconnect', 'dismiss', 'dismiss_all', 'enrich_flights',
+  'enrich_run', 'export', 'hold', 'import', 'link', 'login', 'login_blocked', 'login_failed',
+  'logout', 'merge', 'password_change', 'password_reset', 'purge', 'reactivate', 'read',
+  'release_hold', 'reset', 'restore', 'restore_held_item', 'retire', 'send_reminders', 'send_test',
+  'setup', 'sync', 'sync_deep', 'sync_run', 'telemetry_sync', 'unapprove', 'unlink', 'update',
+  'upload', 'view',
 ]
 
 // Roughly what the 200px details column fits at this font size. Only used to
@@ -30,6 +45,38 @@ const ACTION_COLORS = {
   sync: 'bg-cyan-500/15 text-cyan-400',
   bulk_approve: 'bg-emerald-500/15 text-emerald-400',
   bulk_update: 'bg-blue-500/15 text-blue-400',
+}
+
+// Changes arrive as {old, new} pairs, plain values, or bulk and machine
+// summaries with counts and ids. Show every one as text without erroring.
+function isChangeMap(changes) {
+  return changes !== null && typeof changes === 'object' && !Array.isArray(changes)
+}
+
+function changeText(value) {
+  if (value === null || value === undefined || value === '') return '(empty)'
+  return typeof value === 'object' ? JSON.stringify(value) : String(value)
+}
+
+function isPair(change) {
+  return isChangeMap(change) && ('old' in change || 'new' in change)
+}
+
+function ChangeLine({ field, change }) {
+  return (
+    <div className="flex items-start gap-2">
+      <span className="font-medium text-foreground min-w-[120px]">{field}:</span>
+      {isPair(change) ? (
+        <>
+          <span className="text-red-400 line-through">{changeText(change.old)}</span>
+          <span className="text-muted-foreground">-&gt;</span>
+          <span className="text-emerald-400">{changeText(change.new)}</span>
+        </>
+      ) : (
+        <span className="text-emerald-400 break-all">{changeText(change)}</span>
+      )}
+    </div>
+  )
 }
 
 function entityLink(entityType, entityId) {
@@ -140,7 +187,7 @@ export default function AuditLogPage() {
             >
               <option value="">All</option>
               {ENTITY_TYPES.filter(Boolean).map(t => (
-                <option key={t} value={t}>{t.replace('_', ' ')}</option>
+                <option key={t} value={t}>{t.replaceAll('_', ' ')}</option>
               ))}
             </select>
           </div>
@@ -153,7 +200,7 @@ export default function AuditLogPage() {
             >
               <option value="">All</option>
               {ACTIONS.filter(Boolean).map(a => (
-                <option key={a} value={a}>{a.replace('_', ' ')}</option>
+                <option key={a} value={a}>{a.replaceAll('_', ' ')}</option>
               ))}
             </select>
           </div>
@@ -199,7 +246,7 @@ export default function AuditLogPage() {
               <tbody>
                 {logs.map(log => {
                   const link = entityLink(log.entity_type, log.entity_id)
-                  const hasChanges = log.changes && Object.keys(log.changes).length > 0
+                  const hasChanges = isChangeMap(log.changes) && Object.keys(log.changes).length > 0
                   const isExpanded = expandedId === log.id
 
                   const entries = hasChanges ? Object.entries(log.changes) : []
@@ -218,14 +265,22 @@ export default function AuditLogPage() {
                       </td>
                       <td className="px-4 py-2.5 text-foreground">
                         {log.user_name || '-'}
+                        {log.user_username && (
+                          <span className="ml-1 text-xs text-muted-foreground">({log.user_username})</span>
+                        )}
                       </td>
                       <td className="px-4 py-2.5">
                         <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${ACTION_COLORS[log.action] || 'bg-muted text-muted-foreground'}`}>
-                          {log.action?.replace('_', ' ')}
+                          {log.action?.replaceAll('_', ' ')}
                         </span>
+                        {log.imported && (
+                          <span className="ml-1 inline-block px-2 py-0.5 rounded-full text-xs bg-muted text-muted-foreground">
+                            Imported
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-2.5 text-muted-foreground capitalize">
-                        {log.entity_type?.replace('_', ' ') || '-'}
+                        {log.entity_type?.replaceAll('_', ' ') || '-'}
                       </td>
                       <td className="px-4 py-2.5">
                         {link ? (
@@ -262,13 +317,8 @@ export default function AuditLogPage() {
                               <p className="text-foreground whitespace-pre-wrap break-words mb-2">{log.details}</p>
                             )}
                             {hasChanges && <p className="font-medium text-muted-foreground mb-2">Changes:</p>}
-                            {entries.map(([field, vals]) => (
-                              <div key={field} className="flex items-start gap-2">
-                                <span className="font-medium text-foreground min-w-[120px]">{field}:</span>
-                                <span className="text-red-400 line-through">{vals.old || '(empty)'}</span>
-                                <span className="text-muted-foreground">-&gt;</span>
-                                <span className="text-emerald-400">{vals.new || '(empty)'}</span>
-                              </div>
+                            {entries.map(([field, change]) => (
+                              <ChangeLine key={field} field={field} change={change} />
                             ))}
                           </div>
                         </td>

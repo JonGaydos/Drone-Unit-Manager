@@ -4,12 +4,18 @@
  */
 import { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react'
 import { api, resetSessionExpired } from '@/api/client'
+import { IDLE_LOCK_MINUTES } from '@/lib/idleLock'
 
 const AuthContext = createContext(null)
 
-/** A signed-in browser locks after this long with no input. The server token
- *  lives 12 hours; this covers a screen left unattended. */
-export const IDLE_LIMIT_MS = 30 * 60 * 1000
+// The server token lives 12 hours whatever limit is chosen; the lock covers a
+// screen left unattended.
+const DEFAULT_IDLE_MINUTES = 30
+/** The limit used when none has been read, or the read failed. */
+export const IDLE_LIMIT_MS = DEFAULT_IDLE_MINUTES * 60 * 1000
+// Last limit read from the server, kept so a reopened page applies it before
+// any request. Shared across tabs like the activity stamp.
+const IDLE_MINUTES_KEY = 'idleLockMinutes'
 const IDLE_CHECK_MS = 60 * 1000
 // Activity is stamped at most this often, so a moving mouse is not a stream of
 // localStorage writes.
@@ -26,13 +32,36 @@ const LEVELS = new Set(['own', 'all'])
 // when the window regains focus, at most this often.
 const USER_REFRESH_MS = 60 * 1000
 
+/** A listed number of minutes, or the default for anything else. */
+function parseIdleMinutes(value) {
+  const text = String(value ?? '')
+  const minutes = /^\d+$/.test(text) ? Number(text) : 0
+  return IDLE_LOCK_MINUTES.includes(minutes) ? minutes : DEFAULT_IDLE_MINUTES
+}
+
+function idleLimitMs() {
+  return parseIdleMinutes(localStorage.getItem(IDLE_MINUTES_KEY)) * 60 * 1000
+}
+
+/** Read the limit from the server and keep it. Never throws, and any failure or
+ *  unusable value means the default, so there is no state without a lock. */
+function loadIdleLimit() {
+  return api.get('/settings/idle_lock_minutes')
+    .then(row => parseIdleMinutes(row?.value))
+    .catch(() => DEFAULT_IDLE_MINUTES)
+    .then(minutes => { localStorage.setItem(IDLE_MINUTES_KEY, String(minutes)) })
+}
+
+// Once another tab signs out or locks, the token is gone and input here must
+// not stamp activity, or it would revive the session for the other tabs.
 function markActivity() {
+  if (!localStorage.getItem('token')) return
   localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()))
 }
 
 function idleExpired() {
   const last = Number(localStorage.getItem(LAST_ACTIVITY_KEY))
-  return last > 0 && Date.now() - last > IDLE_LIMIT_MS
+  return last > 0 && Date.now() - last > idleLimitMs()
 }
 
 function clearLocalSession() {
@@ -67,7 +96,7 @@ export function AuthProvider({ children }) {
       setLoading(false)
     } else if (token) {
       api.get('/auth/me')
-        .then(setUser)
+        .then(me => { setUser(me); loadIdleLimit() })
         .catch(clearLocalSession)
         .finally(() => setLoading(false))
     } else {
@@ -92,17 +121,26 @@ export function AuthProvider({ children }) {
       }
     }
     const check = () => {
-      if (idleExpired()) {
+      if (!localStorage.getItem('token')) {
+        // Signed out or locked in another tab, whose storage event may not have arrived.
+        setUser(null)
+      } else if (idleExpired()) {
         sessionStorage.setItem(IDLE_NOTICE_KEY, '1')
         clearLocalSession()
         setUser(null)
       }
     }
     ACTIVITY_EVENTS.forEach(e => globalThis.addEventListener(e, onActivity, { passive: true }))
+    // Another tab signing out or locking removes the shared token.
+    const onStorage = (e) => {
+      if (e.key === 'token' || e.key === null) check()
+    }
+    globalThis.addEventListener('storage', onStorage)
     document.addEventListener('visibilitychange', check)
     const timer = setInterval(check, IDLE_CHECK_MS)
     return () => {
       ACTIVITY_EVENTS.forEach(e => globalThis.removeEventListener(e, onActivity))
+      globalThis.removeEventListener('storage', onStorage)
       document.removeEventListener('visibilitychange', check)
       clearInterval(timer)
     }
@@ -121,6 +159,7 @@ export function AuthProvider({ children }) {
       const now = Date.now()
       if (now - lastRefresh < USER_REFRESH_MS || idleExpired()) return
       lastRefresh = now
+      loadIdleLimit()
       api.get('/auth/me')
         .then(next => { if (active && next?.id) setUser(replaceIfChanged(next)) })
         .catch(err => { if (active && err.status === 401) onSessionEnded() })
@@ -146,6 +185,7 @@ export function AuthProvider({ children }) {
     // Re-arm the once-per-session 401 logout guard so a later expiry redirects.
     resetSessionExpired()
     setUser(data.user)
+    loadIdleLimit()
     return data.user
   }, [])
 

@@ -82,8 +82,8 @@ def test_audit_export_filters_by_local_day(client, db, admin_headers):
                             headers=admin_headers))
     oct8 = _rows(client.get("/api/export/audit/csv", params={"date_from": "2026-10-08", "date_to": "2026-10-08"},
                             headers=admin_headers))
-    assert [r[5] for r in oct7] == ["evening"]
-    assert [r[5] for r in oct8] == ["morning"]
+    assert [r[6] for r in oct7] == ["evening"]
+    assert [r[6] for r in oct8] == ["morning"]
 
 
 def test_checkout_export_filters_by_local_day(client, db, admin_headers, pilot):

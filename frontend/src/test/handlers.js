@@ -9,4 +9,6 @@ export const handlers = [
     const stored = localStorage.getItem('user')
     return HttpResponse.json(stored ? JSON.parse(stored) : withPermissions({ id: 1, username: 'admin', role: 'admin' }))
   }),
+  http.get('/api/settings/idle_lock_minutes', () =>
+    HttpResponse.json({ key: 'idle_lock_minutes', value: '30' })),
 ]

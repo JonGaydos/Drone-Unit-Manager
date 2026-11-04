@@ -59,6 +59,11 @@ def set_telemetry_pragma(dbapi_connection, connection_record):
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 TelemetrySessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=telemetry_engine)
 
+# Imported last, since the models the capture service writes import Base from here.
+from app.services import audit_capture  # noqa: E402
+
+audit_capture.install(SessionLocal)
+
 
 def get_db():
     """FastAPI dependency that provides a primary database session.

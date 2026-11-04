@@ -7,13 +7,13 @@ organization logo upload, and bulk updates.
 from pathlib import Path
 
 import anyio
-from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app.config import settings as app_settings
-from app.constants import LOGO_VIEW_PATH
-from app.deps import DBSession, CurrentUser, AdminUser
+from app.constants import LOGO_VIEW_PATH, SECRET_KEYS
+from app.deps import AdminForm, DBSession, CurrentUser, AdminUser
 from app.models.setting import Setting
 from app.responses import responses
 
@@ -34,7 +34,12 @@ ALLOWED_SETTING_KEYS = {
     "drone_location_places",
     "org_default_lat", "org_default_lon", "org_location_name",
     "backup_enabled", "backup_retention", "backup_hour",
+    "idle_lock_minutes",
 }
+
+# Minutes of no input before a browser locks. One value for every role.
+IDLE_LOCK_KEY = "idle_lock_minutes"
+IDLE_LOCK_CHOICES = frozenset({"30", "60", "120", "240", "360", "480", "720"})
 
 
 class SettingValue(BaseModel):
@@ -50,12 +55,6 @@ class SettingOut(BaseModel):
 
     model_config = {"from_attributes": True}
 
-
-# Keys whose values contain secrets — never returned to any role.
-SECRET_KEYS = {
-    "skydio_api_token", "skydio_token_id",
-    "smtp_password",
-}
 
 # Placeholder returned in place of a stored secret; never written back.
 REDACTED_MARKER = "********"
@@ -73,7 +72,24 @@ PUBLIC_KEYS = {
     "cert_types_config", "cert_status_labels", "mission_purposes",
     "drone_location_places",
     "org_default_lat", "org_default_lon", "org_location_name",
+    "idle_lock_minutes",
 }
+
+
+# Skydio credentials pasted from a browser often carry a trailing space or
+# newline. Mail credentials are kept as typed.
+TRIMMED_KEYS = {"skydio_api_token", "skydio_token_id"}
+
+
+def _trimmed(key: str, value: str) -> str:
+    """The value without surrounding whitespace when the key holds a credential."""
+    return value.strip() if key in TRIMMED_KEYS else value
+
+
+def _check_idle_lock(key: str, value: str) -> None:
+    """Refuse an idle lock value outside the offered choices."""
+    if key == IDLE_LOCK_KEY and value not in IDLE_LOCK_CHOICES:
+        raise HTTPException(422, "Idle lock must be 30, 60, 120, 240, 360, 480 or 720 minutes")
 
 
 def _redact_value(key: str, value: str | None) -> str:
@@ -112,11 +128,13 @@ def get_setting(key: str, db: DBSession, user: CurrentUser):
     return SettingOut(key=key, value=_redact_value(key, setting.value))
 
 
-@router.put("", responses=responses(400, 401))
+@router.put("", responses=responses(400, 401, 422))
 def set_setting(data: SettingValue, db: DBSession, admin: AdminUser):
     """Create or update a single setting. Admin only. Key must be in ALLOWED_SETTING_KEYS."""
     if data.key not in ALLOWED_SETTING_KEYS:
         raise HTTPException(400, f"Setting key '{data.key}' is not allowed")
+    _check_idle_lock(data.key, data.value)
+    data.value = _trimmed(data.key, data.value)
     from app.services.audit import log_action
     setting = db.query(Setting).filter(Setting.key == data.key).first()
     if setting:
@@ -124,7 +142,8 @@ def set_setting(data: SettingValue, db: DBSession, admin: AdminUser):
     else:
         setting = Setting(key=data.key, value=data.value)
         db.add(setting)
-    log_action(db, admin.id, admin.display_name, "update", "setting", details=f"Updated setting '{data.key}'")
+    log_action(db, admin.id, admin.display_name, "update", "setting", entity_name=data.key,
+               details=f"Updated setting '{data.key}'")
     db.commit()
     return {"ok": True}
 
@@ -133,8 +152,10 @@ ALLOWED_LOGO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 
 
 @router.post("/logo", responses=responses(400, 401, 413))
-async def upload_logo(file: UploadFile, db: DBSession, user: AdminUser):
+async def upload_logo(upload: AdminForm, db: DBSession):
     """Upload or replace the organization logo. Admin only."""
+    file = upload.file
+    user = upload.user
     upload_dir = Path(app_settings.UPLOAD_DIR) / "org"
     upload_dir.mkdir(parents=True, exist_ok=True)
     ext = Path(file.filename).suffix.lower() or ".png"
@@ -156,7 +177,8 @@ async def upload_logo(file: UploadFile, db: DBSession, user: AdminUser):
     else:
         db.add(Setting(key="org_logo", value=LOGO_VIEW_PATH))
     from app.services.audit import log_action
-    log_action(db, user.id, user.display_name, "update", "setting", details="Replaced the organization logo")
+    log_action(db, user.id, user.display_name, "update", "setting", entity_name="org_logo",
+               details="Replaced the organization logo")
     db.commit()
     return {"ok": True, "logo_url": LOGO_VIEW_PATH}
 
@@ -180,6 +202,7 @@ def _upsert_settings(db, data) -> list[str]:
     for item in data:
         if item.key not in ALLOWED_SETTING_KEYS:
             continue
+        item.value = _trimmed(item.key, item.value)
         if item.key in SECRET_KEYS and (item.value or "") in ("", REDACTED_MARKER):
             continue
         setting = db.query(Setting).filter(Setting.key == item.key).first()
@@ -206,13 +229,15 @@ def _interval_from(data, key) -> int | None:
     return interval
 
 
-@router.put("/bulk", responses=responses(401))
+@router.put("/bulk", responses=responses(401, 422))
 def set_settings_bulk(data: list[SettingValue], db: DBSession, admin: AdminUser):
     """Update multiple settings in a single request. Admin only.
 
     Skips keys not in ALLOWED_SETTING_KEYS and ignores masked placeholder
     values to avoid overwriting real secrets with redacted strings.
     """
+    for item in data:
+        _check_idle_lock(item.key, item.value)
     changed = _upsert_settings(db, data)
     if changed:
         # Key names only: several of these hold credentials.

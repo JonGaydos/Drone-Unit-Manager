@@ -15,16 +15,17 @@ from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, Query, Form
 from fastapi.responses import FileResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from PIL import Image as PILImage
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.constants import MIME_JPEG, PHOTO_NOT_FOUND, FLIGHT_NOT_FOUND, INCIDENT_NOT_FOUND, UTC_OFFSET
 from app.database import get_db
-from app.deps import AdminUser, DBSession
+from app.deps import AdminUser, DBSession, UploadForm, require_form_user
 from app.models.user import User
 from app.models.photo import Photo, PhotoPilot, PhotoFlight, PhotoIncident
 from app.models.pilot import Pilot
@@ -35,6 +36,7 @@ from app.routers.auth import require_permission
 from app.services import evidence
 from app.services import permissions as permissions_service
 from app.services.audit import compute_changes, log_action
+from app.services.audit_capture import add_folded, delete_links, set_actor
 from app.services.file_validation import mime_for_filename, user_file_headers
 
 logger = logging.getLogger(__name__)
@@ -44,7 +46,7 @@ router = APIRouter(prefix="/api/photos", tags=["photos"])
 FILES_VIEW = "files.view"
 FILES_EDIT = "files.edit"
 ViewUser = Annotated[User, Depends(require_permission(FILES_VIEW))]
-UploadUser = Annotated[User, Depends(require_permission("files.upload"))]
+UploadPermissionForm = Annotated[UploadForm, Depends(require_form_user("files.upload"))]
 EditUser = Annotated[User, Depends(require_permission(FILES_EDIT))]
 CustodyUser = Annotated[User, Depends(require_permission("files.custody"))]
 
@@ -223,57 +225,70 @@ def _stream_to_disk(file_obj, file_path: str, first_chunk: bytes, chunk_size: in
     return total, digest.hexdigest()
 
 
+def _photo_pilot_links(photo_id: int, pilot_ids: Optional[str]) -> list[PhotoPilot]:
+    """Link rows for comma-separated pilot IDs, ignoring non-numeric tokens."""
+    tokens = (token.strip() for token in (pilot_ids or "").split(","))
+    return [PhotoPilot(photo_id=photo_id, pilot_id=int(token)) for token in tokens if token.isdigit()]
+
+
 def _attach_photo_pilots(db, photo_id: int, pilot_ids: Optional[str]) -> None:
-    """Attach comma-separated pilot IDs to a photo, ignoring non-numeric tokens."""
-    if not pilot_ids:
-        return
-    for pid_str in pilot_ids.split(","):
-        pid_str = pid_str.strip()
-        if pid_str.isdigit():
-            db.add(PhotoPilot(photo_id=photo_id, pilot_id=int(pid_str)))
+    """Attach comma-separated pilot IDs to a photo."""
+    db.add_all(_photo_pilot_links(photo_id, pilot_ids))
+
+
+def _replace_photo_pilots(db, photo_id: int, pilot_ids: Optional[str]) -> dict:
+    """Replace a photo's pilot links. Returns the old and new links as
+    ``changes`` for the photo's update entry."""
+    changes = delete_links(db.query(PhotoPilot).filter(PhotoPilot.photo_id == photo_id))
+    links = _photo_pilot_links(photo_id, pilot_ids)
+    for link in links:
+        add_folded(db, link)
+    db.flush()
+    if links:
+        changes["photo_pilot_added"] = {
+            "old": None,
+            "new": ", ".join(f"pilot_id={link.pilot_id}" for link in links),
+            "ids": [link.id for link in links],
+            "total_ids": len(links),
+        }
+    return changes
+
+
+class PhotoUploadFields(BaseModel):
+    """The text fields sent with a photo upload."""
+
+    title: Optional[str] = None
+    description: Optional[str] = None
+    date_taken: Optional[str] = None  # ISO 8601, when the photo was taken
+    pilot_ids: Optional[str] = None  # comma-separated IDs of pilots to tag
 
 
 @router.post("/upload", responses=responses(400, 413))
-def upload_photo(
-
-    db: DBSession,
-
-    user: UploadUser,
-
-    file: Annotated[UploadFile, File()],
-
-    title: Annotated[Optional[str], Form()] = None,
-
-    description: Annotated[Optional[str], Form()] = None,
-
-    date_taken: Annotated[Optional[str], Form()] = None,
-
-    pilot_ids: Annotated[Optional[str], Form()] = None,
-):
+def upload_photo(db: DBSession, upload: UploadPermissionForm):
     """Upload a photo with optional metadata and pilot associations.
 
     Generates a JPEG thumbnail automatically. Files are stored in
     per-photo subdirectories with UUID-based filenames.
 
+    The form holds the image file and PhotoUploadFields.
+
     Args:
-        file: The image file to upload.
-        title: Optional display title.
-        description: Optional description text.
-        date_taken: ISO 8601 date string for when the photo was taken.
-        pilot_ids: Comma-separated pilot IDs to tag in the photo.
         db: Database session.
-        user: Authenticated user holding the upload permission.
+        upload: The form, read once the user is known to hold the upload permission.
 
     Returns:
         Dict with the new photo ID and success message.
     """
+    user = upload.user
+    file = upload.file
+    fields = upload.fields(PhotoUploadFields)
     # Validate file extension
     ext = os.path.splitext(file.filename or "photo.jpg")[1].lower()
     if ext not in ALLOWED_IMAGE_EXTENSIONS:
         raise HTTPException(400, f"File type '{ext}' not allowed. Allowed: {', '.join(sorted(ALLOWED_IMAGE_EXTENSIONS))}")
 
     # Create photo record first to get ID
-    parsed_date = _parse_date_taken(date_taken)
+    parsed_date = _parse_date_taken(fields.date_taken)
 
     stored_name = f"{uuid.uuid4().hex}{ext}"
 
@@ -285,8 +300,8 @@ def upload_photo(
     photo = Photo(
         filename=relative_path,
         original_filename=file.filename or "photo.jpg",
-        title=title,
-        description=description,
+        title=fields.title,
+        description=fields.description,
         date_taken=parsed_date,
         mime_type=mime_for_filename(stored_name),
         uploaded_by_id=user.id,
@@ -313,7 +328,7 @@ def upload_photo(
     photo.thumbnail_path = _generate_thumbnail(file_path, photo_dir, stored_name)
 
     # Create pilot associations
-    _attach_photo_pilots(db, photo.id, pilot_ids)
+    _attach_photo_pilots(db, photo.id, fields.pilot_ids)
 
     log_action(db, user.id, user.display_name, "upload", "photo", photo.id, photo.original_filename,
                details=f"{relative_path}, {photo.file_size} bytes, sha256 {photo.sha256}")
@@ -410,6 +425,16 @@ def _serve_image(path: Path, mime: str | None = None) -> FileResponse:
     return FileResponse(str(path), media_type=mime, headers=user_file_headers(mime))
 
 
+def _record_full_view(db, viewer_id: int | None, photo) -> None:
+    """Audit one serve of the full-resolution image."""
+    viewer = db.get(User, viewer_id) if viewer_id is not None else None
+    if viewer:
+        set_actor(db, viewer)
+    log_action(db, viewer_id, viewer.display_name if viewer else "Signed link", "view", "photo",
+               photo.id, photo.original_filename)
+    db.commit()
+
+
 @router.get("/{photo_id}/view", responses=responses(401, 404))
 def view_photo(
     photo_id: int,
@@ -429,10 +454,7 @@ def view_photo(
     resolved = _resolve_photo_path(photo)
     if not resolved:
         raise HTTPException(404, "File not found on disk")
-    viewer = db.get(User, viewer_id) if viewer_id is not None else None
-    log_action(db, viewer_id, viewer.display_name if viewer else "Signed link", "view", "photo",
-               photo.id, photo.original_filename)
-    db.commit()
+    _record_full_view(db, viewer_id, photo)
     return _serve_image(resolved)
 
 
@@ -445,16 +467,17 @@ def view_thumbnail(
     exp: Annotated[int | None, Query()] = None,
 ):
     """Serve the photo thumbnail. Same auth options as view_photo."""
-    _authenticate_image_request(photo_id, "thumbnail", credentials, sig, exp, db)
+    viewer_id = _authenticate_image_request(photo_id, "thumbnail", credentials, sig, exp, db)
     photo = _live_photo(db, photo_id)
     if photo.thumbnail_path:
         thumb_resolved = _validate_path(photo.thumbnail_path)
         if thumb_resolved.exists():
             return _serve_image(thumb_resolved, MIME_JPEG)
-    # Fall back to full image
+    # Fall back to full image; that is a view of the full file, so it is audited.
     resolved = _resolve_photo_path(photo)
     if not resolved:
         raise HTTPException(404, "File not found on disk")
+    _record_full_view(db, viewer_id, photo)
     return _serve_image(resolved)
 
 
@@ -509,9 +532,7 @@ def update_photo(
         setattr(photo, key, value)
 
     if pilot_ids is not None:
-        # Replace pilot associations
-        db.query(PhotoPilot).filter(PhotoPilot.photo_id == photo_id).delete()
-        _attach_photo_pilots(db, photo_id, pilot_ids)
+        changes.update(_replace_photo_pilots(db, photo_id, pilot_ids))
 
     if changes or pilot_ids is not None:
         log_action(db, user.id, user.display_name, "update", "photo", photo.id, photo.original_filename,
@@ -538,8 +559,10 @@ def link_photo_flight(photo_id: int, flight_id: int, db: DBSession, user: Custod
 @router.delete("/{photo_id}/flight/{flight_id}", responses=responses(401, 404))
 def unlink_photo_flight(photo_id: int, flight_id: int, db: DBSession, user: CustodyUser):
     """Unlink a photo from a flight."""
-    if db.query(PhotoFlight).filter(PhotoFlight.photo_id == photo_id, PhotoFlight.flight_id == flight_id).delete():
-        log_action(db, user.id, user.display_name, "unlink", "photo", photo_id, details=f"Unlinked from flight {flight_id}")
+    link = delete_links(db.query(PhotoFlight).filter(PhotoFlight.photo_id == photo_id, PhotoFlight.flight_id == flight_id))
+    if link:
+        log_action(db, user.id, user.display_name, "unlink", "photo", photo_id, changes=link,
+                   details=f"Unlinked from flight {flight_id}")
     db.commit()
     return {"ok": True}
 
@@ -561,8 +584,10 @@ def link_photo_incident(photo_id: int, incident_id: int, db: DBSession, user: Cu
 @router.delete("/{photo_id}/incident/{incident_id}", responses=responses(401, 404))
 def unlink_photo_incident(photo_id: int, incident_id: int, db: DBSession, user: CustodyUser):
     """Unlink a photo from an incident."""
-    if db.query(PhotoIncident).filter(PhotoIncident.photo_id == photo_id, PhotoIncident.incident_id == incident_id).delete():
-        log_action(db, user.id, user.display_name, "unlink", "photo", photo_id, details=f"Unlinked from incident {incident_id}")
+    link = delete_links(db.query(PhotoIncident).filter(PhotoIncident.photo_id == photo_id, PhotoIncident.incident_id == incident_id))
+    if link:
+        log_action(db, user.id, user.display_name, "unlink", "photo", photo_id, changes=link,
+                   details=f"Unlinked from incident {incident_id}")
     db.commit()
     return {"ok": True}
 
@@ -618,12 +643,14 @@ def purge_photo(photo_id: int, db: DBSession, admin: AdminUser):
     photo = _photo_or_404(db, photo_id)
     evidence.check_purgeable(photo)
 
-    db.query(PhotoPilot).filter(PhotoPilot.photo_id == photo_id).delete()
-    db.query(PhotoFlight).filter(PhotoFlight.photo_id == photo_id).delete()
-    db.query(PhotoIncident).filter(PhotoIncident.photo_id == photo_id).delete()
+    links = {
+        **delete_links(db.query(PhotoPilot).filter(PhotoPilot.photo_id == photo_id)),
+        **delete_links(db.query(PhotoFlight).filter(PhotoFlight.photo_id == photo_id)),
+        **delete_links(db.query(PhotoIncident).filter(PhotoIncident.photo_id == photo_id)),
+    }
     files = [os.path.join(UPLOAD_DIR, photo.filename), photo.thumbnail_path]
     log_action(db, admin.id, admin.display_name, "purge", "photo", photo_id, photo.original_filename,
-               details=f"sha256 {photo.sha256 or 'not recorded'}")
+               changes=links or None, details=f"sha256 {photo.sha256 or 'not recorded'}")
     db.delete(photo)
     db.commit()
     # Files go only once the record is gone, so a failed commit leaves both.

@@ -9,6 +9,7 @@ import { useConfirm } from '@/hooks/useConfirm'
 import { sortPilotsActiveFirst } from '@/lib/formatters'
 import { DEFAULT_ORG_LOCATION } from '@/lib/location'
 import { TIMEZONES } from '@/lib/utils'
+import { IDLE_LOCK_MINUTES, idleLockLabel } from '@/lib/idleLock'
 import { Save, Loader2, Upload, Download, UserPlus, Key, Trash2, Shield, Image as ImageIcon, ChevronUp, ChevronDown, ExternalLink, X, Edit2, MapPin, Search, GripVertical } from 'lucide-react'
 import { SIDEBAR_META, GROUP_ORDER } from '@/lib/sidebarNav'
 
@@ -74,9 +75,15 @@ export default function SettingsPage() {
   const [backupStatus, setBackupStatus] = useState(null)
   const [backupForm, setBackupForm] = useState({ enabled: true, retention: 7, hour: 3 })
   const [savingBackup, setSavingBackup] = useState(false)
-  const { isAdmin, can, user: currentUser } = useAuth()
+  const { isAdmin, can, user: currentUser, updateUser } = useAuth()
   const toast = useToast()
   const [confirmProps, requestConfirm] = useConfirm()
+
+  // Own profile: only an admin may change a display name
+  const [profile, setProfile] = useState({
+    display_name: currentUser?.display_name || '', email: currentUser?.email || '',
+  })
+  const [savingProfile, setSavingProfile] = useState(false)
 
   // User management state
   const [users, setUsers] = useState([])
@@ -212,6 +219,16 @@ export default function SettingsPage() {
       toast.success('User updated')
     } catch (err) { toast.error(err.message) }
     finally { setSavingEditUser(false) }
+  }
+
+  const handleSaveProfile = async () => {
+    setSavingProfile(true)
+    try {
+      const payload = isAdmin ? { display_name: profile.display_name, email: profile.email } : { email: profile.email }
+      updateUser(await api.patch('/auth/me', payload))
+      toast.success('Profile saved')
+    } catch (err) { toast.error(err.message) }
+    finally { setSavingProfile(false) }
   }
 
   // Reset password state
@@ -1195,6 +1212,31 @@ export default function SettingsPage() {
     )
   }
 
+  const renderProfile = () => (
+    <div className="bg-card border border-border rounded-xl p-6">
+      <h3 className="text-lg font-semibold text-foreground mb-4">My Profile</h3>
+      <div className="space-y-4">
+        <div>
+          <label htmlFor="profile-display-name" className="block text-sm font-medium text-foreground mb-1">Display Name</label>
+          {!isAdmin && <p className="text-xs text-muted-foreground mb-1.5">An administrator sets display names.</p>}
+          <input id="profile-display-name" type="text" value={profile.display_name} readOnly={!isAdmin}
+            onChange={e => setProfile({ ...profile, display_name: e.target.value })}
+            className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring read-only:opacity-70" />
+        </div>
+        <div>
+          <label htmlFor="profile-email" className="block text-sm font-medium text-foreground mb-1">Email</label>
+          <input id="profile-email" type="email" value={profile.email}
+            onChange={e => setProfile({ ...profile, email: e.target.value })}
+            className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+        </div>
+        <button onClick={handleSaveProfile} disabled={savingProfile}
+          className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium disabled:opacity-50">
+          {savingProfile ? 'Saving...' : 'Save Profile'}
+        </button>
+      </div>
+    </div>
+  )
+
   const renderOrganization = () => (
       <div className="bg-card border border-border rounded-xl p-6">
         <h3 className="text-lg font-semibold text-foreground mb-4">Organization</h3>
@@ -1214,6 +1256,24 @@ export default function SettingsPage() {
               onInput={() => setHasUnsavedChanges(true)}
             >
               {TIMEZONES.map(tz => <option key={tz} value={tz}>{tz}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="setting-idle_lock_minutes" className="block text-sm font-medium text-foreground mb-1">Idle lock</label>
+            <p className="text-xs text-muted-foreground mb-1.5">
+              A browser signs out after this long with no input, for every role. Applies to each browser at its next refresh or reload. Sessions still end after 12 hours.
+            </p>
+            <select
+              id="setting-idle_lock_minutes"
+              ref={el => { inputRefs.current['idle_lock_minutes'] = el }}
+              key={`idle_lock_minutes-${settings.idle_lock_minutes === undefined ? 'loading' : 'loaded'}`}
+              defaultValue={IDLE_LOCK_MINUTES.map(String).includes(settings.idle_lock_minutes) ? settings.idle_lock_minutes : '30'}
+              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              disabled={!isAdmin}
+              onInput={() => setHasUnsavedChanges(true)}
+            >
+              {IDLE_LOCK_MINUTES.map(m => <option key={m} value={String(m)}>{idleLockLabel(m)}</option>)}
             </select>
           </div>
 
@@ -1584,6 +1644,7 @@ export default function SettingsPage() {
       {/* General Tab */}
       {activeTab !== 'integrations' && activeTab !== 'users' && (
       <div className="space-y-6 max-w-2xl">
+      {renderProfile()}
       {renderOrganization()}
       {renderCertLabels()}
       {renderWeatherThresholds()}

@@ -65,7 +65,7 @@ def _log_provider_error(action: str, exc: Exception) -> None:
         logger.warning("Could not %s: Skydio API returned HTTP %s for %s",
                        action, exc.response.status_code, exc.request.url)
     else:
-        logger.error("Failed to %s", action, exc_info=exc)
+        logger.error("Failed to %s (%s)", action, type(exc).__name__)
 
 
 def _to_str(val):
@@ -289,7 +289,7 @@ class SkydioProvider(DroneProvider):
                 raise
             except httpx.HTTPError as exc:
                 if attempt < MAX_RETRIES:
-                    logger.warning("HTTP error on attempt %d: %s", attempt + 1, exc)
+                    logger.warning("HTTP error on attempt %d (%s)", attempt + 1, type(exc).__name__)
                     time.sleep(2)
                     continue
                 raise

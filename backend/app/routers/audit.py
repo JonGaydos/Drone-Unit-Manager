@@ -41,6 +41,7 @@ def list_audit_logs(
                 "id": entry.id,
                 "user_id": entry.user_id,
                 "user_name": entry.user_name,
+                "user_username": entry.user_username,
                 "action": entry.action,
                 "entity_type": entry.entity_type,
                 "entity_id": entry.entity_id,
@@ -48,6 +49,7 @@ def list_audit_logs(
                 "changes": redact_audit_changes(entry.changes) if hide else entry.changes,
                 "details": redact_audit_details(entry.details) if hide else entry.details,
                 "created_at": entry.created_at.isoformat() if entry.created_at else None,
+                "imported": bool(entry.imported),
             }
             for entry in logs
         ],

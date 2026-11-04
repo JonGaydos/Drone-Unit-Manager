@@ -4,9 +4,10 @@ import logging
 from datetime import datetime, date, timezone
 from typing import Optional
 
-import openpyxl
+from openpyxl.utils.exceptions import InvalidFileException
 from sqlalchemy.orm import Session
 
+from app.services.import_service import NOT_A_WORKBOOK, ImportTooLarge, is_blank_row, open_sheet, open_workbook
 from app.services.local_time import display_zone, local_flight_date
 from app.models.pilot import Pilot
 from app.models.vehicle import Vehicle
@@ -14,6 +15,27 @@ from app.models.flight import Flight, FlightPurpose
 from app.models.certification import CertificationType, PilotCertification
 
 logger = logging.getLogger(__name__)
+
+# Rows of data the Skydio and pilot importer takes from one file.
+MAX_EXCEL_ROWS = 100_000
+
+SKYDIO_SHEET = "Skydio"
+PILOT_INFO_SHEET = "Pilot Info"
+# The row each sheet's data starts on; those above it are headers.
+_FIRST_DATA_ROW = {SKYDIO_SHEET: 2, PILOT_INFO_SHEET: 7}
+
+
+def _cell(values, column: int):
+    """The value in a 1-based column. A read-only row stops at its last cell."""
+    return values[column - 1] if column <= len(values) else None
+
+
+def _check_row_count(count: int) -> None:
+    if count > MAX_EXCEL_ROWS:
+        raise ImportTooLarge(
+            f"This file has {count:,} rows and the import limit is {MAX_EXCEL_ROWS:,}, "
+            "so nothing was imported. Split it into smaller files and import each one."
+        )
 
 
 def _parse_date(val) -> Optional[date]:
@@ -324,13 +346,14 @@ def _process_skydio_row(row: dict, db: Session, result: dict,
 
 def _import_skydio_sheet(ws, db: Session, result: dict) -> tuple[int, int]:
     """Import flights from the Skydio sheet. Returns (pilots_created, vehicles_created)."""
-    headers = [ws.cell(1, c).value for c in range(1, ws.max_column + 1)]
+    rows = ws.iter_rows(values_only=True)
+    headers = next(rows, ())
     pilots_created = 0
     vehicles_created = 0
 
-    for r in range(2, ws.max_row + 1):
+    for r, values in enumerate(rows, start=_FIRST_DATA_ROW[SKYDIO_SHEET]):
         try:
-            row = {headers[c]: ws.cell(r, c + 1).value for c in range(len(headers))}
+            row = {header: _cell(values, c) for c, header in enumerate(headers, start=1)}
             pilot_new, vehicle_new = _process_skydio_row(row, db, result, source="excel_import")
             pilots_created += int(pilot_new)
             vehicles_created += int(vehicle_new)
@@ -361,6 +384,7 @@ def import_skydio_csv(db: Session, file_bytes: bytes) -> dict:
     """
     text = file_bytes.decode("utf-8-sig")
     reader = csv.DictReader(io.StringIO(text))
+    _check_row_count(sum(1 for _ in csv.DictReader(io.StringIO(text))))
     result = _new_import_result()
     pilots_created = 0
     vehicles_created = 0
@@ -411,10 +435,10 @@ _COL_MAP = {
 }
 
 
-def _assign_cert_columns(db: Session, pilot: Pilot, ws, r: int, col_map: dict, cert_types: dict, result: dict):
+def _assign_cert_columns(db: Session, pilot: Pilot, values, col_map: dict, cert_types: dict, result: dict):
     """Assign certifications from column-mapped cells for a single pilot row."""
     for col, cert_name in col_map.items():
-        val = ws.cell(r, col).value
+        val = _cell(values, col)
         ct = cert_types.get(cert_name)
         if not ct:
             continue
@@ -436,7 +460,7 @@ def _assign_cert_columns(db: Session, pilot: Pilot, ws, r: int, col_map: dict, c
         result["cert_assignments"] += 1
 
 
-def _assign_faa_part107(db: Session, pilot: Pilot, ws, r: int, cert_types: dict, result: dict):
+def _assign_faa_part107(db: Session, pilot: Pilot, values, cert_types: dict, result: dict):
     """Assign FAA Part 107 certification for a pilot row."""
     ct_faa = cert_types.get("FAA Part 107")
     if not ct_faa:
@@ -449,10 +473,10 @@ def _assign_faa_part107(db: Session, pilot: Pilot, ws, r: int, cert_types: dict,
     if existing:
         return
 
-    part107_date = _parse_date(ws.cell(r, 19).value)
-    renewal_due = _parse_date(ws.cell(r, 20).value)
-    renewed_date = _parse_date(ws.cell(r, 21).value)
-    renewal_due_2 = _parse_date(ws.cell(r, 22).value)
+    part107_date = _parse_date(_cell(values, 19))
+    renewal_due = _parse_date(_cell(values, 20))
+    renewed_date = _parse_date(_cell(values, 21))
+    renewal_due_2 = _parse_date(_cell(values, 22))
 
     faa_status = "active" if part107_date else "pending"
     if renewal_due and not renewed_date and renewal_due < date.today():
@@ -469,11 +493,11 @@ def _assign_faa_part107(db: Session, pilot: Pilot, ws, r: int, cert_types: dict,
     result["cert_assignments"] += 1
 
 
-def _import_pilot_row(ws, r: int, db: Session, cert_types: dict, result: dict) -> int:
+def _import_pilot_row(values, r: int, db: Session, cert_types: dict, result: dict) -> int:
     """Import one Pilot Info row. Returns 1 if a new pilot was created, else 0.
     A created pilot still counts even if a later cert-assignment step raises, so
     the count is fixed before the risky calls (matching the original flow)."""
-    name = ws.cell(r, 1).value
+    name = _cell(values, 1)
     if not name or str(name).strip() == "" or "STATUS KEY" in str(name):
         return 0
     created = 0
@@ -484,12 +508,12 @@ def _import_pilot_row(ws, r: int, db: Session, cert_types: dict, result: dict) -
         if not pilot:
             return created
 
-        status_val = ws.cell(r, 2).value
+        status_val = _cell(values, 2)
         if status_val:
             pilot.status = "active" if str(status_val).lower() == "active" else "inactive"
 
-        _assign_cert_columns(db, pilot, ws, r, _COL_MAP, cert_types, result)
-        _assign_faa_part107(db, pilot, ws, r, cert_types, result)
+        _assign_cert_columns(db, pilot, values, _COL_MAP, cert_types, result)
+        _assign_faa_part107(db, pilot, values, cert_types, result)
     except Exception as e:
         result["errors"].append(f"Pilot Info row {r}: {str(e)}")
     return created
@@ -504,14 +528,39 @@ def _import_pilot_info_sheet(ws, db: Session, result: dict) -> int:
         result["certifications_created"] += 1
 
     pilots_created = 0
-    for r in range(7, ws.max_row + 1):
-        pilots_created += _import_pilot_row(ws, r, db, cert_types, result)
+    first_row = _FIRST_DATA_ROW[PILOT_INFO_SHEET]
+    for r, values in enumerate(ws.iter_rows(min_row=first_row, values_only=True), start=first_row):
+        pilots_created += _import_pilot_row(values, r, db, cert_types, result)
 
     return pilots_created
 
 
+def _count_data_rows(wb) -> int:
+    """Rows holding data on the sheets this importer reads. Excel can keep
+    formatting on empty rows far below the data, and those do not count."""
+    return sum(
+        not is_blank_row(row)
+        for name, first_row in _FIRST_DATA_ROW.items() if name in wb.sheetnames
+        for row in open_sheet(wb[name]).iter_rows(min_row=first_row, values_only=True)
+    )
+
+
 def import_excel(db: Session, file_bytes: bytes) -> dict:
-    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True)
+    wb = open_workbook(file_bytes)
+    try:
+        # Counted before the first write: an import too large writes nothing.
+        try:
+            rows = _count_data_rows(wb)
+        except Exception as e:
+            # Read-only sheets are first read here, so a missing or broken one shows now.
+            raise InvalidFileException(NOT_A_WORKBOOK) from e
+        _check_row_count(rows)
+        return _import_workbook(db, wb)
+    finally:
+        wb.close()
+
+
+def _import_workbook(db: Session, wb) -> dict:
     pilots_created_count = 0
     vehicles_created_count = 0
     result = {
@@ -524,13 +573,13 @@ def import_excel(db: Session, file_bytes: bytes) -> dict:
         "errors": [],
     }
 
-    if "Skydio" in wb.sheetnames:
-        p_count, v_count = _import_skydio_sheet(wb["Skydio"], db, result)
+    if SKYDIO_SHEET in wb.sheetnames:
+        p_count, v_count = _import_skydio_sheet(open_sheet(wb[SKYDIO_SHEET]), db, result)
         pilots_created_count += p_count
         vehicles_created_count += v_count
 
-    if "Pilot Info" in wb.sheetnames:
-        pilots_created_count += _import_pilot_info_sheet(wb["Pilot Info"], db, result)
+    if PILOT_INFO_SHEET in wb.sheetnames:
+        pilots_created_count += _import_pilot_info_sheet(open_sheet(wb[PILOT_INFO_SHEET]), db, result)
 
     result["pilots_created"] = pilots_created_count
     result["vehicles_created"] = vehicles_created_count

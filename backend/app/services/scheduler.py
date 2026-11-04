@@ -12,6 +12,7 @@ from app.constants import APP_TITLE
 from app.database import SessionLocal
 from app.models.notification_log import NotificationLog
 from app.models.setting import Setting
+from app.services.audit_capture import machine_run
 from app.services.sync_lock import SyncBusy, sync_guard
 from app.services.sync_manager import SyncManager
 
@@ -39,39 +40,40 @@ def check_maintenance_schedules(db):
         MaintenanceSchedule.next_due <= today,
     ).all()
 
-    for schedule in overdue:
-        # One open alert per schedule. Keyed on the equipment as well as the
-        # name: two aircraft each with a "Monthly check" are two alerts.
-        existing = db.query(Alert).filter(
-            Alert.type == "maintenance_due",
-            Alert.title == f"Maintenance Due: {schedule.name}",
-            Alert.entity_type == schedule.entity_type,
-            Alert.entity_id == schedule.entity_id,
-            Alert.is_dismissed == False,
-        ).first()
-        if existing:
-            continue
+    with machine_run(db, "alert_check", "alert", details="Overdue maintenance check"):
+        for schedule in overdue:
+            # One open alert per schedule. Keyed on the equipment as well as the
+            # name: two aircraft each with a "Monthly check" are two alerts.
+            existing = db.query(Alert).filter(
+                Alert.type == "maintenance_due",
+                Alert.title == f"Maintenance Due: {schedule.name}",
+                Alert.entity_type == schedule.entity_type,
+                Alert.entity_id == schedule.entity_id,
+                Alert.is_dismissed == False,
+            ).first()
+            if existing:
+                continue
 
-        entity_info = f"{schedule.entity_type}"
-        if schedule.entity_id:
-            entity_info += f" #{schedule.entity_id}"
+            entity_info = f"{schedule.entity_type}"
+            if schedule.entity_id:
+                entity_info += f" #{schedule.entity_id}"
 
-        if schedule.frequency == "one_time":
-            what = "One-time task"
-        else:
-            freq_label = {"two_years": "2-year", "three_years": "3-year"}.get(
-                schedule.frequency, schedule.frequency
+            if schedule.frequency == "one_time":
+                what = "One-time task"
+            else:
+                freq_label = {"two_years": "2-year", "three_years": "3-year"}.get(
+                    schedule.frequency, schedule.frequency
+                )
+                what = f"Scheduled {freq_label} maintenance"
+            alert = Alert(
+                type="maintenance_due",
+                severity="warning",
+                title=f"Maintenance Due: {schedule.name}",
+                message=f"{what} for {entity_info} is overdue (due {schedule.next_due.isoformat()}).",
+                entity_type=schedule.entity_type,
+                entity_id=schedule.entity_id,
             )
-            what = f"Scheduled {freq_label} maintenance"
-        alert = Alert(
-            type="maintenance_due",
-            severity="warning",
-            title=f"Maintenance Due: {schedule.name}",
-            message=f"{what} for {entity_info} is overdue (due {schedule.next_due.isoformat()}).",
-            entity_type=schedule.entity_type,
-            entity_id=schedule.entity_id,
-        )
-        db.add(alert)
+            db.add(alert)
 
     db.commit()
     logger.info("Maintenance schedule check complete: %d overdue schedules found", len(overdue))
@@ -224,6 +226,7 @@ def _run_digest_job():
     """Check for users due for a digest email and send them."""
     from datetime import datetime
     from app.models.notification_preference import NotificationPreference
+    from app.models.user import User
 
     db = SessionLocal()
     try:
@@ -234,15 +237,22 @@ def _run_digest_job():
         now = datetime.now()
         current_hour = now.strftime("%H")
 
-        prefs = db.query(NotificationPreference).filter(
+        # Deactivated users keep their preferences but get no digest.
+        prefs = db.query(NotificationPreference).join(
+            User, User.id == NotificationPreference.user_id
+        ).filter(
+            User.is_active.is_(True),
             NotificationPreference.enabled == True,
             NotificationPreference.frequency != "off",
         ).all()
 
-        for pref in prefs:
-            if not _is_pref_due_now(pref, now, current_hour, db):
-                continue
-            _send_user_digest(pref, db)
+        due = [pref for pref in prefs if _is_pref_due_now(pref, now, current_hour, db)]
+        if not due:
+            return
+        with machine_run(db, "digest", "notification_log", details="Scheduled email digests"):
+            for pref in due:
+                _send_user_digest(pref, db)
+        db.commit()
 
     except Exception:
         logger.exception("Digest job failed")

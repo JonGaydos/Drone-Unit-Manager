@@ -1,19 +1,23 @@
 import csv
 import io
+import json
 import logging
 import tempfile
 import xml.etree.ElementTree as ET
+import zipfile
 from datetime import date, datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from openpyxl.utils.exceptions import InvalidFileException
 from starlette.concurrency import run_in_threadpool
+from starlette.datastructures import UploadFile
 from sqlalchemy.orm import joinedload
 
 from app.models.flight import Flight
 from app.services.local_time import display_zone, stamped_on_or_after, stamped_on_or_before
-from app.services.pilot_contacts import hides_contacts, redact_audit_details
+from app.services.pilot_contacts import hides_contacts, redact_audit_changes, redact_audit_details
 from app.models.pilot import Pilot
 from app.models.vehicle import Vehicle
 from app.models.maintenance import MaintenanceRecord
@@ -31,9 +35,11 @@ from app.models.other_equipment import OtherEquipment
 from app.models.user import User
 from app.config import settings
 from app.constants import APP_TITLE, FILE_TOO_LARGE
-from app.deps import DBSession, AdminUser
+from app.deps import AdminForm, DBSession
 from app.routers.auth import require_permission
 from app.services.audit import log_action
+from app.services.audit_capture import machine_run
+from app.services.import_service import ImportTooLarge
 from app.responses import responses
 
 router = APIRouter(prefix="/api/export", tags=["export"])
@@ -60,18 +66,20 @@ CSV_MEDIA_TYPE = "text/csv"
 MAX_EXPORT_ROWS = 50000
 
 # Leading characters that spreadsheet apps interpret as the start of a formula.
-_CSV_INJECTION_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+_CSV_INJECTION_PREFIXES = ("=", "+", "-", "@", "\t", "\r", "\n")
 
 
 def _csv_safe(value):
     """Neutralize CSV formula injection in user-controlled text fields.
 
     Prefixes a leading apostrophe to any string cell beginning with a
-    formula trigger character (= + - @ tab CR). Non-string values pass
+    formula trigger character (= + - @ tab CR LF), also after leading spaces. Non-string values pass
     through unchanged.
     """
-    if isinstance(value, str) and value and value[0] in _CSV_INJECTION_PREFIXES:
-        return "'" + value
+    if isinstance(value, str):
+        stripped = value.lstrip(" ")
+        if stripped and stripped[0] in _CSV_INJECTION_PREFIXES:
+            return "'" + value
     return value
 
 
@@ -209,7 +217,7 @@ def export_pilots_csv(db: DBSession, user: ExportUser, _manage: PilotsManage):
             _csv_safe(p.first_name), _csv_safe(p.last_name),
             _csv_safe(p.email or "") if with_contacts else "",
             _csv_safe(p.phone or "") if with_contacts else "",
-            _csv_safe(p.badge_number or ""), p.status, _csv_safe(p.notes or ""),
+            _csv_safe(p.badge_number or ""), _csv_safe(p.status), _csv_safe(p.notes or ""),
         ])
     output.seek(0)
     return StreamingResponse(
@@ -228,7 +236,7 @@ def export_vehicles_csv(db: DBSession, user: ExportUser, _view: FleetView):
     for v in vehicles:
         writer.writerow([
             _csv_safe(v.serial_number), _csv_safe(v.manufacturer), _csv_safe(v.model),
-            _csv_safe(v.nickname or ""), _csv_safe(v.faa_registration or ""), v.status,
+            _csv_safe(v.nickname or ""), _csv_safe(v.faa_registration or ""), _csv_safe(v.status),
             v.total_flights, round(v.total_flight_hours, 1),
         ])
     output.seek(0)
@@ -408,7 +416,7 @@ def export_certifications_csv(
             _csv_safe(pilot.full_name) if pilot else "",
             _csv_safe(cert_type.name) if cert_type else "",
             _csv_safe(cert_type.category) if cert_type else "",
-            c.status,
+            _csv_safe(c.status),
             c.issue_date or "", c.expiration_date or "",
             _csv_safe(c.certificate_number or ""), _csv_safe(c.notes or ""),
         ])
@@ -496,7 +504,7 @@ def export_mission_logs_csv(
                 pilot_names.append(p.full_name)
         writer.writerow([
             m.date, _csv_safe(m.title), _csv_safe(m.reason or ""), _csv_safe(m.location or ""),
-            _csv_safe(m.case_number or ""), m.man_hours, m.status,
+            _csv_safe(m.case_number or ""), m.man_hours, _csv_safe(m.status),
             _csv_safe("; ".join(pilot_names)), _csv_safe(m.description or ""), _csv_safe(m.notes or ""),
         ])
     output.seek(0)
@@ -512,9 +520,9 @@ def _incident_csv_row(inc, db):
     pilot = db.query(Pilot).filter(Pilot.id == inc.pilot_id).first() if inc.pilot_id else None
     return [
         inc.date, _csv_safe(inc.title), _csv_safe(pilot.full_name) if pilot else "",
-        getattr(inc, 'report_type', 'incident') or 'incident',
-        inc.severity, _csv_safe(inc.category), _csv_safe(inc.description or ""),
-        _csv_safe(inc.location or ""), inc.status, _csv_safe(inc.resolution or ""),
+        _csv_safe(getattr(inc, 'report_type', 'incident') or 'incident'),
+        _csv_safe(inc.severity), _csv_safe(inc.category), _csv_safe(inc.description or ""),
+        _csv_safe(inc.location or ""), _csv_safe(inc.status), _csv_safe(inc.resolution or ""),
         "Yes" if inc.equipment_grounded else "No",
         _csv_safe(inc.damage_description or ""), inc.estimated_cost or "", _csv_safe(inc.notes or ""),
     ]
@@ -564,7 +572,7 @@ def _flight_plan_csv_row(p, db):
         _csv_safe(pilot.full_name) if pilot else "",
         _csv_safe(f"{vehicle.manufacturer} {vehicle.model}") if vehicle else "",
         _csv_safe(p.location or ""), _csv_safe(p.purpose or ""), _csv_safe(p.case_number or ""),
-        p.status, p.max_altitude_planned or "", p.estimated_duration_min or "",
+        _csv_safe(p.status), p.max_altitude_planned or "", p.estimated_duration_min or "",
         _csv_safe(p.notes or ""),
     ]
 
@@ -601,6 +609,62 @@ def export_flight_plans_csv(
     )
 
 
+AUDIT_CSV_BATCH = 500
+_EMPTY = "(empty)"
+
+
+def _change_text(change):
+    """One field's change as text. Pairs read ``old -> new``; other values,
+    such as the bulk and machine summaries, are shown as they are."""
+    if isinstance(change, dict) and ("old" in change or "new" in change):
+        old, new = change.get("old"), change.get("new")
+        return f"{_EMPTY if old is None else old} -> {_EMPTY if new is None else new}"
+    if isinstance(change, (dict, list)):
+        return json.dumps(change, default=str)
+    return str(change)
+
+
+def _changes_text(changes):
+    """All of an entry's changes as one cell, whatever shape they were stored in."""
+    if not changes:
+        return ""
+    if not isinstance(changes, dict):
+        return _change_text(changes)
+    return "; ".join(f"{field}: {_change_text(change)}" for field, change in changes.items())
+
+
+def _audit_csv_row(log, local_tz, hide):
+    changes = redact_audit_changes(log.changes) if hide else log.changes
+    return [
+        _csv_fmt_local(log.created_at, local_tz, "%Y-%m-%d %H:%M:%S"),
+        _csv_safe(log.user_name or ""), _csv_safe(log.user_username or ""),
+        _csv_safe(log.action), _csv_safe(log.entity_type),
+        log.entity_id or "", _csv_safe(log.entity_name or ""),
+        _csv_safe((redact_audit_details(log.details) if hide else log.details) or ""),
+        _csv_safe(_changes_text(changes)),
+        _csv_safe(log.ip_address or ""),
+        "Yes" if log.imported else "No",
+    ]
+
+
+def _audit_csv_stream(query, local_tz, hide):
+    """The CSV in pieces, a batch of rows at a time, so the whole log is never
+    held in memory."""
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow([
+        "Timestamp", "User", "Username", "Action", COL_ENTITY_TYPE, COL_ENTITY_ID,
+        "Entity Name", "Details", "Changes", "IP Address", "Imported",
+    ])
+    for count, log in enumerate(query.yield_per(AUDIT_CSV_BATCH), start=1):
+        writer.writerow(_audit_csv_row(log, local_tz, hide))
+        if count % AUDIT_CSV_BATCH == 0:
+            yield buffer.getvalue()
+            buffer.seek(0)
+            buffer.truncate()
+    yield buffer.getvalue()
+
+
 @router.get("/audit/csv")
 def export_audit_csv(
     db: DBSession,
@@ -615,26 +679,9 @@ def export_audit_csv(
         q = q.filter(stamped_on_or_after(AuditLog.created_at, date_from, local_tz))
     if date_to:
         q = q.filter(stamped_on_or_before(AuditLog.created_at, date_to, local_tz))
-    logs = q.order_by(AuditLog.created_at.desc()).limit(5000).all()
-    hide = hides_contacts(db, user)
-
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow([
-        "Timestamp", "User", "Action", COL_ENTITY_TYPE, COL_ENTITY_ID,
-        "Entity Name", "Details", "IP Address",
-    ])
-    for log in logs:
-        writer.writerow([
-            _csv_fmt_local(log.created_at, local_tz, "%Y-%m-%d %H:%M:%S"),
-            _csv_safe(log.user_name or ""), _csv_safe(log.action), _csv_safe(log.entity_type),
-            log.entity_id or "", _csv_safe(log.entity_name or ""),
-            _csv_safe((redact_audit_details(log.details) if hide else log.details) or ""),
-            _csv_safe(log.ip_address or ""),
-        ])
-    output.seek(0)
+    q = q.order_by(AuditLog.created_at.desc(), AuditLog.id.desc()).execution_options(stream_results=True)
     return StreamingResponse(
-        iter([output.getvalue()]),
+        _audit_csv_stream(q, local_tz, hides_contacts(db, user)),
         media_type=CSV_MEDIA_TYPE,
         headers={"Content-Disposition": "attachment; filename=audit_log_export.csv"},
     )
@@ -724,6 +771,19 @@ def _parse_csv_flight_row(row: dict, db) -> Flight:
     return flight
 
 
+def _import_run(db, details: str, importer, *args) -> dict:
+    """Run an importer as one machine run: a file's rows get one summary entry."""
+    try:
+        with machine_run(db, "import", "flight", details=details):
+            result = importer(*args)
+    except ImportTooLarge as e:
+        raise HTTPException(413, str(e)) from e
+    except (zipfile.BadZipFile, InvalidFileException) as e:
+        raise HTTPException(400, "This file could not be read: it is not a valid Excel workbook or ZIP archive") from e
+    db.commit()
+    return result
+
+
 def _import_flights_csv_content(db, content: bytes) -> dict:
     """Import a flights CSV: a Skydio flight-list export, or the app's own
     exported flights CSV. Synchronous; the route runs it off the event loop."""
@@ -757,23 +817,22 @@ def _import_flights_csv_content(db, content: bytes) -> dict:
 @router.post("/flights/import", responses=responses(400, 413))
 async def import_flights_csv(
     db: DBSession,
-    admin: AdminUser,
-    file: Annotated[UploadFile, File()],
+    upload: AdminForm,
 ):
+    file = upload.file
     if not file.filename.endswith('.csv'):
         raise HTTPException(400, "Only CSV files are supported")
 
     content = await file.read()
     if len(content) > settings.MAX_UPLOAD_SIZE:
         raise HTTPException(413, f"File too large. Maximum size is {settings.MAX_UPLOAD_SIZE // (1024*1024)}MB")
-    return await run_in_threadpool(_import_flights_csv_content, db, content)
+    return await run_in_threadpool(_import_run, db, "Flights CSV upload", _import_flights_csv_content, db, content)
 
 
 @router.post("/excel/import", responses=responses(400, 413))
 async def import_excel_file(
     db: DBSession,
-    admin: AdminUser,
-    file: Annotated[UploadFile, File()],
+    upload: AdminForm,
 ):
     """Import a Skydio export and create fleet, pilots, accessories, and flights.
 
@@ -781,6 +840,7 @@ async def import_excel_file(
     flights + pilot certifications) or a flight-list CSV. Both run the full
     Skydio importer so equipment and pilots are created, not just flights.
     """
+    file = upload.file
     if not file.filename.endswith(EXCEL_EXTENSIONS + ('.csv',)):
         raise HTTPException(400, "Only Skydio .xlsx, .xls, or .csv files are supported")
     spooled = await _spool_upload(file, settings.MAX_UPLOAD_SIZE)
@@ -790,7 +850,7 @@ async def import_excel_file(
         spooled.close()
     from app.services.excel_import import import_excel, import_skydio_csv
     importer = import_skydio_csv if file.filename.endswith('.csv') else import_excel
-    return await run_in_threadpool(importer, db, content)
+    return await run_in_threadpool(_import_run, db, "Skydio export upload", importer, db, content)
 
 
 # Below this the upload stays in memory; above it, the spool writes to disk.
@@ -831,7 +891,6 @@ def _import_zip_flight_logs(archive, db, do_import, get_telemetry_db, user_id: i
     Takes a file object rather than bytes: ZipFile reads entries on demand, so
     a 200MB export costs the largest single entry rather than the whole archive.
     """
-    import zipfile
     with zipfile.ZipFile(archive) as zf:
         json_files = [n for n in zf.namelist() if n.endswith('.json') and not n.startswith('__')]
         results = {"total": len(json_files), "imported": 0, "skipped": 0, "errors": []}
@@ -856,14 +915,15 @@ def _import_zip_flight_logs(archive, db, do_import, get_telemetry_db, user_id: i
                     results["imported"] += 1
             except Exception as e:
                 results["errors"].append(f"{fname}: {str(e)}")
+                # Each entry commits on its own, so this drops only the failed one.
+                db.rollback()
         return results
 
 
 @router.post("/flights/import/log", responses=responses(400, 413))
 async def import_flight_log(
     db: DBSession,
-    admin: AdminUser,
-    file: Annotated[UploadFile, File()],
+    upload: AdminForm,
     format: str = "auto",
 ):
     """Import a flight log file (DJI .txt, Litchi CSV, Airdata CSV/JSON, or ZIP).
@@ -872,12 +932,14 @@ async def import_flight_log(
     to specify explicitly. Creates a Flight record and TelemetryPoints.
 
     Args:
-        file: The flight log file (.txt, .csv, .json, or .zip).
+        upload: The form, whose file is the flight log (.txt, .csv, .json, or .zip).
         format: Format hint - "auto", "dji", "litchi", "airdata", or "airdata_json".
 
     Returns:
         Import result with flight_id, points_imported, and format_detected.
     """
+    file = upload.file
+    admin = upload.user
     if not file.filename.endswith(('.txt', '.csv', '.json', '.zip') + EXCEL_EXTENSIONS):
         raise HTTPException(400, "Only .txt, .csv, .json, .zip, and .xlsx files are supported")
 
@@ -896,6 +958,7 @@ async def import_flight_log(
             # database work for a full export, and on the loop it would freeze
             # every other request in the app for the duration.
             return await run_in_threadpool(
+                _import_run, db, "Flight log archive upload",
                 _import_zip_flight_logs, spooled, db, do_import, get_telemetry_db, admin.id)
         finally:
             spooled.close()
@@ -904,7 +967,8 @@ async def import_flight_log(
         content = spooled.read()
     finally:
         spooled.close()
-    return await run_in_threadpool(_import_single_log, db, file.filename, content, format, admin.id)
+    return await run_in_threadpool(
+        _import_run, db, "Flight log upload", _import_single_log, db, file.filename, content, format, admin.id)
 
 
 def _import_single_log(db, filename: str, content: bytes, format: str, user_id: int) -> dict:

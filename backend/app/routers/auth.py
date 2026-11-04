@@ -23,6 +23,7 @@ from app.config import settings
 from app.constants import USER_NOT_FOUND
 from app.services import api_tokens as api_tokens_service
 from app.services import permissions as permissions_service
+from app.services.audit_capture import set_actor
 from app.database import get_db
 from app.models.user import User
 from app.schemas.user import LoginRequest, LoginResponse, UserOut, UserCreate, UserUpdate, ChangePasswordRequest, AdminResetPasswordRequest, SetupRequest
@@ -112,6 +113,7 @@ def user_from_login_token(token: str, db: Session) -> User:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=USER_NOT_FOUND)
     if token_version != (user.token_version or 0):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired. Please log in again.")
+    set_actor(db, user)
     return user
 
 
@@ -142,7 +144,7 @@ def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     if credentials.credentials.startswith(api_tokens_service.TOKEN_PREFIX):
         return api_tokens_service.authenticate_api_token(
-            db, credentials.credentials, request.method, request.url.path
+            db, credentials.credentials, request.method, request.scope["path"]
         )
     return user_from_login_token(credentials.credentials, db)
 
@@ -195,6 +197,9 @@ _USER_FAIL_WINDOW = 900  # 15 minutes, both the counting window and the lock
 _USER_FAIL_MAX_KEYS = 5000  # prune expired entries past this many usernames
 
 
+_warned_untrusted_proxy = False
+
+
 @lru_cache(maxsize=4)
 def _trusted_networks(spec: str) -> tuple:
     """Parse the comma-separated TRUSTED_PROXIES CIDR list (cached per value).
@@ -239,19 +244,50 @@ def _client_ip(request) -> str:
         The resolved client IP string, or "unknown" if unavailable.
     """
     peer = request.client.host if request.client else "unknown"
-    if not settings.TRUST_PROXY_HEADERS or not _is_trusted_proxy(peer):
+    if not settings.TRUST_PROXY_HEADERS:
         return peer
+    if not _is_trusted_proxy(peer):
+        _warn_untrusted_forwarding(request, peer)
+        return peer
+    return _forwarded_ip(request) or peer
+
+
+def _valid_ip(value: str) -> str | None:
+    """The value when it parses as an IP address, otherwise None."""
+    try:
+        return str(ip_address(value.strip()))
+    except ValueError:
+        return None
+
+
+def _forwarded_ip(request) -> str | None:
+    """The client address a trusted proxy reported, or None when there is no
+    usable one. Header values that are not IP addresses are never returned."""
     cf = (request.headers.get("cf-connecting-ip") or "").strip()
     if cf:
-        return cf
+        return _valid_ip(cf)
     hops = [h.strip() for h in (request.headers.get("x-forwarded-for") or "").split(",") if h.strip()]
     for hop in reversed(hops):
         if not _is_trusted_proxy(hop):
-            return hop
+            return _valid_ip(hop)
     if hops:
-        return hops[0]  # every hop is on the trusted network
-    real = (request.headers.get("x-real-ip") or "").strip()
-    return real or peer
+        return _valid_ip(hops[0])  # every hop is on the trusted network
+    return _valid_ip(request.headers.get("x-real-ip") or "")
+
+
+def _warn_untrusted_forwarding(request, peer: str) -> None:
+    """Log once when forwarding headers arrive from a peer that is not trusted,
+    the sign of a reverse proxy that TRUSTED_PROXIES does not name yet. Until
+    it does, every client behind that proxy shares one login rate limit."""
+    global _warned_untrusted_proxy
+    if _warned_untrusted_proxy:
+        return
+    if any(request.headers.get(h) for h in ("cf-connecting-ip", "x-forwarded-for", "x-real-ip")):
+        _warned_untrusted_proxy = True
+        logger.warning(
+            "Forwarding headers arrived from %s, which is not in TRUSTED_PROXIES, so they are "
+            "ignored and clients behind it share one rate limit. Set TRUSTED_PROXIES to that "
+            "proxy's address to use the real client address.", peer)
 
 
 def _check_rate_limit(request):
@@ -388,6 +424,7 @@ def _reactivate_admin(request, db, username: str, password: str) -> dict:
     if not verify_install_token(request.headers.get("X-Install-Token", "")):
         raise HTTPException(401, "Install token required to reactivate an administrator. Read it from the container logs or install_token.txt.")
     admin = _reclaim_admin(db, username, password)
+    set_actor(db, admin)
     revoke_sessions(admin)
     from app.services.audit import log_action
     log_action(db, admin.id, admin.display_name, "reactivate", "user", admin.id, admin.display_name,
@@ -452,6 +489,18 @@ def initial_setup(data: SetupRequest, request: Request, db: DBSession):
     first_name = name_parts[0]
     last_name = name_parts[1] if len(name_parts) > 1 else ""
 
+    # The administrator goes in first, so everything setup writes names them.
+    admin = User(
+        username=username,
+        password_hash=hash_password(password),
+        display_name=display_name or username,
+        role="admin",
+        email=email or None,
+    )
+    db.add(admin)
+    db.flush()
+    set_actor(db, admin)
+
     # Create pilot record for the admin user
     pilot = Pilot(
         first_name=first_name,
@@ -462,16 +511,7 @@ def initial_setup(data: SetupRequest, request: Request, db: DBSession):
     db.add(pilot)
     db.flush()
 
-    # Create admin user linked to the pilot
-    admin = User(
-        username=username,
-        password_hash=hash_password(password),
-        display_name=display_name or username,
-        role="admin",
-        email=email or None,
-        pilot_id=pilot.id,
-    )
-    db.add(admin)
+    admin.pilot_id = pilot.id
 
     # Set org name if provided
     if org_name:
@@ -547,12 +587,14 @@ def login(req: LoginRequest, request: Request, db: DBSession):
     if not user.is_active:
         # Same answer as a wrong password: a distinct message would confirm the
         # password was right. The attempt is still recorded for the audit trail.
+        set_actor(db, user)
         log_action(db, user.id, user.display_name, "login_blocked", "auth",
                    ip_address=client_ip, details="Login attempt to a disabled account")
         db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     _failed_by_user.pop(req.username.strip().lower(), None)
     token = create_token(user.id, user.token_version)
+    set_actor(db, user)
     log_action(db, user.id, user.display_name, "login", "auth",
                ip_address=client_ip, details="Successful login")
     db.commit()
@@ -577,10 +619,13 @@ def get_me(user: Annotated[User, Depends(get_current_user)], db: DBSession):
     return _own_user_out(db, user)
 
 
-@router.patch("/me", response_model=UserOut)
+@router.patch("/me", response_model=UserOut, responses=responses(403))
 def update_me(data: UserUpdate, user: Annotated[User, Depends(get_current_user)], db: DBSession):
-    """Update the current user's own profile (theme, display name)."""
+    """Update the current user's own profile (theme, email). Only an admin may
+    change a display name; sending the current one back is accepted."""
     from app.services.audit import compute_changes, log_action
+    if data.display_name is not None and data.display_name != user.display_name and user.role != "admin":
+        raise HTTPException(status_code=403, detail="Only an administrator can change a display name")
     updates = {k: v for k, v in (("theme", data.theme), ("display_name", data.display_name),
                                  ("email", data.email)) if v is not None}
     # Theme is a display preference, not worth a trail entry.
