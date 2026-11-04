@@ -413,6 +413,8 @@ NOT_WORKBOOKS = {
     "empty_manifest": lambda: _zip_of(**{"[Content_Types].xml": "<Types/>"}),
     "broken_manifest": lambda: _zip_of(**{"[Content_Types].xml": "not xml"}),
     "broken_sheet": lambda: _with_sheet_xml(_rows_only_workbook(1), lambda _xml: "not xml"),
+    "broken_cell": lambda: _with_sheet_xml(_rows_only_workbook(1), lambda xml: re.sub(
+        rb'<c r="A2"[^>]*>.*?</c>', b'<c r="A2" t="n"><v>abc</v></c>', xml, count=1)),
 }
 
 
