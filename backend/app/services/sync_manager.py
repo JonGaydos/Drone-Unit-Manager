@@ -7,6 +7,7 @@ from datetime import datetime, date, timezone
 
 import httpx
 from sqlalchemy import func
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.constants import API_TOKEN_NOT_CONFIGURED, UTC_OFFSET
@@ -1022,7 +1023,8 @@ class SyncManager:
             _sync_media(provider, creds, since, db, result)
             db.commit()
         except Exception as exc:
-            logger.debug("Media sync skipped (%s)", type(exc).__name__)
+            level = logging.WARNING if isinstance(exc, SQLAlchemyError) else logging.DEBUG
+            logger.log(level, "Media sync skipped (%s)", type(exc).__name__)
             db.rollback()
             result.media_synced = 0
 

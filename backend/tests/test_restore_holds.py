@@ -349,6 +349,17 @@ def test_truncated_telemetry_still_leaves_the_summary(
     assert "telemetry=failed" in summary.details and "files=not restored" in summary.details
 
 
+def test_restore_failing_after_the_main_tables_leaves_an_install_token(
+        client, db, admin_user, admin_headers, tmp_path, monkeypatch):
+    _env(tmp_path, monkeypatch)
+    archive = _with_telemetry(_archive(db), b'[{"id": 1, "flight_id"')
+
+    resp = _post(client, admin_headers, archive)
+
+    assert resp.status_code == 500
+    assert (tmp_path / "install_token.txt").read_text().strip()
+
+
 def test_uploads_failing_still_leaves_the_summary(
         client, db, admin_user, admin_headers, tmp_path, monkeypatch):
     _env(tmp_path, monkeypatch)

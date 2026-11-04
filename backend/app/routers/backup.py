@@ -912,10 +912,21 @@ def _restore_archive(db, content: bytes, principal: str, confirm_holds: str = ""
     tables_imported, rows_imported, _, summary = _restore_main_tables(
         db, db_tables, held_items, principal, backup_date)
 
+    # A restore blanks every password hash, so the install is left with no
+    # usable login. Keep the SAME install token available (and logged) so the
+    # operator can reactivate an admin on the setup screen; /auth/setup
+    # retires it once that succeeds. init_install_token reuses the existing
+    # token file untouched -- it never replaces a token -- and only mints one
+    # when none is on disk (an admin restoring in-app, where no token existed
+    # at boot). No-ops if a usable login somehow remains. This runs before the
+    # later steps, so a failure in them still leaves a way back in.
+    init_install_token()
+
     # Telemetry lives in a separate database, so it cannot share the main
     # transaction. A failure is surfaced rather than swallowed: the operator
-    # can retry, which is safe because the whole restore is idempotent
-    # (every table is replaced, not appended).
+    # can reactivate an admin with the install token and retry, which is safe
+    # because the whole restore is idempotent (every table is replaced, not
+    # appended).
     try:
         telemetry_imported, telemetry_count = _restore_telemetry(zf)
     except Exception as exc:
@@ -932,15 +943,6 @@ def _restore_archive(db, content: bytes, principal: str, confirm_holds: str = ""
 
     logger.info("Backup import complete: %d tables, %d rows, %d files (principal=%s)",
                 tables_imported, rows_imported, files_restored, principal)
-
-    # A restore blanks every password hash, so the install is left with no
-    # usable login. Keep the SAME install token available (and logged) so the
-    # operator can reactivate an admin on the setup screen; /auth/setup
-    # retires it once that succeeds. init_install_token reuses the existing
-    # token file untouched -- it never replaces a token -- and only mints one
-    # when none is on disk (an admin restoring in-app, where no token existed
-    # at boot). No-ops if a usable login somehow remains.
-    init_install_token()
 
     _note_restore_steps(db, summary, f"telemetry_points={telemetry_count}, files={files_restored}")
 
