@@ -4,6 +4,7 @@ from datetime import date, datetime, timezone
 
 import pytest
 from sqlalchemy import event, inspect, text
+from sqlalchemy.exc import PendingRollbackError
 from sqlalchemy.orm.attributes import flag_modified
 
 import app.database as database
@@ -1477,3 +1478,50 @@ def test_change_shortcut_agrees_with_full_history(session, parents, change):
             if fast is not None:
                 assert fast == full, key
     session.rollback()
+
+
+def test_a_failed_batch_write_fails_the_flush_and_cannot_be_committed_past(session, db):
+    pilots = _pilots(session, 5)
+    ids = [pilot.id for pilot in pilots]
+    _clear_audit(db)
+    with database.engine.begin() as conn:
+        _refuse_audit_inserts(conn)
+    _edit_badges(pilots, "new")
+
+    with pytest.raises(Exception, match="audit write refused"):
+        session.flush()
+    with pytest.raises(PendingRollbackError):
+        session.commit()
+    session.rollback()
+    with database.engine.begin() as conn:
+        _allow_audit_inserts(conn)
+
+    db.expire_all()
+    assert all(db.get(Pilot, pilot_id).badge_number != "new" for pilot_id in ids)
+    assert _entries(db) == []
+
+    _edit_badges(pilots, "new")
+    session.commit()
+    _assert_badge_entries(db, ids, "new")
+
+
+def test_a_failed_batch_write_in_a_savepoint_takes_only_that_savepoint(session, db, monkeypatch):
+    pilots = _pilots(session, 2)
+    _clear_audit(db)
+    pilots[0].notes = "kept"
+    session.flush()
+
+    def refuse(_session, _rows):
+        raise RuntimeError("audit write refused")
+
+    monkeypatch.setattr(audit_capture, "_insert_rows", refuse)
+    with pytest.raises(RuntimeError):
+        with session.begin_nested():
+            pilots[1].notes = "dropped"
+            session.flush()
+    session.commit()
+
+    db.expire_all()
+    assert db.get(Pilot, pilots[0].id).notes == "kept"
+    assert db.get(Pilot, pilots[1].id).notes is None
+    assert [entry.entity_id for entry in _entries(db)] == [pilots[0].id]

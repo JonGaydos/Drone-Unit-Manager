@@ -84,6 +84,7 @@ def _run_sync(db, full: bool, sync_telemetry: bool, admin_id: int, admin_name: s
                     logger.info("Auto-synced telemetry for %d flights", telemetry_result)
             except Exception as e:
                 logger.warning("Auto telemetry sync failed (%s)", type(e).__name__)
+                db.rollback()
 
     log_action(db, admin_id, admin_name, "sync", "system",
                details=f"{'Full' if full else 'Incremental'} sync: {result.flights_new} new flights, {result.vehicles_synced} vehicles")

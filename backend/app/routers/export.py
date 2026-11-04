@@ -915,6 +915,8 @@ def _import_zip_flight_logs(archive, db, do_import, get_telemetry_db, user_id: i
                     results["imported"] += 1
             except Exception as e:
                 results["errors"].append(f"{fname}: {str(e)}")
+                # Each entry commits on its own, so this drops only the failed one.
+                db.rollback()
         return results
 
 

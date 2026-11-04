@@ -1023,6 +1023,8 @@ class SyncManager:
             db.commit()
         except Exception as exc:
             logger.debug("Media sync skipped (%s)", type(exc).__name__)
+            db.rollback()
+            result.media_synced = 0
 
         # --- Commit and update last sync timestamp ---
         # Only advance last_sync_timestamp when the run was clean. Otherwise

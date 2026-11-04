@@ -22,7 +22,7 @@ from app.routers import mission_logs, training_logs
 from app.schemas.mission_log import MissionLogPilotIn
 from app.schemas.training_log import TrainingLogPilotIn
 from app.routers.sync import _run_sync
-from app.services import backup_jobs, battery_dedupe, scheduler, sync_manager
+from app.services import audit_capture, backup_jobs, battery_dedupe, scheduler, sync_manager
 from app.services.audit_capture import (
     delete_links, delete_recorded, machine_run, record_bulk, set_actor, update_recorded,
 )
@@ -1275,3 +1275,111 @@ def test_flushed_work_is_reported_when_a_run_raises_and_the_caller_commits(sessi
 
     assert db.query(Pilot).count() == 1
     assert _only_summary(db, SYNC).changes[PILOT_MODEL][COUNTS][CREATE] == 1
+
+
+# A summary write that fails ---------------------------------------------------------
+
+def _fail_summary_writes(monkeypatch, times=1):
+    """Make the next ``times`` writes of a run's summary raise."""
+    left = [times]
+
+    def failing(real):
+        def write(*args):
+            if left[0]:
+                left[0] -= 1
+                raise RuntimeError("audit write refused")
+            return real(*args)
+        return write
+
+    for name in ("_insert_row", "_update_row"):
+        monkeypatch.setattr(audit_capture, name, failing(getattr(audit_capture, name)))
+
+
+def test_the_next_commit_retries_a_failed_summary_write(session, db, monkeypatch):
+    with machine_run(session, SYNC, PILOT_ROLE):
+        session.add(Pilot(first_name="Kept", last_name="X"))
+        session.flush()
+        _fail_summary_writes(monkeypatch)
+        with pytest.raises(RuntimeError):
+            session.commit()
+        session.commit()
+
+    assert db.query(Pilot).count() == 1
+    assert _only_summary(db, SYNC).changes[PILOT_MODEL][COUNTS][CREATE] == 1
+
+
+def test_a_summary_write_failing_as_a_run_ends_is_retried(session, db, monkeypatch):
+    with pytest.raises(RuntimeError):
+        with machine_run(session, SYNC, PILOT_ROLE):
+            session.add(Pilot(first_name="Kept", last_name="X"))
+            session.flush()
+            _fail_summary_writes(monkeypatch)
+    session.commit()
+
+    assert db.query(Pilot).count() == 1
+    assert _only_summary(db, SYNC).changes[PILOT_MODEL][COUNTS][CREATE] == 1
+
+
+def test_a_run_that_cannot_write_its_summary_leaves_nothing_to_commit(session, db, monkeypatch):
+    with pytest.raises(RuntimeError):
+        with machine_run(session, SYNC, PILOT_ROLE):
+            session.add(Pilot(first_name="Dropped", last_name="X"))
+            session.flush()
+            _fail_summary_writes(monkeypatch, times=2)
+    session.commit()
+
+    assert db.query(Pilot).count() == 0
+    assert _entries(db) == []
+
+
+def test_media_step_drops_its_rows_when_their_summary_fails(session, db, monkeypatch):
+    _skydio_settings(db)
+
+    def media(creds, since=None):
+        _fail_summary_writes(monkeypatch)
+        return [{"external_uuid": "M1", "filename": PHOTO_FILE}]
+
+    _use_provider(monkeypatch, sync_media=media)
+
+    result = SyncManager.sync_all(SKYDIO, session)
+
+    assert db.query(MediaFile).count() == 0
+    assert result.media_synced == 0
+
+
+def test_telemetry_step_drops_its_changes_when_their_summary_fails(session, db, admin_user, monkeypatch):
+    _skydio_settings(db)
+    flight = _seed(db, Flight(external_id="TODO", telemetry_synced=False, date=date(2026, 1, 1)))[0]
+
+    def telemetry(creds, flight_id):
+        _fail_summary_writes(monkeypatch)
+        return []
+
+    _use_provider(monkeypatch, get_flight_telemetry=telemetry)
+
+    _run_sync(session, False, True, admin_user.id, admin_user.display_name)
+
+    db.expire_all()
+    assert db.get(Flight, flight.id).telemetry_synced is False
+    assert len(_entries(db, action=SYNC)) == 1
+
+
+def test_zip_entry_is_dropped_when_its_summary_fails(client, db, admin_headers, monkeypatch):
+    from app.services import flight_log_import
+
+    def parse(text, fmt):
+        if text == "LOG2":
+            _fail_summary_writes(monkeypatch)
+        return {"metadata": {"date": date(2026, 1, 1), "external_id": text}, "telemetry": []}, "airdata"
+
+    monkeypatch.setattr(flight_log_import, "_parse_for_format", parse)
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, "w") as zf:
+        for i in range(3):
+            zf.writestr(f"f{i}.json", f"LOG{i}")
+
+    body = _upload(client, admin_headers, LOG_IMPORT_URL, "logs.zip", archive.getvalue())
+
+    assert body["imported"] == 2 and len(body["errors"]) == 1
+    assert db.query(Flight).count() == 2
+    assert _only_summary(db, IMPORT).changes[FLIGHT_MODEL][COUNTS][CREATE] == 2

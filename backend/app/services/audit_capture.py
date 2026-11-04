@@ -615,13 +615,14 @@ def _tally_flush(run: _MachineRun, pending: list) -> None:
 def _refresh_run_entry(session, run: _MachineRun) -> None:
     if not run.stale:
         return
-    run.stale = False
     summary = run.summary()
     if run.entry_id is not None:
         _update_row(session, run.entry_id, {"changes": summary})
     elif summary:
         run.entry_id = _insert_row(session, _row_values(
             session, run.action, run.entity_type, None, None, summary, run.details))
+    # Last, so a commit after a failed write tries it again.
+    run.stale = False
 
 
 def _before_commit(session) -> None:
@@ -727,9 +728,13 @@ def machine_run(session, action: str, entity_type: str, details: str | None = No
         _refresh_run_entry(session, run)
     except BaseException:
         # What the block flushed is still in the transaction, for a caller that
-        # commits anyway.
+        # commits anyway. It goes on record here, or does not stay.
         if session.is_active and any(run.frames[1:]):
-            _refresh_run_entry(session, run)
+            try:
+                _refresh_run_entry(session, run)
+            except Exception:
+                session.rollback()
+                raise
         raise
     finally:
         state.run = None
