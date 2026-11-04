@@ -6,16 +6,16 @@ maintenance logs. Two endpoints:
 """
 import json
 import re
-from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException
 from starlette.concurrency import run_in_threadpool
+from starlette.datastructures import UploadFile
 
-from app.deps import DBSession, AdminUser
+from app.deps import AdminForm, DBSession
 from app.responses import responses
 from app.services.audit_capture import machine_run
 from app.services.import_service import (
-    parse_file, suggest_mapping, parse_date_value, parse_float_safe,
+    ImportTooLarge, parse_file, suggest_mapping, parse_date_value, parse_float_safe,
     split_members, parse_drone_list, resolve_pilot, find_unknown_pilot,
     resolve_vehicle,
 )
@@ -106,24 +106,29 @@ def _get(mapping: dict, key: str, row: dict):
     return row.get(src)
 
 
-@router.post("/preview", responses=responses(400, 401))
+async def _parse_upload(file: UploadFile) -> tuple[list[str], list[dict], bool]:
+    content = await file.read()
+    try:
+        # Off the event loop: a large workbook takes seconds to parse, and on
+        # the loop every other request would wait for it.
+        return await run_in_threadpool(parse_file, content, file.filename or "")
+    except ImportTooLarge as e:
+        raise HTTPException(413, str(e)) from e
+    except Exception as e:
+        raise HTTPException(400, f"Could not parse file: {e}") from e
+
+
+@router.post("/preview", responses=responses(400, 401, 413))
 async def preview_import(
     db: DBSession,
-    admin: AdminUser,
-    file: Annotated[UploadFile, File()],
+    upload: AdminForm,
     entity: str = "missions",
 ):
     """Inspect a CSV/XLSX without writing. Returns the file's headers, a sample
     of rows, and a suggested target->source mapping."""
     if entity not in SCHEMAS:
         raise HTTPException(400, f"Unknown entity '{entity}'. Must be one of: {', '.join(SCHEMAS)}")
-    content = await file.read()
-    try:
-        # Off the event loop: a large workbook takes seconds to parse, and on
-        # the loop every other request would wait for it.
-        headers, rows, truncated = await run_in_threadpool(parse_file, content, file.filename or "")
-    except Exception as e:
-        raise HTTPException(400, f"Could not parse file: {e}") from e
+    headers, rows, truncated = await _parse_upload(upload.file)
     if not headers:
         raise HTTPException(400, "File has no header row")
     schema = SCHEMAS[entity]
@@ -138,11 +143,10 @@ async def preview_import(
     }
 
 
-@router.post("/commit", responses=responses(400, 401))
+@router.post("/commit", responses=responses(400, 401, 413))
 async def commit_import(
     db: DBSession,
-    admin: AdminUser,
-    file: Annotated[UploadFile, File()],
+    upload: AdminForm,
     entity: str = "missions",
     mapping: str = "{}",
 ):
@@ -154,12 +158,8 @@ async def commit_import(
         mapping_dict = json.loads(mapping or "{}")
     except (ValueError, TypeError):
         raise HTTPException(400, "Invalid mapping JSON")
-    content = await file.read()
-    try:
-        _, rows, truncated = await run_in_threadpool(parse_file, content, file.filename or "")
-    except Exception as e:
-        raise HTTPException(400, f"Could not parse file: {e}") from e
-    result = await run_in_threadpool(_import_run, db, entity, rows, mapping_dict, admin.id)
+    _, rows, truncated = await _parse_upload(upload.file)
+    result = await run_in_threadpool(_import_run, db, entity, rows, mapping_dict, upload.user.id)
     result["truncated"] = truncated
     return result
 

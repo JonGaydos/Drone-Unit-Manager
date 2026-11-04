@@ -4,12 +4,12 @@ from pathlib import Path
 from typing import Annotated
 
 import anyio
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 
 from app.config import settings
 from app.constants import VEHICLE_NOT_FOUND, ACCESS_DENIED, FILE_TYPE_NOT_ALLOWED, FILE_TOO_LARGE
-from app.deps import DBSession, AdminUser
+from app.deps import AdminForm, DBSession
 from app.models.user import User
 from app.routers.auth import require_permission
 from app.models.vehicle import Vehicle
@@ -301,8 +301,9 @@ ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 
 
 @router.post("/{vehicle_id}/photo", responses=responses(400, 401, 404, 413))
-async def upload_vehicle_photo(vehicle_id: int, file: UploadFile, db: DBSession, user: AdminUser):
+async def upload_vehicle_photo(vehicle_id: int, upload: AdminForm, db: DBSession):
     """Upload or replace a vehicle's profile photo. Admin only."""
+    file = upload.file
     vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
     if not vehicle:
         raise HTTPException(404, VEHICLE_NOT_FOUND)

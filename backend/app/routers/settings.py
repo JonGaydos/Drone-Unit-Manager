@@ -7,13 +7,13 @@ organization logo upload, and bulk updates.
 from pathlib import Path
 
 import anyio
-from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app.config import settings as app_settings
 from app.constants import LOGO_VIEW_PATH, SECRET_KEYS
-from app.deps import DBSession, CurrentUser, AdminUser
+from app.deps import AdminForm, DBSession, CurrentUser, AdminUser
 from app.models.setting import Setting
 from app.responses import responses
 
@@ -151,8 +151,10 @@ ALLOWED_LOGO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 
 
 @router.post("/logo", responses=responses(400, 401, 413))
-async def upload_logo(file: UploadFile, db: DBSession, user: AdminUser):
+async def upload_logo(upload: AdminForm, db: DBSession):
     """Upload or replace the organization logo. Admin only."""
+    file = upload.file
+    user = upload.user
     upload_dir = Path(app_settings.UPLOAD_DIR) / "org"
     upload_dir.mkdir(parents=True, exist_ok=True)
     ext = Path(file.filename).suffix.lower() or ".png"

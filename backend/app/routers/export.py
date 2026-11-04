@@ -7,9 +7,10 @@ import xml.etree.ElementTree as ET
 from datetime import date, datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
+from starlette.datastructures import UploadFile
 from sqlalchemy.orm import joinedload
 
 from app.models.flight import Flight
@@ -32,10 +33,11 @@ from app.models.other_equipment import OtherEquipment
 from app.models.user import User
 from app.config import settings
 from app.constants import APP_TITLE, FILE_TOO_LARGE
-from app.deps import DBSession, AdminUser
+from app.deps import AdminForm, DBSession
 from app.routers.auth import require_permission
 from app.services.audit import log_action
 from app.services.audit_capture import machine_run
+from app.services.import_service import ImportTooLarge
 from app.responses import responses
 
 router = APIRouter(prefix="/api/export", tags=["export"])
@@ -767,8 +769,11 @@ def _parse_csv_flight_row(row: dict, db) -> Flight:
 
 def _import_run(db, details: str, importer, *args) -> dict:
     """Run an importer as one machine run: a file's rows get one summary entry."""
-    with machine_run(db, "import", "flight", details=details):
-        result = importer(*args)
+    try:
+        with machine_run(db, "import", "flight", details=details):
+            result = importer(*args)
+    except ImportTooLarge as e:
+        raise HTTPException(413, str(e)) from e
     db.commit()
     return result
 
@@ -806,9 +811,9 @@ def _import_flights_csv_content(db, content: bytes) -> dict:
 @router.post("/flights/import", responses=responses(400, 413))
 async def import_flights_csv(
     db: DBSession,
-    admin: AdminUser,
-    file: Annotated[UploadFile, File()],
+    upload: AdminForm,
 ):
+    file = upload.file
     if not file.filename.endswith('.csv'):
         raise HTTPException(400, "Only CSV files are supported")
 
@@ -821,8 +826,7 @@ async def import_flights_csv(
 @router.post("/excel/import", responses=responses(400, 413))
 async def import_excel_file(
     db: DBSession,
-    admin: AdminUser,
-    file: Annotated[UploadFile, File()],
+    upload: AdminForm,
 ):
     """Import a Skydio export and create fleet, pilots, accessories, and flights.
 
@@ -830,6 +834,7 @@ async def import_excel_file(
     flights + pilot certifications) or a flight-list CSV. Both run the full
     Skydio importer so equipment and pilots are created, not just flights.
     """
+    file = upload.file
     if not file.filename.endswith(EXCEL_EXTENSIONS + ('.csv',)):
         raise HTTPException(400, "Only Skydio .xlsx, .xls, or .csv files are supported")
     spooled = await _spool_upload(file, settings.MAX_UPLOAD_SIZE)
@@ -911,8 +916,7 @@ def _import_zip_flight_logs(archive, db, do_import, get_telemetry_db, user_id: i
 @router.post("/flights/import/log", responses=responses(400, 413))
 async def import_flight_log(
     db: DBSession,
-    admin: AdminUser,
-    file: Annotated[UploadFile, File()],
+    upload: AdminForm,
     format: str = "auto",
 ):
     """Import a flight log file (DJI .txt, Litchi CSV, Airdata CSV/JSON, or ZIP).
@@ -921,12 +925,14 @@ async def import_flight_log(
     to specify explicitly. Creates a Flight record and TelemetryPoints.
 
     Args:
-        file: The flight log file (.txt, .csv, .json, or .zip).
+        upload: The form, whose file is the flight log (.txt, .csv, .json, or .zip).
         format: Format hint - "auto", "dji", "litchi", "airdata", or "airdata_json".
 
     Returns:
         Import result with flight_id, points_imported, and format_detected.
     """
+    file = upload.file
+    admin = upload.user
     if not file.filename.endswith(('.txt', '.csv', '.json', '.zip') + EXCEL_EXTENSIONS):
         raise HTTPException(400, "Only .txt, .csv, .json, .zip, and .xlsx files are supported")
 

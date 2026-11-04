@@ -15,16 +15,17 @@ from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, Query, Form
 from fastapi.responses import FileResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from PIL import Image as PILImage
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.constants import MIME_JPEG, PHOTO_NOT_FOUND, FLIGHT_NOT_FOUND, INCIDENT_NOT_FOUND, UTC_OFFSET
 from app.database import get_db
-from app.deps import AdminUser, DBSession
+from app.deps import AdminUser, DBSession, UploadForm, require_form_user
 from app.models.user import User
 from app.models.photo import Photo, PhotoPilot, PhotoFlight, PhotoIncident
 from app.models.pilot import Pilot
@@ -45,7 +46,7 @@ router = APIRouter(prefix="/api/photos", tags=["photos"])
 FILES_VIEW = "files.view"
 FILES_EDIT = "files.edit"
 ViewUser = Annotated[User, Depends(require_permission(FILES_VIEW))]
-UploadUser = Annotated[User, Depends(require_permission("files.upload"))]
+UploadPermissionForm = Annotated[UploadForm, Depends(require_form_user("files.upload"))]
 EditUser = Annotated[User, Depends(require_permission(FILES_EDIT))]
 CustodyUser = Annotated[User, Depends(require_permission("files.custody"))]
 
@@ -253,47 +254,41 @@ def _replace_photo_pilots(db, photo_id: int, pilot_ids: Optional[str]) -> dict:
     return changes
 
 
+class PhotoUploadFields(BaseModel):
+    """The text fields sent with a photo upload."""
+
+    title: Optional[str] = None
+    description: Optional[str] = None
+    date_taken: Optional[str] = None  # ISO 8601, when the photo was taken
+    pilot_ids: Optional[str] = None  # comma-separated IDs of pilots to tag
+
+
 @router.post("/upload", responses=responses(400, 413))
-def upload_photo(
-
-    db: DBSession,
-
-    user: UploadUser,
-
-    file: Annotated[UploadFile, File()],
-
-    title: Annotated[Optional[str], Form()] = None,
-
-    description: Annotated[Optional[str], Form()] = None,
-
-    date_taken: Annotated[Optional[str], Form()] = None,
-
-    pilot_ids: Annotated[Optional[str], Form()] = None,
-):
+def upload_photo(db: DBSession, upload: UploadPermissionForm):
     """Upload a photo with optional metadata and pilot associations.
 
     Generates a JPEG thumbnail automatically. Files are stored in
     per-photo subdirectories with UUID-based filenames.
 
+    The form holds the image file and PhotoUploadFields.
+
     Args:
-        file: The image file to upload.
-        title: Optional display title.
-        description: Optional description text.
-        date_taken: ISO 8601 date string for when the photo was taken.
-        pilot_ids: Comma-separated pilot IDs to tag in the photo.
         db: Database session.
-        user: Authenticated user holding the upload permission.
+        upload: The form, read once the user is known to hold the upload permission.
 
     Returns:
         Dict with the new photo ID and success message.
     """
+    user = upload.user
+    file = upload.file
+    fields = upload.fields(PhotoUploadFields)
     # Validate file extension
     ext = os.path.splitext(file.filename or "photo.jpg")[1].lower()
     if ext not in ALLOWED_IMAGE_EXTENSIONS:
         raise HTTPException(400, f"File type '{ext}' not allowed. Allowed: {', '.join(sorted(ALLOWED_IMAGE_EXTENSIONS))}")
 
     # Create photo record first to get ID
-    parsed_date = _parse_date_taken(date_taken)
+    parsed_date = _parse_date_taken(fields.date_taken)
 
     stored_name = f"{uuid.uuid4().hex}{ext}"
 
@@ -305,8 +300,8 @@ def upload_photo(
     photo = Photo(
         filename=relative_path,
         original_filename=file.filename or "photo.jpg",
-        title=title,
-        description=description,
+        title=fields.title,
+        description=fields.description,
         date_taken=parsed_date,
         mime_type=mime_for_filename(stored_name),
         uploaded_by_id=user.id,
@@ -333,7 +328,7 @@ def upload_photo(
     photo.thumbnail_path = _generate_thumbnail(file_path, photo_dir, stored_name)
 
     # Create pilot associations
-    _attach_photo_pilots(db, photo.id, pilot_ids)
+    _attach_photo_pilots(db, photo.id, fields.pilot_ids)
 
     log_action(db, user.id, user.display_name, "upload", "photo", photo.id, photo.original_filename,
                details=f"{relative_path}, {photo.file_size} bytes, sha256 {photo.sha256}")

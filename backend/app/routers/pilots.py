@@ -5,14 +5,14 @@ from pathlib import Path
 from typing import Annotated
 
 import anyio
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import func
 
 from app.config import settings
 from app.constants import PILOT_NOT_FOUND, ACCESS_DENIED, FILE_TYPE_NOT_ALLOWED, FILE_TOO_LARGE
-from app.deps import DBSession, CurrentUser, AdminUser
+from app.deps import AdminForm, DBSession, CurrentUser
 from app.models.user import User
 from app.routers.auth import require_permission
 from app.models.pilot import Pilot
@@ -346,8 +346,9 @@ ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 
 
 @router.post("/{pilot_id}/photo", responses=responses(400, 401, 404, 413))
-async def upload_pilot_photo(pilot_id: int, file: UploadFile, db: DBSession, user: AdminUser):
+async def upload_pilot_photo(pilot_id: int, upload: AdminForm, db: DBSession):
     """Upload or replace a pilot's profile photo. Admin only."""
+    file = upload.file
     pilot = db.query(Pilot).filter(Pilot.id == pilot_id).first()
     if not pilot:
         raise HTTPException(404, PILOT_NOT_FOUND)
