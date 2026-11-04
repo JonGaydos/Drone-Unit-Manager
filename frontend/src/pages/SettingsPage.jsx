@@ -74,7 +74,7 @@ export default function SettingsPage() {
   const [backupStatus, setBackupStatus] = useState(null)
   const [backupForm, setBackupForm] = useState({ enabled: true, retention: 7, hour: 3 })
   const [savingBackup, setSavingBackup] = useState(false)
-  const { isAdmin, user: currentUser } = useAuth()
+  const { isAdmin, can, user: currentUser } = useAuth()
   const toast = useToast()
   const [confirmProps, requestConfirm] = useConfirm()
 
@@ -222,11 +222,13 @@ export default function SettingsPage() {
   // and Flight-detail dropdowns read. Editing here used to write a separate
   // mission_purposes setting instead, so removing an option changed nothing on
   // the flight pages.
+  const canReadPurposeUsage = can('flights.review')
   const loadPurposes = useCallback(() => {
+    if (!canReadPurposeUsage) return
     api.get('/flights/purposes/usage')
       .then(rows => { if (Array.isArray(rows)) setPurposeRows(rows) })
       .catch(() => {})
-  }, [])
+  }, [canReadPurposeUsage])
 
   const loadBackupStatus = () => {
     if (!isAdmin) return
