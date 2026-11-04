@@ -191,3 +191,102 @@ def test_pre_release_backup_restores(
     assert all(r.imported and r.user_username is None for r in rows)
     summary = _audit(db, action="import", entity_type="backup")[0]
     assert "2025-01-03" in summary.details and "audit_rows=2" in summary.details
+
+
+def _soft_deleted_photo(db, when):
+    p = Photo(filename="p2.jpg", original_filename="s.jpg", title="Gone", legal_hold=True,
+              sha256="c" * 64, deleted_at=when)
+    db.add(p)
+    db.commit()
+    return p
+
+
+def test_unchanged_soft_deleted_held_photo_needs_no_confirmation(
+        client, db, admin_user, admin_headers, tmp_path, monkeypatch):
+    from datetime import datetime, timezone
+    _env(tmp_path, monkeypatch)
+    _soft_deleted_photo(db, datetime(2026, 1, 2, 3, 4, 5, tzinfo=timezone.utc))
+    archive = _archive(db)
+
+    resp = _post(client, admin_headers, archive)
+
+    assert resp.status_code == 200, resp.text
+
+
+def test_different_deleted_at_of_held_photo_is_flagged(
+        client, db, admin_user, admin_headers, tmp_path, monkeypatch):
+    from datetime import datetime, timezone
+    _env(tmp_path, monkeypatch)
+    photo = _soft_deleted_photo(db, datetime(2026, 1, 2, 3, 4, 5, tzinfo=timezone.utc))
+    archive = _archive(db)
+    photo.deleted_at = datetime(2026, 2, 2, 3, 4, 5, tzinfo=timezone.utc)
+    db.commit()
+
+    assert _post(client, admin_headers, archive).status_code == 409
+
+
+def test_changed_metadata_of_held_photo_is_flagged(
+        client, db, admin_user, admin_headers, tmp_path, monkeypatch):
+    _env(tmp_path, monkeypatch)
+    for field, value in (("title", "Renamed"), ("original_filename", "other.jpg"), ("file_size", 99)):
+        photo = _held_photo(db)
+        archive = _archive(db)
+        setattr(photo, field, value)
+        db.commit()
+        assert _post(client, admin_headers, archive).status_code == 409, field
+        db.delete(photo)
+        db.commit()
+
+
+def _held_doc(db):
+    doc = Document(entity_type="general", document_type="other", title="Report",
+                   filename="r.pdf", file_path="documents/r.pdf", mime_type="application/pdf",
+                   file_size_bytes=10, legal_hold=True, sha256="d" * 64)
+    db.add(doc)
+    db.commit()
+    return doc
+
+
+def test_unchanged_held_document_needs_no_confirmation(
+        client, db, admin_user, admin_headers, tmp_path, monkeypatch):
+    _env(tmp_path, monkeypatch)
+    _held_doc(db)
+    archive = _archive(db)
+
+    assert _post(client, admin_headers, archive).status_code == 200
+
+
+def test_changed_held_document_needs_confirmation(
+        client, db, admin_user, admin_headers, tmp_path, monkeypatch):
+    _env(tmp_path, monkeypatch)
+    for field, value in (("title", "Renamed"), ("file_size_bytes", 11), ("sha256", "e" * 64)):
+        doc = _held_doc(db)
+        archive = _archive(db)
+        setattr(doc, field, value)
+        db.commit()
+        resp = _post(client, admin_headers, archive)
+        assert resp.status_code == 409, field
+        assert resp.json()["held_items"][0]["type"] == "document"
+        db.delete(doc)
+        db.commit()
+
+
+def test_old_backup_without_metadata_keys_is_not_flagged(
+        client, db, admin_user, admin_headers, tmp_path, monkeypatch):
+    _env(tmp_path, monkeypatch)
+    _held_photo(db)
+    archive = _archive(db)
+    src = zipfile.ZipFile(io.BytesIO(archive))
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w") as zf:
+        for name in src.namelist():
+            data = src.read(name)
+            if name == "database.json":
+                d = json.loads(data)
+                for r in d["photos"]:
+                    for k in ("title", "file_size"):
+                        r.pop(k, None)
+                data = json.dumps(d)
+            zf.writestr(name, data)
+
+    assert _post(client, admin_headers, out.getvalue()).status_code == 200

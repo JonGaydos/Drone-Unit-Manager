@@ -506,7 +506,7 @@ export default function SetupPage({ recovery = false }) {
                   {restoreFile ? restoreFile.name : 'Click to select backup ZIP file'}
                 </p>
               </button>
-              <input ref={fileRef} type="file" accept=".zip" className="hidden" onChange={e => setRestoreFile(e.target.files[0])} />
+              <input ref={fileRef} type="file" accept=".zip" className="hidden" onChange={e => { setRestoreFile(e.target.files[0]); setHeldItems(null); setConfirmHolds('') }} />
               {restoreFile && !restoreResult && (
                 <>
                   <div>

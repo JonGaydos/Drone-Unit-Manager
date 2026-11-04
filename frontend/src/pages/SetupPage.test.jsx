@@ -168,4 +168,23 @@ describe('SetupPage', () => {
     expect(await screen.findByText('Restore complete!')).toBeInTheDocument()
     expect(seen).toEqual([false, true])
   })
+
+  it('clears the held-item list and typed confirmation when another file is chosen', async () => {
+    server.use(http.post('/api/backup/import', () => HttpResponse.json({
+      held_items: [{ type: 'photo', id: 4, title: 'Scene photo' }],
+      confirm_text: 'RESTORE HELD ITEMS',
+    }, { status: 409 })))
+    const { user } = renderWithProviders(<SetupPage />, { route: '/setup' })
+    await user.click(screen.getByRole('button', { name: /Restore from a backup instead/ }))
+    const input = document.querySelector('input[type="file"][accept=".zip"]')
+    await user.upload(input, new File(['PK'], 'one.zip', { type: 'application/zip' }))
+    await user.type(screen.getByLabelText('Install Token'), 'tok')
+    await user.click(screen.getByRole('button', { name: 'Restore Backup' }))
+    await user.type(await screen.findByLabelText(/Type/), 'RESTORE HELD ITEMS')
+
+    await user.upload(input, new File(['PK2'], 'two.zip', { type: 'application/zip' }))
+
+    expect(screen.queryByText(/Scene photo/)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/Type/)).not.toBeInTheDocument()
+  })
 })

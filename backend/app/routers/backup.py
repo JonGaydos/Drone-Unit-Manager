@@ -666,9 +666,15 @@ CONFIRM_HOLDS_TEXT = "RESTORE HELD ITEMS"
 # Held tables: the fields that, if the backup disagrees with the live row,
 # mean the restore changes the held item.
 HELD_TABLES = (
-    ("photo", "photos", Photo, ("filename", "sha256", "legal_hold", "deleted_at")),
-    ("document", "documents", Document, ("filename", "file_path", "sha256", "legal_hold", "deleted_at")),
+    ("photo", "photos", Photo, ("filename", "sha256", "legal_hold", "deleted_at"),
+     ("title", "original_filename", "file_size")),
+    ("document", "documents", Document, ("filename", "file_path", "sha256", "legal_hold", "deleted_at"),
+     ("title", "file_size_bytes")),
 )
+# The last element of each entry is descriptive metadata. A backup that does not
+# carry such a key at all (an older schema) is not flagged for it, or every old
+# restore would prompt; a backup that carries the key must match. The first
+# group fails safe: a missing key counts as a difference.
 
 
 def _held_items_affected(db: Session, db_tables: dict) -> list[dict]:
@@ -678,21 +684,26 @@ def _held_items_affected(db: Session, db_tables: dict) -> list[dict]:
     affected. Computed before anything is deleted.
     """
     affected = []
-    for kind, table, model, fields in HELD_TABLES:
+    for kind, table, model, fields, meta_fields in HELD_TABLES:
         held = db.query(model).filter(model.legal_hold.is_(True)).all()
         if not held:
             continue
         in_backup = {r.get("id"): r for r in _parse_rows(db_tables.get(table, []), model)}
         for item in held:
             row = in_backup.get(item.id)
-            if row is None or any(row.get(f) != _comparable(getattr(item, f)) for f in fields):
+            if row is None or any(_comparable(row.get(f)) != _comparable(getattr(item, f)) for f in fields) \
+                    or any(f in row and _comparable(row[f]) != _comparable(getattr(item, f)) for f in meta_fields):
                 affected.append({"type": kind, "id": item.id,
                                  "title": getattr(item, "title", None) or item.filename})
     return affected
 
 
 def _comparable(value):
-    """A stored value in the form _parse_rows gives the backup's copy."""
+    """A datetime as naive UTC (a naive one is taken as UTC); other values as is.
+
+    Applied to both the live value and the backup's, whichever offset form
+    either carries.
+    """
     if isinstance(value, datetime) and value.tzinfo is not None:
         return value.astimezone(timezone.utc).replace(tzinfo=None)
     return value
