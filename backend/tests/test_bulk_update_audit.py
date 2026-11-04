@@ -30,7 +30,10 @@ def _seed_flights(db, purposes):
 
 
 def _latest_audit(db):
-    return db.query(AuditLog).order_by(AuditLog.id.desc()).first()
+    """The bulk edit's own entry. Each flight it changed also gets an entry."""
+    return (db.query(AuditLog)
+            .filter(AuditLog.action.in_(("bulk_update", "bulk_approve")))
+            .order_by(AuditLog.id.desc()).first())
 
 
 # 1. The prior values survive the edit ------------------------------------

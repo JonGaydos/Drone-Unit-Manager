@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import String, Text, Integer, ForeignKey, JSON, func
+from sqlalchemy import Boolean, String, Text, Integer, ForeignKey, JSON, false, func
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 from app.models.types import UTCDateTime
@@ -11,6 +11,7 @@ class AuditLog(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     user_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    user_username: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     action: Mapped[str] = mapped_column(String(50))  # create, update, delete, login, sync, approve, deny
     entity_type: Mapped[str] = mapped_column(String(50))  # flight, pilot, vehicle, certification, etc.
     entity_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -19,3 +20,5 @@ class AuditLog(Base):
     ip_address: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)
     details: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow)
+    # True for an entry that came from a restored backup.
+    imported: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())

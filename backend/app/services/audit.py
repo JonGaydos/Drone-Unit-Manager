@@ -7,6 +7,7 @@ allowing the caller to include them in its own transaction.
 import logging
 from sqlalchemy.orm import Session
 from app.models.audit_log import AuditLog
+from app.services import audit_capture
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +47,10 @@ def log_action(
     """Record an audit log entry for a user action.
 
     The entry is added to the session but NOT committed; the caller is
-    responsible for committing the transaction.
+    responsible for committing the transaction. When the same transaction has
+    an automatic entry for the same record, this one takes its place, so one
+    change gives one row. A record with no integer key (a setting) is matched
+    by ``entity_name``.
 
     Args:
         db: Active database session.
@@ -60,9 +64,11 @@ def log_action(
         ip_address: Client IP address, if available.
         details: Free-text description of the action.
     """
+    actor = db.info.get(audit_capture.ACTOR_KEY)
     entry = AuditLog(
         user_id=user_id,
         user_name=user_name or "System",
+        user_username=actor["username"] if actor else None,
         action=action,
         entity_type=entity_type,
         entity_id=entity_id,
@@ -71,7 +77,7 @@ def log_action(
         ip_address=ip_address,
         details=details,
     )
-    db.add(entry)
+    audit_capture.add_explicit_entry(db, entry)
     # Don't commit here — let the caller's transaction handle it
 
 

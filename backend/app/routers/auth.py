@@ -23,6 +23,7 @@ from app.config import settings
 from app.constants import USER_NOT_FOUND
 from app.services import api_tokens as api_tokens_service
 from app.services import permissions as permissions_service
+from app.services.audit_capture import set_actor
 from app.database import get_db
 from app.models.user import User
 from app.schemas.user import LoginRequest, LoginResponse, UserOut, UserCreate, UserUpdate, ChangePasswordRequest, AdminResetPasswordRequest, SetupRequest
@@ -112,6 +113,7 @@ def user_from_login_token(token: str, db: Session) -> User:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=USER_NOT_FOUND)
     if token_version != (user.token_version or 0):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired. Please log in again.")
+    set_actor(db, user)
     return user
 
 
@@ -496,6 +498,7 @@ def initial_setup(data: SetupRequest, request: Request, db: DBSession):
         db.add(FlightPurpose(name=name, sort_order=i))
 
     db.flush()
+    set_actor(db, admin)
     from app.services.audit import log_action
     log_action(db, admin.id, admin.display_name, "setup", "user", admin.id, admin.display_name,
                ip_address=_client_ip(request), details=f"Initial setup created administrator '{admin.username}'")
@@ -553,6 +556,7 @@ def login(req: LoginRequest, request: Request, db: DBSession):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     _failed_by_user.pop(req.username.strip().lower(), None)
     token = create_token(user.id, user.token_version)
+    set_actor(db, user)
     log_action(db, user.id, user.display_name, "login", "auth",
                ip_address=client_ip, details="Successful login")
     db.commit()

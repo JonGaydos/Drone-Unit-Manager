@@ -75,3 +75,10 @@ LOGO_VIEW_PATH = "/api/settings/logo/view"
 
 # ── Sync messages ────────────────────────────────────────────────────────────
 API_TOKEN_NOT_CONFIGURED = "API token not configured"
+
+# Settings whose values contain secrets. Never returned to any role, and left
+# out of backups and the audit log.
+SECRET_KEYS = {
+    "skydio_api_token", "skydio_token_id",
+    "smtp_password",
+}

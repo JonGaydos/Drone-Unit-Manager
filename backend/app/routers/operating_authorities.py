@@ -132,8 +132,7 @@ def create_authority(data: AuthorityCreate, db: DBSession, user: ManageUser):
     _validate(data.authority_type, data.record_status)
     a = OperatingAuthority(**data.model_dump())
     db.add(a)
-    db.commit()
-    db.refresh(a)
+    db.flush()
     log_action(db, user.id, user.display_name, "create", "operating_authority", a.id, a.title)
     db.commit()
     return _serialize(a, date.today())
@@ -148,8 +147,6 @@ def update_authority(authority_id: int, data: AuthorityUpdate, db: DBSession, us
     _validate(update_data.get("authority_type"), update_data.get("record_status"))
     for key, val in update_data.items():
         setattr(a, key, val)
-    db.commit()
-    db.refresh(a)
     log_action(db, user.id, user.display_name, "update", "operating_authority", a.id, a.title,
                changes={k: str(v) for k, v in update_data.items()})
     db.commit()

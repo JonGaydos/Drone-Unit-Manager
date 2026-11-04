@@ -890,8 +890,7 @@ def create_purpose(data: FlightPurposeCreate, db: DBSession, admin: AdminUser):
     payload["name"] = name
     purpose = FlightPurpose(**payload)
     db.add(purpose)
-    db.commit()
-    db.refresh(purpose)
+    db.flush()
     log_action(db, admin.id, admin.display_name, "create", "flight_purpose", purpose.id, purpose.name)
     db.commit()
     return FlightPurposeOut.model_validate(purpose)

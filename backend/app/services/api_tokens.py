@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.models.api_token import ApiToken
 from app.models.user import User
+from app.services.audit_capture import set_actor
 
 TOKEN_PREFIX = "dum_"
 
@@ -98,6 +99,7 @@ def authenticate_api_token(db: Session, raw: str, method: str, path: str) -> Use
     user = db.query(User).filter(User.id == token.user_id, User.is_active.is_(True)).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token owner is inactive")
+    set_actor(db, user)
     if token.last_used_at is None or now - token.last_used_at > _LAST_USED_MIN_INTERVAL:
         token.last_used_at = now
         db.commit()

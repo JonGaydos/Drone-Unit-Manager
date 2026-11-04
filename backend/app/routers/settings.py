@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app.config import settings as app_settings
-from app.constants import LOGO_VIEW_PATH
+from app.constants import LOGO_VIEW_PATH, SECRET_KEYS
 from app.deps import DBSession, CurrentUser, AdminUser
 from app.models.setting import Setting
 from app.responses import responses
@@ -50,12 +50,6 @@ class SettingOut(BaseModel):
 
     model_config = {"from_attributes": True}
 
-
-# Keys whose values contain secrets — never returned to any role.
-SECRET_KEYS = {
-    "skydio_api_token", "skydio_token_id",
-    "smtp_password",
-}
 
 # Placeholder returned in place of a stored secret; never written back.
 REDACTED_MARKER = "********"
@@ -124,7 +118,8 @@ def set_setting(data: SettingValue, db: DBSession, admin: AdminUser):
     else:
         setting = Setting(key=data.key, value=data.value)
         db.add(setting)
-    log_action(db, admin.id, admin.display_name, "update", "setting", details=f"Updated setting '{data.key}'")
+    log_action(db, admin.id, admin.display_name, "update", "setting", entity_name=data.key,
+               details=f"Updated setting '{data.key}'")
     db.commit()
     return {"ok": True}
 
@@ -156,7 +151,8 @@ async def upload_logo(file: UploadFile, db: DBSession, user: AdminUser):
     else:
         db.add(Setting(key="org_logo", value=LOGO_VIEW_PATH))
     from app.services.audit import log_action
-    log_action(db, user.id, user.display_name, "update", "setting", details="Replaced the organization logo")
+    log_action(db, user.id, user.display_name, "update", "setting", entity_name="org_logo",
+               details="Replaced the organization logo")
     db.commit()
     return {"ok": True, "logo_url": LOGO_VIEW_PATH}
 

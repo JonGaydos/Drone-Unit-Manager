@@ -32,6 +32,7 @@ from app.models.pilot import Pilot
 from app.models.user import User
 from app.main import app
 from app.routers.auth import hash_password, create_token
+from app.services import audit_capture
 
 
 def _make_engine(path):
@@ -68,6 +69,7 @@ def _engines(tmp_path, monkeypatch):
 
     TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=main_engine)
     TestingTelemetrySessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=telemetry_engine)
+    audit_capture.install(TestingSessionLocal)
 
     # Rebind module-level objects for any code path that calls SessionLocal()
     # directly instead of going through the FastAPI dependency.
@@ -84,9 +86,13 @@ def _engines(tmp_path, monkeypatch):
 
 @pytest.fixture
 def db(_engines):
-    """A Session bound to the temp main engine, for seeding and assertions."""
+    """A Session bound to the temp main engine, for seeding and assertions.
+
+    Built without audit capture, so a test's seed rows don't appear in the
+    audit log. Everything the app itself opens has capture installed.
+    """
     TestingSessionLocal, _ = _engines
-    session = TestingSessionLocal()
+    session = sessionmaker(autocommit=False, autoflush=False, bind=TestingSessionLocal.kw["bind"])()
     try:
         yield session
     finally:
