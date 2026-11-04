@@ -523,7 +523,7 @@ Format is auto-detected, or you can pick a specific format. Select multiple file
       },
       {
         title: 'Organization Settings',
-        body: 'Configure your organization name, logo, and timezone from the Settings page.'
+        body: 'Configure your organization name, logo, timezone, and idle lock from the Settings page. The idle lock (30 minutes by default, up to 12 hours) signs a browser out after that long with no input, for every role; a change reaches each browser at its next refresh or reload. Sessions still end after 12 hours. Signing out or locking in one tab signs out all open tabs.'
       },
       {
         title: 'Default Location',

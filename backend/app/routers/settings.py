@@ -34,7 +34,12 @@ ALLOWED_SETTING_KEYS = {
     "drone_location_places",
     "org_default_lat", "org_default_lon", "org_location_name",
     "backup_enabled", "backup_retention", "backup_hour",
+    "idle_lock_minutes",
 }
+
+# Minutes of no input before a browser locks. One value for every role.
+IDLE_LOCK_KEY = "idle_lock_minutes"
+IDLE_LOCK_CHOICES = frozenset({"30", "60", "120", "240", "360", "480", "720"})
 
 
 class SettingValue(BaseModel):
@@ -67,7 +72,14 @@ PUBLIC_KEYS = {
     "cert_types_config", "cert_status_labels", "mission_purposes",
     "drone_location_places",
     "org_default_lat", "org_default_lon", "org_location_name",
+    "idle_lock_minutes",
 }
+
+
+def _check_idle_lock(key: str, value: str) -> None:
+    """Refuse an idle lock value outside the offered choices."""
+    if key == IDLE_LOCK_KEY and value not in IDLE_LOCK_CHOICES:
+        raise HTTPException(422, "Idle lock must be 30, 60, 120, 240, 360, 480 or 720 minutes")
 
 
 def _redact_value(key: str, value: str | None) -> str:
@@ -106,11 +118,12 @@ def get_setting(key: str, db: DBSession, user: CurrentUser):
     return SettingOut(key=key, value=_redact_value(key, setting.value))
 
 
-@router.put("", responses=responses(400, 401))
+@router.put("", responses=responses(400, 401, 422))
 def set_setting(data: SettingValue, db: DBSession, admin: AdminUser):
     """Create or update a single setting. Admin only. Key must be in ALLOWED_SETTING_KEYS."""
     if data.key not in ALLOWED_SETTING_KEYS:
         raise HTTPException(400, f"Setting key '{data.key}' is not allowed")
+    _check_idle_lock(data.key, data.value)
     from app.services.audit import log_action
     setting = db.query(Setting).filter(Setting.key == data.key).first()
     if setting:
@@ -202,13 +215,15 @@ def _interval_from(data, key) -> int | None:
     return interval
 
 
-@router.put("/bulk", responses=responses(401))
+@router.put("/bulk", responses=responses(401, 422))
 def set_settings_bulk(data: list[SettingValue], db: DBSession, admin: AdminUser):
     """Update multiple settings in a single request. Admin only.
 
     Skips keys not in ALLOWED_SETTING_KEYS and ignores masked placeholder
     values to avoid overwriting real secrets with redacted strings.
     """
+    for item in data:
+        _check_idle_lock(item.key, item.value)
     changed = _upsert_settings(db, data)
     if changed:
         # Key names only: several of these hold credentials.

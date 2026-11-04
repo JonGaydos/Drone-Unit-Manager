@@ -138,6 +138,137 @@ describe('idle lock', () => {
   })
 })
 
+describe('configured idle limit', () => {
+  const MINUTE = 60 * 1000
+
+  async function signInWithLimit(limit) {
+    server.use(
+      http.post('/api/auth/login', () =>
+        HttpResponse.json({ token: 't', user: { id: 1, username: 'a', role: 'pilot' } })),
+      http.get('/api/settings/idle_lock_minutes', () => limit()),
+    )
+    const view = renderAuth()
+    await act(async () => { await view.result.current.login('a', 'b') })
+    await act(async () => {})
+    return view
+  }
+
+  function idleFor(minutes) {
+    localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now() - minutes * MINUTE))
+    act(() => { document.dispatchEvent(new Event('visibilitychange')) })
+  }
+
+  it('uses the configured limit', async () => {
+    const { result } = await signInWithLimit(() => HttpResponse.json({ key: 'idle_lock_minutes', value: '120' }))
+    idleFor(90)
+    expect(result.current.user).not.toBeNull()
+    idleFor(121)
+    expect(result.current.user).toBeNull()
+  })
+
+  it.each([
+    ['junk', () => HttpResponse.json({ key: 'idle_lock_minutes', value: 'soon' })],
+    ['an unlisted number', () => HttpResponse.json({ key: 'idle_lock_minutes', value: '45' })],
+    ['an empty value', () => HttpResponse.json({ key: 'idle_lock_minutes', value: '' })],
+    ['a server error', () => new HttpResponse(null, { status: 500 })],
+    ['a network failure', () => HttpResponse.error()],
+  ])('falls back to 30 minutes on %s', async (_name, limit) => {
+    const { result } = await signInWithLimit(limit)
+    idleFor(29)
+    expect(result.current.user).not.toBeNull()
+    idleFor(31)
+    expect(result.current.user).toBeNull()
+  })
+
+  it('locks at the next check when the limit is shortened', async () => {
+    let value = '480'
+    const { result } = await signInWithLimit(() => HttpResponse.json({ key: 'idle_lock_minutes', value }))
+    server.use(http.get('/api/auth/me', () => HttpResponse.json({ id: 1, username: 'a', role: 'pilot' })))
+    value = '30'
+    const later = Date.now() + 61 * 1000
+    vi.spyOn(Date, 'now').mockReturnValue(later)
+    localStorage.setItem(LAST_ACTIVITY_KEY, String(later - 60 * MINUTE))
+    await act(async () => { globalThis.dispatchEvent(new Event('focus')) })
+    await waitFor(() => expect(localStorage.getItem('idleLockMinutes')).toBe('30'))
+    act(() => { document.dispatchEvent(new Event('visibilitychange')) })
+    expect(result.current.user).toBeNull()
+    vi.restoreAllMocks()
+  })
+
+  it('uses the stored limit when the page is reopened', async () => {
+    localStorage.setItem('token', 'old-token')
+    localStorage.setItem('idleLockMinutes', '480')
+    localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now() - 120 * MINUTE))
+    server.use(
+      http.get('/api/auth/me', () => HttpResponse.json({ id: 1, username: 'a', role: 'pilot' })),
+      http.get('/api/settings/idle_lock_minutes', () => HttpResponse.json({ key: 'idle_lock_minutes', value: '480' })),
+    )
+    const { result } = renderAuth()
+    await waitFor(() => expect(result.current.user).not.toBeNull())
+  })
+})
+
+describe('all tabs lock together', () => {
+  async function signIn() {
+    server.use(
+      http.post('/api/auth/login', () =>
+        HttpResponse.json({ token: 't', user: { id: 1, username: 'a', role: 'pilot' } })),
+      http.get('/api/settings/idle_lock_minutes', () =>
+        HttpResponse.json({ key: 'idle_lock_minutes', value: '30' })),
+    )
+    const view = renderAuth()
+    await act(async () => { await view.result.current.login('a', 'b') })
+    await act(async () => {})
+    return view
+  }
+
+  // Another tab clears shared storage, which this tab hears as a storage event.
+  function otherTabRemoves(key) {
+    localStorage.removeItem(key)
+    act(() => { globalThis.dispatchEvent(new StorageEvent('storage', { key, newValue: null })) })
+  }
+
+  it('logout in another tab locks this tab', async () => {
+    const { result } = await signIn()
+    otherTabRemoves('token')
+    expect(result.current.user).toBeNull()
+  })
+
+  it('idle lock in another tab locks this tab', async () => {
+    const { result } = await signIn()
+    localStorage.removeItem(LAST_ACTIVITY_KEY)
+    otherTabRemoves('token')
+    expect(result.current.user).toBeNull()
+  })
+
+  it('ignores storage changes to other keys', async () => {
+    const { result } = await signIn()
+    act(() => { globalThis.dispatchEvent(new StorageEvent('storage', { key: 'theme', newValue: 'dark' })) })
+    expect(result.current.user).not.toBeNull()
+  })
+
+  it('input in a locked tab does not renew the stamp', async () => {
+    const { result } = await signIn()
+    localStorage.removeItem('token')
+    localStorage.removeItem(LAST_ACTIVITY_KEY)
+    const later = Date.now() + 60 * 1000
+    vi.spyOn(Date, 'now').mockReturnValue(later)
+    act(() => { globalThis.dispatchEvent(new Event('keydown')) })
+    vi.restoreAllMocks()
+    expect(localStorage.getItem(LAST_ACTIVITY_KEY)).toBeNull()
+    act(() => { document.dispatchEvent(new Event('visibilitychange')) })
+    expect(result.current.user).toBeNull()
+  })
+
+  it('a missing stamp with no token counts as locked', async () => {
+    const { result } = await signIn()
+    localStorage.removeItem('token')
+    localStorage.removeItem(LAST_ACTIVITY_KEY)
+    act(() => { document.dispatchEvent(new Event('visibilitychange')) })
+    expect(result.current.user).toBeNull()
+  })
+})
+
 describe('updateUser', () => {
   it('merges partial updates into the current user', async () => {
     server.use(http.post('/api/auth/login', () =>

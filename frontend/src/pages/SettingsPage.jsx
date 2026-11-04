@@ -9,6 +9,7 @@ import { useConfirm } from '@/hooks/useConfirm'
 import { sortPilotsActiveFirst } from '@/lib/formatters'
 import { DEFAULT_ORG_LOCATION } from '@/lib/location'
 import { TIMEZONES } from '@/lib/utils'
+import { IDLE_LOCK_MINUTES, idleLockLabel } from '@/lib/idleLock'
 import { Save, Loader2, Upload, Download, UserPlus, Key, Trash2, Shield, Image as ImageIcon, ChevronUp, ChevronDown, ExternalLink, X, Edit2, MapPin, Search, GripVertical } from 'lucide-react'
 import { SIDEBAR_META, GROUP_ORDER } from '@/lib/sidebarNav'
 
@@ -1255,6 +1256,24 @@ export default function SettingsPage() {
               onInput={() => setHasUnsavedChanges(true)}
             >
               {TIMEZONES.map(tz => <option key={tz} value={tz}>{tz}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="setting-idle_lock_minutes" className="block text-sm font-medium text-foreground mb-1">Idle lock</label>
+            <p className="text-xs text-muted-foreground mb-1.5">
+              A browser signs out after this long with no input, for every role. Applies to each browser at its next refresh or reload. Sessions still end after 12 hours.
+            </p>
+            <select
+              id="setting-idle_lock_minutes"
+              ref={el => { inputRefs.current['idle_lock_minutes'] = el }}
+              key={`idle_lock_minutes-${settings.idle_lock_minutes === undefined ? 'loading' : 'loaded'}`}
+              defaultValue={IDLE_LOCK_MINUTES.map(String).includes(settings.idle_lock_minutes) ? settings.idle_lock_minutes : '30'}
+              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              disabled={!isAdmin}
+              onInput={() => setHasUnsavedChanges(true)}
+            >
+              {IDLE_LOCK_MINUTES.map(m => <option key={m} value={String(m)}>{idleLockLabel(m)}</option>)}
             </select>
           </div>
 

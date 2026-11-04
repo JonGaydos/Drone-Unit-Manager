@@ -85,6 +85,8 @@ The Settings page is accessible to administrators only and controls organization
 
 Enter your organization name and upload a logo. The logo appears on generated PDF reports.
 
+The Idle lock setting chooses how long a browser can sit with no input before it signs out: 30 minutes (the default), 1, 2, 4, 6, 8 or 12 hours. It applies to every role. A change reaches each browser the next time it refreshes its permissions (when the window regains focus) or reloads. Sessions still end after 12 hours whatever is chosen. Signing out or locking in one tab signs out every other tab of the same browser, and typing in a locked tab does not extend the session.
+
 ### 3.2 Skydio API Configuration
 
 Connect to the Skydio Cloud API to automatically import flights, vehicles, batteries, and controllers.
