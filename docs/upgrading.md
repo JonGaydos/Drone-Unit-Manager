@@ -20,13 +20,15 @@ Behind a reverse proxy or tunnel, set `TRUSTED_PROXIES` before upgrading (see
 A restore replaces the database with the backup. If that would remove or change
 a photo or document under legal hold, the restore is refused with a list of the
 held items and nothing changes. To go ahead, send the form field
-`confirm_holds` with the exact text `RESTORE HELD ITEMS` (the setup screen asks
-for it). Each held item the restore removed or changed gets its own audit
-entry. A held item the backup carries unchanged needs no confirmation.
+`confirm_holds` with the exact text `RESTORE HELD ITEMS` to
+`POST /api/backup/import`. On a live install this is an API step with an admin
+token: the setup screen restores only into a fresh install, which has no held
+items. Each held item the restore removed or changed gets its own audit entry.
+A held item the backup carries unchanged needs no confirmation.
 
 The audit entries in a backup are added to this install's own, marked as
-imported, and one summary entry records the backup date and how many were
-added. Backups from before the audit log recorded usernames restore the same
+imported, and one summary entry records the backup date, how many were added,
+and what was restored, including a telemetry or file step that failed. Backups from before the audit log recorded usernames restore the same
 way.
 
 ## 3.1.10: the container fixes its data folder's ownership

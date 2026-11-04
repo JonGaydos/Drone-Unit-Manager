@@ -250,7 +250,7 @@ Test from a completely clean database. Check each item as you go.
 - [ ] Upload backup ZIP — restore completes with stats
 - [ ] After restore, login with original credentials works
 - [ ] All data present after restore (flights, pilots, certs, photos, documents)
-- [ ] Restoring a backup that would remove or change a held item is refused with a list; typing `RESTORE HELD ITEMS` lets it proceed
+- [ ] Restoring a backup that would remove or change a held item is refused with a list; sending the form field `confirm_holds` with `RESTORE HELD ITEMS` to `POST /api/backup/import` lets it proceed
 - [ ] Restored audit entries are marked Imported and one summary entry records the backup date and count
 
 ---

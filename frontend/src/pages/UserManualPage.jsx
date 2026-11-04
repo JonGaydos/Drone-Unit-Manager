@@ -573,9 +573,9 @@ Every change to unit data is recorded automatically, including changes made by i
 
 Passwords are never included in a backup, so right after a restore no one can sign in yet. The setup screen reopens in recovery mode ("Restored backup detected"): enter the username of an administrator from the restored data, a new password, and the install token to reactivate that admin. The token is required for this step (it proves host access) and is retired once an admin is reactivated. Other restored users keep blank passwords until that admin resets them from Settings → Users.
 
-If the backup would remove or change a photo or document under legal hold, the restore is refused and the held items are listed. Type RESTORE HELD ITEMS in the box that appears to go ahead; each held item that is removed or changed gets its own audit entry. Audit entries from the backup are added to this install's own and marked Imported.
+Audit entries from the backup are added to this install's own and marked Imported.
 
-Restoring into an install that already has working logins is an operator task done against the backup API with an admin token rather than through the app.`
+Restoring into an install that already has working logins is an operator task done against the backup API (POST /api/backup/import) with an admin token rather than through the app. If the backup would remove or change a photo or document under legal hold, the API refuses it with a list of the held items and changes nothing. To go ahead, send the call again with the form field confirm_holds set to the exact text RESTORE HELD ITEMS. Each held item that is removed or changed gets its own audit entry.`
       },
       {
         title: 'Filesystem Backup (Fallback)',
