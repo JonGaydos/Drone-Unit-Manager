@@ -102,6 +102,10 @@ def _fixed_error(message: str, exc: Exception) -> str:
     return text
 
 
+USERS_SYNC_ERROR = "Users sync error"
+VEHICLES_SYNC_ERROR = "Vehicles sync error"
+
+
 def _log_sync_failure(label: str, exc: Exception) -> None:
     """Log a fixed message plus the exception type. Never the exception text
     or a traceback, which can carry credentials."""
@@ -996,8 +1000,8 @@ class SyncManager:
             result.users_synced = len(skydio_users)
             logger.info("Users sync: got %d users", len(skydio_users))
         except Exception as exc:
-            result.errors.append(_fixed_error("Users sync error", exc))
-            _log_sync_failure("Users sync error", exc)
+            result.errors.append(_fixed_error(USERS_SYNC_ERROR, exc))
+            _log_sync_failure(USERS_SYNC_ERROR, exc)
 
         # --- Match Skydio users to pilots and populate emails ---
         # Committed here so the write lock is not held through the network
@@ -1016,8 +1020,8 @@ class SyncManager:
             db.commit()
             logger.info("Committed %d vehicles to database", result.vehicles_synced)
         except Exception as exc:
-            result.errors.append(_fixed_error("Vehicles sync error", exc))
-            _log_sync_failure("Vehicles sync error", exc)
+            result.errors.append(_fixed_error(VEHICLES_SYNC_ERROR, exc))
+            _log_sync_failure(VEHICLES_SYNC_ERROR, exc)
             db.rollback()
             result.vehicles_synced = 0
 
@@ -1101,7 +1105,7 @@ class SyncManager:
             result.users_synced = len(skydio_users)
             logger.info("Deep sync users: got %d users", len(skydio_users))
         except Exception as exc:
-            result.errors.append(_fixed_error("Users sync error", exc))
+            result.errors.append(_fixed_error(USERS_SYNC_ERROR, exc))
             _log_sync_failure("Deep sync users error", exc)
 
         # --- Sync vehicles (needed for flight vehicle matching) ---
@@ -1109,7 +1113,7 @@ class SyncManager:
             _sync_vehicles(provider, creds, db, result)
             db.commit()
         except Exception as exc:
-            result.errors.append(_fixed_error("Vehicles sync error", exc))
+            result.errors.append(_fixed_error(VEHICLES_SYNC_ERROR, exc))
             _log_sync_failure("Deep sync vehicles error", exc)
             db.rollback()
 
