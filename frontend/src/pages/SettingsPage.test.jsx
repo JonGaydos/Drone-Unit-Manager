@@ -222,6 +222,33 @@ describe('SettingsPage', () => {
   const mockPurposes = (rows = PURPOSE_ROWS) =>
     server.use(http.get('/api/flights/purposes/usage', () => HttpResponse.json(rows)))
 
+  it.each([
+    ['pilot', 0],
+    ['viewer', 0],
+    ['supervisor', 1],
+  ])('as %s requests purpose usage %i time(s), following flights.review', async (role, expected) => {
+    mockMount()
+    let requests = 0
+    let settingsRequested = false
+    server.use(
+      http.get('/api/flights/purposes/usage', () => {
+        requests += 1
+        return HttpResponse.json(PURPOSE_ROWS)
+      }),
+      http.get('/api/settings', () => {
+        settingsRequested = true
+        return HttpResponse.json([])
+      }),
+    )
+    renderWithProviders(<SettingsPage />, { role })
+
+    // The page's mount effect has run once the settings request has been made.
+    await waitFor(() => expect(settingsRequested).toBe(true))
+    await waitFor(() => expect(requests).toBe(expected))
+    await new Promise(resolve => setTimeout(resolve, 50))
+    expect(requests).toBe(expected)
+  })
+
   it('lists purposes from the table with their usage counts', async () => {
     mockMount()
     mockPurposes()
