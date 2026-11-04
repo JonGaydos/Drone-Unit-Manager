@@ -3,7 +3,8 @@
 from datetime import date, datetime, timezone
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import inspect, text
+from sqlalchemy.orm.attributes import flag_modified
 
 import app.database as database
 from app.database import Base
@@ -1236,3 +1237,183 @@ def test_failure_collecting_changes_leaves_nothing_for_the_next_flush(session, d
 
     entries = _entries(db, entity_type="pilot")
     assert sorted(e.action for e in entries) == ["delete", "update"]
+
+
+# Several records in one flush ------------------------------------------------
+
+def _pilots(session, count):
+    pilots = [Pilot(first_name=f"Ann{i}", last_name="Lee", badge_number=f"old-{i}") for i in range(count)]
+    session.add_all(pilots)
+    session.commit()
+    return pilots
+
+
+def _edit_badges(pilots, prefix):
+    for i, pilot in enumerate(pilots):
+        pilot.badge_number = f"{prefix}-{i}"
+
+
+def _assert_badge_entries(db, ids, new_prefix):
+    entries = {entry.entity_id: entry for entry in _entries(db, entity_type="pilot")}
+    assert sorted(entries) == sorted(ids)
+    for i, record_id in enumerate(ids):
+        assert entries[record_id].changes == {"badge_number": {"old": f"old-{i}", "new": f"{new_prefix}-{i}"}}
+
+
+def test_each_record_in_a_flush_gets_its_own_entry_and_values(session, db):
+    pilots = _pilots(session, 5)
+    ids = [pilot.id for pilot in pilots]
+    _clear_audit(db)
+    _edit_badges(pilots, "new")
+    session.commit()
+
+    _assert_badge_entries(db, ids, "new")
+
+
+def test_a_later_flush_merges_into_each_records_own_entry(session, db):
+    pilots = _pilots(session, 5)
+    ids = [pilot.id for pilot in pilots]
+    _clear_audit(db)
+    _edit_badges(pilots, "first")
+    session.flush()
+    _edit_badges(pilots, "second")
+    session.commit()
+
+    _assert_badge_entries(db, ids, "second")
+
+
+def test_log_action_absorbs_only_its_own_records_entry(session, db, admin_user):
+    pilots = _pilots(session, 5)
+    target_id = pilots[2].id
+    _clear_audit(db)
+    _edit_badges(pilots, "new")
+    session.flush()
+    log_action(session, admin_user.id, admin_user.display_name, "approve", "pilot", target_id,
+               details="logged by hand")
+    session.commit()
+
+    entries = _entries(db, entity_type="pilot")
+    assert len(entries) == 5
+    assert [entry.entity_id for entry in entries if entry.action == "approve"] == [target_id]
+    absorbed = next(entry for entry in entries if entry.entity_id == target_id)
+    assert absorbed.details == "logged by hand"
+    assert absorbed.changes == {"badge_number": {"old": "old-2", "new": "new-2"}}
+
+
+def test_entries_in_one_flush_number_in_order_of_action(session, db):
+    kept, doomed = _pilots(session, 2)
+    _clear_audit(db)
+    kept.notes = "edited"
+    session.delete(doomed)
+    session.add(Pilot(first_name="New", last_name="Lee"))
+    session.commit()
+
+    assert [entry.action for entry in _entries(db, entity_type="pilot")] == ["create", "update", "delete"]
+
+
+def test_a_new_row_taking_a_deleted_rows_id_keeps_both_entries(session, db):
+    old = _pilots(session, 1)[0]
+    old_id = old.id
+    _clear_audit(db)
+    session.delete(old)
+    session.add(Pilot(id=old_id, first_name="Reused", last_name="Id"))
+    session.commit()
+
+    entries = _entries(db, entity_type="pilot", entity_id=old_id)
+    assert [entry.action for entry in entries] == ["create", "delete"]
+    assert entries[0].changes["first_name"] == {"old": None, "new": "Reused"}
+    assert entries[1].changes["first_name"] == {"old": "Ann0", "new": None}
+
+
+def test_a_flush_before_a_failed_savepoint_stays_and_can_still_merge(session, db):
+    pilots = _pilots(session, 3)
+    ids = [pilot.id for pilot in pilots]
+    _clear_audit(db)
+    _edit_badges(pilots, "before")
+    session.flush()
+
+    nested = session.begin_nested()
+    _edit_badges(pilots, "inside")
+    session.flush()
+    nested.rollback()
+
+    _edit_badges(pilots, "after")
+    session.commit()
+
+    _assert_badge_entries(db, ids, "after")
+
+
+def test_a_flush_inside_a_failed_savepoint_leaves_no_entry(session, db):
+    pilots = _pilots(session, 3)
+    _clear_audit(db)
+
+    nested = session.begin_nested()
+    _edit_badges(pilots, "inside")
+    session.flush()
+    nested.rollback()
+    session.commit()
+
+    assert _entries(db, entity_type="pilot") == []
+
+
+def test_one_refused_entry_fails_the_whole_save(session, db):
+    pilots = _pilots(session, 5)
+    ids = [pilot.id for pilot in pilots]
+    _clear_audit(db)
+    with database.engine.begin() as conn:
+        conn.execute(text(
+            "CREATE TRIGGER block_one BEFORE INSERT ON audit_logs "
+            f"WHEN NEW.entity_id = {ids[3]} "
+            "BEGIN SELECT RAISE(ABORT, 'audit write refused'); END"))
+    _edit_badges(pilots, "new")
+
+    with pytest.raises(Exception, match="audit write refused"):
+        session.commit()
+    session.rollback()
+
+    with database.engine.begin() as conn:
+        conn.execute(text("DROP TRIGGER block_one"))
+    db.expire_all()
+    assert [db.get(Pilot, record_id).badge_number for record_id in ids] == [f"old-{i}" for i in range(5)]
+    assert _entries(db, entity_type="pilot") == []
+
+
+# What capture reads per row ---------------------------------------------------
+
+def test_capture_builds_no_attribute_state_per_row(session):
+    """``InstanceState.attrs`` costs an object per attribute per row, which was
+    most of the time a bulk edit spent. It is memoized, so use leaves a trace."""
+    pilot = _pilot(session)
+    pilot.notes = "edited"
+    session.flush()
+
+    assert "attrs" not in vars(inspect(pilot))
+    session.commit()
+
+
+@pytest.mark.parametrize("change", ["scalar", "flagged", "set_while_expired", "collection", "backref", "none"])
+def test_change_shortcut_agrees_with_full_history(session, parents, change):
+    """The shortcut leans on how SQLAlchemy tracks changes, so an upgrade that
+    alters it must fail here rather than silently lose entries."""
+    flight = session.get(Flight, parents["flight"])
+    pilot = session.get(Pilot, parents["pilot"])
+    if change == "scalar":
+        flight.purpose = "Patrol"
+    elif change == "flagged":
+        flag_modified(flight, "purpose")
+    elif change == "set_while_expired":
+        session.expire(flight)
+        flight.purpose = "Patrol"
+    elif change == "collection":
+        pilot.flights.append(flight)
+    elif change == "backref":
+        flight.pilot = pilot
+
+    for state in (inspect(flight), inspect(pilot)):
+        for key in state.mapper.attrs.keys():
+            fast = audit_capture._history_if_changed(state, key)
+            full = state.attrs[key].history
+            assert (fast is not None) == full.has_changes(), key
+            if fast is not None:
+                assert fast == full, key
+    session.rollback()

@@ -24,9 +24,10 @@ This module is imported by ``app.database``, so it imports models and
 import re
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
+from functools import cache
 
 from sqlalchemy import event, inspect, select
-from sqlalchemy.orm.attributes import set_committed_value
+from sqlalchemy.orm.attributes import PASSIVE_NO_INITIALIZE, set_committed_value
 
 from app.constants import SECRET_KEYS
 
@@ -175,6 +176,7 @@ def set_actor(session, user) -> None:
     session.info[ACTOR_KEY] = user if isinstance(user, dict) else actor_fields(user)
 
 
+@cache
 def entity_type_of(model_class) -> str:
     """The audit ``entity_type`` for a model class."""
     name = model_class.__name__
@@ -212,13 +214,24 @@ def _format(obj, attr_key: str, old, new) -> dict:
     return _fmt_change(old, new)
 
 
-def _recorded_keys(mapper):
+@cache
+def _recorded_keys(mapper) -> tuple:
     """Column attributes an entry may mention: not the key, not bookkeeping."""
     primary = {column.key for column in mapper.primary_key}
-    return [
+    return tuple(
         attr.key for attr in mapper.column_attrs
         if attr.key not in EXCLUDED_FIELDS and attr.columns[0].key not in primary
-    ]
+    )
+
+
+def _history_if_changed(obj_state, key: str):
+    """The attribute's history if it has changes, else None. Only an attribute
+    in ``committed_state`` can have any, so most need no history at all. Building
+    ``obj_state.attrs`` instead costs an object per attribute per row."""
+    if key not in obj_state.committed_state:
+        return None
+    history = obj_state.get_history(key, PASSIVE_NO_INITIALIZE)
+    return history if history.has_changes() else None
 
 
 def _stored_values(session, obj_state, keys: list[str]) -> dict:
@@ -236,8 +249,8 @@ def _changed_values(session, obj_state) -> dict:
     pairs: dict = {}
     old_unknown = []
     for key in _recorded_keys(obj_state.mapper):
-        history = obj_state.attrs[key].history
-        if history.has_changes():
+        history = _history_if_changed(obj_state, key)
+        if history is not None:
             new = history.added[0] if history.added else None
             pairs[key] = (history.deleted[0] if history.deleted else None, new)
             if not history.deleted:
@@ -312,7 +325,8 @@ def _audit_table():
 
 
 def _insert_row(session, values: dict) -> int:
-    result = session.connection().execute(_audit_table().insert().values(**values))
+    # Values as parameters, not on the statement, so all rows share one compiled form.
+    result = session.connection().execute(_audit_table().insert(), values)
     return result.inserted_primary_key[0]
 
 
@@ -417,7 +431,7 @@ def _load_keys_a_flush_will_set(obj_state) -> None:
     has expired the flush overwrites it, and its old value is gone."""
     mapper = obj_state.mapper
     for relationship in mapper.relationships:
-        if obj_state.attrs[relationship.key].history.has_changes():
+        if _history_if_changed(obj_state, relationship.key) is not None:
             for column in relationship.local_columns:
                 getattr(obj_state.obj(), mapper.get_property_by_column(column).key)
 
@@ -427,8 +441,8 @@ def _counts_as_update(obj) -> bool:
     so a value set while expired counts even if it matches the stored one."""
     obj_state = inspect(obj)
     for key in _recorded_keys(obj_state.mapper):
-        history = obj_state.attrs[key].history
-        if not history.has_changes():
+        history = _history_if_changed(obj_state, key)
+        if history is None:
             continue
         new = history.added[0] if history.added else None
         if not history.deleted or str(history.deleted[0]) != str(new):
@@ -479,8 +493,8 @@ def _flush_set_changes(obj, examined: frozenset) -> dict:
     obj_state = inspect(obj)
     changes = {}
     for key in _recorded_keys(obj_state.mapper):
-        history = obj_state.attrs[key].history
-        if key in examined or not history.has_changes():
+        history = None if key in examined else _history_if_changed(obj_state, key)
+        if history is None:
             continue
         old = history.deleted[0] if history.deleted else _OLD_VALUE_UNKNOWN
         new = history.added[0] if history.added else None
