@@ -5,11 +5,17 @@ import io
 import json
 import zipfile
 
+import pytest
+from sqlalchemy import text
+
+import app.database as database
 from app.config import settings as app_settings
 from app.models.audit_log import AuditLog
 from app.models.pilot import Pilot
 from app.models.photo import Photo
 from app.models.document import Document
+from app.models.user import User
+from app.routers import backup as backup_router
 from app.routers.backup import build_backup_archive
 
 IMPORT_URL = "/api/backup/import"
@@ -290,3 +296,102 @@ def test_old_backup_without_metadata_keys_is_not_flagged(
             zf.writestr(name, data)
 
     assert _post(client, admin_headers, out.getvalue()).status_code == 200
+
+
+def _with_telemetry(archive, telemetry: bytes) -> bytes:
+    buf = io.BytesIO(archive)
+    with zipfile.ZipFile(buf, "a") as zf:
+        zf.writestr("telemetry.json", telemetry)
+    return buf.getvalue()
+
+
+def _summary(db):
+    summaries = _audit(db, action="import", entity_type="backup")
+    assert len(summaries) == 1
+    return summaries[0]
+
+
+def test_restore_summary_says_what_was_restored(
+        client, db, admin_user, admin_headers, tmp_path, monkeypatch):
+    _env(tmp_path, monkeypatch)
+    archive = _with_telemetry(_archive(db), b"[]")
+
+    assert _post(client, admin_headers, archive).status_code == 200
+
+    details = _summary(db).details
+    assert "tables=" in details and "rows=" in details
+    assert "telemetry_points=0" in details and "files=0" in details
+    assert "pending" not in details
+
+
+def test_truncated_telemetry_still_leaves_the_summary(
+        client, db, admin_user, admin_headers, tmp_path, monkeypatch):
+    _env(tmp_path, monkeypatch)
+    db.add(AuditLog(user_name="Old Timer", action="create", entity_type="pilot", entity_id=1))
+    db.add(Pilot(first_name="In", last_name="Backup", status="active"))
+    db.commit()
+    archive = _with_telemetry(_archive(db), b'[{"id": 1, "flight_id"')
+    with zipfile.ZipFile(io.BytesIO(archive)) as zf:
+        backup_date = json.loads(zf.read("manifest.json"))["export_date"][:10]
+    db.query(AuditLog).delete()
+    db.query(Pilot).filter(Pilot.first_name == "In").delete()
+    db.commit()
+
+    resp = _post(client, admin_headers, archive)
+
+    assert resp.status_code == 500
+    db.expire_all()
+    assert db.query(Pilot).filter_by(first_name="In").count() == 1
+    summary = _summary(db)
+    assert summary.imported is False
+    assert backup_date in summary.details and "audit_rows=1" in summary.details
+    assert "tables=" in summary.details and "rows=" in summary.details
+    assert "telemetry=failed" in summary.details and "files=not restored" in summary.details
+
+
+def test_uploads_failing_still_leaves_the_summary(
+        client, db, admin_user, admin_headers, tmp_path, monkeypatch):
+    _env(tmp_path, monkeypatch)
+    archive = _archive(db)
+
+    def refuse(_zf, _upload_dir):
+        raise RuntimeError("disk full")
+
+    monkeypatch.setattr(backup_router, "_restore_uploads", refuse)
+
+    with pytest.raises(RuntimeError):
+        _post(client, admin_headers, archive)
+
+    assert "files=failed" in _summary(db).details
+
+
+def test_restore_that_cannot_write_its_summary_changes_nothing(
+        client, db, admin_user, admin_headers, tmp_path, monkeypatch):
+    _env(tmp_path, monkeypatch)
+    archive = _archive(db)
+    db.add(Pilot(first_name="After", last_name="Backup", status="active"))
+    db.commit()
+    with database.engine.begin() as conn:
+        conn.execute(text(
+            "CREATE TRIGGER block_summary BEFORE INSERT ON audit_logs WHEN NEW.entity_type = 'backup' "
+            "BEGIN SELECT RAISE(ABORT, 'audit write refused'); END"))
+
+    assert _post(client, admin_headers, archive).status_code >= 400
+
+    db.expire_all()
+    assert db.query(Pilot).filter_by(first_name="After").count() == 1
+    assert db.get(User, admin_user.id).password_hash
+
+
+def test_held_item_and_summary_entries_name_the_acting_user(
+        client, db, admin_user, admin_headers, tmp_path, monkeypatch):
+    _env(tmp_path, monkeypatch)
+    archive = _archive(db)
+    _held_photo(db)
+
+    assert _post(client, admin_headers, archive, confirm_holds=CONFIRM).status_code == 200
+
+    held = _audit(db, action="restore_held_item")
+    assert len(held) == 1
+    assert held[0].user_username == admin_user.username
+    assert _summary(db).user_username == admin_user.username

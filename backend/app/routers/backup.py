@@ -36,6 +36,7 @@ def _telemetry_session():
     return database.TelemetrySessionLocal()
 from app.deps import DBSession, AdminUser
 from app.services import permissions
+from app.services.audit_capture import ACTOR_KEY, set_actor
 from app.services.sync_lock import restoring, sync_guard_http
 from app.models.user import User
 from app.models.pilot import Pilot
@@ -480,6 +481,7 @@ def _verify_admin_or_install_token(request: Request, db: Session) -> str:
         user = user_from_login_token(auth_header[len("Bearer "):], db)
         if user.role != "admin":
             raise HTTPException(403, "Backup import requires an admin account")
+        set_actor(db, user)
         return f"admin:{user.username}"
     # Fresh install path: install-token check
     provided = request.headers.get("X-Install-Token", "").strip()
@@ -709,8 +711,13 @@ def _comparable(value):
     return value
 
 
+# How a restore's summary entry reads until the steps after the main tables finish.
+RESTORE_STEPS_PENDING = "telemetry=pending, files=pending"
+
+
 def _restore_main_tables(db: Session, db_tables: dict, held_items: list[dict] | None = None,
-                         principal: str = "system") -> tuple[int, int, int]:
+                         principal: str = "system",
+                         backup_date: str = "unknown") -> tuple[int, int, int, AuditLog]:
     """Replace the main-DB tables from the backup, in one atomic transaction.
 
     A restore makes the database match the backup, so each table is wiped and
@@ -723,12 +730,13 @@ def _restore_main_tables(db: Session, db_tables: dict, held_items: list[dict] | 
     wipe-and-reload is all-or-nothing, needs no per-row ordering, and never
     leaves a pooled connection with enforcement disabled (the pragma clears
     itself at commit/rollback). Returns (tables_imported, rows_imported,
-    audit_rows_imported).
+    audit_rows_imported, summary_entry).
     """
     db.execute(text("PRAGMA defer_foreign_keys=ON"))
     tables_imported = 0
     rows_imported = 0
     audit_imported = 0
+    username = (db.info.get(ACTOR_KEY) or {}).get("username")
     try:
         # This install's audit trail survives the restore. Its entries are
         # detached from user ids the restore is about to replace; each keeps the
@@ -754,16 +762,23 @@ def _restore_main_tables(db: Session, db_tables: dict, held_items: list[dict] | 
         if held_items:
             now = datetime.now(timezone.utc)
             db.execute(AuditLog.__table__.insert(), [
-                {"user_name": principal, "action": "restore_held_item", "entity_type": h["type"],
+                {"user_name": principal, "user_username": username,
+                 "action": "restore_held_item", "entity_type": h["type"],
                  "entity_id": h["id"], "entity_name": h["title"], "created_at": now,
                  "details": "Held item removed or changed by a backup restore", "imported": False}
                 for h in held_items
             ])
+        # In the same transaction too, so the data cannot change without it.
+        summary = AuditLog(
+            user_name=principal, user_username=username, action="import", entity_type="backup",
+            details=(f"backup_date={backup_date}, audit_rows={audit_imported}, tables={tables_imported}, "
+                     f"rows={rows_imported}, {RESTORE_STEPS_PENDING}"))
+        db.add(summary)
         db.commit()  # FK consistency is verified here
     except Exception:
         db.rollback()
         raise
-    return tables_imported, rows_imported, audit_imported
+    return tables_imported, rows_imported, audit_imported, summary
 
 
 def _stream_json_array(stream, read_size: int = 1 << 20):
@@ -861,6 +876,12 @@ async def _read_backup_upload(request: Request) -> tuple[bytes, str]:
         await form.close()
 
 
+def _note_restore_steps(db, summary: AuditLog, outcome: str) -> None:
+    """Say on a restore's summary entry how the steps after the main tables went."""
+    summary.details = summary.details.replace(RESTORE_STEPS_PENDING, outcome)
+    db.commit()
+
+
 def _restore_archive(db, content: bytes, principal: str, confirm_holds: str = "") -> dict | JSONResponse:
     """Restore a backup ZIP: main tables, telemetry, then uploaded files.
     Synchronous and slow (minutes for a large install); the route runs it
@@ -887,7 +908,9 @@ def _restore_archive(db, content: bytes, principal: str, confirm_holds: str = ""
         return JSONResponse(status_code=409, content={
             "held_items": held_items, "confirm_text": CONFIRM_HOLDS_TEXT})
 
-    tables_imported, rows_imported, audit_rows = _restore_main_tables(db, db_tables, held_items, principal)
+    backup_date = str(manifest.get("export_date") or "unknown")[:10]
+    tables_imported, rows_imported, _, summary = _restore_main_tables(
+        db, db_tables, held_items, principal, backup_date)
 
     # Telemetry lives in a separate database, so it cannot share the main
     # transaction. A failure is surfaced rather than swallowed: the operator
@@ -897,10 +920,15 @@ def _restore_archive(db, content: bytes, principal: str, confirm_holds: str = ""
         telemetry_imported, telemetry_count = _restore_telemetry(zf)
     except Exception as exc:
         logger.exception("Backup telemetry import failed")
+        _note_restore_steps(db, summary, "telemetry=failed, files=not restored")
         raise HTTPException(500, f"Backup telemetry import failed: {exc}")
     rows_imported += telemetry_count
 
-    files_restored = _restore_uploads(zf, str(app_settings.UPLOAD_DIR))
+    try:
+        files_restored = _restore_uploads(zf, str(app_settings.UPLOAD_DIR))
+    except Exception:
+        _note_restore_steps(db, summary, f"telemetry_points={telemetry_count}, files=failed")
+        raise
 
     logger.info("Backup import complete: %d tables, %d rows, %d files (principal=%s)",
                 tables_imported, rows_imported, files_restored, principal)
@@ -914,16 +942,7 @@ def _restore_archive(db, content: bytes, principal: str, confirm_holds: str = ""
     # at boot). No-ops if a usable login somehow remains.
     init_install_token()
 
-    # Audit log entry (best-effort — table may not have existed pre-import).
-    try:
-        from app.services.audit import log_action
-        log_action(db, None, principal, "import", "backup",
-                   details=(f"backup_date={str(manifest.get('export_date') or 'unknown')[:10]}, "
-                            f"audit_rows={audit_rows}, tables={tables_imported}, "
-                            f"rows={rows_imported}, files={files_restored}"))
-        db.commit()
-    except Exception as exc:
-        logger.warning("Could not write audit log for backup import: %s", exc)
+    _note_restore_steps(db, summary, f"telemetry_points={telemetry_count}, files={files_restored}")
 
     return {
         "ok": True,
