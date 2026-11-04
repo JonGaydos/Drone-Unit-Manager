@@ -36,7 +36,7 @@ from app.routers.auth import require_permission
 from app.services import evidence
 from app.services import permissions as permissions_service
 from app.services.audit import compute_changes, log_action
-from app.services.audit_capture import add_folded, delete_links
+from app.services.audit_capture import add_folded, delete_links, set_actor
 from app.services.file_validation import mime_for_filename, user_file_headers
 
 logger = logging.getLogger(__name__)
@@ -428,6 +428,8 @@ def _serve_image(path: Path, mime: str | None = None) -> FileResponse:
 def _record_full_view(db, viewer_id: int | None, photo) -> None:
     """Audit one serve of the full-resolution image."""
     viewer = db.get(User, viewer_id) if viewer_id is not None else None
+    if viewer:
+        set_actor(db, viewer)
     log_action(db, viewer_id, viewer.display_name if viewer else "Signed link", "view", "photo",
                photo.id, photo.original_filename)
     db.commit()

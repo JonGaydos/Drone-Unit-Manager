@@ -24,6 +24,7 @@ import pytest
 from app.config import settings
 from app.routers import photos as photos_router
 from app.routers.photos import _sign_photo, SIGNED_URL_TTL_SECONDS
+from app.models.audit_log import AuditLog
 from app.models.photo import Photo, PhotoFlight, PhotoIncident
 from app.models.flight import Flight
 from app.models.incident import Incident
@@ -237,3 +238,15 @@ def test_real_thumbnail_writes_no_view_audit(client, db, upload_dir, admin_heade
     resp = client.get(f"/api/photos/{photo.id}/thumbnail", headers=admin_headers)
     assert resp.status_code == 200
     assert _view_entries(photo.id) == 0
+
+
+def test_signed_view_entry_names_the_known_viewer(client, db, upload_dir, pilot_user):
+    photo, _ = _photo_on_disk(db, upload_dir)
+    sig, exp = _sign_photo(photo.id, "view", viewer=pilot_user.id)
+
+    resp = client.get(f"/api/photos/{photo.id}/view?sig={sig}&exp={exp}&u={pilot_user.id}")
+
+    assert resp.status_code == 200, resp.text
+    entry = db.query(AuditLog).filter_by(action="view", entity_id=photo.id).one()
+    assert entry.user_id == pilot_user.id
+    assert entry.user_username == pilot_user.username

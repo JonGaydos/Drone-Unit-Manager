@@ -424,6 +424,7 @@ def _reactivate_admin(request, db, username: str, password: str) -> dict:
     if not verify_install_token(request.headers.get("X-Install-Token", "")):
         raise HTTPException(401, "Install token required to reactivate an administrator. Read it from the container logs or install_token.txt.")
     admin = _reclaim_admin(db, username, password)
+    set_actor(db, admin)
     revoke_sessions(admin)
     from app.services.audit import log_action
     log_action(db, admin.id, admin.display_name, "reactivate", "user", admin.id, admin.display_name,
@@ -488,6 +489,18 @@ def initial_setup(data: SetupRequest, request: Request, db: DBSession):
     first_name = name_parts[0]
     last_name = name_parts[1] if len(name_parts) > 1 else ""
 
+    # The administrator goes in first, so everything setup writes names them.
+    admin = User(
+        username=username,
+        password_hash=hash_password(password),
+        display_name=display_name or username,
+        role="admin",
+        email=email or None,
+    )
+    db.add(admin)
+    db.flush()
+    set_actor(db, admin)
+
     # Create pilot record for the admin user
     pilot = Pilot(
         first_name=first_name,
@@ -498,16 +511,7 @@ def initial_setup(data: SetupRequest, request: Request, db: DBSession):
     db.add(pilot)
     db.flush()
 
-    # Create admin user linked to the pilot
-    admin = User(
-        username=username,
-        password_hash=hash_password(password),
-        display_name=display_name or username,
-        role="admin",
-        email=email or None,
-        pilot_id=pilot.id,
-    )
-    db.add(admin)
+    admin.pilot_id = pilot.id
 
     # Set org name if provided
     if org_name:
@@ -532,7 +536,6 @@ def initial_setup(data: SetupRequest, request: Request, db: DBSession):
         db.add(FlightPurpose(name=name, sort_order=i))
 
     db.flush()
-    set_actor(db, admin)
     from app.services.audit import log_action
     log_action(db, admin.id, admin.display_name, "setup", "user", admin.id, admin.display_name,
                ip_address=_client_ip(request), details=f"Initial setup created administrator '{admin.username}'")
@@ -584,6 +587,7 @@ def login(req: LoginRequest, request: Request, db: DBSession):
     if not user.is_active:
         # Same answer as a wrong password: a distinct message would confirm the
         # password was right. The attempt is still recorded for the audit trail.
+        set_actor(db, user)
         log_action(db, user.id, user.display_name, "login_blocked", "auth",
                    ip_address=client_ip, details="Login attempt to a disabled account")
         db.commit()

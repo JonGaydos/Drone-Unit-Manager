@@ -10,6 +10,7 @@ import os
 from tests.conftest import ADMIN_PASSWORD, PILOT_PASSWORD
 
 from app.config import settings as app_settings
+from app.models.audit_log import AuditLog
 from app.models.user import User
 from app.models.flight import FlightPurpose
 from app.models.folder import Folder
@@ -218,3 +219,39 @@ def test_setup_recovery_rejects_non_admin_username(client, db, tmp_path, monkeyp
     resp = client.post(SETUP_URL, headers=headers,
                        json={"username": "observer", "password": RECOVERY_PASSWORD})
     assert resp.status_code == 400, resp.text
+
+
+# Who the audit entries name ---------------------------------------------------------
+
+def test_setup_entries_all_name_the_new_administrator(client, db, tmp_path, monkeypatch):
+    headers = _arm_install_token(monkeypatch, tmp_path)
+    resp = client.post(SETUP_URL, headers=headers,
+                       json={"username": "founder", "password": ADMIN_PASSWORD, "org_name": "Unit"})
+    assert resp.status_code == 200, resp.text
+
+    admin = db.query(User).filter_by(username="founder").one()
+    assert admin.pilot_id is not None
+    entries = db.query(AuditLog).all()
+    assert {"pilot", "setting", "folder", "flight_purpose"} <= {e.entity_type for e in entries}
+    assert {e.user_username for e in entries} == {"founder"}
+    assert {e.user_id for e in entries} == {admin.id}
+    assert [e.action for e in entries if e.entity_type == "user"] == ["setup"]
+
+
+def test_reactivate_entry_names_the_administrator(client, db, tmp_path, monkeypatch):
+    headers = _arm_install_token(monkeypatch, tmp_path)
+    _seed_blank_hash_user(db, "returning", "admin")
+    resp = client.post(SETUP_URL, headers=headers, json={"username": "returning", "password": RECOVERY_PASSWORD})
+    assert resp.status_code == 200, resp.text
+
+    entry = db.query(AuditLog).filter_by(action="reactivate").one()
+    assert entry.user_username == "returning"
+
+
+def test_blocked_login_entry_names_the_account(client, db, pilot_user):
+    pilot_user.is_active = False
+    db.commit()
+    assert client.post(LOGIN_URL, json={"username": pilot_user.username, "password": PILOT_PASSWORD}).status_code == 401
+
+    entry = db.query(AuditLog).filter_by(action="login_blocked").one()
+    assert entry.user_username == pilot_user.username
