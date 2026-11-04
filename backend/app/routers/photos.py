@@ -430,6 +430,14 @@ def _serve_image(path: Path, mime: str | None = None) -> FileResponse:
     return FileResponse(str(path), media_type=mime, headers=user_file_headers(mime))
 
 
+def _record_full_view(db, viewer_id: int | None, photo) -> None:
+    """Audit one serve of the full-resolution image."""
+    viewer = db.get(User, viewer_id) if viewer_id is not None else None
+    log_action(db, viewer_id, viewer.display_name if viewer else "Signed link", "view", "photo",
+               photo.id, photo.original_filename)
+    db.commit()
+
+
 @router.get("/{photo_id}/view", responses=responses(401, 404))
 def view_photo(
     photo_id: int,
@@ -449,10 +457,7 @@ def view_photo(
     resolved = _resolve_photo_path(photo)
     if not resolved:
         raise HTTPException(404, "File not found on disk")
-    viewer = db.get(User, viewer_id) if viewer_id is not None else None
-    log_action(db, viewer_id, viewer.display_name if viewer else "Signed link", "view", "photo",
-               photo.id, photo.original_filename)
-    db.commit()
+    _record_full_view(db, viewer_id, photo)
     return _serve_image(resolved)
 
 
@@ -465,16 +470,17 @@ def view_thumbnail(
     exp: Annotated[int | None, Query()] = None,
 ):
     """Serve the photo thumbnail. Same auth options as view_photo."""
-    _authenticate_image_request(photo_id, "thumbnail", credentials, sig, exp, db)
+    viewer_id = _authenticate_image_request(photo_id, "thumbnail", credentials, sig, exp, db)
     photo = _live_photo(db, photo_id)
     if photo.thumbnail_path:
         thumb_resolved = _validate_path(photo.thumbnail_path)
         if thumb_resolved.exists():
             return _serve_image(thumb_resolved, MIME_JPEG)
-    # Fall back to full image
+    # Fall back to full image; that is a view of the full file, so it is audited.
     resolved = _resolve_photo_path(photo)
     if not resolved:
         raise HTTPException(404, "File not found on disk")
+    _record_full_view(db, viewer_id, photo)
     return _serve_image(resolved)
 
 

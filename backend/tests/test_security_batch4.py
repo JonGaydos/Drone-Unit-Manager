@@ -3,6 +3,7 @@ upload digests, and audited views, for photos, documents and folders."""
 
 import hashlib
 import io
+from pathlib import Path
 from datetime import date, timedelta
 from urllib.parse import parse_qs, urlparse
 
@@ -110,7 +111,7 @@ def test_supervisor_restores_a_photo_and_a_pilot_cannot(client, db, photo, pilot
 
 def test_deleted_document_is_hidden_and_restorable(client, db, document, pilot_user, supervisor_user):
     assert client.delete(f"/api/documents/{document.id}", headers=_bearer(pilot_user)).status_code == 200
-    assert (settings.UPLOAD_DIR / "documents" / "general" / "warrant.pdf").exists()
+    assert Path(document.file_path).exists()
     assert client.get("/api/documents", headers=_bearer(pilot_user)).json() == []
     assert client.get(f"/api/documents/{document.id}/view", headers=_bearer(pilot_user)).status_code == 404
 
@@ -157,7 +158,8 @@ def test_purge_is_admin_only_and_needs_a_prior_delete(client, db, photo, pilot_u
 
 
 def test_document_purge_removes_the_file(client, db, document, pilot_user, admin_user):
-    path = settings.UPLOAD_DIR / "documents" / "general" / "warrant.pdf"
+    path = Path(document.file_path)
+    assert path.exists()
     client.delete(f"/api/documents/{document.id}", headers=_bearer(pilot_user))
     assert client.delete(f"/api/documents/{document.id}/purge", headers=_bearer(admin_user)).status_code == 200
     assert not path.exists()

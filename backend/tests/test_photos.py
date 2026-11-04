@@ -204,3 +204,36 @@ def test_expired_signed_url_rejected(client, db, upload_dir):
     assert exp < int(time.time())
     resp = client.get(f"/api/photos/{photo.id}/view?sig={sig}&exp={exp}")
     assert resp.status_code == 401, resp.text
+
+
+# 4. Thumbnail fallback audit -----------------------------------------------
+
+def _view_entries(photo_id):
+    from app import database
+    from app.models.audit_log import AuditLog
+    s = database.SessionLocal()
+    try:
+        return s.query(AuditLog).filter(AuditLog.entity_type == "photo", AuditLog.entity_id == photo_id,
+                                        AuditLog.action == "view").count()
+    finally:
+        s.close()
+
+
+def test_thumbnail_fallback_writes_view_audit(client, db, upload_dir, admin_headers):
+    photo, _ = _photo_on_disk(db, upload_dir)
+    resp = client.get(f"/api/photos/{photo.id}/thumbnail", headers=admin_headers)
+    assert resp.status_code == 200
+    assert resp.content == _PNG_1x1
+    assert _view_entries(photo.id) == 1
+
+
+def test_real_thumbnail_writes_no_view_audit(client, db, upload_dir, admin_headers):
+    photo, _ = _photo_on_disk(db, upload_dir)
+    thumb = os.path.join(upload_dir, "thumb.jpg")
+    with open(thumb, "wb") as f:
+        f.write(_PNG_1x1)
+    photo.thumbnail_path = thumb
+    db.commit()
+    resp = client.get(f"/api/photos/{photo.id}/thumbnail", headers=admin_headers)
+    assert resp.status_code == 200
+    assert _view_entries(photo.id) == 0

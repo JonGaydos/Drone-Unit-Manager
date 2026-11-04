@@ -5,6 +5,7 @@ file-type validation and path-traversal protection.
 """
 
 import hashlib
+import uuid
 from pathlib import Path
 from typing import Annotated
 
@@ -170,14 +171,9 @@ async def upload_document(
         upload_dir = upload_root / "documents" / entity_type / str(entity_id)
     upload_dir.mkdir(parents=True, exist_ok=True)
 
-    dest = upload_dir / safe_filename
-    # Deduplicate filenames by appending a counter suffix
-    counter = 1
-    while dest.exists():
-        stem = Path(safe_filename).stem
-        suffix = Path(safe_filename).suffix
-        dest = upload_dir / f"{stem}_{counter}{suffix}"
-        counter += 1
+    # A generated name keeps two uploads of the same file name apart; the name
+    # the user gave stays in Document.filename for display and download.
+    dest = upload_dir / f"{uuid.uuid4().hex}{ext}"
 
     # Final realpath check — even with sanitization above, defend in depth.
     resolved = dest.resolve()
@@ -205,7 +201,7 @@ async def upload_document(
         entity_id=entity_id,
         document_type=document_type,
         title=title,
-        filename=dest.name,
+        filename=safe_filename,
         file_path=str(dest),
         mime_type=mime_for_filename(dest.name),
         file_size_bytes=len(contents),
@@ -217,7 +213,7 @@ async def upload_document(
     db.add(doc)
     db.flush()
     log_action(db, admin.id, admin.display_name, "upload", "document", doc.id, title,
-               details=f"{dest.name}, {len(contents)} bytes, {entity_type}"
+               details=f"{safe_filename}, {len(contents)} bytes, {entity_type}"
                        + (f" #{entity_id}" if entity_id is not None else "")
                        + f", sha256 {doc.sha256}")
     db.commit()
