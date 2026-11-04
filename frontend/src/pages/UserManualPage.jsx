@@ -489,7 +489,7 @@ The card also has a **Disconnect** button. Disconnecting clears the stored Skydi
         body: `Import flight data from multiple sources via Settings > Integrations tab:
 
 • **Skydio CSV** — Flight records exported from Skydio Cloud
-• **Excel** — Spreadsheets with "Skydio" and "Pilot Info" sheets
+• **Excel** — Spreadsheets with "Skydio" and "Pilot Info" sheets (up to 100,000 rows and 512 MB unpacked; a larger file is refused and nothing is imported)
 • **DJI .txt** — DJI Go 4 flight log text files
 • **Litchi CSV** — Litchi flight log exports
 • **Airdata CSV** — Rich 52-column exports with gimbal, RC inputs, battery temperature, flight mode
@@ -545,11 +545,13 @@ Click "Save Sidebar Config" to apply.`
       },
       {
         title: 'User Management',
-        body: 'Admins can create, edit, and deactivate user accounts from Settings > Users. Assign roles and link users to pilot profiles. What each role can do is set in the Role Permissions card below the user list.'
+        body: 'Admins can create, edit, and deactivate user accounts from Settings > Users. Assign roles and link users to pilot profiles. Only admins can change a display name; other users can change their own email address and theme under My Profile on the General tab. What each role can do is set in the Role Permissions card below the user list.'
       },
       {
         title: 'Audit Log',
-        body: 'The Audit Log (admin only by default) shows a complete history of all actions taken in the system: who did what, when, and what changed. Use it for accountability and compliance auditing.'
+        body: `The Audit Log (admin only by default) shows a complete history of all actions taken in the system: who did what, when, and what changed. Use it for accountability and compliance auditing.
+
+Every change to unit data is recorded automatically, including changes made by imports, syncs and scheduled jobs. Each entry shows the person's display name and login name, and the full list of fields that changed with old and new values. Bulk changes and background jobs appear as one summary entry with counts and record IDs, and name the person who started the job. Contact details such as email and phone numbers are hidden. Entries that came from a restored backup are marked Imported. Export CSV downloads every matching entry, including the login name, full changes and an Imported column.`
       },
     ]
   },
@@ -570,6 +572,8 @@ Click "Save Sidebar Config" to apply.`
         body: `Restore is done on a fresh install. On the setup screen, choose "Restore from a backup instead?", upload the backup ZIP, and enter the install token. The token is written to install_token.txt in the container's data directory (/app/data) and also printed to the container logs at first boot.
 
 Passwords are never included in a backup, so right after a restore no one can sign in yet. The setup screen reopens in recovery mode ("Restored backup detected"): enter the username of an administrator from the restored data, a new password, and the install token to reactivate that admin. The token is required for this step (it proves host access) and is retired once an admin is reactivated. Other restored users keep blank passwords until that admin resets them from Settings → Users.
+
+If the backup would remove or change a photo or document under legal hold, the restore is refused and the held items are listed. Type RESTORE HELD ITEMS in the box that appears to go ahead; each held item that is removed or changed gets its own audit entry. Audit entries from the backup are added to this install's own and marked Imported.
 
 Restoring into an install that already has working logins is an operator task done against the backup API with an admin token rather than through the app.`
       },

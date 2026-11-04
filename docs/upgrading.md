@@ -1,5 +1,20 @@
 # Upgrading
 
+## Release checks: image scan and database step
+
+The release build scans the image and stops before publishing if it finds a
+fixable HIGH or CRITICAL package issue. If a build is blocked, read the scan
+output in the run log. Either update the named package (rebuild, or bump the
+base image or dependency) or have the owner decide whether to accept it, and
+record that decision before re-running. Issues with no fix available do not
+block.
+
+This release adds migration 0012 (login name and imported marker on audit
+entries). It runs on start. To go back, see `ROLLBACK.md`.
+
+Behind a reverse proxy or tunnel, set `TRUSTED_PROXIES` before upgrading (see
+"Reverse Proxy" in the README).
+
 ## Restoring a backup: held items and audit entries
 
 A restore replaces the database with the backup. If that would remove or change

@@ -207,6 +207,10 @@ Test from a completely clean database. Check each item as you go.
 - [ ] Filter by action type
 - [ ] Filter by user
 - [ ] Timestamps correct
+- [ ] Entries show display name and login name, and the full old and new values
+- [ ] A bulk change or import writes one summary entry naming who started it
+- [ ] Email and phone values are hidden in the log and the CSV export
+- [ ] Export CSV has Username and Imported columns and covers more than 5,000 entries
 
 ## 30. Cross-Reference Links
 - [ ] Pilot names link to pilot detail (everywhere they appear)
@@ -246,6 +250,8 @@ Test from a completely clean database. Check each item as you go.
 - [ ] Upload backup ZIP — restore completes with stats
 - [ ] After restore, login with original credentials works
 - [ ] All data present after restore (flights, pilots, certs, photos, documents)
+- [ ] Restoring a backup that would remove or change a held item is refused with a list; typing `RESTORE HELD ITEMS` lets it proceed
+- [ ] Restored audit entries are marked Imported and one summary entry records the backup date and count
 
 ---
 
@@ -349,3 +355,23 @@ Setup: create one login each for Supervisor, Pilot and Viewer (for example `<sup
 | 34. Validation Errors | | |
 | 35. Backup & Restore | | |
 | 36. Role Permissions | | |
+| 37. Release Staging Pass | | |
+
+---
+
+## 37. Release Staging Pass (hardening release)
+
+Run on the staging instance with `TRUSTED_PROXIES` set to the proxy's address, before moving production.
+
+- [ ] Migration 0012 applied on start; old audit entries still list
+- [ ] After login through the proxy, the audit entry shows the real client address, not the proxy's
+- [ ] A non-admin cannot edit their display name; an admin can. Email and theme still save
+- [ ] An API token with All areas cannot read the audit log; one with the Audit Log area can
+- [ ] Idle lock setting offers 30 minutes to 12 hours; locking one tab signs out the others
+- [ ] Incident and mission forms refuse an unknown status or severity with a readable message
+- [ ] A document upload with a duplicate file name keeps both files; the list shows the original name
+- [ ] A request body over 1 MB on a normal form is refused; photo and document uploads still work
+- [ ] An Excel import over 100,000 rows is refused and writes nothing
+- [ ] Spreadsheet export cells starting with a space then `=` open as text
+- [ ] Restore of a backup with held items needs the confirmation text
+- [ ] The image scan step passes (or is understood, see the release notes)
