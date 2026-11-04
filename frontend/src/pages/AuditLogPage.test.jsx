@@ -203,6 +203,19 @@ describe('AuditLogPage', () => {
       expect(screen.getByText('4: name=x')).toBeInTheDocument()
     })
 
+    it('offers every action and entity type the backend writes as a filter', async () => {
+      server.use(http.get('/api/audit', () => HttpResponse.json({ total: 0, logs: [] })))
+      const { user } = renderWithProviders(<AuditLogPage />, { role: 'admin' })
+
+      await user.click(await screen.findByRole('button', { name: /Filters/ }))
+      const optionsOf = label => within(screen.getByLabelText(label)).getAllByRole('option').map(o => o.value)
+      expect(optionsOf('Action')).toEqual(expect.arrayContaining(['restore_held_item', 'unapprove', 'reset']))
+      expect(optionsOf('Entity Type')).toEqual(expect.arrayContaining([
+        'photo_pilot', 'photo_flight', 'photo_incident', 'mission_log_pilot', 'training_log_pilot',
+        'role_permissions',
+      ]))
+    })
+
     it('offers the newer actions and entity types as filters', async () => {
       server.use(http.get('/api/audit', () => HttpResponse.json({ total: 0, logs: [] })))
       const { user } = renderWithProviders(<AuditLogPage />, { role: 'admin' })

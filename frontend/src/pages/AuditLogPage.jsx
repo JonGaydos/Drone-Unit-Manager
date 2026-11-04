@@ -10,10 +10,12 @@ const ENTITY_TYPES = [
   'calendar_event', 'certification_type', 'checklist_completion', 'checklist_template',
   'component', 'controller', 'currency', 'currency_rule', 'dock', 'document', 'equipment',
   'flight', 'flight_plan', 'flight_purpose', 'folder', 'geofence', 'incident', 'maintenance',
-  'maintenance_schedule', 'media_file', 'mission_log', 'notification', 'notification_log',
-  'notification_preference', 'operating_authority', 'other_equipment', 'photo', 'pilot',
-  'pilot_certification', 'pilot_equipment_qual', 'role_permission', 'saved_report', 'sensor',
-  'setting', 'system', 'training_log', 'user', 'vehicle', 'vehicle_registration',
+  'maintenance_schedule', 'media_file', 'mission_log', 'mission_log_pilot', 'notification',
+  'notification_log', 'notification_preference', 'operating_authority', 'other_equipment', 'photo',
+  'photo_flight', 'photo_incident', 'photo_pilot', 'pilot', 'pilot_certification',
+  'pilot_equipment_qual', 'role_permission', 'role_permissions', 'saved_report', 'sensor',
+  'setting', 'system', 'training_log', 'training_log_pilot', 'user', 'vehicle',
+  'vehicle_registration',
 ]
 
 const ACTIONS = [
@@ -22,8 +24,9 @@ const ACTIONS = [
   'delete', 'deny', 'digest', 'disconnect', 'dismiss', 'dismiss_all', 'enrich_flights',
   'enrich_run', 'export', 'hold', 'import', 'link', 'login', 'login_blocked', 'login_failed',
   'logout', 'merge', 'password_change', 'password_reset', 'purge', 'reactivate', 'read',
-  'release_hold', 'restore', 'retire', 'send_reminders', 'send_test', 'setup', 'sync',
-  'sync_deep', 'sync_run', 'telemetry_sync', 'unlink', 'update', 'upload', 'view',
+  'release_hold', 'reset', 'restore', 'restore_held_item', 'retire', 'send_reminders', 'send_test',
+  'setup', 'sync', 'sync_deep', 'sync_run', 'telemetry_sync', 'unapprove', 'unlink', 'update',
+  'upload', 'view',
 ]
 
 // Roughly what the 200px details column fits at this font size. Only used to
