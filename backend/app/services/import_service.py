@@ -11,6 +11,7 @@ from datetime import date, datetime
 from typing import Optional
 
 import openpyxl
+from openpyxl.utils.exceptions import InvalidFileException
 from sqlalchemy.orm import Session
 
 from app.models.pilot import Pilot
@@ -51,6 +52,9 @@ class ImportTooLarge(ValueError):
     """A file over an import limit. The message says which, for the person importing."""
 
 
+NOT_A_WORKBOOK = "This file is not a readable Excel workbook."
+
+
 def _check_unpacked_size(content: bytes) -> None:
     """Refuse a workbook on the sizes its zip declares. Reading an entry stops at
     its declared size, so understating one does not get more past this."""
@@ -70,7 +74,13 @@ def open_workbook(content: bytes):
     """Open a workbook to read row by row, after checking its unpacked size. The
     caller closes it, and reads sheets through open_sheet."""
     _check_unpacked_size(content)
-    return openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    try:
+        return openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    except zipfile.BadZipFile:
+        raise
+    except Exception as e:
+        # A ZIP that is not a workbook fails in many ways: a missing part, bad XML.
+        raise InvalidFileException(NOT_A_WORKBOOK) from e
 
 
 def open_sheet(ws):

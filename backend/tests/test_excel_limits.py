@@ -398,3 +398,29 @@ def test_an_empty_sheet_has_no_header_row(client, admin_headers):
 
     assert resp.status_code == 400
     assert resp.json()["detail"] == "File has no header row"
+
+
+def _zip_of(**entries) -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        for name, data in entries.items():
+            zf.writestr(name, data)
+    return buf.getvalue()
+
+
+NOT_WORKBOOKS = {
+    "plain_zip": lambda: _zip_of(**{"notes.txt": "hello"}),
+    "empty_manifest": lambda: _zip_of(**{"[Content_Types].xml": "<Types/>"}),
+    "broken_manifest": lambda: _zip_of(**{"[Content_Types].xml": "not xml"}),
+    "broken_sheet": lambda: _with_sheet_xml(_rows_only_workbook(1), lambda _xml: "not xml"),
+}
+
+
+@pytest.mark.parametrize("build", NOT_WORKBOOKS.values(), ids=NOT_WORKBOOKS.keys())
+@pytest.mark.parametrize("url", [EXCEL_URL, LOG_URL])
+def test_a_zip_that_is_not_a_workbook_is_a_400(client, admin_headers, db, url, build):
+    resp = _upload(client, admin_headers, url, "archive.xlsx", build())
+
+    assert resp.status_code == 400
+    assert "not a valid Excel workbook or ZIP archive" in resp.json()["detail"]
+    assert _nothing_imported(db)

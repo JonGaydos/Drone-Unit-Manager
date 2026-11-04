@@ -4,9 +4,10 @@ import logging
 from datetime import datetime, date, timezone
 from typing import Optional
 
+from openpyxl.utils.exceptions import InvalidFileException
 from sqlalchemy.orm import Session
 
-from app.services.import_service import ImportTooLarge, is_blank_row, open_sheet, open_workbook
+from app.services.import_service import NOT_A_WORKBOOK, ImportTooLarge, is_blank_row, open_sheet, open_workbook
 from app.services.local_time import display_zone, local_flight_date
 from app.models.pilot import Pilot
 from app.models.vehicle import Vehicle
@@ -548,7 +549,12 @@ def import_excel(db: Session, file_bytes: bytes) -> dict:
     wb = open_workbook(file_bytes)
     try:
         # Counted before the first write: an import too large writes nothing.
-        _check_row_count(_count_data_rows(wb))
+        try:
+            rows = _count_data_rows(wb)
+        except Exception as e:
+            # Read-only sheets are first read here, so a missing or broken one shows now.
+            raise InvalidFileException(NOT_A_WORKBOOK) from e
+        _check_row_count(rows)
         return _import_workbook(db, wb)
     finally:
         wb.close()
