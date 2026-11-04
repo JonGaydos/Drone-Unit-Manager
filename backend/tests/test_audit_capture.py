@@ -3,7 +3,7 @@
 from datetime import date, datetime, timezone
 
 import pytest
-from sqlalchemy import inspect, text
+from sqlalchemy import event, inspect, text
 from sqlalchemy.orm.attributes import flag_modified
 
 import app.database as database
@@ -1280,6 +1280,66 @@ def test_a_later_flush_merges_into_each_records_own_entry(session, db):
     session.commit()
 
     _assert_badge_entries(db, ids, "second")
+
+
+def test_a_flush_writes_its_new_entries_in_one_statement(session, db):
+    pilots = _pilots(session, 5)
+    ids = [pilot.id for pilot in pilots]
+    _clear_audit(db)
+    _edit_badges(pilots, "new")
+    inserts = []
+
+    def count(_conn, _cursor, statement, _parameters, _context, _executemany):
+        if statement.startswith("INSERT INTO audit_logs"):
+            inserts.append(statement)
+
+    bind = session.get_bind()
+    event.listen(bind, "before_cursor_execute", count)
+    try:
+        session.commit()
+    finally:
+        event.remove(bind, "before_cursor_execute", count)
+
+    assert len(inserts) == 1
+    _assert_badge_entries(db, ids, "new")
+
+
+def test_a_flush_can_mix_merged_and_new_entries(session, db):
+    first, second, third = _pilots(session, 3)
+    ids = [first.id, second.id, third.id]
+    _clear_audit(db)
+    first.badge_number = "early"
+    session.flush()
+    _edit_badges([first, second, third], "new")
+    session.flush()
+    _edit_badges([first, second, third], "last")
+    session.commit()
+
+    _assert_badge_entries(db, ids, "last")
+
+
+def test_new_entries_get_the_right_ids_after_the_newest_entry_is_removed(session, db):
+    """An entry that merges away frees the top ID for the next ones to take."""
+    first, second, third = _pilots(session, 3)
+    second_id, third_id = second.id, third.id
+    _clear_audit(db)
+    first.badge_number = "edited"
+    session.flush()
+    first.badge_number = "old-0"
+    session.flush()
+    assert _entries(session, entity_type="pilot") == []
+
+    second.badge_number = "new-1"
+    third.badge_number = "new-2"
+    session.flush()
+    second.badge_number = "last-1"
+    third.badge_number = "last-2"
+    session.commit()
+
+    entries = {entry.entity_id: entry for entry in _entries(db, entity_type="pilot")}
+    assert sorted(entries) == sorted([second_id, third_id])
+    assert entries[second_id].changes == {"badge_number": {"old": "old-1", "new": "last-1"}}
+    assert entries[third_id].changes == {"badge_number": {"old": "old-2", "new": "last-2"}}
 
 
 def test_log_action_absorbs_only_its_own_records_entry(session, db, admin_user):

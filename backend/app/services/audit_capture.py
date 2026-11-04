@@ -26,7 +26,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from functools import cache
 
-from sqlalchemy import event, inspect, select
+from sqlalchemy import event, func, inspect, select
 from sqlalchemy.orm.attributes import PASSIVE_NO_INITIALIZE, set_committed_value
 
 from app.constants import SECRET_KEYS
@@ -330,6 +330,17 @@ def _insert_row(session, values: dict) -> int:
     return result.inserted_primary_key[0]
 
 
+def _insert_rows(session, rows: list[dict]) -> range:
+    """Insert one row at a time in a single executemany, and return their IDs in
+    order. Each new row takes one more than the largest ID in use, and this
+    transaction now holds SQLite's write lock, so the last ID gives all of them."""
+    table = _audit_table()
+    connection = session.connection()
+    connection.execute(table.insert(), rows)
+    last_id = connection.execute(select(func.max(table.c.id))).scalar_one()
+    return range(last_id - len(rows) + 1, last_id + 1)
+
+
 def _update_row(session, entry_id: int, values: dict) -> None:
     table = _audit_table()
     session.connection().execute(table.update().where(table.c.id == entry_id).values(**values))
@@ -391,6 +402,37 @@ def _write_entry(session, state: _CaptureState, record_key: tuple, captured: _Ca
     entry_id = _insert_row(session, _row_values(
         session, captured.action, record_key[0], record_key[1], captured.entity_name, changes))
     state.records[record_key] = _Tracked(entry_id, captured.action, changes, explicit=False, settled=True)
+
+
+def _write_batch(session, state: _CaptureState, batch: list) -> None:
+    """Write entries for records with none yet in this transaction."""
+    if not batch:
+        return
+    rows = [
+        _row_values(session, captured.action, record_key[0], record_key[1], captured.entity_name, changes)
+        for record_key, captured, changes in batch
+    ]
+    for entry_id, (record_key, captured, changes) in zip(_insert_rows(session, rows), batch):
+        state.records[record_key] = _Tracked(entry_id, captured.action, changes, explicit=False, settled=True)
+    batch.clear()
+
+
+def _write_entries(session, state: _CaptureState, entries: list) -> None:
+    """Write ``(record key, captured, changes)`` entries in order, batching those
+    for records with no entry yet. A record that has one, or has one waiting in
+    the batch, needs that entry's ID, so the batch goes first and the statements
+    stay in the order of the entries."""
+    batch: list = []
+    batched_keys = set()
+    for record_key, captured, changes in entries:
+        if record_key in state.records or record_key in batched_keys:
+            _write_batch(session, state, batch)
+            batched_keys.clear()
+            _write_entry(session, state, record_key, captured, changes)
+        else:
+            batch.append((record_key, captured, changes))
+            batched_keys.add(record_key)
+    _write_batch(session, state, batch)
 
 
 def _absorb(session, state: _CaptureState, record_key: tuple, automatic: _Tracked, entry) -> None:
@@ -547,13 +589,15 @@ def _after_flush_postexec(session, _flush_context) -> None:
     if state.run is not None:
         _tally_flush(state.run, pending)
     else:
+        entries = []
         for captured in pending:
             action, changes = _settle(captured)
             record_key = _record_key(captured.obj)
             if record_key is None or (action == UPDATE and not changes):
                 continue
             captured.action = action
-            _write_entry(session, state, record_key, captured, changes)
+            entries.append((record_key, captured, changes))
+        _write_entries(session, state, entries)
     _settle_explicit_entries(state)
 
 
