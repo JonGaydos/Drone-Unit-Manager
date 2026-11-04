@@ -361,7 +361,6 @@ def test_rollback_leaves_no_entry(session, db):
 
     pilot.notes = "flushed"
     session.flush()
-    session.flush()  # the queued entry reaches the database too
     session.rollback()
     session.commit()
 
@@ -754,3 +753,488 @@ def test_person_bulk_edit_logs_each_flight_with_values(client, db, admin_headers
         flights[0].id: {"purpose": {"old": "Patrol", "new": "Mapping"}},
         flights[1].id: {"purpose": {"old": "Training", "new": "Mapping"}},
     }
+
+
+def test_theme_is_not_recorded(client, db, pilot_user, pilot_headers):
+    """A personal display preference, unlike the rest of a user's profile."""
+    assert pilot_user.theme != "light"
+    resp = client.patch("/api/auth/me", headers=pilot_headers, json={"theme": "light"})
+    assert resp.status_code == 200
+
+    db.expire_all()
+    assert db.get(User, pilot_user.id).theme == "light"
+    assert _entries(db) == []
+
+
+def _failed_savepoint(session):
+    """Begin a savepoint, as the importers do per row, and roll it back."""
+    nested = session.begin_nested()
+    session.add(Pilot(first_name="Inside", last_name="Savepoint"))
+    session.flush()
+    nested.rollback()
+
+
+def test_create_before_failed_savepoint_keeps_its_entry(session, db):
+    pilot = Pilot(first_name="Ann", last_name="Lee")
+    session.add(pilot)
+    _failed_savepoint(session)
+    session.commit()
+
+    entries = _entries(db)
+    assert [(e.action, e.entity_id) for e in entries] == [("create", pilot.id)]
+
+
+def test_update_before_failed_savepoint_keeps_its_entry(session, db):
+    pilot = _pilot(session)
+    _clear_audit(db)
+
+    pilot.notes = "outside"
+    _failed_savepoint(session)
+    session.commit()
+
+    entries = _entries(db)
+    assert [e.action for e in entries] == ["update"]
+    assert entries[0].changes == {"notes": {"old": None, "new": "outside"}}
+
+
+def test_delete_before_failed_savepoint_keeps_its_entry(session, db):
+    pilot = _pilot(session)
+    pilot_id = pilot.id
+    _clear_audit(db)
+
+    session.delete(pilot)
+    _failed_savepoint(session)
+    session.commit()
+
+    entries = _entries(db)
+    assert [(e.action, e.entity_id) for e in entries] == [("delete", pilot_id)]
+
+
+def test_log_action_before_failed_savepoint_keeps_its_entry_and_values(session, db, admin_user):
+    pilot = _pilot(session)
+    _clear_audit(db)
+
+    pilot.notes = "outside"
+    log_action(session, admin_user.id, "Admin", "update", "pilot", pilot.id, "Ann Lee", details="Why")
+    _failed_savepoint(session)
+    pilot.badge_number = "7"
+    session.commit()
+
+    entries = _entries(db)
+    assert len(entries) == 1
+    assert entries[0].details == "Why"
+    assert entries[0].changes == {
+        "notes": {"old": None, "new": "outside"},
+        "badge_number": {"old": None, "new": "7"},
+    }
+
+
+def test_change_inside_failed_savepoint_leaves_no_entry(session, db):
+    pilot = _pilot(session)
+    _clear_audit(db)
+
+    nested = session.begin_nested()
+    pilot.notes = "rolled back"
+    session.flush()
+    nested.rollback()
+    pilot.badge_number = "7"
+    session.commit()
+
+    entries = _entries(db)
+    assert len(entries) == 1
+    assert entries[0].changes == {"badge_number": {"old": None, "new": "7"}}
+
+
+def test_merge_inside_failed_savepoint_is_undone(session, db):
+    pilot = _pilot(session, badge_number="1")
+    _clear_audit(db)
+
+    pilot.badge_number = "2"
+    session.flush()
+    nested = session.begin_nested()
+    pilot.badge_number = "3"
+    session.flush()
+    nested.rollback()
+    session.commit()
+
+    entries = _entries(db)
+    assert len(entries) == 1
+    assert entries[0].changes == {"badge_number": {"old": "1", "new": "2"}}
+
+
+def _refuse_audit_inserts(bind):
+    """Through the connection already writing, since SQLite allows only one."""
+    bind.execute(text(
+        "CREATE TRIGGER block_audit BEFORE INSERT ON audit_logs "
+        "BEGIN SELECT RAISE(ABORT, 'audit write refused'); END"))
+
+
+def _allow_audit_inserts(bind):
+    bind.execute(text("DROP TRIGGER block_audit"))
+
+
+def test_audit_failure_with_swallowed_savepoint_error_saves_nothing(session, db):
+    """A caller that catches the savepoint's error cannot then commit the change."""
+    pilot = _pilot(session)
+    pilot_id = pilot.id
+    _clear_audit(db)
+    with database.engine.begin() as conn:
+        _refuse_audit_inserts(conn)
+
+    pilot.notes = "must not save"
+    with pytest.raises(Exception, match="audit write refused"):
+        with session.begin_nested():
+            pass  # entering it flushes the change made outside
+    with pytest.raises(Exception, match="rolled back"):
+        session.commit()
+    session.rollback()
+
+    with database.engine.begin() as conn:
+        _allow_audit_inserts(conn)
+    db.expire_all()
+    assert db.get(Pilot, pilot_id).notes is None
+    assert _entries(db) == []
+
+
+def test_audit_failure_inside_swallowed_savepoint_saves_nothing_of_it(session, db):
+    """Work in the savepoint goes with its entry; the outer change keeps its own."""
+    outer, inner = _pilot(session), _pilot(session)
+    outer_id, inner_id = outer.id, inner.id
+    _clear_audit(db)
+    outer.notes = "outer"
+    session.flush()
+    _refuse_audit_inserts(session)
+
+    with pytest.raises(Exception, match="audit write refused"):
+        with session.begin_nested():
+            inner.notes = "inner"
+            session.flush()
+    _allow_audit_inserts(session)
+    session.commit()
+
+    db.expire_all()
+    assert db.get(Pilot, outer_id).notes == "outer"
+    assert db.get(Pilot, inner_id).notes is None
+    entries = _entries(db)
+    assert len(entries) == 1
+    assert entries[0].changes == {"notes": {"old": None, "new": "outer"}}
+
+
+def _certification(db, parents):
+    cert = PilotCertification(pilot_id=parents["pilot"], certification_type_id=parents["cert_type"])
+    db.add(cert)
+    db.commit()
+    return cert
+
+
+def test_deleting_certification_records_the_document_it_released(client, db, parents, admin_headers):
+    cert = _certification(db, parents)
+    cert_id = cert.id
+    document = Document(entity_type="pilot", document_type="other", title="Doc", filename="d.pdf",
+                        file_path="d.pdf", mime_type="application/pdf", file_size_bytes=1,
+                        certification_id=cert_id)
+    db.add(document)
+    db.commit()
+
+    resp = client.delete(f"/api/pilot-certifications/{cert_id}", headers=admin_headers)
+    assert resp.status_code == 200
+
+    entries = _entries(db, entity_type="document", entity_id=document.id)
+    assert [e.action for e in entries] == ["update"]
+    assert entries[0].changes == {"certification_id": {"old": str(cert_id), "new": None}}
+    assert [e.action for e in _entries(db, entity_type="pilot_certification")] == ["delete"]
+
+
+def test_deleting_pilot_records_the_flights_it_released(session, db, admin_user):
+    pilot = Pilot(first_name="Gone", last_name="Soon")
+    db.add(pilot)
+    db.commit()
+    flight = Flight(pilot_id=pilot.id)
+    db.add(flight)
+    db.commit()
+    pilot_id = pilot.id
+
+    set_actor(session, admin_user)
+    session.delete(session.get(Pilot, pilot_id))
+    session.commit()
+
+    entries = _entries(db, entity_type="flight", entity_id=flight.id)
+    assert [e.action for e in entries] == ["update"]
+    assert entries[0].changes == {"pilot_id": {"old": str(pilot_id), "new": None}}
+    assert entries[0].user_username == admin_user.username
+
+
+def test_setting_a_relationship_records_the_foreign_key(session, db, parents):
+    other = Pilot(first_name="Other", last_name="Pilot")
+    flight_row = Flight(pilot_id=parents["pilot"])
+    db.add_all([other, flight_row])
+    db.commit()
+    other_id, flight_id = other.id, flight_row.id
+
+    flight = session.get(Flight, flight_id)
+    assert flight.pilot_id == parents["pilot"]
+    flight.pilot = session.get(Pilot, other_id)
+    session.commit()
+
+    entries = _entries(db, entity_type="flight", entity_id=flight_id)
+    assert [e.action for e in entries] == ["update"]
+    assert entries[0].changes == {"pilot_id": {"old": str(parents["pilot"]), "new": str(other_id)}}
+
+
+def test_setting_a_relationship_on_an_expired_object_keeps_the_old_key(session, db, parents):
+    other = Pilot(first_name="Other", last_name="Pilot")
+    flight_row = Flight(pilot_id=parents["pilot"])
+    db.add_all([other, flight_row])
+    db.commit()
+    other_id, flight_id = other.id, flight_row.id
+
+    flight = session.get(Flight, flight_id)
+    new_pilot = session.get(Pilot, other_id)
+    session.commit()
+    assert "pilot_id" not in flight.__dict__
+    flight.pilot = new_pilot
+    session.commit()
+
+    entry = _entries(db, entity_type="flight", entity_id=flight_id)[0]
+    assert entry.changes == {"pilot_id": {"old": str(parents["pilot"]), "new": str(other_id)}}
+
+
+def test_relationship_and_field_change_share_one_entry(session, db, parents):
+    other = Pilot(first_name="Other", last_name="Pilot")
+    flight_row = Flight(pilot_id=parents["pilot"])
+    db.add_all([other, flight_row])
+    db.commit()
+    other_id, flight_id = other.id, flight_row.id
+
+    flight = session.get(Flight, flight_id)
+    assert flight.pilot_id == parents["pilot"]
+    flight.pilot = session.get(Pilot, other_id)
+    flight.notes = "moved"
+    session.commit()
+
+    entries = _entries(db, entity_type="flight", entity_id=flight_id)
+    assert len(entries) == 1
+    assert set(entries[0].changes) == {"pilot_id", "notes"}
+
+
+def test_machine_run_counts_a_flush_set_foreign_key(session, db):
+    pilot = Pilot(first_name="Gone", last_name="Soon")
+    flight = Flight()
+    db.add_all([pilot, flight])
+    db.commit()
+    flight.pilot_id = pilot.id
+    db.commit()
+    flight_id, pilot_id = flight.id, pilot.id
+
+    with machine_run(session, "cleanup", "pilot"):
+        session.delete(session.get(Pilot, pilot_id))
+        session.flush()
+    session.commit()
+
+    entries = _entries(db)
+    assert len(entries) == 1
+    assert entries[0].changes["Flight"]["ids"] == [flight_id]
+
+
+def test_id_reused_after_delete_writes_a_new_entry(session, db):
+    first = RolePermission(role="pilot", permission_key="a.a", value="on")
+    session.add(first)
+    session.commit()
+    reused_id = first.id
+    _clear_audit(db)
+
+    session.delete(first)
+    session.flush()
+    second = RolePermission(role="pilot", permission_key="b.b", value="on")
+    session.add(second)
+    session.commit()
+
+    assert second.id == reused_id
+    entries = _entries(db, entity_type="role_permission")
+    assert [e.action for e in entries] == ["delete", "create"]
+    assert entries[0].changes["permission_key"] == {"old": "a.a", "new": None}
+    assert entries[1].changes["permission_key"] == {"old": None, "new": "b.b"}
+
+
+def test_permission_reset_then_set_records_both(session, db):
+    from app.services.permissions import REGISTRY, apply_changes
+
+    keys = sorted(key for key, spec in REGISTRY.items() if len(set(spec.defaults.values())) > 1)[:2]
+    role = "viewer"
+
+    def other_value(key):
+        return next(v for v in REGISTRY[key].defaults.values() if v != REGISTRY[key].defaults[role])
+
+    session.add(RolePermission(role=role, permission_key=keys[0], value=other_value(keys[0])))
+    session.commit()
+    _clear_audit(db)
+
+    apply_changes(session, [{"role": role, "key": keys[0], "value": REGISTRY[keys[0]].defaults[role]}])
+    session.flush()
+    apply_changes(session, [{"role": role, "key": keys[1], "value": other_value(keys[1])}])
+    session.commit()
+
+    entries = _entries(db, entity_type="role_permission")
+    assert [e.action for e in entries] == ["delete", "create"]
+
+
+def test_log_action_update_then_delete_writes_both(session, db, admin_user):
+    pilot = _pilot(session)
+    pilot_id = pilot.id
+    _clear_audit(db)
+
+    log_action(session, admin_user.id, "Admin", "update", "pilot", pilot_id, "Ann Lee")
+    session.flush()
+    session.delete(pilot)
+    session.commit()
+
+    assert [e.action for e in _entries(db)] == ["update", "delete"]
+
+
+def test_log_action_update_before_flush_of_delete_writes_both(session, db, admin_user):
+    pilot = _pilot(session)
+    pilot_id = pilot.id
+    _clear_audit(db)
+
+    log_action(session, admin_user.id, "Admin", "update", "pilot", pilot_id, "Ann Lee")
+    session.delete(pilot)
+    session.commit()
+
+    assert [e.action for e in _entries(db)] == ["update", "delete"]
+
+
+@pytest.mark.parametrize("action", ["delete", "purge"])
+def test_delete_logged_before_the_flush_absorbs(session, db, admin_user, action):
+    pilot = _pilot(session)
+    pilot_id = pilot.id
+    _clear_audit(db)
+
+    log_action(session, admin_user.id, "Admin", action, "pilot", pilot_id, "Ann Lee")
+    session.delete(pilot)
+    session.commit()
+
+    entries = _entries(db)
+    assert [e.action for e in entries] == [action]
+    assert entries[0].changes["first_name"] == {"old": "Ann", "new": None}
+
+
+def test_soft_delete_logged_before_the_flush_absorbs(session, db, admin_user):
+    pilot = _pilot(session)
+    _clear_audit(db)
+
+    pilot.status = "gone"
+    log_action(session, admin_user.id, "Admin", "delete", "pilot", pilot.id, "Ann Lee")
+    session.commit()
+
+    entries = _entries(db)
+    assert [e.action for e in entries] == ["delete"]
+    assert entries[0].changes["status"]["new"] == "gone"
+
+
+def test_settled_delete_entry_takes_nothing_further(session, db, admin_user):
+    first = RolePermission(role="pilot", permission_key="a.a", value="on")
+    session.add(first)
+    session.commit()
+    reused_id = first.id
+    _clear_audit(db)
+
+    session.delete(first)
+    log_action(session, admin_user.id, "Admin", "delete", "role_permission", reused_id)
+    session.flush()
+    second = RolePermission(role="pilot", permission_key="b.b", value="on")
+    session.add(second)
+    session.commit()
+
+    assert second.id == reused_id
+    assert [e.action for e in _entries(db, entity_type="role_permission")] == ["delete", "create"]
+
+
+def test_later_flush_after_log_action_keeps_the_original_old_value(session, db, admin_user):
+    pilot = _pilot(session, badge_number="1")
+    _clear_audit(db)
+
+    pilot.badge_number = "2"
+    session.flush()
+    log_action(session, admin_user.id, "Admin", "update", "pilot", pilot.id, "Ann Lee")
+    pilot.badge_number = "3"
+    session.commit()
+
+    entries = _entries(db)
+    assert len(entries) == 1
+    assert entries[0].changes == {"badge_number": {"old": "1", "new": "3"}}
+
+
+def test_later_flush_merges_over_plain_logged_values(session, db, admin_user):
+    """Some callers pass ``changes`` as plain strings with no old value."""
+    pilot = _pilot(session, badge_number="1")
+    _clear_audit(db)
+
+    log_action(session, admin_user.id, "Admin", "update", "pilot", pilot.id, "Ann Lee",
+               changes={"reason": "typo", "badge_number": "2"})
+    session.flush()
+    pilot.badge_number = "3"
+    session.commit()
+
+    assert _entries(db)[0].changes == {
+        "badge_number": {"old": "1", "new": "3"},
+        "reason": "typo",
+    }
+
+
+def test_value_changed_and_changed_back_writes_nothing(session, db):
+    pilot = _pilot(session, badge_number="A")
+    _clear_audit(db)
+
+    pilot.badge_number = "B"
+    session.flush()
+    pilot.badge_number = "A"
+    session.commit()
+
+    assert _entries(db) == []
+
+
+def test_changed_back_field_drops_out_and_others_stay(session, db):
+    pilot = _pilot(session, badge_number="A")
+    _clear_audit(db)
+
+    pilot.badge_number = "B"
+    pilot.notes = "kept"
+    session.flush()
+    pilot.badge_number = "A"
+    session.commit()
+
+    assert _entries(db)[0].changes == {"notes": {"old": None, "new": "kept"}}
+
+
+def test_secret_changed_twice_stays_recorded(session, db, admin_user):
+    user = session.get(User, admin_user.id)
+    _clear_audit(db)
+
+    user.password_hash = "one"
+    session.flush()
+    user.password_hash = "two"
+    session.commit()
+
+    assert _entries(db)[0].changes == {"password_hash": {"old": MARKER, "new": MARKER}}
+
+
+def test_failure_collecting_changes_leaves_nothing_for_the_next_flush(session, db, monkeypatch):
+    """Updates are collected before deletes, so this fails with one already held."""
+    pilot = _pilot(session)
+    doomed = _pilot(session)
+    _clear_audit(db)
+    pilot.notes = "first"
+    session.delete(doomed)
+
+    def refuse(_obj):
+        raise RuntimeError("collect failed")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(audit_capture, "_delete_changes", refuse)
+        with pytest.raises(RuntimeError):
+            session.flush()
+    assert audit_capture._state(session).pending == []
+    session.commit()
+
+    entries = _entries(db, entity_type="pilot")
+    assert sorted(e.action for e in entries) == ["delete", "update"]
