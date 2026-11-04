@@ -76,6 +76,15 @@ PUBLIC_KEYS = {
 }
 
 
+# Credentials pasted from a browser often carry a trailing space or newline.
+TRIMMED_KEYS = SECRET_KEYS | {"smtp_username"}
+
+
+def _trimmed(key: str, value: str) -> str:
+    """The value without surrounding whitespace when the key holds a credential."""
+    return value.strip() if key in TRIMMED_KEYS else value
+
+
 def _check_idle_lock(key: str, value: str) -> None:
     """Refuse an idle lock value outside the offered choices."""
     if key == IDLE_LOCK_KEY and value not in IDLE_LOCK_CHOICES:
@@ -124,6 +133,7 @@ def set_setting(data: SettingValue, db: DBSession, admin: AdminUser):
     if data.key not in ALLOWED_SETTING_KEYS:
         raise HTTPException(400, f"Setting key '{data.key}' is not allowed")
     _check_idle_lock(data.key, data.value)
+    data.value = _trimmed(data.key, data.value)
     from app.services.audit import log_action
     setting = db.query(Setting).filter(Setting.key == data.key).first()
     if setting:
@@ -189,6 +199,7 @@ def _upsert_settings(db, data) -> list[str]:
     for item in data:
         if item.key not in ALLOWED_SETTING_KEYS:
             continue
+        item.value = _trimmed(item.key, item.value)
         if item.key in SECRET_KEYS and (item.value or "") in ("", REDACTED_MARKER):
             continue
         setting = db.query(Setting).filter(Setting.key == item.key).first()

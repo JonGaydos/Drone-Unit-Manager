@@ -83,7 +83,7 @@ def _run_sync(db, full: bool, sync_telemetry: bool, admin_id: int, admin_name: s
                 if telemetry_result > 0:
                     logger.info("Auto-synced telemetry for %d flights", telemetry_result)
             except Exception as e:
-                logger.warning("Auto telemetry sync failed: %s", e)
+                logger.warning("Auto telemetry sync failed (%s)", type(e).__name__)
 
     log_action(db, admin_id, admin_name, "sync", "system",
                details=f"{'Full' if full else 'Incremental'} sync: {result.flights_new} new flights, {result.vehicles_synced} vehicles")
@@ -292,7 +292,7 @@ def _enrich_one(provider, creds, flight, db) -> str:
     try:
         detail = provider.get_flight_detail(creds, flight.external_id)
     except Exception as exc:
-        logger.warning("Enrich lookup failed for %s: %s", flight.external_id, exc)
+        logger.warning("Enrich lookup failed for %s (%s)", flight.external_id, type(exc).__name__)
         return "failed"
     if detail is None:
         return "empty"

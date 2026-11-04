@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.constants import MISSION_LOG_NOT_FOUND
+from app.constants import MISSION_LOG_NOT_FOUND, MISSION_STATUSES
+from app.services.choices import require_choices
 from app.deps import DBSession
 from app.models.user import User
 from app.routers.auth import require_permission
@@ -25,6 +26,7 @@ from app.schemas.mission_log import (
 router = APIRouter(prefix="/api/mission-logs", tags=["mission-logs"])
 
 LOGS_EDIT = "logs.edit"
+MISSION_CHOICES = {"status": MISSION_STATUSES}
 
 ViewUser = Annotated[User, Depends(require_permission("logs.view"))]
 CreateUser = Annotated[User, Depends(require_permission("logs.create"))]
@@ -169,6 +171,7 @@ def create_mission_log(data: MissionLogCreate, db: DBSession, admin: CreateUser)
     from app.services.audit import log_action
     pilots_data = data.pilots
     mission_dict = data.model_dump(exclude={"pilots"})
+    require_choices(mission_dict, None, MISSION_CHOICES)
     mission = MissionLog(**mission_dict, created_by_id=admin.id)
     db.add(mission)
     db.flush()
@@ -193,6 +196,7 @@ def update_mission_log(mission_id: int, data: MissionLogUpdate, db: DBSession, a
     _require_edit(db, admin, mission)
     update_data = data.model_dump(exclude_unset=True)
     pilots_data = update_data.pop("pilots", None)
+    require_choices(update_data, mission, MISSION_CHOICES)
     for key, value in update_data.items():
         setattr(mission, key, value)
     if pilots_data is not None:

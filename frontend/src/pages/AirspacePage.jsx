@@ -8,6 +8,7 @@ import L from 'leaflet'
 import { api } from '@/api/client'
 import { useToast } from '@/contexts/ToastContext'
 import { resolveOrgLocation } from '@/lib/location'
+import { aircraftIconHtml, numericTrack } from '@/lib/aircraft'
 import { Radar, RefreshCw, Plane, MapPin } from 'lucide-react'
 
 /** Default center (center of US) used when no settings available. */
@@ -46,15 +47,12 @@ function getAltColor(altBaro) {
 }
 
 function aircraftIcon(track, color) {
-  const rotation = track == null ? 0 : track
   return L.divIcon({
     className: '',
     iconSize: [24, 24],
     iconAnchor: [12, 12],
     popupAnchor: [0, -14],
-    html: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" style="transform:rotate(${rotation}deg)">
-      <path d="M12 2L8 9h-5l1 2 5 1 1 8 2 2 2-2 1-8 5-1 1-2h-5z" fill="${color}" stroke="#000" stroke-width="0.5"/>
-    </svg>`,
+    html: aircraftIconHtml(track, color),
   })
 }
 
@@ -309,7 +307,7 @@ export default function AirspacePage() {
                       <span className="text-gray-500">Reg:</span><span>{ac.registration || '--'}</span>
                       <span className="text-gray-500">Altitude:</span><span>{fmtAlt(ac.alt_baro)}</span>
                       <span className="text-gray-500">Speed:</span><span>{ac.gs == null ? '--' : ac.gs + ' kts'}</span>
-                      <span className="text-gray-500">Heading:</span><span>{ac.track == null ? '--' : ac.track + '\u00B0'}</span>
+                      <span className="text-gray-500">Heading:</span><span>{numericTrack(ac.track) == null ? '--' : numericTrack(ac.track) + '\u00B0'}</span>
                       <span className="text-gray-500">Vert Rate:</span><span>{ac.baro_rate == null ? '--' : ac.baro_rate + ' ft/m'}</span>
                       <span className="text-gray-500">Squawk:</span><span>{ac.squawk || '--'}</span>
                     </div>

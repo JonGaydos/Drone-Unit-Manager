@@ -8,6 +8,7 @@ server-side requests, directing programmatic users to contact them first.
 """
 
 import logging
+import math
 import time
 import threading
 from typing import Annotated, Optional
@@ -28,6 +29,14 @@ _CACHE_TTL = 5  # seconds
 # adsb.lol asks callers to send a descriptive User-Agent.
 _ADSB_BASE = "https://api.adsb.lol/v2/point"
 _USER_AGENT = "DroneUnitManager (self-hosted drone fleet manager)"
+
+
+def _number(value) -> float | int | None:
+    """The value when it is a finite number, otherwise None. The feed is not
+    trusted: the page puts this heading into the aircraft icon."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return value if math.isfinite(value) else None
 
 
 @router.get("/nearby")
@@ -110,7 +119,7 @@ def get_nearby_aircraft(
             "alt_baro": ac.get("alt_baro"),
             "alt_geom": ac.get("alt_geom"),
             "gs": ac.get("gs"),  # Ground speed in knots
-            "track": ac.get("track"),  # Heading in degrees
+            "track": _number(ac.get("track")),  # Heading in degrees
             "baro_rate": ac.get("baro_rate"),  # Vertical rate ft/min
             "squawk": ac.get("squawk", ""),
             "emergency": ac.get("emergency", "none"),

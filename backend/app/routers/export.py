@@ -62,14 +62,14 @@ CSV_MEDIA_TYPE = "text/csv"
 MAX_EXPORT_ROWS = 50000
 
 # Leading characters that spreadsheet apps interpret as the start of a formula.
-_CSV_INJECTION_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+_CSV_INJECTION_PREFIXES = ("=", "+", "-", "@", "\t", "\r", "\n")
 
 
 def _csv_safe(value):
     """Neutralize CSV formula injection in user-controlled text fields.
 
     Prefixes a leading apostrophe to any string cell beginning with a
-    formula trigger character (= + - @ tab CR). Non-string values pass
+    formula trigger character (= + - @ tab CR LF). Non-string values pass
     through unchanged.
     """
     if isinstance(value, str) and value and value[0] in _CSV_INJECTION_PREFIXES:
@@ -211,7 +211,7 @@ def export_pilots_csv(db: DBSession, user: ExportUser, _manage: PilotsManage):
             _csv_safe(p.first_name), _csv_safe(p.last_name),
             _csv_safe(p.email or "") if with_contacts else "",
             _csv_safe(p.phone or "") if with_contacts else "",
-            _csv_safe(p.badge_number or ""), p.status, _csv_safe(p.notes or ""),
+            _csv_safe(p.badge_number or ""), _csv_safe(p.status), _csv_safe(p.notes or ""),
         ])
     output.seek(0)
     return StreamingResponse(
@@ -230,7 +230,7 @@ def export_vehicles_csv(db: DBSession, user: ExportUser, _view: FleetView):
     for v in vehicles:
         writer.writerow([
             _csv_safe(v.serial_number), _csv_safe(v.manufacturer), _csv_safe(v.model),
-            _csv_safe(v.nickname or ""), _csv_safe(v.faa_registration or ""), v.status,
+            _csv_safe(v.nickname or ""), _csv_safe(v.faa_registration or ""), _csv_safe(v.status),
             v.total_flights, round(v.total_flight_hours, 1),
         ])
     output.seek(0)
@@ -410,7 +410,7 @@ def export_certifications_csv(
             _csv_safe(pilot.full_name) if pilot else "",
             _csv_safe(cert_type.name) if cert_type else "",
             _csv_safe(cert_type.category) if cert_type else "",
-            c.status,
+            _csv_safe(c.status),
             c.issue_date or "", c.expiration_date or "",
             _csv_safe(c.certificate_number or ""), _csv_safe(c.notes or ""),
         ])
@@ -498,7 +498,7 @@ def export_mission_logs_csv(
                 pilot_names.append(p.full_name)
         writer.writerow([
             m.date, _csv_safe(m.title), _csv_safe(m.reason or ""), _csv_safe(m.location or ""),
-            _csv_safe(m.case_number or ""), m.man_hours, m.status,
+            _csv_safe(m.case_number or ""), m.man_hours, _csv_safe(m.status),
             _csv_safe("; ".join(pilot_names)), _csv_safe(m.description or ""), _csv_safe(m.notes or ""),
         ])
     output.seek(0)
@@ -514,9 +514,9 @@ def _incident_csv_row(inc, db):
     pilot = db.query(Pilot).filter(Pilot.id == inc.pilot_id).first() if inc.pilot_id else None
     return [
         inc.date, _csv_safe(inc.title), _csv_safe(pilot.full_name) if pilot else "",
-        getattr(inc, 'report_type', 'incident') or 'incident',
-        inc.severity, _csv_safe(inc.category), _csv_safe(inc.description or ""),
-        _csv_safe(inc.location or ""), inc.status, _csv_safe(inc.resolution or ""),
+        _csv_safe(getattr(inc, 'report_type', 'incident') or 'incident'),
+        _csv_safe(inc.severity), _csv_safe(inc.category), _csv_safe(inc.description or ""),
+        _csv_safe(inc.location or ""), _csv_safe(inc.status), _csv_safe(inc.resolution or ""),
         "Yes" if inc.equipment_grounded else "No",
         _csv_safe(inc.damage_description or ""), inc.estimated_cost or "", _csv_safe(inc.notes or ""),
     ]
@@ -566,7 +566,7 @@ def _flight_plan_csv_row(p, db):
         _csv_safe(pilot.full_name) if pilot else "",
         _csv_safe(f"{vehicle.manufacturer} {vehicle.model}") if vehicle else "",
         _csv_safe(p.location or ""), _csv_safe(p.purpose or ""), _csv_safe(p.case_number or ""),
-        p.status, p.max_altitude_planned or "", p.estimated_duration_min or "",
+        _csv_safe(p.status), p.max_altitude_planned or "", p.estimated_duration_min or "",
         _csv_safe(p.notes or ""),
     ]
 

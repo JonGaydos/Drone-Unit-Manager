@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { renderWithProviders } from '@/test/render'
 import AirspacePage from './AirspacePage'
+import { aircraftIconHtml } from '@/lib/aircraft'
 
 // react-leaflet is globally stubbed (MapContainer -> data-testid="leaflet-stub",
 // useMapEvents -> {}). Mount endpoint:
@@ -50,5 +51,15 @@ describe('AirspacePage', () => {
     const radius = screen.getByLabelText('Radius')
     await user.selectOptions(radius, '200')
     expect(radius).toHaveValue('200')
+  })
+
+  it('a string track never reaches the icon HTML', () => {
+    const html = aircraftIconHtml('45deg);background:url(x', '#fff')
+    expect(html).toContain('rotate(0deg)')
+    expect(html).not.toContain('url(x')
+  })
+
+  it('a numeric track rotates the icon', () => {
+    expect(aircraftIconHtml(90, '#fff')).toContain('rotate(90deg)')
   })
 })
