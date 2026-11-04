@@ -170,8 +170,9 @@ def test_the_limit_covers_the_sheets_together_and_writes_nothing(db, monkeypatch
     the first flight is written."""
     monkeypatch.setattr(excel_import, "MAX_EXCEL_ROWS", 4)
 
+    workbook = _real_shaped_workbook(flights=3)
     with pytest.raises(ImportTooLarge):
-        import_excel(db, _real_shaped_workbook(flights=3))
+        import_excel(db, workbook)
 
     db.rollback()
     assert _nothing_imported(db)

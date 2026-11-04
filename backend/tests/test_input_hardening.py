@@ -160,7 +160,8 @@ def test_reminder_subject_collapses_whitespace(monkeypatch):
         "is_current": False, "rule_name": "r", "actual_hours": 0, "required_hours": 1, "period_days": 30}])
     pilot = SimpleNamespace(first_name="A", full_name="A B", email="a@x.org")
     assert _send_one_reminder(pilot, [], [], "Unit\r\nBcc: evil@x.org", "", None)[0] == "sent"
-    assert "\n" not in sent["subject"] and "\r" not in sent["subject"]
+    assert "\n" not in sent["subject"]
+    assert "\r" not in sent["subject"]
     assert sent["subject"].endswith("Unit Bcc: evil@x.org")
 
 
@@ -266,7 +267,8 @@ def test_legacy_value_displays_and_exports(client, db, admin_headers):
     assert items[0]["severity"] == "low"
     assert client.get(MISSIONS_URL, headers=admin_headers).json()[0]["status"] == "active"
     text = client.get("/api/export/incidents/csv", headers=admin_headers).text
-    assert "low" in text and "pending" in text
+    assert "low" in text
+    assert "pending" in text
 
 
 def test_edit_leaving_legacy_value_saves(client, db, admin_headers):
@@ -278,9 +280,11 @@ def test_edit_leaving_legacy_value_saves(client, db, admin_headers):
     r = client.patch(f"{INCIDENTS_URL}/{inc.id}", headers=admin_headers,
                      json={"severity": "low", "status": "pending", "title": "New"})
     assert r.status_code == 200
-    assert r.json()["title"] == "New" and r.json()["severity"] == "low"
+    assert r.json()["title"] == "New"
+    assert r.json()["severity"] == "low"
     r = client.patch(f"{MISSIONS_URL}/{mission.id}", json={"status": "active", "title": "New"},
                      headers=admin_headers)
-    assert r.status_code == 200 and r.json()["status"] == "active"
+    assert r.status_code == 200
+    assert r.json()["status"] == "active"
     assert client.patch(f"{INCIDENTS_URL}/{inc.id}", json={"severity": "bogus"},
                         headers=admin_headers).status_code == 422

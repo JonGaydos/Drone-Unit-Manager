@@ -152,7 +152,8 @@ def test_restored_audit_rows_marked_imported(
 
     assert resp.status_code == 200, resp.text
     rows = _audit(db, user_name="Old Timer")
-    assert len(rows) == 1 and rows[0].imported is True
+    assert len(rows) == 1
+    assert rows[0].imported is True
 
 
 def test_restore_writes_one_summary_entry(
@@ -196,7 +197,8 @@ def test_pre_release_backup_restores(
     assert len(rows) == 2
     assert all(r.imported and r.user_username is None for r in rows)
     summary = _audit(db, action="import", entity_type="backup")[0]
-    assert "2025-01-03" in summary.details and "audit_rows=2" in summary.details
+    assert "2025-01-03" in summary.details
+    assert "audit_rows=2" in summary.details
 
 
 def _soft_deleted_photo(db, when):
@@ -319,8 +321,10 @@ def test_restore_summary_says_what_was_restored(
     assert _post(client, admin_headers, archive).status_code == 200
 
     details = _summary(db).details
-    assert "tables=" in details and "rows=" in details
-    assert "telemetry_points=0" in details and "files=0" in details
+    assert "tables=" in details
+    assert "rows=" in details
+    assert "telemetry_points=0" in details
+    assert "files=0" in details
     assert "pending" not in details
 
 
@@ -344,9 +348,12 @@ def test_truncated_telemetry_still_leaves_the_summary(
     assert db.query(Pilot).filter_by(first_name="In").count() == 1
     summary = _summary(db)
     assert summary.imported is False
-    assert backup_date in summary.details and "audit_rows=1" in summary.details
-    assert "tables=" in summary.details and "rows=" in summary.details
-    assert "telemetry=failed" in summary.details and "files=not restored" in summary.details
+    assert backup_date in summary.details
+    assert "audit_rows=1" in summary.details
+    assert "tables=" in summary.details
+    assert "rows=" in summary.details
+    assert "telemetry=failed" in summary.details
+    assert "files=not restored" in summary.details
 
 
 def test_restore_failing_after_the_main_tables_leaves_an_install_token(

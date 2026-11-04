@@ -500,8 +500,9 @@ def test_merge_reassignments_are_recorded_for_sensors_and_attachments(client, db
                        headers=admin_headers).status_code == 200
 
     bulk = [e.changes for e in _entries(db, entity_type=FLIGHT) if e.changes and RECORDS in e.changes]
-    assert {"sensor_package", "attachment_top", "attachment_left"} == {
-        key for changes in bulk for key in changes if key != RECORDS}
+    assert {
+        key for changes in bulk for key in changes if key != RECORDS
+    } == {"sensor_package", "attachment_top", "attachment_left"}
     assert all(changes[RECORDS][IDS] == [flight_id] for changes in bulk)
 
 
@@ -1266,11 +1267,14 @@ def test_a_run_counts_each_commit_with_one_audit_write(session, db, statements):
 
 
 def test_flushed_work_is_reported_when_a_run_raises_and_the_caller_commits(session, db):
-    with pytest.raises(RuntimeError):
+    def dying_run():
         with machine_run(session, SYNC, PILOT_ROLE):
             session.add(Pilot(first_name="Flushed", last_name="X"))
             session.flush()
             raise RuntimeError("provider went away")
+
+    with pytest.raises(RuntimeError):
+        dying_run()
     session.commit()
 
     assert db.query(Pilot).count() == 1
@@ -1309,11 +1313,14 @@ def test_the_next_commit_retries_a_failed_summary_write(session, db, monkeypatch
 
 
 def test_a_summary_write_failing_as_a_run_ends_is_retried(session, db, monkeypatch):
-    with pytest.raises(RuntimeError):
+    def failing_run():
         with machine_run(session, SYNC, PILOT_ROLE):
             session.add(Pilot(first_name="Kept", last_name="X"))
             session.flush()
             _fail_summary_writes(monkeypatch)
+
+    with pytest.raises(RuntimeError):
+        failing_run()
     session.commit()
 
     assert db.query(Pilot).count() == 1
@@ -1321,11 +1328,14 @@ def test_a_summary_write_failing_as_a_run_ends_is_retried(session, db, monkeypat
 
 
 def test_a_run_that_cannot_write_its_summary_leaves_nothing_to_commit(session, db, monkeypatch):
-    with pytest.raises(RuntimeError):
+    def failing_run():
         with machine_run(session, SYNC, PILOT_ROLE):
             session.add(Pilot(first_name="Dropped", last_name="X"))
             session.flush()
             _fail_summary_writes(monkeypatch, times=2)
+
+    with pytest.raises(RuntimeError):
+        failing_run()
     session.commit()
 
     assert db.query(Pilot).count() == 0
@@ -1380,6 +1390,7 @@ def test_zip_entry_is_dropped_when_its_summary_fails(client, db, admin_headers, 
 
     body = _upload(client, admin_headers, LOG_IMPORT_URL, "logs.zip", archive.getvalue())
 
-    assert body["imported"] == 2 and len(body["errors"]) == 1
+    assert body["imported"] == 2
+    assert len(body["errors"]) == 1
     assert db.query(Flight).count() == 2
     assert _only_summary(db, IMPORT).changes[FLIGHT_MODEL][COUNTS][CREATE] == 2

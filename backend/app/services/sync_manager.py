@@ -102,6 +102,12 @@ def _fixed_error(message: str, exc: Exception) -> str:
     return text
 
 
+def _log_sync_failure(label: str, exc: Exception) -> None:
+    """Log a fixed message plus the exception type. Never the exception text
+    or a traceback, which can carry credentials."""
+    logger.error("%s (%s)", label, type(exc).__name__)
+
+
 def _build_creds(db: Session, provider_name: str) -> ProviderCredentials:
     """Build credentials from the settings table."""
     api_token = _get_setting(db, f"{provider_name}_api_token")
@@ -896,7 +902,46 @@ def _run_entity_sync(provider, creds, db: Session, result: SyncResult, spec) -> 
         db.commit()
     except Exception as exc:
         result.errors.append(_fixed_error(f"{label} sync error", exc))
-        logger.error("%s sync error (%s)", label, type(exc).__name__)
+        _log_sync_failure(f"{label} sync error", exc)
+        db.rollback()
+
+
+def _prepare_full_sync(provider_name: str, db: Session, full_sync: bool, result: SyncResult):
+    """Build credentials, provider and the since filter. Returns None, with the
+    error recorded on result, when the sync cannot start."""
+    try:
+        creds = _build_creds(db, provider_name)
+        if not creds.api_token:
+            result.errors.append(API_TOKEN_NOT_CONFIGURED)
+            return None
+
+        provider = get_provider(provider_name)
+        if full_sync:
+            since = None
+            logger.info("Full sync requested — fetching all historical data")
+        else:
+            last_sync = _get_setting(db, "last_sync_timestamp")
+            since = last_sync if last_sync else None
+        return creds, provider, since
+    except Exception as exc:
+        result.errors.append(_fixed_error("Setup error", exc))
+        _log_sync_failure("Sync setup error", exc)
+        return None
+
+
+def _finalize_sync(db: Session, result: SyncResult, provider_name: str, failure_label: str) -> None:
+    """Commit and update the last sync settings. Only advance
+    last_sync_timestamp when the run was clean. Otherwise the next sync's
+    `since=` filter would skip rows that failed this run."""
+    try:
+        if not result.errors:
+            _set_setting(db, "last_sync_timestamp", datetime.now(timezone.utc).isoformat())
+        _set_setting(db, "last_sync_provider", provider_name)
+        _persist_last_sync_result(db, result)
+        db.commit()
+    except Exception as exc:
+        result.errors.append(_fixed_error("Commit error", exc))
+        _log_sync_failure(failure_label, exc)
         db.rollback()
 
 
@@ -923,7 +968,7 @@ class SyncManager:
 
             return True, "Connection successful", user_info
         except Exception as exc:
-            logger.error("Connection test failed for %s (%s)", provider_name, type(exc).__name__)
+            _log_sync_failure(f"Connection test failed for {provider_name}", exc)
             return False, _fixed_error("Connection failed", exc), {}
 
     @staticmethod
@@ -939,25 +984,10 @@ class SyncManager:
     def _sync_all_steps(provider_name: str, db: Session, full_sync: bool) -> SyncResult:
         """Run a full sync from the given provider into the local database."""
         result = SyncResult()
-
-        try:
-            creds = _build_creds(db, provider_name)
-            if not creds.api_token:
-                result.errors.append(API_TOKEN_NOT_CONFIGURED)
-                return result
-
-            provider = get_provider(provider_name)
-            if full_sync:
-                since = None
-                logger.info("Full sync requested — fetching all historical data")
-            else:
-                last_sync = _get_setting(db, "last_sync_timestamp")
-                since = last_sync if last_sync else None
-
-        except Exception as exc:
-            result.errors.append(_fixed_error("Setup error", exc))
-            logger.error("Sync setup error (%s)", type(exc).__name__)
+        setup = _prepare_full_sync(provider_name, db, full_sync, result)
+        if setup is None:
             return result
+        creds, provider, since = setup
 
         # --- Sync users first (needed for pilot matching) ---
         skydio_users = []
@@ -967,7 +997,7 @@ class SyncManager:
             logger.info("Users sync: got %d users", len(skydio_users))
         except Exception as exc:
             result.errors.append(_fixed_error("Users sync error", exc))
-            logger.error("Users sync error (%s)", type(exc).__name__)
+            _log_sync_failure("Users sync error", exc)
 
         # --- Match Skydio users to pilots and populate emails ---
         # Committed here so the write lock is not held through the network
@@ -987,7 +1017,7 @@ class SyncManager:
             logger.info("Committed %d vehicles to database", result.vehicles_synced)
         except Exception as exc:
             result.errors.append(_fixed_error("Vehicles sync error", exc))
-            logger.error("Vehicles sync error (%s)", type(exc).__name__)
+            _log_sync_failure("Vehicles sync error", exc)
             db.rollback()
             result.vehicles_synced = 0
 
@@ -999,7 +1029,7 @@ class SyncManager:
             logger.info("Committed %d new flights to database", result.flights_new)
         except Exception as exc:
             result.errors.append(_fixed_error("Flights sync error", exc))
-            logger.error("Flights sync error (%s)", type(exc).__name__)
+            _log_sync_failure("Flights sync error", exc)
             db.rollback()
             result.flights_new = 0
             result.flights_skipped = 0
@@ -1010,7 +1040,7 @@ class SyncManager:
             db.commit()
         except Exception as exc:
             result.errors.append(_fixed_error("Flight enrichment error", exc))
-            logger.error("Flight enrichment error (%s)", type(exc).__name__)
+            _log_sync_failure("Flight enrichment error", exc)
             db.rollback()
 
         # --- Sync batteries, controllers, docks, sensors, attachments ---
@@ -1031,16 +1061,7 @@ class SyncManager:
         # --- Commit and update last sync timestamp ---
         # Only advance last_sync_timestamp when the run was clean. Otherwise
         # the next sync's `since=` filter would skip rows that failed this run.
-        try:
-            if not result.errors:
-                _set_setting(db, "last_sync_timestamp", datetime.now(timezone.utc).isoformat())
-            _set_setting(db, "last_sync_provider", provider_name)
-            _persist_last_sync_result(db, result)
-            db.commit()
-        except Exception as exc:
-            result.errors.append(_fixed_error("Commit error", exc))
-            logger.error("Sync commit error (%s)", type(exc).__name__)
-            db.rollback()
+        _finalize_sync(db, result, provider_name, "Sync commit error")
 
         logger.info(
             "Sync complete: %d vehicles, %d new flights (%d skipped), %d batteries, %d errors",
@@ -1081,7 +1102,7 @@ class SyncManager:
             logger.info("Deep sync users: got %d users", len(skydio_users))
         except Exception as exc:
             result.errors.append(_fixed_error("Users sync error", exc))
-            logger.error("Deep sync users error (%s)", type(exc).__name__)
+            _log_sync_failure("Deep sync users error", exc)
 
         # --- Sync vehicles (needed for flight vehicle matching) ---
         try:
@@ -1089,7 +1110,7 @@ class SyncManager:
             db.commit()
         except Exception as exc:
             result.errors.append(_fixed_error("Vehicles sync error", exc))
-            logger.error("Deep sync vehicles error (%s)", type(exc).__name__)
+            _log_sync_failure("Deep sync vehicles error", exc)
             db.rollback()
 
         # --- Deep flight sync ---
@@ -1101,22 +1122,13 @@ class SyncManager:
             logger.info("Committed %d new flights to database", result.flights_new)
         except Exception as exc:
             result.errors.append(_fixed_error("Deep flight sync error", exc))
-            logger.error("Deep flight sync error (%s)", type(exc).__name__)
+            _log_sync_failure("Deep flight sync error", exc)
             db.rollback()
 
         # --- Commit and update last sync timestamp ---
         # Only advance last_sync_timestamp when the run was clean. Otherwise
         # the next sync's `since=` filter would skip rows that failed this run.
-        try:
-            if not result.errors:
-                _set_setting(db, "last_sync_timestamp", datetime.now(timezone.utc).isoformat())
-            _set_setting(db, "last_sync_provider", provider_name)
-            _persist_last_sync_result(db, result)
-            db.commit()
-        except Exception as exc:
-            result.errors.append(_fixed_error("Commit error", exc))
-            logger.error("Deep sync commit error (%s)", type(exc).__name__)
-            db.rollback()
+        _finalize_sync(db, result, provider_name, "Deep sync commit error")
 
         logger.info(
             "Deep sync complete: %d vehicles, %d new flights (%d skipped), %d errors",

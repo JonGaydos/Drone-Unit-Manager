@@ -556,11 +556,14 @@ def test_machine_run_counts_creates_and_deletes_across_commits(session, db):
 
 def test_machine_run_row_commits_with_each_batch(session, db):
     """A run that dies later still has its earlier batches on record."""
-    with pytest.raises(RuntimeError):
+    def dying_run():
         with machine_run(session, "sync", "pilot"):
             session.add(Pilot(first_name="Batch", last_name="One"))
             session.commit()
             raise RuntimeError("provider went away")
+
+    with pytest.raises(RuntimeError):
+        dying_run()
     session.rollback()
 
     entries = _entries(db)
@@ -905,9 +908,10 @@ def test_audit_failure_inside_swallowed_savepoint_saves_nothing_of_it(session, d
     session.flush()
     _refuse_audit_inserts(session)
 
+    nested = session.begin_nested()
+    inner.notes = "inner"
     with pytest.raises(Exception, match="audit write refused"):
-        with session.begin_nested():
-            inner.notes = "inner"
+        with nested:
             session.flush()
     _allow_audit_inserts(session)
     session.commit()
@@ -1515,9 +1519,10 @@ def test_a_failed_batch_write_in_a_savepoint_takes_only_that_savepoint(session, 
         raise RuntimeError("audit write refused")
 
     monkeypatch.setattr(audit_capture, "_insert_rows", refuse)
+    nested = session.begin_nested()
+    pilots[1].notes = "dropped"
     with pytest.raises(RuntimeError):
-        with session.begin_nested():
-            pilots[1].notes = "dropped"
+        with nested:
             session.flush()
     session.commit()
 
