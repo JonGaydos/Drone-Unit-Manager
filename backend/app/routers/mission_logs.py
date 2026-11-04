@@ -1,3 +1,4 @@
+from collections import Counter
 from datetime import date
 from typing import Annotated
 
@@ -69,7 +70,11 @@ def _mission_to_out(mission: MissionLog, db: Session, vehicle_cache=None, pilot_
 
 
 def _sync_pilots(db: Session, mission: MissionLog, pilots_data: list[MissionLogPilotIn]):
-    delete_recorded(db, db.query(MissionLogPilot).filter(MissionLogPilot.mission_log_id == mission.id))
+    current = db.query(MissionLogPilot).filter(MissionLogPilot.mission_log_id == mission.id)
+    if Counter((p.pilot_id, p.role, p.hours) for p in current) == Counter(
+            (p.pilot_id, p.role, p.hours) for p in pilots_data):
+        return
+    delete_recorded(db, current)
     db.flush()
     for p in pilots_data:
         db.add(MissionLogPilot(

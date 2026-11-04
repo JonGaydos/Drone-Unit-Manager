@@ -16,7 +16,7 @@ from app.config import settings as app_settings
 from app.database import SessionLocal
 from app.models.setting import Setting
 from app.routers.backup import build_backup_archive
-from app.services.audit_capture import machine_run
+from app.services.audit import log_action
 from app.services.sync_lock import restore_active
 
 logger = logging.getLogger(__name__)
@@ -99,9 +99,11 @@ def _rotate(directory: str, retention: int) -> None:
 
 
 def _record_result(db, now_iso: str, result: dict, details: str) -> None:
-    with machine_run(db, "backup", "system", details=details):
-        _set_setting(db, "last_backup_at", now_iso)
-        _set_setting(db, "last_backup_result", json.dumps(result))
+    """Save the outcome. Status settings alone would leave no entry, and a backup
+    is worth one whether it worked or not."""
+    _set_setting(db, "last_backup_at", now_iso)
+    _set_setting(db, "last_backup_result", json.dumps(result))
+    log_action(db, None, None, "backup", "system", details=details)
     db.commit()
 
 

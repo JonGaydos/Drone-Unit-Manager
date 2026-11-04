@@ -43,6 +43,7 @@ _DELETE_ACTIONS = frozenset({DELETE, "purge"})
 # Old value of a key the flush overwrote before anything had loaded it.
 _OLD_VALUE_UNKNOWN = "(unknown)"
 
+_FOLDED_ATTR = "_audit_folded"
 _AUDIT_LOG_MODEL = "AuditLog"
 _SETTING_MODEL = "Setting"
 _SETTING_VALUE_FIELD = "value"
@@ -163,9 +164,15 @@ def _state(session) -> _CaptureState:
     return session.info.setdefault(_STATE_KEY, _CaptureState())
 
 
+def actor_fields(user) -> dict:
+    """Who a user is, in plain values that can outlive the user's session."""
+    return {"id": user.id, "name": user.display_name, "username": user.username}
+
+
 def set_actor(session, user) -> None:
-    """Record who is acting on this session, for every entry written through it."""
-    session.info[ACTOR_KEY] = {"id": user.id, "name": user.display_name, "username": user.username}
+    """Record who is acting on this session, for every entry written through it.
+    ``user`` is a user, or what ``actor_fields`` returned for one."""
+    session.info[ACTOR_KEY] = user if isinstance(user, dict) else actor_fields(user)
 
 
 def entity_type_of(model_class) -> str:
@@ -182,7 +189,7 @@ def _is_captured(obj, run) -> bool:
     """Whether a change to ``obj`` is recorded. A machine run counts the models
     left out of per-row capture, since writing those is often the run's job."""
     name = type(obj).__name__
-    if name == _AUDIT_LOG_MODEL or _is_status_setting(obj):
+    if name == _AUDIT_LOG_MODEL or getattr(obj, _FOLDED_ATTR, False) or _is_status_setting(obj):
         return False
     return run is not None or name not in EXCLUDED_MODELS
 
@@ -551,11 +558,12 @@ def _refresh_run_entry(session, run: _MachineRun) -> None:
     if not run.stale:
         return
     run.stale = False
-    if run.entry_id is None:
+    summary = run.summary()
+    if run.entry_id is not None:
+        _update_row(session, run.entry_id, {"changes": summary})
+    elif summary:
         run.entry_id = _insert_row(session, _row_values(
-            session, run.action, run.entity_type, None, None, run.summary(), run.details))
-    else:
-        _update_row(session, run.entry_id, {"changes": run.summary()})
+            session, run.action, run.entity_type, None, None, summary, run.details))
 
 
 def _before_commit(session) -> None:
@@ -642,6 +650,7 @@ def machine_run(session, action: str, entity_type: str, details: str | None = No
 
     The row joins the session's transaction and is brought current at each
     commit, so each batch the block commits is on record with the counts so far.
+    A run that changes nothing writes no row.
     Commit after the block for anything it left uncommitted, as with
     ``log_action``. If the block raises, what it committed stays reported and
     capture resumes. A run inside a run counts toward the outer one. Other
@@ -657,7 +666,6 @@ def machine_run(session, action: str, entity_type: str, details: str | None = No
     try:
         yield
         session.flush()
-        run.stale = run.stale or run.entry_id is None
         _refresh_run_entry(session, run)
     except BaseException:
         # What the block flushed is still in the transaction, for a caller that
@@ -684,7 +692,11 @@ def _bulk_changes(ids: list[int], changes: dict | None) -> dict:
     if len(ordered) > len(shown):
         text += f" (first {len(shown)} shown)"
     records = {"old": None, "new": text, "ids": ordered, "total_ids": len(ordered)}
-    return {"records": records, **(changes or {})}
+    fields = {
+        key: {"old": SECRET_MARKER, "new": SECRET_MARKER} if key in SECRET_FIELDS else change
+        for key, change in (changes or {}).items()
+    }
+    return {"records": records, **fields}
 
 
 def record_bulk(session, action: str, entity_type: str, ids: list[int], changes: dict | None) -> None:
@@ -722,20 +734,45 @@ def update_recorded(session, query, values: dict, action: str = UPDATE) -> int:
     return len(ids)
 
 
-def delete_recorded(session, query) -> int:
-    """Run ``query.delete`` and record each row's values, since the rows are gone
-    after this. Returns how many rows matched."""
+def _delete_rows(query) -> tuple[str, list[int], str]:
+    """Run ``query.delete``. Returns the entity type, the IDs and the values of
+    each row, since the rows are gone after this."""
     model = _query_model(query)
     mapper = inspect(model)
     keys = _recorded_keys(mapper)
     rows = query.with_entities(model.id, *(mapper.get_property(key).columns[0] for key in keys)).all()
     if not rows:
-        return 0
+        return entity_type_of(model), [], ""
     query.delete()
     traces = (
-        f"{row[0]}: " + ", ".join(f"{key}={value}" for key, value in zip(keys, row[1:]) if value is not None)
+        f"{row[0]}: " + ", ".join(
+            f"{key}={SECRET_MARKER if key in SECRET_FIELDS else value}"
+            for key, value in zip(keys, row[1:]) if value is not None)
         for row in rows
     )
-    record_bulk(session, DELETE, entity_type_of(model), [row[0] for row in rows],
-                {"deleted": {"old": "; ".join(traces), "new": None}})
-    return len(rows)
+    return entity_type_of(model), [row[0] for row in rows], "; ".join(traces)
+
+
+def delete_recorded(session, query) -> int:
+    """Run ``query.delete`` and record it in an entry of its own. Returns how
+    many rows matched."""
+    entity_type, ids, trace = _delete_rows(query)
+    record_bulk(session, DELETE, entity_type, ids, {"deleted": {"old": trace, "new": None}})
+    return len(ids)
+
+
+def delete_links(query) -> dict:
+    """Run ``query.delete`` for link rows and return their record as ``changes``
+    for the entry of the action that removed them, so the action stays one
+    row. Empty if nothing matched."""
+    entity_type, ids, trace = _delete_rows(query)
+    if not ids:
+        return {}
+    return {entity_type: {"old": trace, "new": None, "ids": ids, "total_ids": len(ids)}}
+
+
+def add_folded(session, obj) -> None:
+    """Add a row whose record goes in the entry of the action that created it,
+    so it gets no automatic entry of its own."""
+    setattr(obj, _FOLDED_ATTR, True)
+    session.add(obj)

@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from app.constants import UTC_OFFSET
 from app.deps import DBSession, AdminUser
 from app.models.setting import Setting
-from app.services.audit_capture import machine_run
+from app.services.audit_capture import actor_fields, machine_run, set_actor
 from app.services.flight_delete import delete_flights, purge_flight_telemetry
 from app.services.local_time import display_zone, local_flight_date
 from app.services import jobs
@@ -104,14 +104,16 @@ def _run_telemetry(db) -> dict:
     return {"synced": synced, "remaining": max(0, remaining)}
 
 
-def _start_job(kind: str, work) -> dict:
+def _start_job(kind: str, work, actor: dict) -> dict:
     """Take the sync lock here, so a busy lock is a 409 on this request, and
-    run work(db) as a job on its own session; the job releases the lock."""
+    run work(db) as a job on its own session; the job releases the lock.
+    ``actor`` is who started it, in plain values for the job's audit entries."""
     from app import database
     acquire_or_409()
 
     def run():
         db = database.SessionLocal()
+        set_actor(db, actor)
         try:
             return work(db)
         finally:
@@ -150,7 +152,7 @@ def start_sync(
     logger.info("Background sync started by admin (full=%s, sync_telemetry=%s)", full, sync_telemetry)
     # Plain values, not the ORM user: the job outlives this request's session.
     admin_id, admin_name = admin.id, admin.display_name
-    return _start_job("sync", lambda db: _run_sync(db, full, sync_telemetry, admin_id, admin_name))
+    return _start_job("sync", lambda db: _run_sync(db, full, sync_telemetry, admin_id, admin_name), actor_fields(admin))
 
 
 @router.post("/telemetry", responses=responses(401, 409))
@@ -163,7 +165,7 @@ def sync_telemetry_batch(db: DBSession, user: AdminUser):
 @router.post("/telemetry/start", responses=responses(401, 409))
 def start_telemetry(user: AdminUser):
     """Start a telemetry batch as a background job; poll /jobs/{id}."""
-    return _start_job("telemetry", _run_telemetry)
+    return _start_job("telemetry", _run_telemetry, actor_fields(user))
 
 
 @router.get("/jobs/{job_id}", responses=responses(401, 404))

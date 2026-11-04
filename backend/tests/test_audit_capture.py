@@ -609,14 +609,12 @@ def test_machine_run_caps_ids_and_states_total(session, db):
     assert summary["counts"]["create"] == 505
 
 
-def test_machine_run_with_no_writes_still_writes_summary(session, db):
+def test_machine_run_with_no_writes_writes_no_summary(session, db):
     with machine_run(session, "sync", "flight"):
         pass
     session.commit()
 
-    entries = _entries(db)
-    assert len(entries) == 1
-    assert entries[0].changes == {}
+    assert _entries(db) == []
 
 
 def test_machine_run_counts_alerts_and_skips_status_settings(session, db):
@@ -650,7 +648,7 @@ def test_capture_resumes_after_machine_run(session, db):
         pass
     _pilot(session)
 
-    assert [e.action for e in _entries(db)] == ["sync", "create"]
+    assert [e.action for e in _entries(db)] == ["create"]
 
 
 def test_person_edit_in_another_session_during_run_is_logged_in_full(session, db, _engines):
@@ -667,7 +665,7 @@ def test_person_edit_in_another_session_during_run_is_logged_in_full(session, db
     finally:
         other.close()
 
-    assert sorted(e.action for e in _entries(db)) == ["sync", "update"]
+    assert [e.action for e in _entries(db)] == ["update"]
 
 
 def test_login_token_actor_is_recorded(client, db, admin_user, admin_headers):
