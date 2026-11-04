@@ -154,7 +154,7 @@ def update_authority(authority_id: int, data: AuthorityUpdate, db: DBSession, us
     return _serialize(a, date.today(), counts.get(a.id, 0))
 
 
-@router.delete("/{authority_id}", responses=responses(401, 404, 409))
+@router.delete("/{authority_id}", responses=responses(401, 403, 404, 409))
 def delete_authority(authority_id: int, db: DBSession, user: ManageUser):
     a = db.query(OperatingAuthority).filter(OperatingAuthority.id == authority_id).first()
     if not a:
@@ -162,17 +162,22 @@ def delete_authority(authority_id: int, db: DBSession, user: ManageUser):
 
     # Documents attach by (entity_type, entity_id) rather than a foreign key, and
     # SQLite reuses row ids, so leaving them behind would hand this authority's
-    # paperwork to whichever record is created next. Delete them with the record,
-    # which is also why they are purged rather than kept restorable. A document
-    # on legal hold blocks the whole delete.
+    # paperwork to whichever record is created next. Admins delete them with the
+    # record, which is why they are purged rather than kept restorable. Soft-deleted
+    # documents still count as attached. A document on legal hold blocks the whole
+    # delete for everyone, and any other attached document leaves it to admins.
     docs = db.query(Document).filter(
         Document.entity_type == DOCUMENT_ENTITY_TYPE,
         Document.entity_id == authority_id,
     ).all()
     if any(doc.legal_hold for doc in docs):
         raise HTTPException(409, "A document attached to this authority is on legal hold.")
+    if docs and user.role != "admin":
+        raise HTTPException(403, "Only an admin can delete an authority that has documents attached.")
     files = [doc.file_path for doc in docs]
     for doc in docs:
+        log_action(db, user.id, user.display_name, "delete", "document", doc.id, doc.title,
+                   details=f"Deleted with operating authority {a.id}; sha256 {doc.sha256 or 'unknown'}")
         db.delete(doc)
 
     log_action(db, user.id, user.display_name, "delete", "operating_authority", a.id, a.title,

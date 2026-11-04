@@ -226,6 +226,7 @@ def _run_digest_job():
     """Check for users due for a digest email and send them."""
     from datetime import datetime
     from app.models.notification_preference import NotificationPreference
+    from app.models.user import User
 
     db = SessionLocal()
     try:
@@ -236,7 +237,11 @@ def _run_digest_job():
         now = datetime.now()
         current_hour = now.strftime("%H")
 
-        prefs = db.query(NotificationPreference).filter(
+        # Deactivated users keep their preferences but get no digest.
+        prefs = db.query(NotificationPreference).join(
+            User, User.id == NotificationPreference.user_id
+        ).filter(
+            User.is_active.is_(True),
             NotificationPreference.enabled == True,
             NotificationPreference.frequency != "off",
         ).all()

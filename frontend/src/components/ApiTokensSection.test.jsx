@@ -54,6 +54,19 @@ describe('ApiTokensSection', () => {
     expect(captured).toMatchObject({ name: 'Home Assistant', read_only: true, scopes: ['fleet'], expires_in_days: null })
   })
 
+  it('offers the audit log as an explicit area, not part of all areas', async () => {
+    mockMount([])
+    const { user } = renderWithProviders(<ApiTokensSection />, { role: 'admin' })
+    await screen.findByText('No API tokens yet')
+
+    await user.click(screen.getByRole('button', { name: /Create Token/ }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).queryByLabelText('Audit Log')).not.toBeInTheDocument()
+    await user.click(within(dialog).getByLabelText('All areas'))
+
+    expect(within(dialog).getByLabelText('Audit Log')).toBeInTheDocument()
+  })
+
   it('sends the chosen expiry when creating a token', async () => {
     let captured = null
     mockMount([])

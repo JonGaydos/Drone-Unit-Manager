@@ -4,7 +4,8 @@ Tokens look like "dum_<43 url-safe chars>" so they are distinguishable from
 login JWTs at a glance. Only the SHA-256 hash is stored. Every request
 authenticated by a token is checked against the token's read_only flag and
 area scopes; any path outside the scope map (auth, settings, users, backup,
-sync, audit, the token API itself) is denied to all tokens.
+sync, the token API itself) is denied to all tokens. The audit log is reachable
+only by a token that names the "audit" scope.
 """
 
 import hashlib
@@ -20,6 +21,10 @@ from app.models.user import User
 from app.services.audit_capture import set_actor
 
 TOKEN_PREFIX = "dum_"
+
+# The audit log and its export. Only a token that names the "audit" scope
+# reaches them: all-areas tokens and the reports scope do not.
+AUDIT_PREFIXES = ["/api/audit", "/api/export/audit"]
 
 # API areas selectable when creating a token, mapped to route prefixes.
 # A request path must fall under one of the token's areas to be allowed.
@@ -44,6 +49,7 @@ SCOPE_PREFIXES = {
     ],
     "documents": ["/api/documents", "/api/folders", "/api/photos", "/api/media"],
     "reports": ["/api/reports", "/api/export", "/api/dashboard", "/api/compliance"],
+    "audit": AUDIT_PREFIXES,
 }
 
 READ_METHODS = {"GET", "HEAD", "OPTIONS"}
@@ -70,13 +76,15 @@ def token_scopes(token: ApiToken) -> list[str] | None:
         return []
 
 
+def _under(path: str, prefixes: list[str]) -> bool:
+    return any(path == prefix or path.startswith(prefix + "/") for prefix in prefixes)
+
+
 def _path_allowed(path: str, scopes: list[str] | None) -> bool:
+    if _under(path, AUDIT_PREFIXES):
+        return scopes is not None and "audit" in scopes
     areas = SCOPE_PREFIXES.keys() if scopes is None else scopes
-    for area in areas:
-        for prefix in SCOPE_PREFIXES.get(area, []):
-            if path == prefix or path.startswith(prefix + "/"):
-                return True
-    return False
+    return any(_under(path, SCOPE_PREFIXES.get(area, [])) for area in areas)
 
 
 def authenticate_api_token(db: Session, raw: str, method: str, path: str) -> User:

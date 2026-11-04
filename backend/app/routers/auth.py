@@ -144,7 +144,7 @@ def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     if credentials.credentials.startswith(api_tokens_service.TOKEN_PREFIX):
         return api_tokens_service.authenticate_api_token(
-            db, credentials.credentials, request.method, request.url.path
+            db, credentials.credentials, request.method, request.scope["path"]
         )
     return user_from_login_token(credentials.credentials, db)
 
@@ -197,6 +197,9 @@ _USER_FAIL_WINDOW = 900  # 15 minutes, both the counting window and the lock
 _USER_FAIL_MAX_KEYS = 5000  # prune expired entries past this many usernames
 
 
+_warned_untrusted_proxy = False
+
+
 @lru_cache(maxsize=4)
 def _trusted_networks(spec: str) -> tuple:
     """Parse the comma-separated TRUSTED_PROXIES CIDR list (cached per value).
@@ -241,19 +244,50 @@ def _client_ip(request) -> str:
         The resolved client IP string, or "unknown" if unavailable.
     """
     peer = request.client.host if request.client else "unknown"
-    if not settings.TRUST_PROXY_HEADERS or not _is_trusted_proxy(peer):
+    if not settings.TRUST_PROXY_HEADERS:
         return peer
+    if not _is_trusted_proxy(peer):
+        _warn_untrusted_forwarding(request, peer)
+        return peer
+    return _forwarded_ip(request) or peer
+
+
+def _valid_ip(value: str) -> str | None:
+    """The value when it parses as an IP address, otherwise None."""
+    try:
+        return str(ip_address(value.strip()))
+    except ValueError:
+        return None
+
+
+def _forwarded_ip(request) -> str | None:
+    """The client address a trusted proxy reported, or None when there is no
+    usable one. Header values that are not IP addresses are never returned."""
     cf = (request.headers.get("cf-connecting-ip") or "").strip()
     if cf:
-        return cf
+        return _valid_ip(cf)
     hops = [h.strip() for h in (request.headers.get("x-forwarded-for") or "").split(",") if h.strip()]
     for hop in reversed(hops):
         if not _is_trusted_proxy(hop):
-            return hop
+            return _valid_ip(hop)
     if hops:
-        return hops[0]  # every hop is on the trusted network
-    real = (request.headers.get("x-real-ip") or "").strip()
-    return real or peer
+        return _valid_ip(hops[0])  # every hop is on the trusted network
+    return _valid_ip(request.headers.get("x-real-ip") or "")
+
+
+def _warn_untrusted_forwarding(request, peer: str) -> None:
+    """Log once when forwarding headers arrive from a peer that is not trusted,
+    the sign of a reverse proxy that TRUSTED_PROXIES does not name yet. Until
+    it does, every client behind that proxy shares one login rate limit."""
+    global _warned_untrusted_proxy
+    if _warned_untrusted_proxy:
+        return
+    if any(request.headers.get(h) for h in ("cf-connecting-ip", "x-forwarded-for", "x-real-ip")):
+        _warned_untrusted_proxy = True
+        logger.warning(
+            "Forwarding headers arrived from %s, which is not in TRUSTED_PROXIES, so they are "
+            "ignored and clients behind it share one rate limit. Set TRUSTED_PROXIES to that "
+            "proxy's address to use the real client address.", peer)
 
 
 def _check_rate_limit(request):

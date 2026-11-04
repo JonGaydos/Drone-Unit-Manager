@@ -18,6 +18,7 @@ const SCOPE_LABELS = {
   operations: 'Operations',
   documents: 'Documents & Media',
   reports: 'Reports & Dashboard',
+  audit: 'Audit Log',
 }
 
 const fmt = (s) => (s ? new Date(s).toLocaleString() : 'Never')

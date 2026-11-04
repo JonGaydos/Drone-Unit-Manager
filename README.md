@@ -289,6 +289,10 @@ Import flight logs from DJI Go 4 (.txt files) or Litchi (.csv files). The applic
 
 Interactive API documentation (`/docs` for Swagger UI, `/redoc` for ReDoc, and the OpenAPI schema) is off by default, so a production instance does not publish its API surface. Set the environment variable `EXPOSE_API_DOCS=true` to turn it on, for example in development.
 
+## Reverse Proxy
+
+By default the app identifies every client by the address it connects from and ignores `X-Forwarded-For` and `CF-Connecting-IP`. If the app sits behind a reverse proxy or tunnel, set `TRUSTED_PROXIES` to that proxy's address (comma-separated IPs or CIDR ranges) so the real client address is used for login rate limits and the audit log. Until it is set, clients behind the proxy share one rate limit and the app logs a warning.
+
 ## Backup and Restore
 
 The application has built-in backup and restore — no container stop required.

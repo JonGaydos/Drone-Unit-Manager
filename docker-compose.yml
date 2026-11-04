@@ -10,6 +10,8 @@ services:
     environment:
       - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
       - TZ=${TZ:-America/Chicago}
+      # Address of your reverse proxy, if any, so client addresses are read from its headers
+      - TRUSTED_PROXIES=${TRUSTED_PROXIES:-}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
