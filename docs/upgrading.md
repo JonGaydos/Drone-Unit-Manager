@@ -1,5 +1,19 @@
 # Upgrading
 
+## Restoring a backup: held items and audit entries
+
+A restore replaces the database with the backup. If that would remove or change
+a photo or document under legal hold, the restore is refused with a list of the
+held items and nothing changes. To go ahead, send the form field
+`confirm_holds` with the exact text `RESTORE HELD ITEMS` (the setup screen asks
+for it). Each held item the restore removed or changed gets its own audit
+entry. A held item the backup carries unchanged needs no confirmation.
+
+The audit entries in a backup are added to this install's own, marked as
+imported, and one summary entry records the backup date and how many were
+added. Backups from before the audit log recorded usernames restore the same
+way.
+
 ## 3.1.10: the container fixes its data folder's ownership
 
 From 3.1.10 the container starts as root only long enough to give the data

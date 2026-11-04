@@ -389,7 +389,10 @@ export const api = {
       if (msg.includes('SQL') || msg.includes('Traceback') || msg.includes('/app/')) {
         throw new Error('An unexpected error occurred')
       }
-      throw new Error(msg)
+      const error = new Error(msg)
+      error.status = res.status
+      error.data = data
+      throw error
     }
     return res.json()
   },

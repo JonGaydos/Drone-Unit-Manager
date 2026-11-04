@@ -65,6 +65,10 @@ export default function SetupPage({ recovery = false }) {
   const [restoring, setRestoring] = useState(false)
   const [restoreFile, setRestoreFile] = useState(null)
   const [restoreResult, setRestoreResult] = useState(null)
+  // Held items the restore would remove or change; set when the server asks
+  // for the typed confirmation.
+  const [heldItems, setHeldItems] = useState(null)
+  const [confirmHolds, setConfirmHolds] = useState('')
   const [installToken, setInstallToken] = useState('')
   const fileRef = useRef(null)
 
@@ -521,6 +525,25 @@ export default function SetupPage({ recovery = false }) {
                       Required for a fresh-install restore. Read <code className="text-foreground">install_token.txt</code> from the container's data directory (<code className="text-foreground">/app/data</code>), or run <code className="text-foreground">docker logs &lt;container&gt;</code> and look for "install token" (printed at first startup).
                     </p>
                   </div>
+                  {heldItems && (
+                    <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 text-sm space-y-2">
+                      <p className="font-medium text-amber-500">This restore would remove or change items under legal hold</p>
+                      <ul className="list-disc pl-5 text-foreground">
+                        {heldItems.map(h => <li key={`${h.type}-${h.id}`}>{h.type} {h.id}: {h.title}</li>)}
+                      </ul>
+                      <label htmlFor="confirm-holds" className="block text-xs text-muted-foreground">
+                        Type <code className="text-foreground">RESTORE HELD ITEMS</code> to restore anyway.
+                      </label>
+                      <input
+                        id="confirm-holds"
+                        type="text"
+                        autoComplete="off"
+                        value={confirmHolds}
+                        onChange={e => setConfirmHolds(e.target.value)}
+                        className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-xs font-mono focus:outline-none focus:ring-2 focus:ring-ring"
+                      />
+                    </div>
+                  )}
                   <button
                     onClick={async () => {
                       if (!installToken) {
@@ -532,16 +555,22 @@ export default function SetupPage({ recovery = false }) {
                       try {
                         const fd = new FormData()
                         fd.append('file', restoreFile)
+                        if (heldItems) fd.append('confirm_holds', confirmHolds)
                         const result = await api.upload('/backup/import', fd, { 'X-Install-Token': installToken }, { timeout: 0 })
                         setRestoreResult(result)
                         setTimeout(() => { globalThis.location.href = '/login' }, 3000)
                       } catch (err) {
-                        setError(err.message || 'Restore failed')
+                        if (err.status === 409 && err.data?.held_items) {
+                          setHeldItems(err.data.held_items)
+                          setError('')
+                        } else {
+                          setError(err.message || 'Restore failed')
+                        }
                       } finally {
                         setRestoring(false)
                       }
                     }}
-                    disabled={restoring || !installToken}
+                    disabled={restoring || !installToken || (heldItems && confirmHolds !== 'RESTORE HELD ITEMS')}
                     className="w-full py-2.5 bg-emerald-600 text-white rounded-lg font-medium disabled:opacity-50 flex items-center justify-center gap-2"
                   >
                     {restoring ? <><Loader2 className="w-4 h-4 animate-spin" /> Restoring...</> : 'Restore Backup'}

@@ -14,7 +14,7 @@ import zipfile
 from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile as StarletteUploadFile
 from sqlalchemy import func, inspect as sa_inspect, text
@@ -653,10 +653,53 @@ def _prepare_restore_rows(db: Session, name: str, rows: list[dict]) -> list[dict
         rows = [r for r in rows if _audit_key(r) not in existing]
         for r in rows:
             r.pop("id", None)
+            # Every column the current schema has, so a backup from before
+            # user_username existed inserts like any other; and marked, so the
+            # audit page can tell these entries from ones made here.
+            r.setdefault("user_username", None)
+            r["imported"] = True
     return rows
 
 
-def _restore_main_tables(db: Session, db_tables: dict) -> tuple[int, int]:
+CONFIRM_HOLDS_TEXT = "RESTORE HELD ITEMS"
+
+# Held tables: the fields that, if the backup disagrees with the live row,
+# mean the restore changes the held item.
+HELD_TABLES = (
+    ("photo", "photos", Photo, ("filename", "sha256", "legal_hold", "deleted_at")),
+    ("document", "documents", Document, ("filename", "file_path", "sha256", "legal_hold", "deleted_at")),
+)
+
+
+def _held_items_affected(db: Session, db_tables: dict) -> list[dict]:
+    """Held photos and documents the restore would remove or change.
+
+    A held item the backup carries unchanged (same fields, same digest) is not
+    affected. Computed before anything is deleted.
+    """
+    affected = []
+    for kind, table, model, fields in HELD_TABLES:
+        held = db.query(model).filter(model.legal_hold.is_(True)).all()
+        if not held:
+            continue
+        in_backup = {r.get("id"): r for r in _parse_rows(db_tables.get(table, []), model)}
+        for item in held:
+            row = in_backup.get(item.id)
+            if row is None or any(row.get(f) != _comparable(getattr(item, f)) for f in fields):
+                affected.append({"type": kind, "id": item.id,
+                                 "title": getattr(item, "title", None) or item.filename})
+    return affected
+
+
+def _comparable(value):
+    """A stored value in the form _parse_rows gives the backup's copy."""
+    if isinstance(value, datetime) and value.tzinfo is not None:
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value
+
+
+def _restore_main_tables(db: Session, db_tables: dict, held_items: list[dict] | None = None,
+                         principal: str = "system") -> tuple[int, int, int]:
     """Replace the main-DB tables from the backup, in one atomic transaction.
 
     A restore makes the database match the backup, so each table is wiped and
@@ -668,11 +711,13 @@ def _restore_main_tables(db: Session, db_tables: dict) -> tuple[int, int]:
     and, unlike PRAGMA foreign_keys, is honored inside a transaction -- so the
     wipe-and-reload is all-or-nothing, needs no per-row ordering, and never
     leaves a pooled connection with enforcement disabled (the pragma clears
-    itself at commit/rollback). Returns (tables_imported, rows_imported).
+    itself at commit/rollback). Returns (tables_imported, rows_imported,
+    audit_rows_imported).
     """
     db.execute(text("PRAGMA defer_foreign_keys=ON"))
     tables_imported = 0
     rows_imported = 0
+    audit_imported = 0
     try:
         # This install's audit trail survives the restore. Its entries are
         # detached from user ids the restore is about to replace; each keeps the
@@ -690,12 +735,24 @@ def _restore_main_tables(db: Session, db_tables: dict) -> tuple[int, int]:
             db.execute(model.__table__.insert(), rows)
             tables_imported += 1
             rows_imported += len(rows)
+            if name == "audit_logs":
+                audit_imported = len(rows)
             logger.info("  Imported %s: %d rows", name, len(rows))
+        # One entry per held item the restore removed or changed, in the same
+        # transaction: the restore and its record stand or fall together.
+        if held_items:
+            now = datetime.now(timezone.utc)
+            db.execute(AuditLog.__table__.insert(), [
+                {"user_name": principal, "action": "restore_held_item", "entity_type": h["type"],
+                 "entity_id": h["id"], "entity_name": h["title"], "created_at": now,
+                 "details": "Held item removed or changed by a backup restore", "imported": False}
+                for h in held_items
+            ])
         db.commit()  # FK consistency is verified here
     except Exception:
         db.rollback()
         raise
-    return tables_imported, rows_imported
+    return tables_imported, rows_imported, audit_imported
 
 
 def _stream_json_array(stream, read_size: int = 1 << 20):
@@ -779,7 +836,7 @@ def _restore_telemetry(zf: zipfile.ZipFile) -> tuple[bool, int]:
     return count > 0, count
 
 
-async def _read_backup_upload(request: Request) -> bytes:
+async def _read_backup_upload(request: Request) -> tuple[bytes, str]:
     """The uploaded ZIP from the multipart body. Read by hand, after the caller
     is authorized: as a declared File() parameter FastAPI would spool the whole
     body (up to the archive cap) before this route could refuse the caller."""
@@ -788,12 +845,12 @@ async def _read_backup_upload(request: Request) -> bytes:
         file = form.get("file")
         if not isinstance(file, StarletteUploadFile):
             raise HTTPException(400, "No backup file in the request")
-        return await file.read()
+        return await file.read(), str(form.get("confirm_holds") or "")
     finally:
         await form.close()
 
 
-def _restore_archive(db, content: bytes, principal: str) -> dict:
+def _restore_archive(db, content: bytes, principal: str, confirm_holds: str = "") -> dict | JSONResponse:
     """Restore a backup ZIP: main tables, telemetry, then uploaded files.
     Synchronous and slow (minutes for a large install); the route runs it
     off the event loop so the rest of the app keeps answering meanwhile."""
@@ -812,7 +869,14 @@ def _restore_archive(db, content: bytes, principal: str) -> dict:
                 manifest.get("export_date"), manifest.get("app_version"), principal)
 
     db_tables = json.loads(zf.read(DATABASE_FILE))
-    tables_imported, rows_imported = _restore_main_tables(db, db_tables)
+    # Decided before the first delete: a restore that would remove or change a
+    # legal hold needs the typed confirmation, and changes nothing without it.
+    held_items = _held_items_affected(db, db_tables)
+    if held_items and confirm_holds != CONFIRM_HOLDS_TEXT:
+        return JSONResponse(status_code=409, content={
+            "held_items": held_items, "confirm_text": CONFIRM_HOLDS_TEXT})
+
+    tables_imported, rows_imported, audit_rows = _restore_main_tables(db, db_tables, held_items, principal)
 
     # Telemetry lives in a separate database, so it cannot share the main
     # transaction. A failure is surfaced rather than swallowed: the operator
@@ -843,7 +907,9 @@ def _restore_archive(db, content: bytes, principal: str) -> dict:
     try:
         from app.services.audit import log_action
         log_action(db, None, principal, "import", "backup",
-                   details=f"tables={tables_imported}, rows={rows_imported}, files={files_restored}")
+                   details=(f"backup_date={str(manifest.get('export_date') or 'unknown')[:10]}, "
+                            f"audit_rows={audit_rows}, tables={tables_imported}, "
+                            f"rows={rows_imported}, files={files_restored}"))
         db.commit()
     except Exception as exc:
         logger.warning("Could not write audit log for backup import: %s", exc)
@@ -857,7 +923,7 @@ def _restore_archive(db, content: bytes, principal: str) -> dict:
     }
 
 
-@router.post("/import", responses=responses(400, 401, 403, 413))
+@router.post("/import", responses=responses(400, 401, 403, 409, 413))
 async def import_backup(request: Request):
     """Import a full backup from a ZIP file (multipart field ``file``).
 
@@ -873,12 +939,12 @@ async def import_backup(request: Request):
     try:
         principal = _verify_admin_or_install_token(request, db)
 
-        content = await _read_backup_upload(request)
+        content, confirm_holds = await _read_backup_upload(request)
         if len(content) > 500 * 1024 * 1024:
             raise HTTPException(413, "Backup file too large (max 500MB)")
 
         # No sync or scheduled backup may run while tables are being replaced.
         with sync_guard_http(), restoring():
-            return await run_in_threadpool(_restore_archive, db, content, principal)
+            return await run_in_threadpool(_restore_archive, db, content, principal, confirm_holds)
     finally:
         db.close()

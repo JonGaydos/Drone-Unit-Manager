@@ -137,4 +137,35 @@ describe('SetupPage', () => {
     await waitFor(() => expect(setupBody).not.toBeNull())
     expect(setupBody.timezone).toBe('America/New_York')
   })
+
+  it('asks for the typed confirmation when a restore would remove held items', async () => {
+    const seen = []
+    server.use(http.post('/api/backup/import', async ({ request }) => {
+      const body = await request.text()
+      const confirmed = body.includes('name="confirm_holds"') && body.includes('RESTORE HELD ITEMS')
+      seen.push(confirmed)
+      if (!confirmed) {
+        return HttpResponse.json({
+          held_items: [{ type: 'photo', id: 4, title: 'Scene photo' }],
+          confirm_text: 'RESTORE HELD ITEMS',
+        }, { status: 409 })
+      }
+      return HttpResponse.json({ ok: true, rows_imported: 3, tables_imported: 1, files_restored: 0 })
+    }))
+    const { user } = renderWithProviders(<SetupPage />, { route: '/setup' })
+    await user.click(screen.getByRole('button', { name: /Restore from a backup instead/ }))
+    const file = new File(['PK'], 'backup.zip', { type: 'application/zip' })
+    await user.upload(document.querySelector('input[type="file"][accept=".zip"]'), file)
+    await user.type(screen.getByLabelText('Install Token'), 'tok')
+    await user.click(screen.getByRole('button', { name: 'Restore Backup' }))
+
+    expect(await screen.findByText(/Scene photo/)).toBeInTheDocument()
+    const restore = screen.getByRole('button', { name: 'Restore Backup' })
+    expect(restore).toBeDisabled()
+    await user.type(screen.getByLabelText(/Type/), 'RESTORE HELD ITEMS')
+    await user.click(restore)
+
+    expect(await screen.findByText('Restore complete!')).toBeInTheDocument()
+    expect(seen).toEqual([false, true])
+  })
 })
