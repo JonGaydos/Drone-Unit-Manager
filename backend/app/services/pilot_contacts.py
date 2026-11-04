@@ -14,8 +14,10 @@ CONTACT_FIELDS = ("email", "phone", "phone_type", "phone_work")
 CONTACT_HIDDEN = "(hidden)"
 # What separates an address from the text around it in an audit entry's details.
 _ADDRESS_BOUNDARY = re.compile(r"([\s<>;,=]+)")
-# A contact field written as text, ``email=jane@example.org``, up to the next separator.
-_CONTACT_PAIR = re.compile(r"\b(" + "|".join(CONTACT_FIELDS) + r")=[^,;]*")
+# A contact field written as text, ``email=jane@example.org``, up to the next
+# field or row of the trace. The value itself may hold commas and semicolons.
+_CONTACT_PAIR = re.compile(
+    r"\b(" + "|".join(CONTACT_FIELDS) + r")=.*?(?=, \w+=|; \d+: |\Z)", re.DOTALL)
 
 
 def hides_contacts(db, user) -> bool:

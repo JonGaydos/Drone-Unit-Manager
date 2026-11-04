@@ -123,6 +123,12 @@ def test_redaction_covers_every_changes_shape(shape):
     assert PHONE not in text
 
 
+def test_redaction_hides_a_contact_value_with_punctuation():
+    trace = "4: phone_work=555-0100, ext 22; call first, first_name=Jane; 5: email=a@b.org"
+    redacted = redact_audit_changes({"deleted": {"old": trace, "new": None}})["deleted"]["old"]
+    assert redacted == "4: phone_work=(hidden), first_name=Jane; 5: email=(hidden)"
+
+
 def test_redaction_keeps_other_values():
     redacted = redact_audit_changes(SHAPES["deleted"])
     assert "first_name=Jane" in redacted["deleted"]["old"]
