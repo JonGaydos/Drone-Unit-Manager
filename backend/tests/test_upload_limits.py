@@ -323,6 +323,28 @@ def test_archive_routes_keep_todays_limit(path):
     assert body_limit_for(path) == settings.MAX_ARCHIVE_SIZE + FORM_OVERHEAD
 
 
+@pytest.mark.parametrize("path", sorted(UPLOAD_PATHS))
+def test_a_trailing_slash_keeps_the_upload_limit(path):
+    assert body_limit_for(_filled(path) + "/") == settings.MAX_UPLOAD_SIZE + FORM_OVERHEAD
+
+
+@pytest.mark.parametrize("path", sorted(ARCHIVE_PATHS))
+def test_a_trailing_slash_keeps_the_archive_limit(path):
+    assert body_limit_for(path + "/") == settings.MAX_ARCHIVE_SIZE + FORM_OVERHEAD
+
+
+def test_a_trailing_slash_gains_nothing_on_other_routes():
+    assert body_limit_for(LOGIN_URL + "/") == DEFAULT_BODY_LIMIT
+    assert body_limit_for("/") == DEFAULT_BODY_LIMIT
+
+
+def test_an_upload_to_a_trailing_slash_path_is_not_cut_off(client, admin_headers):
+    resp = client.post(DOCUMENT_URL + "/", content=b"x" * (DEFAULT_BODY_LIMIT + 1), headers=admin_headers,
+                       follow_redirects=False)
+
+    assert resp.status_code != 413
+
+
 def test_a_parameter_matches_one_path_segment_only():
     assert body_limit_for("/api/pilots/7/photo") > DEFAULT_BODY_LIMIT
     assert body_limit_for("/api/pilots/7/8/photo") == DEFAULT_BODY_LIMIT
@@ -462,3 +484,25 @@ def test_a_malformed_multipart_body_is_a_400(client, admin_headers):
                        headers={**admin_headers, "content-type": "multipart/form-data"})
 
     assert resp.status_code == 400
+
+
+def test_a_multipart_parse_error_keeps_its_message(client, admin_headers):
+    resp = client.post(LOGO_URL, content=b"junk",
+                       headers={**admin_headers, "content-type": "multipart/form-data"})
+
+    assert resp.json()["detail"] == "Missing boundary in multipart."
+
+
+def test_an_upload_streamed_past_its_limit_is_still_a_413(client, admin_headers, monkeypatch):
+    monkeypatch.setattr(settings, "MAX_UPLOAD_SIZE", 1024)
+
+    def chunks():
+        yield b"--b\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.png\"\r\n\r\n"
+        for _ in range(40):
+            yield b"y" * 65536
+
+    resp = client.post(LOGO_URL, content=chunks(),
+                       headers={**admin_headers, "content-type": "multipart/form-data; boundary=b"})
+
+    assert resp.status_code == 413
+    assert "too large" in resp.json()["detail"]

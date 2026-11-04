@@ -13,6 +13,7 @@ from datetime import date, datetime
 
 import openpyxl
 import pytest
+from openpyxl.utils.exceptions import InvalidFileException
 
 from app.models.certification import PilotCertification
 from app.models.flight import Flight
@@ -117,6 +118,33 @@ def test_excel_over_100000_rows_refused_nothing_imported(client, admin_headers, 
     assert resp.status_code == 413
     assert "100,000" in resp.json()["detail"]
     assert "nothing was imported" in resp.json()["detail"]
+    assert _nothing_imported(db)
+
+
+NOT_A_FILE = b"this is not a workbook or an archive"
+
+
+@pytest.mark.parametrize("url,name", [
+    (EXCEL_URL, "broken.xlsx"), (LOG_URL, "broken.xlsx"), (LOG_URL, "broken.zip")])
+def test_a_file_that_is_not_a_zip_is_a_400(client, admin_headers, db, url, name):
+    resp = _upload(client, admin_headers, url, name, NOT_A_FILE)
+
+    assert resp.status_code == 400
+    assert "not a valid Excel workbook or ZIP archive" in resp.json()["detail"]
+    assert _nothing_imported(db)
+
+
+@pytest.mark.parametrize("url", [EXCEL_URL, LOG_URL])
+def test_a_workbook_openpyxl_refuses_is_a_400(client, admin_headers, db, monkeypatch, url):
+    def refuse(_content):
+        raise InvalidFileException("openpyxl does not support this file format")
+
+    monkeypatch.setattr(excel_import, "open_workbook", refuse)
+
+    resp = _upload(client, admin_headers, url, "odd.xlsx", NOT_A_FILE)
+
+    assert resp.status_code == 400
+    assert "not a valid Excel workbook or ZIP archive" in resp.json()["detail"]
     assert _nothing_imported(db)
 
 

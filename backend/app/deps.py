@@ -12,6 +12,7 @@ from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session
 from starlette.datastructures import FormData, UploadFile
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.database import get_db, get_telemetry_db
 from app.models.user import User
@@ -58,7 +59,8 @@ class UploadForm:
 async def _parse_form(request: Request) -> FormData:
     try:
         return await request.form()
-    except HTTPException:
+    except StarletteHTTPException:
+        # A multipart parse error, with its message, or the 413 from the body limit.
         raise
     except Exception as e:
         raise HTTPException(400, "There was an error parsing the body") from e

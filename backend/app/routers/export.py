@@ -4,11 +4,13 @@ import json
 import logging
 import tempfile
 import xml.etree.ElementTree as ET
+import zipfile
 from datetime import date, datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from openpyxl.utils.exceptions import InvalidFileException
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 from sqlalchemy.orm import joinedload
@@ -776,6 +778,8 @@ def _import_run(db, details: str, importer, *args) -> dict:
             result = importer(*args)
     except ImportTooLarge as e:
         raise HTTPException(413, str(e)) from e
+    except (zipfile.BadZipFile, InvalidFileException) as e:
+        raise HTTPException(400, "This file could not be read: it is not a valid Excel workbook or ZIP archive") from e
     db.commit()
     return result
 
@@ -887,7 +891,6 @@ def _import_zip_flight_logs(archive, db, do_import, get_telemetry_db, user_id: i
     Takes a file object rather than bytes: ZipFile reads entries on demand, so
     a 200MB export costs the largest single entry rather than the whole archive.
     """
-    import zipfile
     with zipfile.ZipFile(archive) as zf:
         json_files = [n for n in zf.namelist() if n.endswith('.json') and not n.startswith('__')]
         results = {"total": len(json_files), "imported": 0, "skipped": 0, "errors": []}

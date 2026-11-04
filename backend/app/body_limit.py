@@ -59,7 +59,9 @@ _SINGLE_FILE_SIZED = re.compile(
 
 
 def body_limit_for(path: str) -> int:
-    """The largest request body accepted on this path, in bytes."""
+    """The largest request body accepted on this path, in bytes. A trailing slash
+    still reaches the route, through its redirect, so it counts as the same path."""
+    path = path.removesuffix("/")
     if path in ARCHIVE_PATHS:
         return settings.MAX_ARCHIVE_SIZE + FORM_OVERHEAD
     if _SINGLE_FILE_SIZED.fullmatch(path):
