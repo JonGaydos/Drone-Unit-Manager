@@ -545,7 +545,7 @@ Click "Save Sidebar Config" to apply.`
       },
       {
         title: 'User Management',
-        body: 'Admins can create, edit, and deactivate user accounts from Settings > Users. Assign roles and link users to pilot profiles. Only admins can change a display name; other users can change their own email address and theme under My Profile on the General tab. What each role can do is set in the Role Permissions card below the user list.'
+        body: 'Admins can create, edit, and deactivate user accounts from Settings > Users. Assign roles and link users to pilot profiles. Only admins can change a display name; other users can change their own email address under My Profile on the General tab, and their theme from the palette icon in the top bar. What each role can do is set in the Role Permissions card below the user list.'
       },
       {
         title: 'Audit Log',

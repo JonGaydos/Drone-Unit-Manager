@@ -274,3 +274,16 @@ def test_delete_user_who_logged_a_flight(client, db, admin_headers, pilot_user, 
     assert db.query(User).filter(User.id == user_id).first() is not None
     assert db.query(Flight).filter(Flight.id == created["id"]).one().created_by_id == user_id
     assert db.query(AuditLog).filter(AuditLog.user_id == user_id).count() > 0
+
+
+def test_delete_user_with_audit_history_says_to_deactivate(client, db, admin_headers, pilot_user):
+    from app.models.audit_log import AuditLog
+    db.add(AuditLog(user_id=pilot_user.id, user_name="Pilot", action="update", entity_type="flight"))
+    db.commit()
+
+    resp = client.delete(f"/api/auth/users/{pilot_user.id}", headers=admin_headers)
+
+    assert resp.status_code == 409
+    assert "Deactivate" in resp.json()["detail"]
+    db.expire_all()
+    assert db.get(type(pilot_user), pilot_user.id) is not None
