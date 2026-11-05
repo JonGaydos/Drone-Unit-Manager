@@ -382,14 +382,16 @@ describe('SettingsPage', () => {
   it('keeps each drone location with its own row when one is removed', async () => {
     mockMount({ settings: () => HttpResponse.json([
       ...SETTINGS,
-      { key: 'drone_location_places', value: JSON.stringify(['North', 'Central', 'South']) },
+      { key: 'drone_location_places', value: JSON.stringify(['Harbor', 'Airfield', 'Ridge']) },
     ]) })
     renderWithProviders(<SettingsPage />, { role: 'admin' })
 
     await screen.findByText('Drone Locations')
-    expect(screen.getByLabelText('Location 1')).toHaveValue('North')
-    expect(screen.getByLabelText('Location 2')).toHaveValue('Central')
-    expect(screen.getByLabelText('Location 3')).toHaveValue('South')
+    // The rows start from the defaults, so wait for the saved names: removing a
+    // row before the settings arrive would be undone when they do.
+    await waitFor(() => expect(screen.getByLabelText('Location 1')).toHaveValue('Harbor'))
+    expect(screen.getByLabelText('Location 2')).toHaveValue('Airfield')
+    expect(screen.getByLabelText('Location 3')).toHaveValue('Ridge')
 
     // Remove the first row; the two below it shift up and must bring their own
     // values with them. fireEvent rather than userEvent: userEvent's full
@@ -399,8 +401,8 @@ describe('SettingsPage', () => {
     fireEvent.click(within(firstRow).getByRole('button', { name: 'Remove' }))
 
     await waitFor(() => expect(screen.queryByLabelText('Location 3')).toBeNull())
-    expect(screen.getByLabelText('Location 1')).toHaveValue('Central')
-    expect(screen.getByLabelText('Location 2')).toHaveValue('South')
+    expect(screen.getByLabelText('Location 1')).toHaveValue('Airfield')
+    expect(screen.getByLabelText('Location 2')).toHaveValue('Ridge')
   })
 
   // The observable cost of keying by index. The values follow either way,
@@ -411,14 +413,14 @@ describe('SettingsPage', () => {
   it('leaves the caret in the field being edited when another row is removed', async () => {
     mockMount({ settings: () => HttpResponse.json([
       ...SETTINGS,
-      { key: 'drone_location_places', value: JSON.stringify(['North', 'Central', 'South']) },
+      { key: 'drone_location_places', value: JSON.stringify(['Harbor', 'Airfield', 'Ridge']) },
     ]) })
     renderWithProviders(<SettingsPage />, { role: 'admin' })
 
     await screen.findByText('Drone Locations')
     // Wait for the value, not just the heading: the heading renders before the
     // settings fetch resolves, and focusing mid-load races the re-render.
-    await waitFor(() => expect(screen.getByLabelText('Location 3')).toHaveValue('South'))
+    await waitFor(() => expect(screen.getByLabelText('Location 3')).toHaveValue('Ridge'))
     const editing = screen.getByLabelText('Location 3')
     editing.focus()
     expect(document.activeElement).toBe(editing)
@@ -428,7 +430,7 @@ describe('SettingsPage', () => {
 
     await waitFor(() => expect(screen.queryByLabelText('Location 3')).toBeNull())
     expect(document.activeElement).toBe(editing)
-    expect(editing).toHaveValue('South')
+    expect(editing).toHaveValue('Ridge')
   })
 
   it('saves drone locations as a plain array of names', async () => {

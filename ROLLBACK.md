@@ -7,6 +7,9 @@ It moved from 3.2.3 to 3.3.0 (running on production, confirmed by the owner
 2026-11-03). 3.3.0 has migration 0011, so rolling back needs the steps below, not just
 the older image.
 
+The next release, 3.4.0, has migration 0012, so its rollback target is 3.3.0.
+Use the migration 0012 steps below.
+
 | | Current | Rollback target | Before 3.x migrations |
 | --- | --- | --- | --- |
 | Version | 3.3.0 | 3.2.3 | 3.0.17 |
