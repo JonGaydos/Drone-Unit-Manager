@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 import jwt
 from jwt import PyJWTError
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -792,7 +793,10 @@ def admin_reset_password(user_id: int, req: AdminResetPasswordRequest, admin: An
     return {"ok": True, "message": f"Password reset for {target.username}"}
 
 
-@router.delete("/users/{user_id}", responses=responses(400, 404))
+USER_HAS_HISTORY = "This user has history in the system and cannot be deleted. Deactivate the account instead."
+
+
+@router.delete("/users/{user_id}", responses=responses(400, 404, 409))
 def delete_user(user_id: int, admin: Annotated[User, Depends(require_admin)], db: DBSession):
     """Permanently delete a user account. Admin only. Cannot delete self."""
     from app.services.audit import log_action
@@ -803,7 +807,11 @@ def delete_user(user_id: int, admin: Annotated[User, Depends(require_admin)], db
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
     target_name = target.display_name
     target_username = target.username
-    db.delete(target)
-    log_action(db, admin.id, admin.display_name, "delete", "user", user_id, target_name, details=f"Deleted user '{target_username}'")
-    db.commit()
+    try:
+        db.delete(target)
+        log_action(db, admin.id, admin.display_name, "delete", "user", user_id, target_name, details=f"Deleted user '{target_username}'")
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=USER_HAS_HISTORY)
     return {"ok": True}

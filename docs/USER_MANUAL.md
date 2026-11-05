@@ -109,7 +109,7 @@ Create, edit, and manage user accounts.
 
 1. Click Add User and enter a username, password, display name, and role.
 2. Optionally link the user to a pilot profile so the system knows which pilot they are.
-3. Use the edit button on existing users to change their role, display name, or pilot link. Display names are changed by administrators only; other users can still change their own email address and theme under My Profile on the General tab.
+3. Use the edit button on existing users to change their role, display name, or pilot link. Display names are changed by administrators only; other users can still change their own email address under My Profile on the General tab, and their theme from the palette icon in the top bar.
 4. Toggle users active or inactive as needed.
 5. What each role can do is set in the Role Permissions card below (see section 18).
 

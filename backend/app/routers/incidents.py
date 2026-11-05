@@ -43,6 +43,7 @@ class IncidentCreate(BaseModel):
     title: str
     severity: str
     category: str
+    status: Optional[str] = None  # checked only; a new incident always starts open
     description: str
     location: Optional[str] = None
     lat: Optional[float] = None

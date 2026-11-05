@@ -288,3 +288,19 @@ def test_edit_leaving_legacy_value_saves(client, db, admin_headers):
     assert r.json()["status"] == "active"
     assert client.patch(f"{INCIDENTS_URL}/{inc.id}", json={"severity": "bogus"},
                         headers=admin_headers).status_code == 422
+
+
+def test_incident_create_refuses_an_unknown_status(client, admin_headers):
+    body = {"date": "2026-01-02", "title": "zz", "severity": "minor", "category": "other",
+            "description": "zz", "status": "not-a-status"}
+    resp = client.post("/api/incidents", headers=admin_headers, json=body)
+    assert resp.status_code == 422
+    assert "status must be one of" in resp.json()["detail"]
+
+
+def test_incident_create_still_starts_open(client, admin_headers):
+    body = {"date": "2026-01-02", "title": "zz", "severity": "minor", "category": "other",
+            "description": "zz", "status": "resolved"}
+    resp = client.post("/api/incidents", headers=admin_headers, json=body)
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "open"
