@@ -45,8 +45,12 @@ describe('CommandPalette', () => {
   it('opens on the open-command-palette event', async () => {
     renderPalette()
     await screen.findByTestId('location')
-    globalThis.dispatchEvent(new CustomEvent('open-command-palette'))
-    expect(await screen.findByPlaceholderText(/Search pilots/)).toBeInTheDocument()
+    // The listener is attached in an effect that can run after the first paint,
+    // so send the event until the palette has heard it. Opening is idempotent.
+    await waitFor(() => {
+      globalThis.dispatchEvent(new CustomEvent('open-command-palette'))
+      expect(screen.getByPlaceholderText(/Search pilots/)).toBeInTheDocument()
+    })
   })
 
   it('filters static page targets as you type', async () => {
