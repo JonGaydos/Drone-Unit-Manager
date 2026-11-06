@@ -285,6 +285,9 @@ def _apply_enrichment_detail(flight, detail: dict, db):
     _enrich_pilot(flight, detail, db)
     _enrich_vehicle(flight, detail, db)
     _apply_first_present(flight, detail, _EQUIPMENT_FIELDS)
+    if flight.battery_serial:
+        from app.integrations.skydio import _clean_serial
+        flight.battery_serial = _clean_serial(flight.battery_serial)
 
 
 def _enrich_one(provider, creds, flight, db) -> str:
