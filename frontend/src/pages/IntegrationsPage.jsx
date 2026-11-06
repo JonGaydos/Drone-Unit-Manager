@@ -625,6 +625,9 @@ function ImportNotices({ result }) {
   if (result.coordinates_backfilled) {
     notes.push(`${result.coordinates_backfilled} earlier flight(s) placed on the map`)
   }
+  if (result.batteries_filled > 0) {
+    notes.push(`${result.batteries_filled} battery serial${result.batteries_filled === 1 ? '' : 's'} filled`)
+  }
   if (!unmatched.length && !warnings.length && !errors.length && !notes.length) return null
 
   return (
