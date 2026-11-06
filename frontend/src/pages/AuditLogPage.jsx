@@ -79,6 +79,11 @@ function ChangeLine({ field, change }) {
   )
 }
 
+function expandTitle(hasChanges, detailsClipped) {
+  if (hasChanges) return 'View changes'
+  return detailsClipped ? 'View full details' : 'View details'
+}
+
 function entityLink(entityType, entityId) {
   if (!entityId) return null
   switch (entityType) {
@@ -256,6 +261,7 @@ export default function AuditLogPage() {
                   // down: a row that expands to the text it already showed is
                   // harmless, a truncated row with no way to read it is not.
                   const detailsClipped = (log.details || '').length > DETAILS_VISIBLE_CHARS
+                  const expandable = hasChanges || detailsClipped || Boolean(log.ip_address)
 
                   return (
                     <Fragment key={log.id}>
@@ -298,23 +304,28 @@ export default function AuditLogPage() {
                         {log.details || '-'}
                       </td>
                       <td className="px-2 py-2.5">
-                        {(hasChanges || detailsClipped) && (
+                        {expandable && (
                           <button
                             onClick={() => setExpandedId(isExpanded ? null : log.id)}
                             className="p-1 text-muted-foreground hover:text-foreground rounded"
-                            title={hasChanges ? 'View changes' : 'View full details'}
+                            title={expandTitle(hasChanges, detailsClipped)}
                           >
                             {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                           </button>
                         )}
                       </td>
                     </tr>
-                    {isExpanded && (hasChanges || detailsClipped) && (
+                    {isExpanded && expandable && (
                       <tr className="bg-muted/10">
                         <td colSpan={7} className="px-4 py-3">
                           <div className="text-xs space-y-1.5">
                             {detailsClipped && (
                               <p className="text-foreground whitespace-pre-wrap break-words mb-2">{log.details}</p>
+                            )}
+                            {log.ip_address && (
+                              <p className="text-muted-foreground mb-2">
+                                IP address: <span className="text-foreground break-all">{log.ip_address}</span>
+                              </p>
                             )}
                             {hasChanges && <p className="font-medium text-muted-foreground mb-2">Changes:</p>}
                             {entries.map(([field, change]) => (
