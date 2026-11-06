@@ -544,5 +544,24 @@ describe('SettingsPage role permissions', () => {
 
       await waitFor(() => expect(sent).toEqual({ display_name: 'Chief', email: 'j@example.org' }))
     })
+
+    // The signed-in user is fetched again when the window regains focus, so an
+    // email changed elsewhere arrives after the page mounted.
+    it('shows the profile as the server now has it after a refresh', async () => {
+      mockMount()
+      server.use(http.get('/api/auth/me', () => HttpResponse.json(withPermissions(ME))))
+      renderWithProviders(<SettingsPage />, { user: ME, role: 'pilot' })
+      const email = await screen.findByLabelText('Email')
+
+      server.use(http.get('/api/auth/me', () =>
+        HttpResponse.json(withPermissions({ ...ME, email: 'changed@example.org' }))))
+      const later = Date.now() + 61 * 1000
+      vi.spyOn(Date, 'now').mockReturnValue(later)
+      localStorage.setItem('lastActivity', String(later))
+      globalThis.dispatchEvent(new Event('focus'))
+
+      await waitFor(() => expect(email).toHaveValue('changed@example.org'))
+      vi.restoreAllMocks()
+    })
   })
 })
