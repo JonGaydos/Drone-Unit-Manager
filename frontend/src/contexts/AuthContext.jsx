@@ -24,6 +24,9 @@ const ACTIVITY_WRITE_MS = 15 * 1000
 export const LAST_ACTIVITY_KEY = 'lastActivity'
 /** Set when the idle lock signs someone out, so the login page can say why. */
 export const IDLE_NOTICE_KEY = 'signedOutIdle'
+/** Shared across tabs: the last sign-out was the idle lock, so every tab shows
+ *  the notice, not only the one that locked. Cleared by a sign-in or a logout. */
+export const IDLE_LOCKED_KEY = 'idleLocked'
 const ACTIVITY_EVENTS = ['pointerdown', 'keydown', 'touchstart', 'wheel', 'scroll']
 // Values of a permission that hold it at any level above the lowest.
 const GRANTED = new Set(['yes', 'own', 'all'])
@@ -70,6 +73,14 @@ function clearLocalSession() {
   localStorage.removeItem(LAST_ACTIVITY_KEY)
 }
 
+// Written before the token is removed, so the other tabs read it when they
+// hear the removal.
+function lockForInactivity() {
+  sessionStorage.setItem(IDLE_NOTICE_KEY, '1')
+  localStorage.setItem(IDLE_LOCKED_KEY, '1')
+  clearLocalSession()
+}
+
 /** Keep the same object when nothing changed, so a focus does not reload pages
  *  whose effects depend on the permission checks. */
 const replaceIfChanged = (next) => (current) => (
@@ -91,8 +102,7 @@ export function AuthProvider({ children }) {
     const token = localStorage.getItem('token')
     if (token && idleExpired()) {
       // Reopened after sitting idle past the limit: lock before any request.
-      sessionStorage.setItem(IDLE_NOTICE_KEY, '1')
-      clearLocalSession()
+      lockForInactivity()
       setLoading(false)
     } else if (token) {
       api.get('/auth/me')
@@ -123,10 +133,10 @@ export function AuthProvider({ children }) {
     const check = () => {
       if (!localStorage.getItem('token')) {
         // Signed out or locked in another tab, whose storage event may not have arrived.
+        if (localStorage.getItem(IDLE_LOCKED_KEY)) sessionStorage.setItem(IDLE_NOTICE_KEY, '1')
         setUser(null)
       } else if (idleExpired()) {
-        sessionStorage.setItem(IDLE_NOTICE_KEY, '1')
-        clearLocalSession()
+        lockForInactivity()
         setUser(null)
       }
     }
@@ -182,6 +192,7 @@ export function AuthProvider({ children }) {
     localStorage.setItem('token', data.token)
     markActivity()
     sessionStorage.removeItem(IDLE_NOTICE_KEY)
+    localStorage.removeItem(IDLE_LOCKED_KEY)
     // Re-arm the once-per-session 401 logout guard so a later expiry redirects.
     resetSessionExpired()
     setUser(data.user)
@@ -196,6 +207,7 @@ export function AuthProvider({ children }) {
     // request() reads the token before its first await, so clearing it on the
     // next line does not strip the header from this call.
     api.post('/auth/logout').catch(() => {})
+    localStorage.removeItem(IDLE_LOCKED_KEY)
     clearLocalSession()
     setUser(null)
   }, [])

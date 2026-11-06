@@ -3,7 +3,7 @@ import { renderHook, act, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import {
-  AuthProvider, useAuth, IDLE_LIMIT_MS, IDLE_NOTICE_KEY, LAST_ACTIVITY_KEY,
+  AuthProvider, useAuth, IDLE_LIMIT_MS, IDLE_NOTICE_KEY, IDLE_LOCKED_KEY, LAST_ACTIVITY_KEY,
 } from '@/contexts/AuthContext'
 
 // resetSessionExpired is module-level state in the api client; AuthContext
@@ -239,6 +239,40 @@ describe('all tabs lock together', () => {
     localStorage.removeItem(LAST_ACTIVITY_KEY)
     otherTabRemoves('token')
     expect(result.current.user).toBeNull()
+  })
+
+  it('an idle lock in another tab leaves the notice here too', async () => {
+    await signIn()
+    localStorage.setItem(IDLE_LOCKED_KEY, '1')
+    otherTabRemoves('token')
+    expect(sessionStorage.getItem(IDLE_NOTICE_KEY)).toBe('1')
+  })
+
+  it('a logout in another tab leaves no notice here', async () => {
+    await signIn()
+    otherTabRemoves('token')
+    expect(sessionStorage.getItem(IDLE_NOTICE_KEY)).toBeNull()
+  })
+
+  it('the idle lock tells the other tabs why', async () => {
+    await signIn()
+    localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now() - IDLE_LIMIT_MS - 1000))
+    act(() => { document.dispatchEvent(new Event('visibilitychange')) })
+    expect(localStorage.getItem(IDLE_LOCKED_KEY)).toBe('1')
+  })
+
+  it('a logout clears the reason a lock left behind', async () => {
+    const { result } = await signIn()
+    localStorage.setItem(IDLE_LOCKED_KEY, '1')
+    server.use(http.post('/api/auth/logout', () => HttpResponse.json({ ok: true })))
+    act(() => { result.current.logout() })
+    expect(localStorage.getItem(IDLE_LOCKED_KEY)).toBeNull()
+  })
+
+  it('signing in clears the reason a lock left behind', async () => {
+    localStorage.setItem(IDLE_LOCKED_KEY, '1')
+    await signIn()
+    expect(localStorage.getItem(IDLE_LOCKED_KEY)).toBeNull()
   })
 
   it('ignores storage changes to other keys', async () => {
