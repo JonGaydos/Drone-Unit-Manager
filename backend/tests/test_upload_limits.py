@@ -506,3 +506,23 @@ def test_an_upload_streamed_past_its_limit_is_still_a_413(client, admin_headers,
 
     assert resp.status_code == 413
     assert "too large" in resp.json()["detail"]
+
+
+def test_the_upload_is_received_with_no_database_connection_held(client, admin_headers, monkeypatch, _engines):
+    """The sign-in and permission checks read the database before the body.
+    A slow upload must not keep a pooled connection checked out meanwhile."""
+    from app import deps
+
+    pool = _engines[0].kw["bind"].pool
+    real = deps._parse_form
+    held = []
+
+    async def spy(request):
+        held.append(pool.checkedout())
+        return await real(request)
+
+    monkeypatch.setattr(deps, "_parse_form", spy)
+    before = pool.checkedout()    # the test's own seeding session
+    _post(client, admin_headers, "one.json", _airdata("held-1"))
+
+    assert held == [before]
