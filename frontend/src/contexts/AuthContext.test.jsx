@@ -275,6 +275,44 @@ describe('all tabs lock together', () => {
     expect(localStorage.getItem(IDLE_LOCKED_KEY)).toBeNull()
   })
 
+  describe('a different sign-in in another tab', () => {
+    const OTHER = { id: 2, username: 'b', role: 'viewer' }
+
+    it('loads the user the new token belongs to', async () => {
+      const { result } = await signIn()
+      server.use(http.get('/api/auth/me', () => HttpResponse.json(OTHER)))
+      localStorage.setItem('token', 't2')
+      act(() => { globalThis.dispatchEvent(new StorageEvent('storage', { key: 'token', newValue: 't2' })) })
+      await waitFor(() => expect(result.current.user).toEqual(OTHER))
+    })
+
+    it('is caught at the next check when this tab missed the event', async () => {
+      const { result } = await signIn()
+      server.use(http.get('/api/auth/me', () => HttpResponse.json(OTHER)))
+      localStorage.setItem('token', 't2')
+      act(() => { document.dispatchEvent(new Event('visibilitychange')) })
+      await waitFor(() => expect(result.current.user).toEqual(OTHER))
+    })
+
+    it('signs this tab out when the new token is refused', async () => {
+      vi.stubGlobal('location', { href: 'http://localhost/', origin: 'http://localhost' })
+      const { result } = await signIn()
+      server.use(http.get('/api/auth/me', () => new HttpResponse(null, { status: 401 })))
+      localStorage.setItem('token', 't2')
+      act(() => { document.dispatchEvent(new Event('visibilitychange')) })
+      await waitFor(() => expect(result.current.user).toBeNull())
+    })
+
+    it('asks nothing while the token is the one this tab signed in with', async () => {
+      let calls = 0
+      await signIn()
+      server.use(http.get('/api/auth/me', () => { calls += 1; return HttpResponse.json(OTHER) }))
+      act(() => { document.dispatchEvent(new Event('visibilitychange')) })
+      await act(async () => {})
+      expect(calls).toBe(0)
+    })
+  })
+
   it('ignores storage changes to other keys', async () => {
     const { result } = await signIn()
     act(() => { globalThis.dispatchEvent(new StorageEvent('storage', { key: 'theme', newValue: 'dark' })) })

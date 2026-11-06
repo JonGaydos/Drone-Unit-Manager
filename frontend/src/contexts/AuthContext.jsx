@@ -87,6 +87,19 @@ const replaceIfChanged = (next) => (current) => (
   JSON.stringify(current) === JSON.stringify(next) ? current : next
 )
 
+/** Fetch the signed-in user again. A failed or empty answer keeps the current
+ *  user unless the session itself has ended. */
+function reloadUser(isActive, setUser) {
+  return api.get('/auth/me')
+    .then(next => { if (isActive() && next?.id) setUser(replaceIfChanged(next)) })
+    .catch(err => {
+      if (isActive() && err.status === 401) {
+        clearLocalSession()
+        setUser(null)
+      }
+    })
+}
+
 /**
  * Provides authentication state and actions to the component tree.
  * On mount, validates the stored token against the backend.
@@ -122,6 +135,10 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (!signedIn) return undefined
     markActivity()
+    let active = true
+    // The token this tab signed in with. Another one means a sign-in elsewhere,
+    // possibly as someone else, that this tab may have missed.
+    let knownToken = localStorage.getItem('token')
     let lastWrite = Date.now()
     const onActivity = () => {
       const now = Date.now()
@@ -131,17 +148,22 @@ export function AuthProvider({ children }) {
       }
     }
     const check = () => {
-      if (!localStorage.getItem('token')) {
+      const token = localStorage.getItem('token')
+      if (!token) {
         // Signed out or locked in another tab, whose storage event may not have arrived.
         if (localStorage.getItem(IDLE_LOCKED_KEY)) sessionStorage.setItem(IDLE_NOTICE_KEY, '1')
         setUser(null)
       } else if (idleExpired()) {
         lockForInactivity()
         setUser(null)
+      } else if (token !== knownToken) {
+        knownToken = token
+        reloadUser(() => active, setUser)
       }
     }
     ACTIVITY_EVENTS.forEach(e => globalThis.addEventListener(e, onActivity, { passive: true }))
-    // Another tab signing out or locking removes the shared token.
+    // Another tab signing out or locking removes the shared token, and signing
+    // in replaces it.
     const onStorage = (e) => {
       if (e.key === 'token' || e.key === null) check()
     }
@@ -149,6 +171,7 @@ export function AuthProvider({ children }) {
     document.addEventListener('visibilitychange', check)
     const timer = setInterval(check, IDLE_CHECK_MS)
     return () => {
+      active = false
       ACTIVITY_EVENTS.forEach(e => globalThis.removeEventListener(e, onActivity))
       globalThis.removeEventListener('storage', onStorage)
       document.removeEventListener('visibilitychange', check)
@@ -156,23 +179,16 @@ export function AuthProvider({ children }) {
     }
   }, [signedIn])
 
-  // A failed or empty refresh keeps the current user unless the session itself has ended.
   useEffect(() => {
     if (!signedIn) return undefined
     let active = true
     let lastRefresh = Date.now()
-    const onSessionEnded = () => {
-      clearLocalSession()
-      setUser(null)
-    }
     const refresh = () => {
       const now = Date.now()
       if (now - lastRefresh < USER_REFRESH_MS || idleExpired()) return
       lastRefresh = now
       loadIdleLimit()
-      api.get('/auth/me')
-        .then(next => { if (active && next?.id) setUser(replaceIfChanged(next)) })
-        .catch(err => { if (active && err.status === 401) onSessionEnded() })
+      reloadUser(() => active, setUser)
     }
     globalThis.addEventListener('focus', refresh)
     return () => {
