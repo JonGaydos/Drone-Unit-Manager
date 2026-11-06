@@ -3,19 +3,17 @@
 ## Production
 
 Production runs a pinned version tag on Unraid (port 3014), not `:latest`.
-It moved from 3.2.3 to 3.3.0 (running on production, confirmed by the owner
-2026-11-03). 3.3.0 has migration 0011, so rolling back needs the steps below, not just
-the older image.
-
-The next release, 3.4.0, has migration 0012, so its rollback target is 3.3.0.
-Use the migration 0012 steps below.
+It moved from 3.3.0 to 3.4.0 (running on production, confirmed by the owner
+2026-11-05). 3.4.0 has migration 0012, so rolling back needs the steps below, not just
+the older image. 3.4.0 reads `TRUSTED_PROXIES`, set to the tunnel's address
+(`172.17.0.1` on this host). 3.3.0 ignores that variable, so it can stay on a rollback.
 
 | | Current | Rollback target | Before 3.x migrations |
 | --- | --- | --- | --- |
-| Version | 3.3.0 | 3.2.3 | 3.0.17 |
-| Tag | `v3.3.0` | `v3.2.3` | `v3.0.17` |
-| Commit | 48013c0 | 9455079 | 42d83e9 |
-| Image | `ghcr.io/jongaydos/drone-unit-manager@sha256:d65a9f731f24ec1b78ce8e75558db151a471d194f0da279c054fc71064dda1ec` | `ghcr.io/jongaydos/drone-unit-manager@sha256:7fb2fb7ca266a916779b301bbe2733fb3e966a36297371cfe4f85911af779aca` | `ghcr.io/jongaydos/drone-unit-manager@sha256:264f129219b17672bea90b6b3f9e04182dc9979fc6c7a3e198762d97c3055eb5` |
+| Version | 3.4.0 | 3.3.0 | 3.0.17 |
+| Tag | `v3.4.0` | `v3.3.0` | `v3.0.17` |
+| Commit | 0b2b09d | 48013c0 | 42d83e9 |
+| Image | `ghcr.io/jongaydos/drone-unit-manager@sha256:215ed55ac7f3925bd6293cb91b250ae97b30970062107deb4ac978ec5eb2f1a0` | `ghcr.io/jongaydos/drone-unit-manager@sha256:d65a9f731f24ec1b78ce8e75558db151a471d194f0da279c054fc71064dda1ec` | `ghcr.io/jongaydos/drone-unit-manager@sha256:264f129219b17672bea90b6b3f9e04182dc9979fc6c7a3e198762d97c3055eb5` |
 | Extra Parameters | `--restart unless-stopped` | `--restart unless-stopped` | `--restart unless-stopped --user 99:100` |
 
 A version's image tag (`:3.3.0`) exists only after its `vX.Y.Z` git tag is
@@ -23,9 +21,15 @@ pushed and the release build has finished. Check it on ghcr.io before changing
 production's Repository; an Apply to a missing tag removes the running container
 and then fails to pull.
 
+## Roll production back to 3.3.0
+
+Use the migration 0012 steps under "Roll back a release with migration 0012" below.
+
 ## Roll production back to 3.2.3
 
-Use the migration 0011 steps under "Roll back a release with migration 0011" below.
+Step back to 3.3.0 first, then use the migration 0011 steps under "Roll back a
+release with migration 0011" below. The 3.2.3 image is
+`ghcr.io/jongaydos/drone-unit-manager@sha256:7fb2fb7ca266a916779b301bbe2733fb3e966a36297371cfe4f85911af779aca`.
 
 ## Roll production back to 3.0.17
 
@@ -88,7 +92,7 @@ step back past both by following the 0011 section afterwards.
 4. Set the Repository to the previous tag and Apply. The data folder and Extra
    Parameters stay as they are.
 
-The downgrade drops the two columns. Audit entries stay, but the recorded
+The downgrade drops the two columns and the index on entry dates. Audit entries stay, but the recorded
 login name of who made each change and the marker for entries that came from a
 restored backup are lost. To return to the new release later, run it again; it
 applies the migration on start, and older entries have no login name.
