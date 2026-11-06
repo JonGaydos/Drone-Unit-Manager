@@ -220,12 +220,121 @@ def _view_entries(photo_id):
         s.close()
 
 
-def test_thumbnail_fallback_writes_view_audit(client, db, upload_dir, admin_headers):
-    photo, _ = _photo_on_disk(db, upload_dir)
-    resp = client.get(f"/api/photos/{photo.id}/thumbnail", headers=admin_headers)
-    assert resp.status_code == 200
-    assert resp.content == _PNG_1x1
-    assert _view_entries(photo.id) == 1
+def _photo_entries(photo_id):
+    from app import database
+    s = database.SessionLocal()
+    try:
+        return s.query(AuditLog).filter(AuditLog.entity_type == "photo", AuditLog.entity_id == photo_id).count()
+    finally:
+        s.close()
+
+
+def _thumbnail_url(photo_id):
+    sig, exp = _sign_photo(photo_id, "thumbnail")
+    return f"/api/photos/{photo_id}/thumbnail?sig={sig}&exp={exp}"
+
+
+def _decodable_photo_on_disk(db, upload_dir):
+    """A photo whose file Pillow can decode (``_PNG_1x1`` only passes the type sniff)."""
+    from PIL import Image
+    photo, abs_path = _photo_on_disk(db, upload_dir)
+    Image.new("RGB", (800, 600), (10, 20, 30)).save(abs_path, "PNG")
+    with open(abs_path, "rb") as f:
+        return photo, f.read()
+
+
+def test_missing_thumbnail_is_built_and_served_with_no_audit_entry(client, db, upload_dir):
+    photo, _ = _decodable_photo_on_disk(db, upload_dir)
+
+    resp = client.get(_thumbnail_url(photo.id))
+
+    assert resp.status_code == 200, resp.text
+    assert resp.headers["content-type"] == "image/jpeg"
+    assert resp.content[:3] == b"\xff\xd8\xff"
+    db.expire_all()
+    assert photo.thumbnail_path == os.path.join(upload_dir, "thumb_test_photos_sig.png")
+    assert os.path.exists(photo.thumbnail_path)
+    assert _photo_entries(photo.id) == 0
+
+
+def test_thumbnail_lost_from_disk_is_built_again(client, db, upload_dir):
+    photo, _ = _decodable_photo_on_disk(db, upload_dir)
+    photo.thumbnail_path = os.path.join(upload_dir, "gone.jpg")
+    db.commit()
+
+    resp = client.get(_thumbnail_url(photo.id))
+
+    assert resp.content[:3] == b"\xff\xd8\xff"
+    assert _view_entries(photo.id) == 0
+
+
+def test_thumbnail_that_cannot_be_built_is_a_placeholder(client, db, upload_dir, caplog):
+    photo, abs_path = _photo_on_disk(db, upload_dir)
+    unreadable = b"\x89PNG\r\n\x1a\n not really an image"
+    with open(abs_path, "wb") as f:
+        f.write(unreadable)
+
+    resp = client.get(_thumbnail_url(photo.id))
+
+    assert resp.status_code == 200, resp.text
+    assert resp.content == photos_router.placeholder_thumbnail()
+    assert resp.content != unreadable
+    assert _photo_entries(photo.id) == 0
+    db.expire_all()
+    assert photo.thumbnail_path is None
+    assert "not really" not in caplog.text
+
+
+def test_placeholder_is_a_small_image():
+    from io import BytesIO
+    from PIL import Image
+    image = Image.open(BytesIO(photos_router.placeholder_thumbnail()))
+    assert image.width <= photos_router.THUMB_WIDTH
+
+
+@pytest.mark.parametrize(("mode", "fmt"), [
+    ("I;16", "PNG"), ("I;16", "TIFF"), ("F", "TIFF"), ("LA", "PNG"), ("CMYK", "TIFF"), ("1", "PNG"),
+])
+def test_thumbnail_is_built_from_any_image_mode(upload_dir, mode, fmt):
+    from PIL import Image
+    source = Image.new(mode, (800, 600))
+    if mode in ("I;16", "F"):
+        source.putpixel((0, 0), 7000)
+        source.putpixel((1, 0), 9000)
+    path = os.path.join(upload_dir, f"source.{fmt.lower()}")
+    source.save(path, fmt)
+
+    thumb = photos_router._generate_thumbnail(path, upload_dir, "source.jpg")
+
+    assert thumb is not None
+    built = Image.open(thumb)
+    assert built.format == "JPEG"
+    assert built.mode in ("L", "RGB")
+    assert built.width == photos_router.THUMB_WIDTH
+
+
+def test_sixteen_bit_thumbnail_keeps_its_contrast(upload_dir):
+    from PIL import Image
+    source = Image.new("I;16", (2, 1), 7000)
+    source.putpixel((1, 0), 9000)
+    path = os.path.join(upload_dir, "thermal.png")
+    source.save(path, "PNG")
+
+    thumb = photos_router._generate_thumbnail(path, upload_dir, "thermal.png")
+
+    low, high = Image.open(thumb).getextrema()
+    assert high - low > 200
+
+
+def test_full_view_after_a_thumbnail_records_the_viewer(client, db, upload_dir, admin_user, admin_headers):
+    photo, full = _decodable_photo_on_disk(db, upload_dir)
+    client.get(_thumbnail_url(photo.id))
+
+    resp = client.get(f"/api/photos/{photo.id}/view", headers=admin_headers)
+
+    assert resp.content == full
+    entry = db.query(AuditLog).filter_by(action="view", entity_id=photo.id).one()
+    assert entry.user_id == admin_user.id
 
 
 def test_real_thumbnail_writes_no_view_audit(client, db, upload_dir, admin_headers):

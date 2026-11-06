@@ -4,8 +4,10 @@ Handles image uploads with automatic thumbnail generation, pilot tagging,
 and secure file serving with path-traversal prevention.
 """
 
+import functools
 import hashlib
 import hmac
+import io
 import os
 import time
 import uuid
@@ -16,14 +18,14 @@ from pathlib import Path
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Form
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from PIL import Image as PILImage
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.constants import MIME_JPEG, PHOTO_NOT_FOUND, FLIGHT_NOT_FOUND, INCIDENT_NOT_FOUND, UTC_OFFSET
+from app.constants import MIME_JPEG, MIME_PNG,PHOTO_NOT_FOUND, FLIGHT_NOT_FOUND, INCIDENT_NOT_FOUND, UTC_OFFSET
 from app.database import get_db
 from app.deps import AdminUser, DBSession, UploadForm, require_form_user
 from app.models.user import User
@@ -177,6 +179,20 @@ def _validate_path(file_path: str) -> Path:
     return resolved
 
 
+def _jpeg_ready(img: PILImage.Image) -> PILImage.Image:
+    """The image as 8-bit gray or RGB, the modes JPEG stores. A 16-bit or
+    float image (thermal exports) is stretched over its own value range."""
+    if img.mode in ("RGB", "L"):
+        return img
+    if img.mode == "F" or img.mode.startswith("I"):
+        if img.mode != "F":
+            img = img.convert("I")
+        low, high = img.getextrema()
+        scale = 255 / (high - low) if high > low else 1
+        return img.point(lambda v: v * scale - low * scale).convert("L")
+    return img.convert("RGB")
+
+
 def _generate_thumbnail(file_path: str, photo_dir: str, stored_name: str) -> str | None:
     """Generate a JPEG thumbnail for an uploaded image. Returns thumbnail path or None."""
     try:
@@ -185,13 +201,19 @@ def _generate_thumbnail(file_path: str, photo_dir: str, stored_name: str) -> str
         img.thumbnail((THUMB_WIDTH, THUMB_WIDTH * 10), PILImage.LANCZOS)
         thumb_name = f"thumb_{stored_name}"
         thumb_path = os.path.join(photo_dir, thumb_name)
-        if img.mode in ("RGBA", "P"):
-            img = img.convert("RGB")
-        img.save(thumb_path, "JPEG", quality=85)
+        _jpeg_ready(img).save(thumb_path, "JPEG", quality=85)
         return thumb_path
     except (IOError, OSError, ValueError, PILImage.DecompressionBombError) as e:
-        logger.warning("Thumbnail generation failed: %s", e)
+        logger.warning("Thumbnail generation failed: %s", type(e).__name__)
         return None
+
+
+@functools.cache
+def placeholder_thumbnail() -> bytes:
+    """A plain gray PNG served when a photo's thumbnail cannot be built."""
+    buffer = io.BytesIO()
+    PILImage.new("L", (THUMB_WIDTH, THUMB_WIDTH * 3 // 4), 200).save(buffer, "PNG")
+    return buffer.getvalue()
 
 
 def _parse_date_taken(date_taken: Optional[str]):
@@ -466,19 +488,25 @@ def view_thumbnail(
     sig: Annotated[str | None, Query()] = None,
     exp: Annotated[int | None, Query()] = None,
 ):
-    """Serve the photo thumbnail. Same auth options as view_photo."""
-    viewer_id = _authenticate_image_request(photo_id, "thumbnail", credentials, sig, exp, db)
+    """Serve the photo thumbnail. Same auth options as view_photo.
+
+    A missing thumbnail is built and kept. The full image is never served
+    here: if no thumbnail can be built, a placeholder is."""
+    _authenticate_image_request(photo_id, "thumbnail", credentials, sig, exp, db)
     photo = _live_photo(db, photo_id)
     if photo.thumbnail_path:
         thumb_resolved = _validate_path(photo.thumbnail_path)
         if thumb_resolved.exists():
             return _serve_image(thumb_resolved, MIME_JPEG)
-    # Fall back to full image; that is a view of the full file, so it is audited.
     resolved = _resolve_photo_path(photo)
     if not resolved:
         raise HTTPException(404, "File not found on disk")
-    _record_full_view(db, viewer_id, photo)
-    return _serve_image(resolved)
+    thumb_path = _generate_thumbnail(str(resolved), str(resolved.parent), resolved.name)
+    if thumb_path is None:
+        return Response(placeholder_thumbnail(), media_type=MIME_PNG, headers=user_file_headers(MIME_PNG))
+    photo.thumbnail_path = thumb_path
+    db.commit()
+    return _serve_image(Path(thumb_path), MIME_JPEG)
 
 
 @router.get("/{photo_id}/signed-urls", responses=responses(401, 404))

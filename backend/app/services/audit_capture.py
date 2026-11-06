@@ -50,9 +50,11 @@ _SETTING_MODEL = "Setting"
 _SETTING_VALUE_FIELD = "value"
 
 EXCLUDED_MODELS = frozenset({_AUDIT_LOG_MODEL, "NotificationLog", "Alert"})
-# Bookkeeping, plus theme, a personal display preference.
+# Bookkeeping, plus theme, a personal display preference, and the path of a
+# thumbnail the server builds on its own.
 EXCLUDED_FIELDS = frozenset({
     "created_at", "updated_at", "last_used_at", "token_version", "modified_by_id", "theme",
+    "thumbnail_path",
 })
 SECRET_FIELDS = frozenset({"password_hash", "token_hash"})
 SECRET_MARKER = "[changed]"
