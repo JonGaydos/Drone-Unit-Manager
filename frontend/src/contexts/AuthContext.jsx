@@ -88,12 +88,18 @@ const replaceIfChanged = (next) => (current) => (
 )
 
 /** Fetch the signed-in user again. A failed or empty answer keeps the current
- *  user unless the session itself has ended. */
+ *  user unless the session itself has ended. An answer is dropped once the
+ *  stored token has changed, so an older reload cannot overwrite a newer one. */
 function reloadUser(isActive, setUser) {
+  const token = localStorage.getItem('token')
   return api.get('/auth/me')
-    .then(next => { if (isActive() && next?.id) setUser(replaceIfChanged(next)) })
+    .then(next => {
+      if (isActive() && localStorage.getItem('token') === token && next?.id) setUser(replaceIfChanged(next))
+    })
     .catch(err => {
-      if (isActive() && err.status === 401) {
+      // The api client drops the token on a 401 itself, so a missing one still counts.
+      const stored = localStorage.getItem('token') ?? token
+      if (isActive() && stored === token && err.status === 401) {
         clearLocalSession()
         setUser(null)
       }

@@ -28,7 +28,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.constants import MIME_JPEG, MIME_PNG,PHOTO_NOT_FOUND, FLIGHT_NOT_FOUND, INCIDENT_NOT_FOUND, UTC_OFFSET
+from app.constants import MIME_JPEG, MIME_PNG, PHOTO_NOT_FOUND, FLIGHT_NOT_FOUND, INCIDENT_NOT_FOUND, UTC_OFFSET
 from app.database import get_db
 from app.deps import AdminUser, DBSession, UploadForm, require_form_user
 from app.models.user import User

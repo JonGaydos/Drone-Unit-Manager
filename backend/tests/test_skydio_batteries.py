@@ -156,3 +156,9 @@ def test_migration_strips_the_dash_from_stored_flight_batteries(tmp_path, monkey
     assert _battery_serials(path) == expected
     command.upgrade(config, "head")
     assert _battery_serials(path) == expected
+
+
+@pytest.mark.parametrize("raw", ["-", "--", ""])
+def test_a_serial_that_is_only_dashes_is_none_as_the_migration_stores_it(raw):
+    from app.integrations.skydio import _clean_serial
+    assert _clean_serial(raw) is None

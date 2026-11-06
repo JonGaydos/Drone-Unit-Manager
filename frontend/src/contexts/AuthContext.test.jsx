@@ -303,6 +303,30 @@ describe('all tabs lock together', () => {
       await waitFor(() => expect(result.current.user).toBeNull())
     })
 
+    it('keeps the newest sign-in when an older reload answers last', async () => {
+      const THIRD = { id: 3, username: 'c', role: 'pilot' }
+      let answerOlder
+      const olderAnswered = new Promise(resolve => { answerOlder = resolve })
+      const { result } = await signIn()
+      server.use(http.get('/api/auth/me', async ({ request }) => {
+        if (request.headers.get('Authorization') !== 'Bearer t2') return HttpResponse.json(THIRD)
+        await olderAnswered
+        return HttpResponse.json(OTHER)
+      }))
+      const otherTabSignsIn = (token) => {
+        localStorage.setItem('token', token)
+        act(() => { globalThis.dispatchEvent(new StorageEvent('storage', { key: 'token', newValue: token })) })
+      }
+      otherTabSignsIn('t2')
+      otherTabSignsIn('t3')
+      await waitFor(() => expect(result.current.user).toEqual(THIRD))
+
+      answerOlder()
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)) })
+
+      expect(result.current.user).toEqual(THIRD)
+    })
+
     it('asks nothing while the token is the one this tab signed in with', async () => {
       let calls = 0
       await signIn()

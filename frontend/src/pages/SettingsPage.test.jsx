@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
@@ -507,6 +507,8 @@ describe('SettingsPage role permissions', () => {
   describe('own profile', () => {
     const ME = { id: 9, username: 'jpilot', role: 'pilot', display_name: 'Jamie Pilot', email: 'j@example.org' }
 
+    afterEach(() => { vi.restoreAllMocks() })
+
     it('shows a non-admin their display name read-only and still saves the email', async () => {
       mockMount()
       let sent = null
@@ -561,7 +563,6 @@ describe('SettingsPage role permissions', () => {
       globalThis.dispatchEvent(new Event('focus'))
 
       await waitFor(() => expect(email).toHaveValue('changed@example.org'))
-      vi.restoreAllMocks()
     })
   })
 })
