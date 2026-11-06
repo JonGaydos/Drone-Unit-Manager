@@ -359,3 +359,178 @@ def test_signed_view_entry_names_the_known_viewer(client, db, upload_dir, pilot_
     entry = db.query(AuditLog).filter_by(action="view", entity_id=photo.id).one()
     assert entry.user_id == pilot_user.id
     assert entry.user_username == pilot_user.username
+
+
+# 5. Thumbnail builds: remembered failures, one build at a time per photo ----
+
+@pytest.fixture(autouse=True)
+def _forget_thumbnail_failures():
+    photos_router._failed_thumbnails.clear()
+    yield
+    photos_router._failed_thumbnails.clear()
+
+
+def _counting_render(monkeypatch, before=None):
+    """Count calls to the thumbnail decoder, running ``before`` first in each."""
+    calls = []
+    real = photos_router._render_thumbnail
+
+    def render(file_path):
+        calls.append(file_path)
+        if before:
+            before()
+        return real(file_path)
+
+    monkeypatch.setattr(photos_router, "_render_thumbnail", render)
+    return calls
+
+
+def _unreadable_photo_on_disk(db, upload_dir):
+    photo, abs_path = _photo_on_disk(db, upload_dir)
+    with open(abs_path, "wb") as f:
+        f.write(b"\x89PNG\r\n\x1a\n not really an image")
+    return photo, abs_path
+
+
+def _thumbnail_in_thread(photo_id, results):
+    from app import database
+    sig, exp = _sign_photo(photo_id, "thumbnail")
+    session = database.SessionLocal()
+    try:
+        results.append(photos_router.view_thumbnail(photo_id, session, None, sig, exp))
+    finally:
+        session.close()
+
+
+def test_a_failed_thumbnail_is_decoded_once(client, db, upload_dir, monkeypatch):
+    photo, _ = _unreadable_photo_on_disk(db, upload_dir)
+    calls = _counting_render(monkeypatch)
+
+    first = client.get(_thumbnail_url(photo.id))
+    second = client.get(_thumbnail_url(photo.id))
+
+    assert len(calls) == 1
+    assert first.content == photos_router.placeholder_thumbnail()
+    assert second.content == photos_router.placeholder_thumbnail()
+
+
+def test_a_failed_thumbnail_is_tried_again_once_its_file_changes(client, db, upload_dir, monkeypatch):
+    from PIL import Image
+    photo, abs_path = _unreadable_photo_on_disk(db, upload_dir)
+    calls = _counting_render(monkeypatch)
+    client.get(_thumbnail_url(photo.id))
+    Image.new("RGB", (800, 600)).save(abs_path, "PNG")
+
+    resp = client.get(_thumbnail_url(photo.id))
+
+    assert len(calls) == 2
+    assert resp.content[:3] == b"\xff\xd8\xff"
+
+
+def test_concurrent_requests_for_one_photo_build_it_once(db, upload_dir, monkeypatch):
+    import threading
+    photo, _ = _decodable_photo_on_disk(db, upload_dir)
+    started, release = threading.Event(), threading.Event()
+
+    def hold_first_build():
+        started.set()
+        release.wait(5)
+
+    calls = _counting_render(monkeypatch, hold_first_build)
+    results = []
+    first = threading.Thread(target=_thumbnail_in_thread, args=(photo.id, results))
+    second = threading.Thread(target=_thumbnail_in_thread, args=(photo.id, results))
+    first.start()
+    started.wait(5)
+    second.start()
+    time.sleep(0.2)
+    release.set()
+    first.join(5)
+    second.join(5)
+
+    assert len(calls) == 1
+    assert [Path(r.path).name for r in results] == ["thumb_test_photos_sig.png"] * 2
+
+
+def test_a_build_that_would_wait_too_long_gets_the_placeholder(client, db, upload_dir, monkeypatch):
+    photo, _ = _decodable_photo_on_disk(db, upload_dir)
+    monkeypatch.setattr(photos_router, "THUMB_BUILD_WAIT_SECONDS", 0.01)
+    monkeypatch.setattr(photos_router, "_thumbnail_builds", photos_router.threading.Semaphore(0))
+
+    resp = client.get(_thumbnail_url(photo.id))
+
+    assert resp.content == photos_router.placeholder_thumbnail()
+
+
+def test_a_photo_deleted_during_its_build_keeps_no_thumbnail(client, db, upload_dir, monkeypatch):
+    from datetime import datetime
+    from app import database
+    photo, _ = _decodable_photo_on_disk(db, upload_dir)
+
+    def delete_meanwhile():
+        session = database.SessionLocal()
+        session.get(Photo, photo.id).deleted_at = datetime.now()
+        session.commit()
+        session.close()
+
+    _counting_render(monkeypatch, delete_meanwhile)
+
+    resp = client.get(_thumbnail_url(photo.id))
+
+    assert resp.status_code == 404
+    assert not os.path.exists(os.path.join(upload_dir, "thumb_test_photos_sig.png"))
+
+
+def test_a_thumbnail_whose_save_does_not_commit_is_removed(db, upload_dir, monkeypatch):
+    from sqlalchemy.orm.exc import StaleDataError
+    from app import database
+    photo, _ = _decodable_photo_on_disk(db, upload_dir)
+    real_save = photos_router._save_thumbnail
+
+    def save_then_purge(*args):
+        path = real_save(*args)
+        session = database.SessionLocal()
+        session.delete(session.get(Photo, photo.id))
+        session.commit()
+        session.close()
+        return path
+
+    monkeypatch.setattr(photos_router, "_save_thumbnail", save_then_purge)
+    sig, exp = _sign_photo(photo.id, "thumbnail")
+
+    with pytest.raises(StaleDataError):
+        photos_router.view_thumbnail(photo.id, db, None, sig, exp)
+
+    assert not os.path.exists(os.path.join(upload_dir, "thumb_test_photos_sig.png"))
+
+
+def test_a_thumbnail_save_that_fails_leaves_no_file(upload_dir, monkeypatch):
+    from PIL import Image
+
+    class HalfWritten:
+        def save(self, path, *_args, **_kwargs):
+            with open(path, "wb") as f:
+                f.write(b"\xff\xd8\xff partial")
+            raise OSError("disk full")
+
+    path = os.path.join(upload_dir, "source.png")
+    Image.new("RGB", (8, 8)).save(path, "PNG")
+    monkeypatch.setattr(photos_router, "_jpeg_ready", lambda _img: HalfWritten())
+
+    assert photos_router._generate_thumbnail(path, upload_dir, "source.png") is None
+    assert os.listdir(upload_dir) == ["source.png"]
+
+
+def test_purge_removes_a_thumbnail_the_record_never_named(client, db, upload_dir, admin_headers):
+    from datetime import datetime
+    photo, abs_path = _photo_on_disk(db, upload_dir)
+    photo.deleted_at = datetime.now()
+    db.commit()
+    stray = os.path.join(upload_dir, "thumb_test_photos_sig.png")
+    with open(stray, "wb") as f:
+        f.write(_PNG_1x1)
+
+    resp = client.delete(f"/api/photos/{photo.id}/purge", headers=admin_headers)
+
+    assert resp.status_code == 200, resp.text
+    assert not os.path.exists(stray)
