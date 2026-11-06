@@ -1742,7 +1742,7 @@ def _annual_unit_report(config: ReportConfig, db: Session):
         "open_incidents": sum(1 for i in incidents if i.status not in ("resolved", "closed")),
     }
 
-    yoy_rows = _annual_yoy_rows(db, period_start.year)
+    yoy_rows = _annual_yoy_rows(db, period_end.year)
 
     sections = [
         _annual_exec_summary_section(period_label, totals),
