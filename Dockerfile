@@ -19,7 +19,7 @@ RUN npm run build
 # Root is the default user on purpose: the entrypoint uses it only to fix
 # /app/data ownership, then drops to PUID:PGID before the app starts (see the
 # RUN step below the entrypoint copy, and the image smoke test that checks it).
-FROM python@sha256:b18b261e1b4974b4f321451ad5251ded85abb22c2b8b262da527dda1d031ab30
+FROM python@sha256:4840d514c583a4d3d8cad3940e68dee6f0f6f3635c12fcd0a3d74c21a5b93a54
 
 LABEL maintainer="JonGaydos"
 LABEL org.opencontainers.image.title="Drone Unit Manager"
