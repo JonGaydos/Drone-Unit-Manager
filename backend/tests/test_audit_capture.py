@@ -865,6 +865,45 @@ def test_merge_inside_failed_savepoint_is_undone(session, db):
     assert entries[0].changes == {"badge_number": {"old": "1", "new": "2"}}
 
 
+def _roll_back_middle_savepoint_with_inner_open(session, middle_work):
+    """Savepoints A > B > C; roll B back while C is still open, then leave A."""
+    outer = session.begin_nested()
+    middle = session.begin_nested()
+    middle_work()
+    session.flush()
+    session.begin_nested()
+    middle.rollback()
+    outer.commit()
+
+
+def test_record_after_a_middle_savepoint_rollback_keeps_its_entry(session, db):
+    def add_pilot():
+        session.add(Pilot(first_name="Rolled", last_name="Back"))
+
+    _roll_back_middle_savepoint_with_inner_open(session, add_pilot)
+    kept = Pilot(first_name="Kept", last_name="Pilot")
+    session.add(kept)
+    session.commit()
+
+    entries = _entries(db, entity_type="pilot")
+    assert [(e.action, e.entity_id, e.entity_name) for e in entries] == [("create", kept.id, "Kept Pilot")]
+
+
+def test_run_after_a_middle_savepoint_rollback_counts_only_what_stayed(session, db):
+    with machine_run(session, "import", "pilot"):
+        def add_pilots():
+            session.add_all([Pilot(first_name=f"Rolled{i}", last_name="Back") for i in range(2)])
+
+        _roll_back_middle_savepoint_with_inner_open(session, add_pilots)
+        kept = Pilot(first_name="Kept", last_name="Pilot")
+        session.add(kept)
+    session.commit()
+
+    entries = _entries(db, action="import")
+    assert len(entries) == 1
+    assert entries[0].changes["Pilot"]["ids"] == [kept.id]
+
+
 def _refuse_audit_inserts(bind):
     """Through the connection already writing, since SQLite allows only one."""
     bind.execute(text(
