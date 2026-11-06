@@ -70,6 +70,10 @@ ENV DATABASE_URL=sqlite:////app/data/drone_unit_manager.db
 # Unbuffered stdout/stderr so startup logs (including the fresh-install backup
 # token) reach `docker logs` immediately instead of sitting in a block buffer.
 ENV PYTHONUNBUFFERED=1
+# The app runs as PUID:PGID with HOME still /root, which it cannot write, so
+# matplotlib keeps its config and font cache in /tmp (writable by any user)
+# instead of making a throwaway directory on every start.
+ENV MPLCONFIGDIR=/tmp/matplotlib
 
 EXPOSE 8000
 
