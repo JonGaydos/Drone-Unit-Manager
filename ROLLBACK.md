@@ -21,6 +21,18 @@ pushed and the release build has finished. Check it on ghcr.io before changing
 production's Repository; an Apply to a missing tag removes the running container
 and then fails to pull.
 
+## Roll production back to 3.4.0 (after 3.4.1)
+
+3.4.1 adds migration 0013, which only removes a leading dash from stored flight
+battery serials. Its downgrade changes nothing, and 3.4.0 reads the cleaned
+values as they are, so no data step is needed:
+
+1. Optionally step the schema back so the migration history matches:
+
+        docker exec -w /app <container> alembic downgrade 0012_audit_identity
+
+2. Set the Repository to `ghcr.io/jongaydos/drone-unit-manager:3.4.0` and Apply.
+
 ## Roll production back to 3.3.0
 
 Use the migration 0012 steps under "Roll back a release with migration 0012" below.
