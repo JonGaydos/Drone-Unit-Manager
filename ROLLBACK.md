@@ -3,18 +3,18 @@
 ## Production
 
 Production runs a pinned version tag on Unraid (port 3014), not `:latest`.
-It moved from 3.4.0 to 3.4.1 (running on production, confirmed by the owner
-2026-11-07). 3.4.1 adds migration 0013, a data-only cleanup, so going back to
-3.4.0 needs no data step; going back further needs the 0012 steps below.
+It moved from 3.4.1 to 3.4.2 (running on production, confirmed by the owner
+2026-11-07). 3.4.2 has no migration, so going back to 3.4.1 is an image change
+only; going back to 3.4.0 or further uses the steps below.
 3.4.x reads `TRUSTED_PROXIES`, set to the tunnel's address
 (`172.17.0.1` on this host). 3.3.0 ignores that variable, so it can stay on a rollback.
 
 | | Current | Rollback target | Before 3.x migrations |
 | --- | --- | --- | --- |
-| Version | 3.4.1 | 3.4.0 | 3.0.17 |
-| Tag | `v3.4.1` | `v3.4.0` | `v3.0.17` |
-| Commit | 8b3caaf | 0b2b09d | 42d83e9 |
-| Image | `ghcr.io/jongaydos/drone-unit-manager@sha256:283a2bc634643221f3b2d98035cd100f82009435f8decfb6862b2e47901b76c5` | `ghcr.io/jongaydos/drone-unit-manager@sha256:215ed55ac7f3925bd6293cb91b250ae97b30970062107deb4ac978ec5eb2f1a0` | `ghcr.io/jongaydos/drone-unit-manager@sha256:264f129219b17672bea90b6b3f9e04182dc9979fc6c7a3e198762d97c3055eb5` |
+| Version | 3.4.2 | 3.4.1 | 3.0.17 |
+| Tag | `v3.4.2` | `v3.4.1` | `v3.0.17` |
+| Commit | 5b15043 | 8b3caaf | 42d83e9 |
+| Image | `ghcr.io/jongaydos/drone-unit-manager@sha256:36c52e7b1d20c14a9cfe76e24631fada57282d8968fcc5d44a9909aed20a712b` | `ghcr.io/jongaydos/drone-unit-manager@sha256:283a2bc634643221f3b2d98035cd100f82009435f8decfb6862b2e47901b76c5` | `ghcr.io/jongaydos/drone-unit-manager@sha256:264f129219b17672bea90b6b3f9e04182dc9979fc6c7a3e198762d97c3055eb5` |
 | Extra Parameters | `--restart unless-stopped` | `--restart unless-stopped` | `--restart unless-stopped --user 99:100` |
 
 A version's image tag (`:3.3.0`) exists only after its `vX.Y.Z` git tag is
@@ -22,12 +22,15 @@ pushed and the release build has finished. Check it on ghcr.io before changing
 production's Repository; an Apply to a missing tag removes the running container
 and then fails to pull.
 
-## Roll production back to 3.4.1 (after 3.4.2)
+## Roll production back to 3.4.1
 
 3.4.2 has no migration. Set the Repository to
 `ghcr.io/jongaydos/drone-unit-manager:3.4.1` and Apply.
 
 ## Roll production back to 3.4.0
+
+The 3.4.0 image is
+`ghcr.io/jongaydos/drone-unit-manager@sha256:215ed55ac7f3925bd6293cb91b250ae97b30970062107deb4ac978ec5eb2f1a0`.
 
 3.4.1 adds migration 0013, which only removes a leading dash from stored flight
 battery serials. Its downgrade changes nothing, and 3.4.0 reads the cleaned
