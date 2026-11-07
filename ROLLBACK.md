@@ -22,6 +22,11 @@ pushed and the release build has finished. Check it on ghcr.io before changing
 production's Repository; an Apply to a missing tag removes the running container
 and then fails to pull.
 
+## Roll production back to 3.4.1 (after 3.4.2)
+
+3.4.2 has no migration. Set the Repository to
+`ghcr.io/jongaydos/drone-unit-manager:3.4.1` and Apply.
+
 ## Roll production back to 3.4.0
 
 3.4.1 adds migration 0013, which only removes a leading dash from stored flight

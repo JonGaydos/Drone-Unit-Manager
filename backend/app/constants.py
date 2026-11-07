@@ -66,7 +66,7 @@ APP_TITLE = "Drone Unit Manager"
 # tells which channel a container is running: production tracks a released
 # tag, staging tracks :main, and until v3.0.0 is cut those differ here.
 # Bump this in the same commit as the release tag.
-APP_VERSION = "3.4.1"
+APP_VERSION = "3.4.2"
 
 # ── Folder / geofence messages ───────────────────────────────────────────────
 FOLDER_NOT_FOUND = "Folder not found"
