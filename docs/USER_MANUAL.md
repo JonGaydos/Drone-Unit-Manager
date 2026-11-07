@@ -101,7 +101,7 @@ Ensure all pilots have email addresses in their profiles before syncing. The sys
 
 ### 3.3 Importing Data from Excel
 
-Upload an Excel spreadsheet containing flight data exported from Skydio or another source. The spreadsheet must have a sheet named "Skydio" with specific column headers. Click the format requirements link below the upload button to see the required column names. A workbook with more than 100,000 rows, or one that unpacks to more than 512 MB, is refused and nothing is imported; split it into smaller files. An optional "Pilot Info" sheet imports certification data. A Skydio export row whose Flight ID matches a flight already in the app is skipped, except that its Battery value fills in that flight's battery serial when the flight has none.
+Upload an Excel spreadsheet containing flight data exported from Skydio or another source. The spreadsheet must have a sheet named "Skydio" with specific column headers. Click the format requirements link below the upload button to see the required column names. A workbook with more than 100,000 rows, or one that unpacks to more than 512 MB, is refused and nothing is imported; split it into smaller files. An optional "Pilot Info" sheet imports certification data. A Skydio export row whose Flight ID matches a flight already in the app is skipped, except that its Battery value fills in that flight's battery serial when the flight has none. A filled battery does not change the flight's review status.
 
 ### 3.4 User Management
 

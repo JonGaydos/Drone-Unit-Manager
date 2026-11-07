@@ -18,9 +18,13 @@ from app.models import AuditLog, Battery, Flight, Pilot, Vehicle
 from app.services.excel_import import import_excel, import_skydio_csv
 
 FLIGHT_ID = "Flight ID"
+VEHICLE = "Vehicle"
+PILOT = "Pilot"
+TAKEOFF_COL = "Takeoff"
+LOCAL_TAKEOFF = "Local Takeoff Time"
 BATTERY = "Battery"
 HEADER = [
-    FLIGHT_ID, "Vehicle", "Pilot", "Local Takeoff Time", "Takeoff", "Takeoff Address",
+    FLIGHT_ID, VEHICLE, PILOT, LOCAL_TAKEOFF, TAKEOFF_COL, "Takeoff Address",
     "Takeoff Latitude", "Takeoff Longitude", "Land", "Duration (seconds)", BATTERY,
     "Sensor Package", "Attachment (TOP)", "Attachment (BOTTOM)", "Attachment (LEFT)",
     "Attachment (RIGHT)", "Dock", "Dock Nickname", "Dock Serial", "Dock ID", "Controller",
@@ -37,13 +41,17 @@ CLEAN_SERIAL = "k99-990101-1-00001"
 KEPT_SERIAL = "k99-990101-1-00002"
 FILLED = "batteries_filled"
 SKIPPED = "flights_skipped"
+STORED_ID_2 = "test-fill-0002"
+ROW_ID_2 = "TESTFILL0002"
+STORED_ID_3 = "test-fill-0003"
+ROW_ID_3 = "TESTFILL0003"
 
 
 def _row(**overrides):
     row = dict.fromkeys(HEADER, "")
     row.update({
-        FLIGHT_ID: ROW_ID, "Vehicle": VEHICLE_SERIAL, "Pilot": PILOT_EMAIL,
-        "Local Takeoff Time": "2026-03-01 07:00:00", "Takeoff": TAKEOFF.strftime("%Y-%m-%d %H:%M:%S"),
+        FLIGHT_ID: ROW_ID, VEHICLE: VEHICLE_SERIAL, PILOT: PILOT_EMAIL,
+        LOCAL_TAKEOFF: "2026-03-01 07:00:00", TAKEOFF_COL: TAKEOFF.strftime("%Y-%m-%d %H:%M:%S"),
         "Takeoff Address": "1 Test Way", "Takeoff Latitude": "30.1", "Takeoff Longitude": "-85.1",
         "Land": "2026-03-01 12:10:00", "Duration (seconds)": "600", BATTERY: DASH_SERIAL,
         "Sensor Package": "SP-TEST-1", "Controller": "Test Controller",
@@ -92,7 +100,9 @@ def test_only_the_battery_changes(db):
 
     db.expire_all()
     stored = db.get(Flight, flight.id)
-    assert (stored.duration_seconds, stored.sensor_package, stored.takeoff_address) == (590, "SP-OLD", None)
+    assert stored.duration_seconds == 590
+    assert stored.sensor_package == "SP-OLD"
+    assert stored.takeoff_address is None
 
 
 def test_a_battery_already_set_is_kept(db):
@@ -130,14 +140,16 @@ def test_a_fallback_duplicate_is_not_filled(db):
 
 
 def test_counts_cover_each_filled_row(db):
-    _flight(db, external_id="test-fill-0002")
-    _flight(db, external_id="test-fill-0003")
-    rows = [_row(**{FLIGHT_ID: "TESTFILL0002"}), _row(**{FLIGHT_ID: "TESTFILL0003", BATTERY: KEPT_SERIAL}),
+    _flight(db, external_id=STORED_ID_2)
+    _flight(db, external_id=STORED_ID_3)
+    rows = [_row(**{FLIGHT_ID: ROW_ID_2}), _row(**{FLIGHT_ID: ROW_ID_3, BATTERY: KEPT_SERIAL}),
             _row(**{FLIGHT_ID: "TESTFILL0004"})]
 
     result = import_skydio_csv(db, _csv(*rows))
 
-    assert (result[FILLED], result[SKIPPED], result["flights_imported"]) == (2, 2, 1)
+    assert result[FILLED] == 2
+    assert result[SKIPPED] == 2
+    assert result["flights_imported"] == 1
 
 
 def test_the_battery_record_counts_the_filled_flight(client, db, admin_headers):
@@ -190,3 +202,57 @@ def test_the_import_summary_records_the_filled_flight(client, db, admin_headers)
     flights = entry.changes["Flight"]
     assert flights["counts"]["update"] == 1
     assert flights["ids"] == [flight.id]
+
+
+def test_the_oldest_flight_with_a_repeated_flight_id_is_filled(db):
+    oldest = _flight(db, external_id=STORED_ID)
+    newer = _flight(db, external_id=STORED_ID.upper())
+
+    result = import_skydio_csv(db, _csv(_row()))
+
+    assert _battery_of(db, oldest.id) == CLEAN_SERIAL
+    assert _battery_of(db, newer.id) is None
+    assert result[FILLED] == 1
+
+
+@pytest.mark.parametrize("status", ["reviewed", "needs_review"])
+def test_the_review_status_is_unchanged(db, status):
+    flight = _flight(db, review_status=status)
+
+    import_skydio_csv(db, _csv(_row()))
+
+    db.expire_all()
+    stored = db.get(Flight, flight.id)
+    assert stored.battery_serial == CLEAN_SERIAL
+    assert stored.review_status == status
+
+
+def test_a_repeated_flight_id_in_the_csv_fills_once(db):
+    flight = _flight(db)
+
+    result = import_skydio_csv(db, _csv(_row(), _row(**{BATTERY: KEPT_SERIAL})))
+
+    assert _battery_of(db, flight.id) == CLEAN_SERIAL
+    assert result[FILLED] == 1
+
+
+@pytest.mark.parametrize("csv_serial", [DASH_SERIAL, DASH_SERIAL.upper(), CLEAN_SERIAL.upper()])
+def test_a_serial_differing_in_case_or_dash_uses_the_stored_record(db, csv_serial):
+    stored_serial = CLEAN_SERIAL.upper()
+    db.add(Battery(serial_number=stored_serial, status="active"))
+    db.commit()
+    flight = _flight(db)
+
+    import_skydio_csv(db, _csv(_row(**{BATTERY: csv_serial})))
+
+    assert [b.serial_number for b in db.query(Battery).all()] == [stored_serial]
+    assert _battery_of(db, flight.id) == stored_serial
+
+
+def test_a_whitespace_only_battery_counts_as_empty(db):
+    flight = _flight(db, battery="   ")
+
+    result = import_skydio_csv(db, _csv(_row()))
+
+    assert _battery_of(db, flight.id) == CLEAN_SERIAL
+    assert result[FILLED] == 1

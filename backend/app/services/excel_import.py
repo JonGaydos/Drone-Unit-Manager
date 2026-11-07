@@ -237,11 +237,11 @@ def _clean(val) -> Optional[str]:
 
 def _flight_by_flight_id(db: Session, flight_id: str) -> Optional[Flight]:
     """The flight whose external_id matches a normalized Flight ID
-    (case-insensitive, hyphens stripped)."""
+    (case-insensitive, hyphens stripped). When several match, the oldest."""
     from sqlalchemy import func as sa_func
     return db.query(Flight).filter(
         sa_func.replace(sa_func.upper(Flight.external_id), "-", "") == flight_id
-    ).first()
+    ).order_by(Flight.id).first()
 
 
 def _is_duplicate_flight(db: Session, flight_id: str, pilot, vehicle, takeoff_dt) -> bool:

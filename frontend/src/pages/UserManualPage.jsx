@@ -488,7 +488,7 @@ The card also has a **Disconnect** button. Disconnecting clears the stored Skydi
         title: 'Flight Log Import',
         body: `Import flight data from multiple sources via Settings > Integrations tab:
 
-• **Skydio CSV** — Flight records exported from Skydio Cloud. A row whose Flight ID is already in the app is skipped, except that its Battery value fills in that flight's battery serial when the flight has none
+• **Skydio CSV** — Flight records exported from Skydio Cloud. A row whose Flight ID is already in the app is skipped, except that its Battery value fills in that flight's battery serial when the flight has none. A filled battery does not change the flight's review status
 • **Excel** — Spreadsheets with "Skydio" and "Pilot Info" sheets (up to 100,000 rows and 512 MB unpacked; a larger file is refused and nothing is imported)
 • **DJI .txt** — DJI Go 4 flight log text files
 • **Litchi CSV** — Litchi flight log exports
