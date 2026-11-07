@@ -86,9 +86,10 @@ def _to_str(val):
 
 
 def _clean_serial(val):
-    """Serial string with Skydio's leading-dash artifact stripped."""
+    """Serial string with Skydio's leading-dash artifact stripped, or None when
+    nothing is left (as migration 0013 stores a dash-only serial)."""
     s = _to_str(val)
-    return s.lstrip("-") if s else s
+    return (s or "").lstrip("-") or None
 
 
 def _first_of(d: dict, *keys):

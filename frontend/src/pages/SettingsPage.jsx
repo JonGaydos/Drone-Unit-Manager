@@ -83,6 +83,14 @@ export default function SettingsPage() {
   const [profile, setProfile] = useState({
     display_name: currentUser?.display_name || '', email: currentUser?.email || '',
   })
+  // The signed-in user is fetched again on focus, so take up values that
+  // changed on the server since the card was filled.
+  const profileSource = [currentUser?.id, currentUser?.display_name, currentUser?.email].join('\n')
+  const [shownSource, setShownSource] = useState(profileSource)
+  if (profileSource !== shownSource) {
+    setShownSource(profileSource)
+    setProfile({ display_name: currentUser?.display_name || '', email: currentUser?.email || '' })
+  }
   const [savingProfile, setSavingProfile] = useState(false)
 
   // User management state

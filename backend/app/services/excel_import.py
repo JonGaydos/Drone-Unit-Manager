@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.services.import_service import NOT_A_WORKBOOK, ImportTooLarge, is_blank_row, open_sheet, open_workbook
 from app.services.local_time import display_zone, local_flight_date
+from app.models.battery import Battery
 from app.models.pilot import Pilot
 from app.models.vehicle import Vehicle
 from app.models.flight import Flight, FlightPurpose
@@ -234,6 +235,15 @@ def _clean(val) -> Optional[str]:
     return s
 
 
+def _flight_by_flight_id(db: Session, flight_id: str) -> Optional[Flight]:
+    """The flight whose external_id matches a normalized Flight ID
+    (case-insensitive, hyphens stripped). When several match, the oldest."""
+    from sqlalchemy import func as sa_func
+    return db.query(Flight).filter(
+        sa_func.replace(sa_func.upper(Flight.external_id), "-", "") == flight_id
+    ).order_by(Flight.id).first()
+
+
 def _is_duplicate_flight(db: Session, flight_id: str, pilot, vehicle, takeoff_dt) -> bool:
     """Check if a flight is a duplicate.
 
@@ -241,11 +251,7 @@ def _is_duplicate_flight(db: Session, flight_id: str, pilot, vehicle, takeoff_dt
     Fallback check: exact takeoff timestamp + pilot + vehicle. Distinct same-day
     flights with merely similar durations are no longer treated as duplicates.
     """
-    from sqlalchemy import func as sa_func
-    existing = db.query(Flight).filter(
-        sa_func.replace(sa_func.upper(Flight.external_id), "-", "") == flight_id
-    ).first()
-    if existing:
+    if _flight_by_flight_id(db, flight_id):
         return True
 
     if takeoff_dt:
@@ -314,6 +320,26 @@ def _build_flight_from_row(row: dict, flight_id: str, pilot, vehicle, db: Sessio
     )
 
 
+def _fill_empty_battery(db: Session, row: dict, flight_id: str) -> int:
+    """Give the existing flight with this Flight ID the row's battery when it
+    has none. Skydio's API leaves the battery empty for X2 flights, and its
+    flight-list export carries it. Matches by Flight ID only and changes no
+    other field. Returns 1 when a battery was filled, otherwise 0."""
+    from app.integrations.skydio import _clean_serial
+    serial = _clean_serial(_clean(row.get("Battery")))
+    if not serial:
+        return 0
+    existing = _flight_by_flight_id(db, flight_id)
+    if existing is None or (existing.battery_serial or "").strip():
+        return 0
+    from app.services.sync_manager import _ensure_simple_equipment
+    stored = _ensure_simple_equipment(db, serial, Battery, "battery")
+    if not stored:
+        return 0
+    existing.battery_serial = stored
+    return 1
+
+
 def _process_skydio_row(row: dict, db: Session, result: dict,
                         source: str = "skydio_csv") -> tuple[bool, bool]:
     """Process one Skydio flight row from either an xlsx sheet or a CSV.
@@ -332,6 +358,7 @@ def _process_skydio_row(row: dict, db: Session, result: dict,
     flight = _build_flight_from_row(row, flight_id, pilot, vehicle, db, source)
     if flight is None:
         result["flights_skipped"] += 1
+        result["batteries_filled"] += _fill_empty_battery(db, row, flight_id)
         return pilot_new, vehicle_new
 
     db.add(flight)
@@ -371,6 +398,7 @@ def _new_import_result() -> dict:
         "flights_skipped": 0,
         "certifications_created": 0,
         "cert_assignments": 0,
+        "batteries_filled": 0,
         "errors": [],
     }
 
@@ -563,15 +591,7 @@ def import_excel(db: Session, file_bytes: bytes) -> dict:
 def _import_workbook(db: Session, wb) -> dict:
     pilots_created_count = 0
     vehicles_created_count = 0
-    result = {
-        "pilots_created": 0,
-        "vehicles_created": 0,
-        "flights_imported": 0,
-        "flights_skipped": 0,
-        "certifications_created": 0,
-        "cert_assignments": 0,
-        "errors": [],
-    }
+    result = _new_import_result()
 
     if SKYDIO_SHEET in wb.sheetnames:
         p_count, v_count = _import_skydio_sheet(open_sheet(wb[SKYDIO_SHEET]), db, result)

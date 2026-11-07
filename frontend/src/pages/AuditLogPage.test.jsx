@@ -161,6 +161,45 @@ describe('AuditLogPage', () => {
     })
   })
 
+  describe('client IP address', () => {
+    const withIp = (over) => ({
+      total: 1,
+      logs: [{
+        id: 40, created_at: '2026-06-10T12:00:00Z', user_name: 'admin',
+        action: 'login', entity_type: 'auth', entity_id: null, entity_name: 'Sign in',
+        details: 'Successful login', changes: null, ip_address: '10.0.0.5', ...over,
+      }],
+    })
+
+    it('shows the IP address in the expanded row', async () => {
+      server.use(http.get('/api/audit', () => HttpResponse.json(withIp())))
+      const { user } = renderWithProviders(<AuditLogPage />, { role: 'admin' })
+
+      await screen.findByText('Sign in')
+      await user.click(screen.getByTitle('View details'))
+
+      expect(await screen.findByText('10.0.0.5')).toBeInTheDocument()
+    })
+
+    it('shows the IP address beside the changes', async () => {
+      server.use(http.get('/api/audit', () => HttpResponse.json(withIp({ changes: { role: { old: 'a', new: 'b' } } }))))
+      const { user } = renderWithProviders(<AuditLogPage />, { role: 'admin' })
+
+      await screen.findByText('Sign in')
+      await user.click(screen.getByTitle('View changes'))
+
+      expect(await screen.findByText('10.0.0.5')).toBeInTheDocument()
+    })
+
+    it('offers no expander for an entry without one', async () => {
+      server.use(http.get('/api/audit', () => HttpResponse.json(withIp({ ip_address: null }))))
+      renderWithProviders(<AuditLogPage />, { role: 'admin' })
+
+      await screen.findByText('Sign in')
+      expect(screen.queryByTitle('View details')).toBeNull()
+    })
+  })
+
   describe('usernames, imported entries and every changes shape', () => {
     const entry = (over) => ({
       id: 20, created_at: '2026-06-10T12:00:00Z', user_name: 'Jamie Pilot', user_username: 'jpilot',

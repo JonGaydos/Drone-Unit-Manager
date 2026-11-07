@@ -4,26 +4,31 @@ Handles image uploads with automatic thumbnail generation, pilot tagging,
 and secure file serving with path-traversal prevention.
 """
 
+import contextlib
+import functools
 import hashlib
 import hmac
+import io
 import os
 import time
 import uuid
 import shutil
 import logging
+import threading
+import weakref
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated, Iterator, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Form
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from PIL import Image as PILImage
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.constants import MIME_JPEG, PHOTO_NOT_FOUND, FLIGHT_NOT_FOUND, INCIDENT_NOT_FOUND, UTC_OFFSET
+from app.constants import MIME_JPEG, MIME_PNG, PHOTO_NOT_FOUND, FLIGHT_NOT_FOUND, INCIDENT_NOT_FOUND, UTC_OFFSET
 from app.database import get_db
 from app.deps import AdminUser, DBSession, UploadForm, require_form_user
 from app.models.user import User
@@ -52,6 +57,16 @@ CustodyUser = Annotated[User, Depends(require_permission("files.custody"))]
 
 UPLOAD_DIR = str(Path(settings.UPLOAD_DIR) / "photos")
 THUMB_WIDTH = 400  # Maximum thumbnail width in pixels
+
+# Thumbnails built on request: at most two decode at once, one per photo, and a
+# request waits at most this long for its turn before it gets the placeholder.
+THUMB_BUILD_WAIT_SECONDS = 1.0
+_thumbnail_builds = threading.Semaphore(2)
+_photo_locks: "weakref.WeakValueDictionary[int, threading.Lock]" = weakref.WeakValueDictionary()
+_photo_locks_guard = threading.Lock()
+# (photo id, file mtime in ns, file size) of sources that failed to build, so
+# they are not decoded again until the file changes.
+_failed_thumbnails: set[tuple[int, int, int]] = set()
 
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif"}
 
@@ -177,21 +192,60 @@ def _validate_path(file_path: str) -> Path:
     return resolved
 
 
-def _generate_thumbnail(file_path: str, photo_dir: str, stored_name: str) -> str | None:
-    """Generate a JPEG thumbnail for an uploaded image. Returns thumbnail path or None."""
+def _jpeg_ready(img: PILImage.Image) -> PILImage.Image:
+    """The image as 8-bit gray or RGB, the modes JPEG stores. A 16-bit or
+    float image (thermal exports) is stretched over its own value range."""
+    if img.mode in ("RGB", "L"):
+        return img
+    if img.mode == "F" or img.mode.startswith("I"):
+        if img.mode != "F":
+            img = img.convert("I")
+        low, high = img.getextrema()
+        scale = 255 / (high - low) if high > low else 1
+        return img.point(lambda v: v * scale - low * scale).convert("L")
+    return img.convert("RGB")
+
+
+def _render_thumbnail(file_path: str) -> PILImage.Image | None:
+    """Decode an image and shrink it to thumbnail size, or None if it cannot be decoded."""
     try:
         img = PILImage.open(file_path)
         img.load()  # force decode now so a decompression bomb trips the guard here
         img.thumbnail((THUMB_WIDTH, THUMB_WIDTH * 10), PILImage.LANCZOS)
-        thumb_name = f"thumb_{stored_name}"
-        thumb_path = os.path.join(photo_dir, thumb_name)
-        if img.mode in ("RGBA", "P"):
-            img = img.convert("RGB")
-        img.save(thumb_path, "JPEG", quality=85)
-        return thumb_path
+        return _jpeg_ready(img)
     except (IOError, OSError, ValueError, PILImage.DecompressionBombError) as e:
-        logger.warning("Thumbnail generation failed: %s", e)
+        logger.warning("Thumbnail generation failed: %s", type(e).__name__)
         return None
+
+
+def _save_thumbnail(img: PILImage.Image, photo_dir: str, stored_name: str) -> str | None:
+    """Write the thumbnail beside its photo. It goes to a temporary name first, so
+    a reader never sees a half-written file. Returns the path, or None on failure."""
+    thumb_path = os.path.join(photo_dir, f"thumb_{stored_name}")
+    temp_path = f"{thumb_path}.{uuid.uuid4().hex}.tmp"
+    try:
+        img.save(temp_path, "JPEG", quality=85)
+        os.replace(temp_path, thumb_path)
+    except (OSError, ValueError) as e:
+        logger.warning("Thumbnail save failed: %s", type(e).__name__)
+        with contextlib.suppress(FileNotFoundError):
+            os.remove(temp_path)
+        return None
+    return thumb_path
+
+
+def _generate_thumbnail(file_path: str, photo_dir: str, stored_name: str) -> str | None:
+    """Generate a JPEG thumbnail for an uploaded image. Returns thumbnail path or None."""
+    img = _render_thumbnail(file_path)
+    return _save_thumbnail(img, photo_dir, stored_name) if img is not None else None
+
+
+@functools.cache
+def placeholder_thumbnail() -> bytes:
+    """A plain gray PNG served when a photo's thumbnail cannot be built."""
+    buffer = io.BytesIO()
+    PILImage.new("L", (THUMB_WIDTH, THUMB_WIDTH * 3 // 4), 200).save(buffer, "PNG")
+    return buffer.getvalue()
 
 
 def _parse_date_taken(date_taken: Optional[str]):
@@ -458,6 +512,81 @@ def view_photo(
     return _serve_image(resolved)
 
 
+def _stored_thumbnail(photo) -> Path | None:
+    """The photo's kept thumbnail, if it is still on disk."""
+    if photo.thumbnail_path:
+        resolved = _validate_path(photo.thumbnail_path)
+        if resolved.exists():
+            return resolved
+    return None
+
+
+def _photo_lock(photo_id: int) -> threading.Lock:
+    """The lock one photo's thumbnail build holds. It lives while anyone holds it."""
+    with _photo_locks_guard:
+        lock = _photo_locks.get(photo_id)
+        if lock is None:
+            lock = threading.Lock()
+            _photo_locks[photo_id] = lock
+        return lock
+
+
+@contextlib.contextmanager
+def _waited_for(lock) -> Iterator[bool]:
+    """Hold ``lock`` for the block if it frees within THUMB_BUILD_WAIT_SECONDS.
+    Yields whether it was acquired."""
+    acquired = lock.acquire(timeout=THUMB_BUILD_WAIT_SECONDS)
+    try:
+        yield acquired
+    finally:
+        if acquired:
+            lock.release()
+
+
+def _build_thumbnail(db, photo_id: int, source: Path) -> Path | None:
+    """Build and keep a missing thumbnail. None means serve the placeholder for
+    now: this source failed before or fails now, or the wait for a turn ran out.
+
+    Raises:
+        HTTPException: 404 if the photo is deleted while the request waits.
+    """
+    stat = source.stat()
+    failure_key = (photo_id, stat.st_mtime_ns, stat.st_size)
+    if failure_key in _failed_thumbnails:
+        return None
+    with _waited_for(_photo_lock(photo_id)) as ready:
+        if not ready:
+            return None
+        # Another request may have built it, or failed to, while this one waited.
+        db.expire_all()
+        stored = _stored_thumbnail(_live_photo(db, photo_id))
+        if stored or failure_key in _failed_thumbnails:
+            return stored
+        with _waited_for(_thumbnail_builds) as ready:
+            return _build_and_keep(db, photo_id, source, failure_key) if ready else None
+
+
+def _build_and_keep(db, photo_id: int, source: Path, failure_key: tuple[int, int, int]) -> Path | None:
+    """Decode, save and record one thumbnail. The file is removed again if the
+    record cannot be saved, for example because the photo was purged meanwhile."""
+    img = _render_thumbnail(str(source))
+    if img is None:
+        _failed_thumbnails.add(failure_key)
+        return None
+    photo = _live_photo(db, photo_id)  # a delete or purge may have run during decoding
+    thumb_path = _save_thumbnail(img, str(source.parent), source.name)
+    if thumb_path is None:
+        return None
+    photo.thumbnail_path = thumb_path
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        evidence.remove_file(thumb_path, UPLOAD_DIR)
+        raise
+    return Path(thumb_path)
+
+
 @router.get("/{photo_id}/thumbnail", responses=responses(401, 404))
 def view_thumbnail(
     photo_id: int,
@@ -466,19 +595,22 @@ def view_thumbnail(
     sig: Annotated[str | None, Query()] = None,
     exp: Annotated[int | None, Query()] = None,
 ):
-    """Serve the photo thumbnail. Same auth options as view_photo."""
-    viewer_id = _authenticate_image_request(photo_id, "thumbnail", credentials, sig, exp, db)
+    """Serve the photo thumbnail. Same auth options as view_photo.
+
+    A missing thumbnail is built and kept. The full image is never served
+    here: if no thumbnail can be built, a placeholder is."""
+    _authenticate_image_request(photo_id, "thumbnail", credentials, sig, exp, db)
     photo = _live_photo(db, photo_id)
-    if photo.thumbnail_path:
-        thumb_resolved = _validate_path(photo.thumbnail_path)
-        if thumb_resolved.exists():
-            return _serve_image(thumb_resolved, MIME_JPEG)
-    # Fall back to full image; that is a view of the full file, so it is audited.
+    stored = _stored_thumbnail(photo)
+    if stored:
+        return _serve_image(stored, MIME_JPEG)
     resolved = _resolve_photo_path(photo)
     if not resolved:
         raise HTTPException(404, "File not found on disk")
-    _record_full_view(db, viewer_id, photo)
-    return _serve_image(resolved)
+    built = _build_thumbnail(db, photo_id, resolved)
+    if built is None:
+        return Response(placeholder_thumbnail(), media_type=MIME_PNG, headers=user_file_headers(MIME_PNG))
+    return _serve_image(built, MIME_JPEG)
 
 
 @router.get("/{photo_id}/signed-urls", responses=responses(401, 404))
@@ -648,7 +780,9 @@ def purge_photo(photo_id: int, db: DBSession, admin: AdminUser):
         **delete_links(db.query(PhotoFlight).filter(PhotoFlight.photo_id == photo_id)),
         **delete_links(db.query(PhotoIncident).filter(PhotoIncident.photo_id == photo_id)),
     }
-    files = [os.path.join(UPLOAD_DIR, photo.filename), photo.thumbnail_path]
+    original = Path(UPLOAD_DIR, photo.filename)
+    # thumb_<name> too, in case a thumbnail build saved one the record never named.
+    files = [str(original), photo.thumbnail_path, str(original.with_name(f"thumb_{original.name}"))]
     log_action(db, admin.id, admin.display_name, "purge", "photo", photo_id, photo.original_filename,
                changes=links or None, details=f"sha256 {photo.sha256 or 'not recorded'}")
     db.delete(photo)

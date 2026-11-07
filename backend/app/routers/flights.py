@@ -403,14 +403,15 @@ def _apply_attachments(flight: Flight, attachments, updated_fields: list):
 def _apply_battery_sensor(flight: Flight, detail: dict, updated_fields: list):
     """Fill battery_serial / sensor_package from the API detail's nested or string
     forms, only when the flight does not already have that value."""
-    from app.integrations.skydio import _to_str
+    from app.integrations.skydio import _clean_serial, _to_str
 
     battery = detail.get("battery")
     if isinstance(battery, dict) and not flight.battery_serial:
-        flight.battery_serial = battery.get("battery_serial") or battery.get("serial_number") or _to_str(battery)
+        flight.battery_serial = _clean_serial(
+            battery.get("battery_serial") or battery.get("serial_number") or _to_str(battery))
         updated_fields.append("battery_serial")
     elif isinstance(battery, str) and not flight.battery_serial:
-        flight.battery_serial = battery
+        flight.battery_serial = _clean_serial(battery)
         updated_fields.append("battery_serial")
 
     sensor = detail.get("sensor_package")
@@ -421,15 +422,15 @@ def _apply_battery_sensor(flight: Flight, detail: dict, updated_fields: list):
 
 def _refresh_equipment(flight: Flight, detail: dict, updated_fields: list):
     """Apply equipment fields (battery, sensor, attachments, carrier) from API detail."""
-    from app.integrations.skydio import _to_str
+    from app.integrations.skydio import _clean_serial, _to_str
 
-    for api_key, fld in [
-        ("battery_serial", "battery_serial"), ("sensor_package", "sensor_package"),
-        ("carrier", "carrier"),
+    for api_key, fld, convert in [
+        ("battery_serial", "battery_serial", _clean_serial), ("sensor_package", "sensor_package", _to_str),
+        ("carrier", "carrier", _to_str),
     ]:
         val = detail.get(api_key)
         if val is not None:
-            setattr(flight, fld, _to_str(val))
+            setattr(flight, fld, convert(val))
             updated_fields.append(fld)
 
     _apply_attachments(flight, detail.get("attachments"), updated_fields)

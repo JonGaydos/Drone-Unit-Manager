@@ -50,6 +50,14 @@ def test_entry_returns_username_and_imported(client, db, admin_headers):
     assert logs["Old"]["imported"] is False
 
 
+def test_entry_returns_the_client_ip_address(client, db, admin_headers):
+    _entry(db, ip_address="10.0.0.5")
+
+    logs = client.get(AUDIT_URL, headers=admin_headers).json()["logs"]
+
+    assert logs[0]["ip_address"] == "10.0.0.5"
+
+
 def test_csv_has_username_changes_and_imported_columns(client, db, admin_headers):
     _entry(db, user_username="jdoe", imported=True,
            changes={"first_name": {"old": "Jan", "new": "Jane"}}, ip_address="10.0.0.5")

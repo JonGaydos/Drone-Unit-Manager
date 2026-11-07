@@ -50,9 +50,11 @@ _SETTING_MODEL = "Setting"
 _SETTING_VALUE_FIELD = "value"
 
 EXCLUDED_MODELS = frozenset({_AUDIT_LOG_MODEL, "NotificationLog", "Alert"})
-# Bookkeeping, plus theme, a personal display preference.
+# Bookkeeping, plus theme, a personal display preference, and the path of a
+# thumbnail the server builds on its own.
 EXCLUDED_FIELDS = frozenset({
     "created_at", "updated_at", "last_used_at", "token_version", "modified_by_id", "theme",
+    "thumbnail_path",
 })
 SECRET_FIELDS = frozenset({"password_hash", "token_hash"})
 SECRET_MARKER = "[changed]"
@@ -139,8 +141,9 @@ class _Tracked:
 
 @dataclass
 class _CaptureState:
-    """``savepoints`` holds, per open savepoint, what to go back to if it rolls
-    back: ``records`` and the run's row as they were when it began."""
+    """``savepoints`` holds, per open savepoint, its transaction and what to go
+    back to if it rolls back: ``records`` and the run's row as they were when
+    it began."""
     pending: list = field(default_factory=list)
     records: dict = field(default_factory=dict)
     unsettled: list = field(default_factory=list)
@@ -639,7 +642,7 @@ def _after_transaction_create(session, transaction) -> None:
     if not transaction.nested:
         return
     state = _state(session)
-    state.savepoints.append((dict(state.records), state.run.entry_id if state.run else None))
+    state.savepoints.append((transaction, dict(state.records), state.run.entry_id if state.run else None))
     if state.run is not None:
         state.run.frames.append({})
 
@@ -660,22 +663,36 @@ def _after_commit(session) -> None:
         state.run.committed_entry_id = state.run.entry_id
 
 
+def _savepoint_depth(state: _CaptureState, transaction) -> int | None:
+    """Where this savepoint's entry sits in ``state.savepoints``, or None for
+    no savepoint."""
+    if transaction is None:
+        return None
+    for depth in range(len(state.savepoints) - 1, -1, -1):
+        if state.savepoints[depth][0] is transaction:
+            return depth
+    return None
+
+
 def _after_rollback(session) -> None:
     """Put the tracking back where the database just went. A flush that failed
     leaves its captured objects behind too."""
     state = _state(session)
     state.pending = []
     state.unsettled.clear()
-    nested = session.in_nested_transaction() and bool(state.savepoints)
-    if nested:
-        state.records, run_entry_id = state.savepoints.pop()
+    depth = _savepoint_depth(state, session.get_nested_transaction())
+    if depth is not None:
+        _, state.records, run_entry_id = state.savepoints[depth]
+        # Savepoints opened inside this one ended with it, without a rollback event.
+        dropped = len(state.savepoints) - depth
+        del state.savepoints[depth:]
     else:
         state.records = {}
         state.savepoints.clear()
     if state.run is None:
         return
-    if nested:
-        state.run.frames.pop()
+    if depth is not None:
+        del state.run.frames[-dropped:]
         state.run.entry_id = run_entry_id
     else:
         state.run.frames[1:] = [{}]

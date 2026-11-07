@@ -36,6 +36,7 @@ ACCESS_DENIED = "Access denied"
 
 # ── Media types ───────────────────────────────────────────────────────────────
 MIME_JPEG = "image/jpeg"
+MIME_PNG = "image/png"
 FILE_TYPE_NOT_ALLOWED = "File type '{}' not allowed."
 FILE_TOO_LARGE = "File too large. Maximum size is {}MB"
 

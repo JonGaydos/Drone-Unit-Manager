@@ -302,6 +302,12 @@ describe('IntegrationsPage', () => {
       expect(await screen.findAllByText(/Imported 1 flight(?!s)/)).not.toHaveLength(0)
     })
 
+    it('reports the battery serials it filled on existing flights', async () => {
+      await importFile({ format_detected: 'skydio', flights_imported: 0, flights_skipped: 22, batteries_filled: 22 })
+
+      expect(await screen.findByText('22 battery serials filled')).toBeInTheDocument()
+    })
+
     it('adds nothing when an import had no notices', async () => {
       await importFile({ format_detected: 'litchi', flights_imported: 1 })
 

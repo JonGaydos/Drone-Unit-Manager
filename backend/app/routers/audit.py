@@ -48,6 +48,7 @@ def list_audit_logs(
                 "entity_name": entry.entity_name,
                 "changes": redact_audit_changes(entry.changes) if hide else entry.changes,
                 "details": redact_audit_details(entry.details) if hide else entry.details,
+                "ip_address": entry.ip_address,
                 "created_at": entry.created_at.isoformat() if entry.created_at else None,
                 "imported": bool(entry.imported),
             }

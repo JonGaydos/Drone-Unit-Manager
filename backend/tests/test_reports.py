@@ -720,6 +720,23 @@ def test_annual_report_yoy_spans_five_years(client, db, pilot_headers):
     assert y25["flight_hours"] == 1.5
 
 
+def test_annual_report_yoy_ends_at_the_last_year_of_a_multi_year_range(client, db, pilot_headers):
+    _seed_annual_year(db, 2026)
+    payload = _generate(client, pilot_headers, "annual_unit_report",
+                        date_from="2020-01-01", date_to="2026-12-31")
+
+    assert [r["year"] for r in payload["rows"]] == [2022, 2023, 2024, 2025, 2026]
+
+
+def test_annual_report_yoy_counts_the_last_year_of_a_multi_year_range(client, db, pilot_headers):
+    _seed_annual_year(db, 2026)
+    payload = _generate(client, pilot_headers, "annual_unit_report",
+                        date_from="2020-01-01", date_to="2026-12-31")
+
+    y26 = next(r for r in payload["rows"] if r["year"] == 2026)
+    assert y26["flights"] == 2
+
+
 def test_annual_yoy_vehicle_count_respects_the_unit_filter(client, db, pilot_headers):
     """A vehicle that only flew a non-counted flight is left out of the
     Year-over-Year unique-vehicles count, consistent with the flight, hour and

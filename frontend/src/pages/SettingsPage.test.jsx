@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
@@ -507,6 +507,8 @@ describe('SettingsPage role permissions', () => {
   describe('own profile', () => {
     const ME = { id: 9, username: 'jpilot', role: 'pilot', display_name: 'Jamie Pilot', email: 'j@example.org' }
 
+    afterEach(() => { vi.restoreAllMocks() })
+
     it('shows a non-admin their display name read-only and still saves the email', async () => {
       mockMount()
       let sent = null
@@ -543,6 +545,24 @@ describe('SettingsPage role permissions', () => {
       await user.click(screen.getByRole('button', { name: 'Save Profile' }))
 
       await waitFor(() => expect(sent).toEqual({ display_name: 'Chief', email: 'j@example.org' }))
+    })
+
+    // The signed-in user is fetched again when the window regains focus, so an
+    // email changed elsewhere arrives after the page mounted.
+    it('shows the profile as the server now has it after a refresh', async () => {
+      mockMount()
+      server.use(http.get('/api/auth/me', () => HttpResponse.json(withPermissions(ME))))
+      renderWithProviders(<SettingsPage />, { user: ME, role: 'pilot' })
+      const email = await screen.findByLabelText('Email')
+
+      server.use(http.get('/api/auth/me', () =>
+        HttpResponse.json(withPermissions({ ...ME, email: 'changed@example.org' }))))
+      const later = Date.now() + 61 * 1000
+      vi.spyOn(Date, 'now').mockReturnValue(later)
+      localStorage.setItem('lastActivity', String(later))
+      globalThis.dispatchEvent(new Event('focus'))
+
+      await waitFor(() => expect(email).toHaveValue('changed@example.org'))
     })
   })
 })

@@ -77,7 +77,10 @@ def require_form_user(key: str | None = None):
     """
     guard = require_admin if key is None else require_permission(key)
 
-    async def read_form(request: Request, user: Annotated[User, Depends(guard)]):
+    async def read_form(request: Request, user: Annotated[User, Depends(guard)], db: DBSession):
+        # The checks only read. Ending their transaction returns the pooled
+        # connection while a slow upload arrives; the user reloads on next use.
+        db.rollback()
         form = await _parse_form(request)
         try:
             yield UploadForm(user, form)
