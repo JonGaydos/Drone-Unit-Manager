@@ -114,7 +114,7 @@ def test_a_battery_already_set_is_kept(db):
     assert result[FILLED] == 0
 
 
-@pytest.mark.parametrize("placeholder", ["", "N/A", "-"])
+@pytest.mark.parametrize("placeholder", ["", "N/A", "-", "-N/A"])
 def test_a_placeholder_battery_fills_nothing(db, placeholder):
     flight = _flight(db)
 

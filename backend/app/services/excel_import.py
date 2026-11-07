@@ -333,7 +333,10 @@ def _fill_empty_battery(db: Session, row: dict, flight_id: str) -> int:
     if existing is None or (existing.battery_serial or "").strip():
         return 0
     from app.services.sync_manager import _ensure_simple_equipment
-    existing.battery_serial = _ensure_simple_equipment(db, serial, Battery, "battery") or serial
+    stored = _ensure_simple_equipment(db, serial, Battery, "battery")
+    if not stored:
+        return 0
+    existing.battery_serial = stored
     return 1
 
 
