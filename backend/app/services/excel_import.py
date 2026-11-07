@@ -123,12 +123,25 @@ def _find_or_create_pilot_by_email(db: Session, email: str) -> tuple[Optional[Pi
     return pilot, True
 
 
+def _vehicle_by_serial_or_nickname(db: Session, name: str) -> Optional[Vehicle]:
+    """The vehicle whose serial is `name`, or else the one whose nickname is.
+    A Skydio export names each drone by its nickname, while sync stores the
+    hardware serial, so both are tried. The nickname match ignores case."""
+    from sqlalchemy import func as sa_func
+    vehicle = db.query(Vehicle).filter(Vehicle.serial_number == name).first()
+    if vehicle:
+        return vehicle
+    return (db.query(Vehicle)
+            .filter(sa_func.lower(Vehicle.nickname) == name.lower())
+            .order_by(Vehicle.id).first())
+
+
 def _find_or_create_vehicle(db: Session, vehicle_str: str) -> tuple[Optional[Vehicle], bool]:
     """Returns (vehicle, was_created)."""
     if not vehicle_str or vehicle_str.strip() == "":
         return None, False
     serial = vehicle_str.strip()
-    vehicle = db.query(Vehicle).filter(Vehicle.serial_number == serial).first()
+    vehicle = _vehicle_by_serial_or_nickname(db, serial)
     if not vehicle:
         manufacturer = "Skydio"
         model = serial
