@@ -3,7 +3,8 @@ from typing import Annotated, Optional
 
 from pydantic import BaseModel, StringConstraints, field_validator
 
-# Serial number, manufacturer and model are required text: trimmed, never blank.
+# Required text (serial number, manufacturer, model, location place): trimmed,
+# never blank, at most the 100 characters their columns hold.
 RequiredText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
 
 
@@ -67,4 +68,4 @@ class VehicleOut(BaseModel):
 
 class VehicleLocationUpdate(BaseModel):
     pilot_id: int | None = None
-    place: str | None = None
+    place: RequiredText | None = None

@@ -409,3 +409,16 @@ def test_vehicles_csv_has_lifecycle_dates_and_current_registration(client, admin
     assert by_serial["VEH-001"]["FAA Reg"] == "FA-CURRENT"
     assert by_serial["VEH-002"]["FAA Reg"] == "LEGACY-2"
     assert by_serial["VEH-002"]["Acquired"] == ""
+
+
+# ── A-F8: vehicle location place must be 1-100 characters ───────────────────
+
+def test_vehicle_location_place_blank_or_long_is_refused(client, admin_headers):
+    vid = _vehicle(client, admin_headers)["id"]
+    for place in ("", "   ", "x" * 101):
+        resp = client.patch(f"/api/vehicles/{vid}/location", headers=admin_headers, json={"place": place})
+        assert resp.status_code == 422, f"{place!r}: {resp.text}"
+    resp = client.patch(f"/api/vehicles/{vid}/location", headers=admin_headers, json={"place": " Hangar 2 "})
+    assert resp.status_code == 200, resp.text
+    row = next(r for r in client.get("/api/vehicles/locations", headers=admin_headers).json() if r["vehicle_id"] == vid)
+    assert row["location_text"] == "Hangar 2"
