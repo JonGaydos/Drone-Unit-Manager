@@ -377,6 +377,21 @@ export const api = {
     URL.revokeObjectURL(url)
   },
   /**
+   * GET a stored file as a Blob with the session token, for images an <img>
+   * cannot load itself (a bare img request sends no Authorization header).
+   * @param {string} path - API endpoint path serving the file.
+   * @param {{timeout?: number, signal?: AbortSignal}} [options={}]
+   * @returns {Promise<Blob>}
+   */
+  blob: async (path, options = {}) => {
+    const token = localStorage.getItem('token')
+    const res = await fetchWithTimeout(`${API_BASE}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    }, options)
+    if (!res.ok) throw httpError('Could not load file', res.status)
+    return res.blob()
+  },
+  /**
    * Upload a file via multipart/form-data POST.
    * Does not set Content-Type header (browser sets boundary automatically).
    * @param {string} path - API endpoint path.

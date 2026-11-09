@@ -129,4 +129,17 @@ describe('VehicleDetailPage', () => {
     await screen.findByRole('heading', { name: /DJI Mavic 3 \(Falcon\)/ })
     expect(screen.getByRole('button', { name: /Add Registration/ })).toBeInTheDocument()
   })
+
+  it('loads the vehicle photo with the session token and shows it from a blob URL', async () => {
+    let auth = null
+    mockMount({ vehicle: () => HttpResponse.json({ ...VEHICLE, photo_url: '/api/vehicles/7/photo/view' }) })
+    server.use(http.get('/api/vehicles/7/photo/view', ({ request }) => {
+      auth = request.headers.get('Authorization')
+      return new HttpResponse(new Uint8Array([0x89, 0x50, 0x4e, 0x47]), { headers: { 'Content-Type': 'image/png' } })
+    }))
+    render()
+    const img = await screen.findByRole('img', { name: /DJI Mavic 3 \(Falcon\)/ })
+    expect(img.getAttribute('src')).toMatch(/^blob:/)
+    expect(auth).toBe('Bearer test-token')
+  })
 })

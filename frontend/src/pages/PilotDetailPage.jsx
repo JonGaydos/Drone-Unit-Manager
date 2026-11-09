@@ -13,6 +13,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
 import DocumentUpload from '@/components/DocumentUpload'
+import { useAuthedImage } from '@/hooks/useAuthedImage'
 
 /** Performance tiles whose values come from other features. The server leaves a
  *  value null when the user's view of that feature is off, so its tile is hidden. */
@@ -62,6 +63,7 @@ export default function PilotDetailPage() {
   }, [canSeeFiles])
 
   const [pilot, setPilot] = useState(null)
+  const photoSrc = useAuthedImage(pilot?.photo_url)
   const [stats, setStats] = useState(null)
   const [flights, setFlights] = useState([])
   const [certifications, setCertifications] = useState([])
@@ -145,8 +147,8 @@ export default function PilotDetailPage() {
       <div className="bg-card border border-border rounded-xl p-6">
         <div className="flex items-start gap-4">
           <div className="relative shrink-0">
-            {pilot.photo_url ? (
-              <img src={pilot.photo_url} alt={pilot.full_name}
+            {photoSrc ? (
+              <img src={photoSrc} alt={pilot.full_name}
                 className="w-16 h-16 rounded-2xl object-cover" />
             ) : (
               <div className="w-16 h-16 rounded-2xl bg-primary/15 flex items-center justify-center text-primary text-xl font-bold">

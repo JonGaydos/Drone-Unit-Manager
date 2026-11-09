@@ -194,4 +194,17 @@ describe('PilotDetailPage', () => {
     expect(await screen.findByRole('heading', { name: 'Ada Lovelace' })).toBeInTheDocument()
     expect(screen.queryByText('Pilot not found')).toBeNull()
   })
+
+  it('loads the profile photo with the session token and shows it from a blob URL', async () => {
+    let auth = null
+    mockMount({ pilot: () => HttpResponse.json({ ...PILOT, photo_url: '/api/pilots/7/photo/view' }) })
+    server.use(http.get('/api/pilots/7/photo/view', ({ request }) => {
+      auth = request.headers.get('Authorization')
+      return new HttpResponse(new Uint8Array([0x89, 0x50, 0x4e, 0x47]), { headers: { 'Content-Type': 'image/png' } })
+    }))
+    render()
+    const img = await screen.findByRole('img', { name: 'Ada Lovelace' })
+    expect(img.getAttribute('src')).toMatch(/^blob:/)
+    expect(auth).toBe('Bearer test-token')
+  })
 })

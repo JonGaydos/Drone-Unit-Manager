@@ -11,6 +11,7 @@ import { ArrowLeft, Clock, Calendar, Battery, Edit, Gamepad2, Cpu, Paperclip, Ca
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 import DocumentUpload from '@/components/DocumentUpload'
 import MaintenanceHistoryCard from '@/components/MaintenanceHistoryCard'
+import { useAuthedImage } from '@/hooks/useAuthedImage'
 
 export default function VehicleDetailPage() {
   const { id } = useParams()
@@ -23,6 +24,7 @@ export default function VehicleDetailPage() {
   const toast = useToast()
   const [confirmProps, requestConfirm] = useConfirm()
   const [vehicle, setVehicle] = useState(null)
+  const photoSrc = useAuthedImage(vehicle?.photo_url)
   const [stats, setStats] = useState(null)
   const [flights, setFlights] = useState([])
   const [batteries, setBatteries] = useState([])
@@ -157,8 +159,8 @@ export default function VehicleDetailPage() {
       <div className="bg-card border border-border rounded-xl p-6">
         <div className="flex items-start gap-4">
           <div className="relative shrink-0">
-            {vehicle.photo_url ? (
-              <img src={vehicle.photo_url} alt={displayName}
+            {photoSrc ? (
+              <img src={photoSrc} alt={displayName}
                 className="w-16 h-16 rounded-2xl object-cover" />
             ) : (
               <div className="w-16 h-16 rounded-2xl bg-primary/15 flex items-center justify-center text-primary">
