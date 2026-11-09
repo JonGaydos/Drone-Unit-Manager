@@ -289,3 +289,42 @@ def test_equipment_flight_items_carry_vehicle_id_and_location(client, db, admin_
     assert att["positions"] == ["top", "left"]
     for url in (f"/api/sensors/{sid}/stats", f"/api/attachments/{aid}/stats"):
         assert client.get(url, headers=admin_headers).json()["unique_pilots"] == 2, url
+
+
+# ── A-F2: status must be one the equipment type uses ────────────────────────
+
+def test_vehicle_status_outside_the_list_is_refused(client, admin_headers):
+    resp = client.post("/api/vehicles", headers=admin_headers, json={
+        "serial_number": "VEH-S1", "manufacturer": "Acme", "model": "Hawk", "status": "banana"})
+    assert resp.status_code == 422, resp.text
+    assert "active" in resp.json()["detail"]
+    vid = _vehicle(client, admin_headers)["id"]
+    assert client.patch(f"/api/vehicles/{vid}", headers=admin_headers, json={"status": "banana"}).status_code == 422
+    for status in ("maintenance", "damaged", "retired", "active"):
+        resp = client.patch(f"/api/vehicles/{vid}", headers=admin_headers, json={"status": status})
+        assert resp.status_code == 200, f"{status}: {resp.text}"
+
+
+def test_each_equipment_type_takes_its_own_statuses(client, admin_headers):
+    cases = [
+        ("/api/batteries", {"serial_number": "B-S"}, "charging", "online"),
+        ("/api/docks", {"serial_number": "D-S"}, "online", "charging"),
+        ("/api/controllers", {"serial_number": "C-S"}, "damaged", "online"),
+        ("/api/sensors", {"serial_number": "S-S"}, "maintenance", "charging"),
+        ("/api/attachments", {"serial_number": "A-S"}, "retired", "banana"),
+        ("/api/other-equipment", {"name": "Case"}, "damaged", "inactive"),
+    ]
+    for url, payload, good, bad in cases:
+        assert client.post(url, headers=admin_headers, json={**payload, "status": bad}).status_code == 422, url
+        resp = client.post(url, headers=admin_headers, json={**payload, "status": good})
+        assert resp.status_code == 200, f"{url}: {resp.text}"
+
+
+def test_a_stored_legacy_status_does_not_block_other_edits(client, db, admin_headers):
+    from app.models.controller import Controller
+    c = Controller(serial_number="C-OLD", status="inactive")
+    db.add(c)
+    db.commit()
+    resp = client.patch(f"/api/controllers/{c.id}", headers=admin_headers,
+                        json={"nickname": "Spare", "status": "inactive"})
+    assert resp.status_code == 200, resp.text
