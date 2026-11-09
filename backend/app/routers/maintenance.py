@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, StringConstraints, model_validator
 from datetime import date
-from typing import Annotated, Optional
+from typing import Annotated, Literal, Optional
 
 from app.constants import RECORD_NOT_FOUND
 from app.deps import DBSession
@@ -57,29 +57,45 @@ def _validate_entity(db, entity_type: str, entity_id: int | None) -> None:
             raise HTTPException(status_code=404, detail=f"{entity_type} #{entity_id} not found")
 
 
+MaintenanceType = Literal["scheduled", "unscheduled", "inspection"]
+Description = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+DUE_BEFORE_PERFORMED = "Next due date cannot be before the performed date"
+
+
+def _check_due_after_performed(performed: date | None, next_due: date | None) -> None:
+    if performed and next_due and next_due < performed:
+        raise HTTPException(status_code=422, detail=DUE_BEFORE_PERFORMED)
+
+
 class MaintenanceCreate(BaseModel):
     entity_type: str
     entity_id: Optional[int] = None
-    maintenance_type: str = "scheduled"
-    description: str
-    performed_by: Optional[str] = None
+    maintenance_type: MaintenanceType = "scheduled"
+    description: Description
+    performed_by: Optional[str] = Field(None, max_length=200)
     performed_date: Optional[date] = None
     next_due_date: Optional[date] = None
-    next_due_hours: Optional[float] = None
-    cost: Optional[float] = None
+    next_due_hours: Optional[float] = Field(None, ge=0)
+    cost: Optional[float] = Field(None, ge=0)
     notes: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _due_after_performed(self):
+        if self.performed_date and self.next_due_date and self.next_due_date < self.performed_date:
+            raise ValueError(DUE_BEFORE_PERFORMED)
+        return self
 
 
 class MaintenanceUpdate(BaseModel):
     entity_type: Optional[str] = None
     entity_id: Optional[int] = None
-    maintenance_type: Optional[str] = None
-    description: Optional[str] = None
-    performed_by: Optional[str] = None
+    maintenance_type: Optional[MaintenanceType] = None
+    description: Optional[Description] = None
+    performed_by: Optional[str] = Field(None, max_length=200)
     performed_date: Optional[date] = None
     next_due_date: Optional[date] = None
-    next_due_hours: Optional[float] = None
-    cost: Optional[float] = None
+    next_due_hours: Optional[float] = Field(None, ge=0)
+    cost: Optional[float] = Field(None, ge=0)
     notes: Optional[str] = None
 
 
@@ -193,6 +209,8 @@ def update_maintenance(record_id: int, data: MaintenanceUpdate, db: DBSession, a
         raise HTTPException(status_code=404, detail=RECORD_NOT_FOUND)
     _require_edit(db, admin, record)
     update_data = data.model_dump(exclude_unset=True)
+    _check_due_after_performed(update_data.get("performed_date", record.performed_date),
+                               update_data.get("next_due_date", record.next_due_date))
     _resolve_entity_change(db, record, update_data)
     for key, value in update_data.items():
         setattr(record, key, value)

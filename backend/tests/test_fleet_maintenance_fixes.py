@@ -478,3 +478,22 @@ def test_dock_coordinates_out_of_range_are_refused(client, admin_headers):
     did = client.post("/api/docks", headers=admin_headers,
                       json={"serial_number": "D-1", "lat": -90, "lon": 180}).json()["id"]
     assert client.patch(f"/api/docks/{did}", headers=admin_headers, json={"lat": 91}).status_code == 422
+
+
+# ── A-F19: maintenance record validation ────────────────────────────────────
+
+def test_maintenance_record_validation(client, admin_headers):
+    vid = _vehicle(client, admin_headers)["id"]
+    base = {"entity_type": "vehicle", "entity_id": vid, "description": "Prop swap"}
+    for extra in ({"description": ""}, {"description": "   "}, {"cost": -50}, {"next_due_hours": -1},
+                  {"maintenance_type": "zzz"},
+                  {"performed_date": "2026-03-01", "next_due_date": "2026-02-01"}):
+        resp = client.post("/api/maintenance", headers=admin_headers, json={**base, **extra})
+        assert resp.status_code == 422, f"{extra}: {resp.text}"
+    rid = client.post("/api/maintenance", headers=admin_headers,
+                      json={**base, "performed_date": "2026-03-01", "cost": 0}).json()["id"]
+    for extra in ({"next_due_date": "2026-02-28"}, {"cost": -1}, {"description": ""}, {"maintenance_type": "zzz"}):
+        resp = client.patch(f"/api/maintenance/{rid}", headers=admin_headers, json=extra)
+        assert resp.status_code == 422, f"{extra}: {resp.text}"
+    assert client.patch(f"/api/maintenance/{rid}", headers=admin_headers,
+                        json={"next_due_date": "2026-04-01", "maintenance_type": "inspection"}).status_code == 200
