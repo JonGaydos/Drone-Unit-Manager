@@ -12,8 +12,19 @@ from app.config import settings
 
 
 class Base(DeclarativeBase):
-    """Declarative base class for all primary application ORM models."""
-    pass
+    """Declarative base class for all primary application ORM models.
+
+    Every table uses SQLite AUTOINCREMENT, so an id is never handed out twice:
+    without it a deleted newest row's id goes to the next insert, and audit
+    entries naming the old record point at the new one. SQLite applies it only
+    to a single integer primary key; other tables are unaffected.
+    """
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        table = cls.__dict__.get("__table__")
+        if table is not None:
+            table.dialect_kwargs["sqlite_autoincrement"] = True
 
 
 # How long a writer waits for SQLite's single write lock before giving up with
