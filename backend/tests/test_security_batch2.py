@@ -117,9 +117,9 @@ def test_password_over_72_bytes_is_refused(client, pilot_user, pilot_headers):
     assert resp.status_code == 400
 
 
-# 3. A restore cannot grant access or rewrite history ---------------------------
+# 3. A restore brings back logins and tokens but cannot rewrite history ----------
 
-def test_restore_blanks_hashes_drops_tokens_and_keeps_the_audit_trail(db, admin_user):
+def test_restore_keeps_hashes_and_tokens_and_keeps_the_audit_trail(db, admin_user):
     raw = generate_token()
     db.add(ApiToken(name="local", token_hash=hash_token(raw), token_prefix=raw[:12], user_id=admin_user.id))
     db.add(AuditLog(user_id=admin_user.id, user_name="Local Admin", action="login", entity_type="auth",
@@ -142,8 +142,8 @@ def test_restore_blanks_hashes_drops_tokens_and_keeps_the_audit_trail(db, admin_
     backup_router._restore_main_tables(db, doctored)
     db.expire_all()
 
-    assert db.query(User).one().password_hash == ""
-    assert db.query(ApiToken).count() == 0
+    assert db.query(User).one().password_hash == "$2b$12$knownhashknownhashknownhashknownhashknownhashkn"
+    assert db.query(ApiToken).one().token_hash == hash_token("dum_planted")
     entries = db.query(AuditLog).filter(AuditLog.entity_type != "backup").order_by(AuditLog.created_at).all()
     assert [(e.user_name, e.action) for e in entries] == [("Planted", "update"), ("Local Admin", "login")]
     local = entries[1]

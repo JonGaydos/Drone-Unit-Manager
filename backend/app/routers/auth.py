@@ -62,7 +62,7 @@ def verify_password(password: str, hashed: str) -> bool:
     Returns:
         True if the password matches the hash.
     """
-    # An empty stored hash (e.g. a redacted backup restore) can never match and
+    # An empty stored hash (e.g. a restore of an older backup) can never match and
     # is not a valid bcrypt salt; bcrypt.checkpw would raise on it. Fail closed.
     if not hashed:
         return False
@@ -367,10 +367,10 @@ def _validate_password(password: str):
 def _has_usable_login(db) -> bool:
     """True when at least one active user has a real (non-blank) password hash.
 
-    A backup blanks every password_hash (backup._serialize_database redacts
-    them), so a database restored onto a fresh install has user rows but no way
-    to authenticate. That locked-out state, like a genuinely empty install, has
-    no usable login and must be able to reach setup/recovery again.
+    Backups made before password hashes were included carry a blank
+    password_hash for every user, so a database restored from one has user rows
+    but no way to authenticate. That locked-out state, like a genuinely empty
+    install, has no usable login and must be able to reach setup/recovery again.
     """
     return (
         db.query(User)
@@ -385,8 +385,8 @@ def check_setup_required(db: DBSession):
     """Report whether initial setup or lockout recovery is needed.
 
     ``setup_required`` is true when no active user has a usable password: a
-    genuine fresh install (no users) or a restore that redacted every password
-    hash. ``recovery`` distinguishes the latter (users exist but none can log
+    genuine fresh install (no users) or a restore of an older backup with blank
+    password hashes. ``recovery`` distinguishes the latter (users exist but none can log
     in) so the setup page can tell the operator to re-claim an existing admin.
     """
     usable = _has_usable_login(db)
@@ -395,7 +395,7 @@ def check_setup_required(db: DBSession):
 
 
 def _reclaim_admin(db, username: str, password: str) -> User:
-    """Restore login access to an existing admin after a redacted-backup restore.
+    """Restore login access to an existing admin after a blank-hash restore.
 
     The operator supplies the username of an administrator from the restored
     backup; we set its password and reactivate it. Other restored users keep
@@ -414,7 +414,7 @@ def _reclaim_admin(db, username: str, password: str) -> User:
 
 
 def _reactivate_admin(request, db, username: str, password: str) -> dict:
-    """Recovery path for a locked-out (redacted-restore) install.
+    """Recovery path for a locked-out (blank-hash restore) install.
 
     Gated on the same install token that authorized the restore -- knowing an
     admin username is not enough to take over a locked-out install. Reactivates
@@ -442,7 +442,7 @@ def _reactivate_admin(request, db, username: str, password: str) -> dict:
 
 @router.post("/setup", responses=responses(400, 401, 403))
 def initial_setup(data: SetupRequest, request: Request, db: DBSession):
-    """Create the first admin, or re-claim one after a redacted-backup restore.
+    """Create the first admin, or re-claim one after a blank-hash restore.
 
     Allowed only while no active user has a usable password (see
     _has_usable_login). On a genuine fresh install it creates the admin and

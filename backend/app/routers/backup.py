@@ -1,7 +1,10 @@
 """Full backup export and import for Drone Unit Manager.
 
 Export creates a ZIP with manifest, JSON database dump, and uploaded files.
-Import requires a fresh install (no users) and restores everything.
+A backup holds everything, with no encryption: password hashes, API tokens and
+secret settings included, so a restored install signs in as before. Import onto
+a fresh install takes the install token; onto a live install it takes an admin
+and a typed confirmation.
 """
 
 import io
@@ -80,7 +83,6 @@ from app.models.notification_preference import NotificationPreference
 from app.models.notification_log import NotificationLog
 from app.models.telemetry import TelemetryPoint
 from app.responses import responses
-from app.routers.settings import SECRET_KEYS
 
 logger = logging.getLogger(__name__)
 
@@ -156,22 +158,16 @@ EXPORT_ORDER = [
 
 
 def _serialize_database(db: Session) -> tuple[dict, dict]:
-    """Serialize every main table to ``{table_name: rows}``, redacting secrets.
+    """Serialize every main table to ``{table_name: rows}``.
 
-    Setting rows whose key is a known secret are dropped, and user password
-    hashes are blanked (the column is non-nullable, so the key stays with an
-    empty string; restored accounts need a password reset). Returns
-    ``(database, row_counts)``.
+    Nothing is redacted: user password hashes, API token rows and the secret
+    settings (SECRET_KEYS) are written as stored, so a restore brings back
+    working logins, tokens and integrations. Returns ``(database, row_counts)``.
     """
     database = {}
     counts = {}
     for table_name, model_class in EXPORT_ORDER:
         rows = _serialize_table(db, model_class)
-        if table_name == "settings":
-            rows = [r for r in rows if r.get("key") not in SECRET_KEYS]
-        elif table_name == "users":
-            for r in rows:
-                r["password_hash"] = ""
         database[table_name] = rows
         counts[table_name] = len(rows)
         logger.info("  Exported %s: %d rows", table_name, len(rows))
@@ -376,11 +372,12 @@ def init_install_token() -> str | None:
     login, logging it so an operator can read it from container logs.
 
     "No usable login" covers a genuine fresh install (no users) and a database
-    restored from a backup (users exist but every password hash was redacted, so
-    nobody can sign in). Both need the token: the first to import a backup, the
-    second to reactivate an admin. Returns None (and issues nothing) once a real
-    login exists. Called at startup and again after an import, since a restore
-    blanks the hashes and re-opens the no-usable-login state."""
+    restored from an older backup (users exist but every password hash is blank,
+    since backups once left them out, so nobody can sign in). Both need the
+    token: the first to import a backup, the second to reactivate an admin.
+    Returns None (and issues nothing) once a real login exists. Called at
+    startup and again after an import, since a restore of such a backup
+    re-opens the no-usable-login state."""
     from app.routers.auth import _has_usable_login
     db = database.SessionLocal()   # call-time resolution, see import_backup
     try:
@@ -438,8 +435,8 @@ def verify_install_token(provided: str) -> bool:
     """Constant-time check of a provided install token against the token file.
 
     False when the file is missing, empty, or the value does not match, so the
-    caller can fail closed. Used to gate both backup import and, after a redacted
-    restore, admin reactivation on the setup screen."""
+    caller can fail closed. Used to gate both backup import and, after a restore
+    that left no usable login, admin reactivation on the setup screen."""
     provided = (provided or "").strip()
     if not provided:
         return False
@@ -622,27 +619,21 @@ def _audit_key(row) -> tuple:
 def _prepare_restore_rows(db: Session, name: str, rows: list[dict]) -> list[dict]:
     """Adjust one table's backup rows before they are inserted.
 
-    A backup file is admin-supplied and could be edited by hand, so nothing in
-    it may grant access or rewrite history:
-    - API tokens are never restored; a restored install does not accept
-      credentials minted elsewhere.
-    - Password hashes are blanked (an honest export already blanks them), so a
-      restore can never plant a known password; admins re-claim access with the
-      install token.
+    A restore brings back everything the backup holds, including password
+    hashes and API tokens (only an admin or the install-token holder can run
+    one, and either already controls the install). What it may not do is let a
+    session from before the restore act as someone else, or rewrite history:
     - Each user gets a fresh random token version. Users are restored by id, so
       a login token issued before the restore would otherwise sign in as
-      whoever holds that id in the restored data.
+      whoever holds that id in the restored data. Everyone signs in again.
     - Role permissions pass the same checks as the write API: rows with an
       unknown key, an invalid value, the admin role, a locked viewer cell, or a
       change permission without its view key are dropped.
     - Audit entries are appended, not substituted: they lose their ids, and any
       entry this install already holds is skipped rather than duplicated.
     """
-    if name == "api_tokens":
-        return []
     if name == "users":
         for r in rows:
-            r["password_hash"] = ""
             r["token_version"] = secrets.randbelow(2**31 - 1) + 1
     elif name == "role_permissions":
         rows, dropped = permissions.restorable_overrides(rows)
@@ -722,8 +713,8 @@ def _restore_main_tables(db: Session, db_tables: dict, held_items: list[dict] | 
 
     A restore makes the database match the backup, so each table is wiped and
     reloaded rather than appended to (appending would collide on the backup's
-    explicit ids). The exceptions are in _prepare_restore_rows: the audit trail
-    is appended to, and API tokens are dropped rather than restored.
+    explicit ids). The exception is in _prepare_restore_rows: the audit trail
+    is appended to.
 
     PRAGMA defer_foreign_keys holds every FK check until COMMIT
     and, unlike PRAGMA foreign_keys, is honored inside a transaction -- so the
@@ -912,21 +903,22 @@ def _restore_archive(db, content: bytes, principal: str, confirm_holds: str = ""
     tables_imported, rows_imported, _, summary = _restore_main_tables(
         db, db_tables, held_items, principal, backup_date)
 
-    # A restore blanks every password hash, so the install is left with no
-    # usable login. Keep the SAME install token available (and logged) so the
-    # operator can reactivate an admin on the setup screen; /auth/setup
-    # retires it once that succeeds. init_install_token reuses the existing
-    # token file untouched -- it never replaces a token -- and only mints one
-    # when none is on disk (an admin restoring in-app, where no token existed
-    # at boot). No-ops if a usable login somehow remains. This runs before the
-    # later steps, so a failure in them still leaves a way back in.
-    init_install_token()
+    # The restored password hashes normally leave a usable login, and then the
+    # install token has done its job and is retired. A backup made before hashes
+    # were included leaves none: keep the SAME install token available (and
+    # logged) so the operator can reactivate an admin on the setup screen;
+    # /auth/setup retires it once that succeeds. init_install_token reuses the
+    # existing token file untouched -- it never replaces a token -- and only
+    # mints one when none is on disk (an admin restoring in-app, where no token
+    # existed at boot). This runs before the later steps, so a failure in them
+    # still leaves a way back in.
+    if init_install_token() is None:
+        retire_install_token()
 
     # Telemetry lives in a separate database, so it cannot share the main
     # transaction. A failure is surfaced rather than swallowed: the operator
-    # can reactivate an admin with the install token and retry, which is safe
-    # because the whole restore is idempotent (every table is replaced, not
-    # appended).
+    # can sign in and retry, which is safe because the whole restore is
+    # idempotent (every table is replaced, not appended).
     try:
         telemetry_imported, telemetry_count = _restore_telemetry(zf)
     except Exception as exc:

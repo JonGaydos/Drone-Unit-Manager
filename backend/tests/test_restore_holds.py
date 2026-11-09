@@ -356,10 +356,39 @@ def test_truncated_telemetry_still_leaves_the_summary(
     assert "files=not restored" in summary.details
 
 
-def test_restore_failing_after_the_main_tables_leaves_an_install_token(
+def test_restore_failing_after_the_main_tables_leaves_a_working_login(
         client, db, admin_user, admin_headers, tmp_path, monkeypatch):
+    from tests.conftest import ADMIN_PASSWORD
     _env(tmp_path, monkeypatch)
     archive = _with_telemetry(_archive(db), b'[{"id": 1, "flight_id"')
+
+    resp = _post(client, admin_headers, archive)
+
+    assert resp.status_code == 500
+    login = client.post("/api/auth/login", json={"username": "admin", "password": ADMIN_PASSWORD})
+    assert login.status_code == 200
+
+
+def _blank_hashes(archive: bytes) -> bytes:
+    """The archive as a backup from before password hashes were included."""
+    src = zipfile.ZipFile(io.BytesIO(archive))
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w") as zf:
+        for name in src.namelist():
+            data = src.read(name)
+            if name == "database.json":
+                tables = json.loads(data)
+                for row in tables["users"]:
+                    row["password_hash"] = ""
+                data = json.dumps(tables)
+            zf.writestr(name, data)
+    return out.getvalue()
+
+
+def test_blank_hash_restore_failing_after_the_main_tables_leaves_an_install_token(
+        client, db, admin_user, admin_headers, tmp_path, monkeypatch):
+    _env(tmp_path, monkeypatch)
+    archive = _with_telemetry(_blank_hashes(_archive(db)), b'[{"id": 1, "flight_id"')
 
     resp = _post(client, admin_headers, archive)
 
