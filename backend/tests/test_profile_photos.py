@@ -82,3 +82,18 @@ def test_replacing_with_another_type_serves_only_the_new_photo(client, admin_hea
     assert client.get(f"{owner_url}/view", headers=admin_headers).content == second
     folder = next(uploads.joinpath("photos").glob(f"*/{owner_url.split('/')[3]}"))
     assert sorted(p.name for p in folder.iterdir()) == ["profile.jpg"]
+
+
+@pytest.mark.parametrize("name, fmt, mime", [
+    ("anim.gif", "GIF", "image/gif"),
+    ("photo.webp", "WEBP", "image/webp"),
+    ("photo.jpeg", "JPEG", "image/jpeg"),
+])
+def test_every_accepted_type_is_served(client, admin_headers, uploads, owner_url, name, fmt, mime):
+    content = _image(fmt)
+    assert _upload(client, admin_headers, owner_url, name, content).status_code == 200
+
+    view = client.get(f"{owner_url}/view", headers=admin_headers)
+    assert view.status_code == 200
+    assert view.headers["content-type"] == mime
+    assert view.content == content

@@ -386,8 +386,10 @@ def view_pilot_photo(pilot_id: int, db: DBSession, _user: ViewUser):
     upload_root = Path(settings.UPLOAD_DIR).resolve()
     if not str(resolved_dir).startswith(str(upload_root)):
         raise HTTPException(403, ACCESS_DENIED)
-    for ext in [".jpg", ".jpeg", ".png", ".webp"]:
+    # Every type the upload accepts, served as the type its extension names.
+    from app.services.file_validation import mime_for_filename
+    for ext in sorted(ALLOWED_IMAGE_EXTENSIONS):
         p = photo_dir / f"profile{ext}"
         if p.exists():
-            return FileResponse(p)
+            return FileResponse(p, media_type=mime_for_filename(p.name))
     raise HTTPException(404, "No photo found")
