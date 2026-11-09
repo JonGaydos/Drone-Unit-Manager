@@ -436,11 +436,12 @@ def get_controller(cid: int, db: DBSession, user: ViewUser):
 
 @router.get("/controllers/{cid}/stats", responses=responses(401, 404))
 def get_controller_stats(cid: int, db: DBSession, user: ViewUser):
-    """Get basic stats for a controller."""
+    """Get basic stats for a controller. Flights do not record the controller
+    flown with, so there are no flight figures to give."""
     ctrl = db.query(Controller).filter(Controller.id == cid).first()
     if not ctrl:
         raise HTTPException(404, CONTROLLER_NOT_FOUND)
-    return {"total_flights": 0, "total_hours": 0, "assigned_pilot": ctrl.assigned_pilot_id}
+    return {"assigned_pilot": ctrl.assigned_pilot_id}
 
 
 class DockCreate(BaseModel):

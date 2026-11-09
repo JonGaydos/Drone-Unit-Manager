@@ -458,3 +458,12 @@ def test_battery_reading_validation(client, admin_headers):
 
     resp = client.post(url, headers=admin_headers, json={"cycle_count": 31, "voltage": 15.2, "temperature_c": -10})
     assert resp.status_code == 200, resp.text
+
+
+# ── A-F17: controller stats carry no made-up flight figures ─────────────────
+
+def test_controller_stats_do_not_report_fake_zero_flights(client, admin_headers):
+    cid = client.post("/api/controllers", headers=admin_headers, json={"serial_number": "C-1"}).json()["id"]
+    body = client.get(f"/api/controllers/{cid}/stats", headers=admin_headers).json()
+    assert "total_flights" not in body and "total_hours" not in body
+    assert body["assigned_pilot"] is None
