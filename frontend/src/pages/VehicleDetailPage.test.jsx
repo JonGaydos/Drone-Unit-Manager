@@ -152,4 +152,16 @@ describe('VehicleDetailPage', () => {
     fireEvent.change(screen.getByLabelText('Registration Date'), { target: { value: '2024-02-29' } })
     expect(screen.getByLabelText('Expiry (auto: +3 years)')).toHaveValue('2027-02-28')
   })
+
+  it('shows Next Due from the current registration, not the latest dated one', async () => {
+    mockMount({
+      registrations: () => HttpResponse.json([
+        { id: 2, vehicle_id: 7, registration_number: 'REG-NEWER', registration_date: '2025-05-01', expiry_date: '2028-05-01', is_current: false },
+        { id: 1, vehicle_id: 7, registration_number: 'REG-CURRENT', registration_date: '2024-01-01', expiry_date: '2027-01-01', is_current: true },
+      ]),
+    })
+    render()
+    expect(await screen.findByText('Next Due: 2027-01-01')).toBeInTheDocument()
+    expect(screen.getByText(/REG-CURRENT \| Registered: 2024-01-01/)).toBeInTheDocument()
+  })
 })
