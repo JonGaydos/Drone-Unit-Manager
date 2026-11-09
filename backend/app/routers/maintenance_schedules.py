@@ -21,6 +21,7 @@ from app.models.user import User
 from app.models.vehicle import Vehicle
 from app.responses import responses
 from app.services.audit import compute_changes, log_action
+from app.services.maintenance_due import dismiss_schedule_alerts
 
 router = APIRouter(prefix="/api/maintenance/schedules", tags=["maintenance-schedules"])
 
@@ -268,6 +269,7 @@ def complete_schedule(
         schedule.is_active = False
     else:
         schedule.next_due = _calc_next_due(schedule.frequency, today)
+    dismiss_schedule_alerts(db, schedule)
 
     # Auto-create a maintenance record. One-time tasks get no next_due_date so
     # the record doesn't linger in the Upcoming list.

@@ -29,10 +29,12 @@ TELEMETRY_SYNC_JOB_ID = "skydio_telemetry_sync"
 
 
 def check_maintenance_schedules(db):
-    """Create alerts for overdue maintenance schedules."""
+    """Create alerts for overdue maintenance schedules, and dismiss open ones
+    whose schedule is no longer overdue (completed, moved, ended or deleted)."""
     from datetime import date as date_type
     from app.models.maintenance_schedule import MaintenanceSchedule
     from app.models.alert import Alert
+    from app.services.maintenance_due import schedule_alert_title
 
     today = date_type.today()
     overdue = db.query(MaintenanceSchedule).filter(
@@ -41,12 +43,19 @@ def check_maintenance_schedules(db):
     ).all()
 
     with machine_run(db, "alert_check", "alert", details="Overdue maintenance check"):
+        overdue_keys = {(schedule_alert_title(s), s.entity_type, s.entity_id) for s in overdue}
+        for alert in db.query(Alert).filter(
+            Alert.type == "maintenance_due", Alert.is_dismissed == False,
+        ).all():
+            if (alert.title, alert.entity_type, alert.entity_id) not in overdue_keys:
+                alert.is_dismissed = True
+
         for schedule in overdue:
             # One open alert per schedule. Keyed on the equipment as well as the
             # name: two aircraft each with a "Monthly check" are two alerts.
             existing = db.query(Alert).filter(
                 Alert.type == "maintenance_due",
-                Alert.title == f"Maintenance Due: {schedule.name}",
+                Alert.title == schedule_alert_title(schedule),
                 Alert.entity_type == schedule.entity_type,
                 Alert.entity_id == schedule.entity_id,
                 Alert.is_dismissed == False,
@@ -68,7 +77,7 @@ def check_maintenance_schedules(db):
             alert = Alert(
                 type="maintenance_due",
                 severity="warning",
-                title=f"Maintenance Due: {schedule.name}",
+                title=schedule_alert_title(schedule),
                 message=f"{what} for {entity_info} is overdue (due {schedule.next_due.isoformat()}).",
                 entity_type=schedule.entity_type,
                 entity_id=schedule.entity_id,

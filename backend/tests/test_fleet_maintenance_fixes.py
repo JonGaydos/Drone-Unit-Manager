@@ -1,5 +1,7 @@
 """Fleet and maintenance fixes from the 2026-11-08 staging test (Area 3)."""
 
+from datetime import date
+
 
 # ── A-F26: component dates ──────────────────────────────────────────────────
 
@@ -219,3 +221,43 @@ def test_completed_one_time_schedule_cannot_be_completed_again(client, db, admin
     assert "already completed" in again.json()["detail"].lower()
     db.expire_all()
     assert db.query(MaintenanceRecord).count() == 1
+
+
+# ── A-F41 / G-9: completing a schedule clears its overdue alert ─────────────
+
+def _open_maintenance_alerts(db):
+    from app.models.alert import Alert
+    db.expire_all()
+    return db.query(Alert).filter(Alert.type == "maintenance_due", Alert.is_dismissed.is_(False)).all()
+
+
+def test_completing_a_schedule_dismisses_its_overdue_alert(client, db, admin_headers):
+    from app.models.maintenance_schedule import MaintenanceSchedule
+    from app.services.scheduler import check_maintenance_schedules
+    vid = _vehicle(client, admin_headers)["id"]
+    other = _vehicle(client, admin_headers, serial_number="VEH-002")["id"]
+    sid = _schedule(client, admin_headers, vid, next_due="2026-01-01")
+    _schedule(client, admin_headers, other, next_due="2026-01-01")
+    check_maintenance_schedules(db)
+    assert len(_open_maintenance_alerts(db)) == 2
+
+    assert client.post(f"/api/maintenance/schedules/{sid}/complete", headers=admin_headers).status_code == 200
+    assert [a.entity_id for a in _open_maintenance_alerts(db)] == [other]
+
+    # Overdue again later: a fresh alert is raised, not blocked by the old one.
+    db.query(MaintenanceSchedule).filter(MaintenanceSchedule.id == sid).update({"next_due": date(2026, 2, 1)})
+    db.commit()
+    check_maintenance_schedules(db)
+    assert sorted(a.entity_id for a in _open_maintenance_alerts(db)) == sorted([vid, other])
+
+
+def test_alert_check_dismisses_alerts_whose_schedule_is_no_longer_overdue(client, db, admin_headers):
+    from app.models.alert import Alert
+    from app.services.scheduler import check_maintenance_schedules
+    vid = _vehicle(client, admin_headers)["id"]
+    _schedule(client, admin_headers, vid, next_due="2099-01-01")
+    db.add(Alert(type="maintenance_due", severity="warning", title="Maintenance Due: Prop check",
+                 message="overdue (due 2026-01-01)", entity_type="vehicle", entity_id=vid))
+    db.commit()
+    check_maintenance_schedules(db)
+    assert _open_maintenance_alerts(db) == []
