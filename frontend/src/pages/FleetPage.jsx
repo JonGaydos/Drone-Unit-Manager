@@ -60,7 +60,7 @@ function EquipmentModal({ title, record, fields, onSave, onClose, vehicleModels 
                   <label htmlFor={`field-${f.key}`} className="block text-sm font-medium text-foreground mb-1">{f.label}{f.required && ' *'}</label>
                   <select
                     id={`field-${f.key}`}
-                    value={form[f.key] || ''}
+                    value={form[f.key] ?? ''}
                     onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
                     className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
                   >
@@ -77,7 +77,7 @@ function EquipmentModal({ title, record, fields, onSave, onClose, vehicleModels 
                     id={`field-${f.key}`}
                     type="text"
                     list={`${f.key}-options`}
-                    value={form[f.key] || ''}
+                    value={form[f.key] ?? ''}
                     onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
                     className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring text-sm"
                     placeholder="Select or type a model..."
@@ -95,7 +95,7 @@ function EquipmentModal({ title, record, fields, onSave, onClose, vehicleModels 
                   id={`field-${f.key}`}
                   type={f.type || 'text'}
                   required={f.required}
-                  value={form[f.key] || ''}
+                  value={form[f.key] ?? ''}
                   onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring text-sm"
                 />
@@ -143,7 +143,7 @@ function EquipmentTable({ items, columns, canManage, onEdit, onDelete, deleteLab
             <tr key={item.id} className="border-b border-border/50 hover:bg-accent/30 transition-colors">
               {columns.map(c => (
                 <td key={c.key} className={`px-4 py-3 ${c.align === 'right' ? 'text-right' : ''} ${c.primary ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
-                  {c.render ? c.render(item) : (item[c.key] || '—')}
+                  {c.render ? c.render(item) : ((item[c.key] ?? '') === '' ? '—' : item[c.key])}
                 </td>
               ))}
               <td className="px-4 py-3 text-right">

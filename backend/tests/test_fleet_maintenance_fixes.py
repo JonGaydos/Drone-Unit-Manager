@@ -623,3 +623,18 @@ def test_vehicle_merge_keeps_one_current_registration(client, admin_headers):
     assert [r["registration_number"] for r in _current(client, admin_headers, keeper)] == ["REG-DUP"]
     regs = client.get(f"/api/vehicles/{keeper}/registrations", headers=admin_headers).json()
     assert len(regs) == 2
+
+
+# ── A-F33: equipment CSV writes 0, not an empty cell ────────────────────────
+
+def test_equipment_csv_keeps_zero_values(client, admin_headers):
+    import csv
+    import io
+    client.post("/api/batteries", headers=admin_headers,
+                json={"serial_number": "BAT-Z", "cycle_count": 0, "health_pct": 0})
+    rows = list(csv.DictReader(io.StringIO(
+        client.get("/api/export/fleet/batteries/csv", headers=admin_headers).text)))
+    row = next(r for r in rows if r["Serial"] == "BAT-Z")
+    assert row["Cycles"] == "0"
+    assert row["Health %"] == "0.0"
+    assert row["Nickname"] == ""

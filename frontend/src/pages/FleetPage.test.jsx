@@ -356,4 +356,22 @@ describe('FleetPage', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Retire' }))
     await waitFor(() => expect(deleted).toBe('1'))
   })
+
+  it('shows a zero as 0 in the table and the edit form, and a dash only when empty', async () => {
+    mockVehicles()
+    server.use(http.get('/api/batteries', () => HttpResponse.json([
+      { id: 5, nickname: 'Cell A', serial_number: 'B-1', model: null, cycle_count: 0, health_pct: 0, status: 'active' },
+    ])))
+    const { user } = renderWithProviders(<FleetPage />, { role: 'admin' })
+    await screen.findByText('Falcon')
+    await user.click(screen.getByRole('button', { name: /Batteries/ }))
+    const row = (await screen.findByRole('link', { name: 'Cell A' })).closest('tr')
+    const cells = within(row).getAllByRole('cell').map(c => c.textContent)
+    expect(cells[5]).toBe('0')
+    expect(cells[6]).toBe('0%')
+    expect(cells[3]).toBe('—')
+    await user.click(within(row).getByRole('button', { name: 'Edit' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByLabelText('Cycle Count')).toHaveValue(0)
+  })
 })

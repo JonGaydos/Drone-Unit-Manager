@@ -325,7 +325,9 @@ def export_equipment_csv(equipment_type: str, db: DBSession, user: ExportUser, _
     writer = csv.writer(output)
     writer.writerow([header for header, _ in columns])
     for row in rows:
-        writer.writerow([_csv_safe(getattr(row, attr, None) or "") for _, attr in columns])
+        # Blank only when empty: a zero is written as 0.
+        values = [getattr(row, attr, None) for _, attr in columns]
+        writer.writerow([_csv_safe("" if v is None else v) for v in values])
     output.seek(0)
     return StreamingResponse(
         iter([output.getvalue()]),
