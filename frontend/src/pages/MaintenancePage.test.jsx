@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { withPermissions } from '@/test/permissions'
@@ -279,5 +279,22 @@ describe('MaintenancePage', () => {
     expect(screen.getByRole('option', { name: 'B-002' })).toBeInTheDocument()
     await user.selectOptions(type, 'controller')
     expect(await screen.findByRole('option', { name: 'Pad' })).toBeInTheDocument()
+  })
+
+  it('marks Description required and names it when left blank', async () => {
+    mockMount()
+    let posted = false
+    server.use(http.post('/api/maintenance', () => { posted = true; return HttpResponse.json({}) }))
+    const { user } = renderWithProviders(<MaintenancePage />, { role: 'admin' })
+    await screen.findByText('Prop swap')
+    await user.click(screen.getByRole('button', { name: /Add Maintenance/ }))
+    const dialog = await screen.findByRole('dialog', { name: 'Add Maintenance' })
+    const description = within(dialog).getByLabelText('Description *')
+    expect(description).toBeRequired()
+    await user.selectOptions(within(dialog).getByLabelText('Entity'), '1')
+    await user.type(description, '   ')
+    await user.click(within(dialog).getByRole('button', { name: 'Add Maintenance' }))
+    expect(await within(dialog).findByText('Description is required.')).toBeInTheDocument()
+    expect(posted).toBe(false)
   })
 })

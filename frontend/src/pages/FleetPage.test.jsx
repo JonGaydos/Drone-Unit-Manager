@@ -321,4 +321,24 @@ describe('FleetPage', () => {
     expect(screen.getByRole('link', { name: 'Falcon' })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Hawk' })).toBeNull()
   })
+
+  it('marks the required Add Vehicle fields and names the blank ones', async () => {
+    mockVehicles()
+    let posted = false
+    server.use(http.post(VEHICLES, () => { posted = true; return HttpResponse.json({}) }))
+    const { user } = renderWithProviders(<FleetPage />, { role: 'admin' })
+    await screen.findByRole('link', { name: 'Falcon' })
+    await user.click(screen.getByRole('button', { name: /Add Vehicle/ }))
+    const dialog = await screen.findByRole('dialog')
+    for (const label of ['Serial Number', 'Manufacturer', 'Model']) {
+      expect(within(dialog).getByLabelText(`${label} *`)).toBeRequired()
+    }
+    expect(within(dialog).getByLabelText('Nickname')).not.toBeRequired()
+    for (const label of ['Serial Number', 'Manufacturer', 'Model']) {
+      await user.type(within(dialog).getByLabelText(`${label} *`), '  ')
+    }
+    await user.click(within(dialog).getByRole('button', { name: 'Add Vehicle' }))
+    expect(await screen.findByText('Required: Serial Number, Manufacturer, Model')).toBeInTheDocument()
+    expect(posted).toBe(false)
+  })
 })

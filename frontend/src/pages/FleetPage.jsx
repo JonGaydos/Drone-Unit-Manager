@@ -35,9 +35,12 @@ function EquipmentModal({ title, record, fields, onSave, onClose, vehicleModels 
   fields.forEach(f => { defaults[f.key] = '' })
   const [form, setForm] = useState(record || defaults)
   const [saving, setSaving] = useState(false)
+  const toast = useToast()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    const missing = fields.filter(f => f.required && !String(form[f.key] ?? '').trim()).map(f => f.label)
+    if (missing.length) { toast.error(`Required: ${missing.join(', ')}`); return }
     const data = { ...form }
     fields.forEach(f => {
       if (f.type === 'number' && data[f.key]) data[f.key] = Number.parseFloat(data[f.key])
@@ -54,7 +57,7 @@ function EquipmentModal({ title, record, fields, onSave, onClose, vehicleModels 
             if (f.type === 'select') {
               return (
                 <div key={f.key}>
-                  <label htmlFor={`field-${f.key}`} className="block text-sm font-medium text-foreground mb-1">{f.label}</label>
+                  <label htmlFor={`field-${f.key}`} className="block text-sm font-medium text-foreground mb-1">{f.label}{f.required && ' *'}</label>
                   <select
                     id={`field-${f.key}`}
                     value={form[f.key] || ''}
@@ -69,7 +72,7 @@ function EquipmentModal({ title, record, fields, onSave, onClose, vehicleModels 
             if (f.type === 'combobox') {
               return (
                 <div key={f.key}>
-                  <label htmlFor={`field-${f.key}`} className="block text-sm font-medium text-foreground mb-1">{f.label}</label>
+                  <label htmlFor={`field-${f.key}`} className="block text-sm font-medium text-foreground mb-1">{f.label}{f.required && ' *'}</label>
                   <input
                     id={`field-${f.key}`}
                     type="text"
@@ -87,10 +90,11 @@ function EquipmentModal({ title, record, fields, onSave, onClose, vehicleModels 
             }
             return (
               <div key={f.key}>
-                <label htmlFor={`field-${f.key}`} className="block text-sm font-medium text-foreground mb-1">{f.label}</label>
+                <label htmlFor={`field-${f.key}`} className="block text-sm font-medium text-foreground mb-1">{f.label}{f.required && ' *'}</label>
                 <input
                   id={`field-${f.key}`}
                   type={f.type || 'text'}
+                  required={f.required}
                   value={form[f.key] || ''}
                   onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring text-sm"
@@ -248,10 +252,10 @@ const TAB_CONFIGS = {
       { key: 'status', label: 'Status', render: v => <StatusBadge status={v.status} /> },
     ],
     fields: [
-      { key: 'serial_number', label: 'Serial Number' },
+      { key: 'serial_number', label: 'Serial Number', required: true },
       { key: 'provider_serial', label: 'API Serial (what the provider calls this aircraft)' },
-      { key: 'manufacturer', label: 'Manufacturer' },
-      { key: 'model', label: 'Model' },
+      { key: 'manufacturer', label: 'Manufacturer', required: true },
+      { key: 'model', label: 'Model', required: true },
       { key: 'nickname', label: 'Nickname' },
       ...LIFECYCLE_FIELDS,
       { key: 'status', label: 'Status', type: 'select', options: [
@@ -280,7 +284,7 @@ const TAB_CONFIGS = {
       { key: 'status', label: 'Status', render: b => <StatusBadge status={b.status} /> },
     ],
     fields: [
-      { key: 'serial_number', label: 'Serial Number' },
+      { key: 'serial_number', label: 'Serial Number', required: true },
       { key: 'nickname', label: 'Nickname' },
       { key: 'manufacturer', label: 'Manufacturer' },
       { key: 'model', label: 'Model' },
@@ -311,7 +315,7 @@ const TAB_CONFIGS = {
       { key: 'status', label: 'Status', render: c => <StatusBadge status={c.status} /> },
     ],
     fields: [
-      { key: 'serial_number', label: 'Serial Number' },
+      { key: 'serial_number', label: 'Serial Number', required: true },
       { key: 'nickname', label: 'Nickname' },
       { key: 'manufacturer', label: 'Manufacturer' },
       { key: 'model', label: 'Model' },
@@ -339,7 +343,7 @@ const TAB_CONFIGS = {
       { key: 'status', label: 'Status', render: d => <StatusBadge status={d.status} /> },
     ],
     fields: [
-      { key: 'serial_number', label: 'Serial Number' },
+      { key: 'serial_number', label: 'Serial Number', required: true },
       { key: 'name', label: 'Name' },
       { key: 'location_name', label: 'Location Name' },
       { key: 'lat', label: 'Latitude', type: 'number' },
@@ -368,7 +372,7 @@ const TAB_CONFIGS = {
       { key: 'status', label: 'Status', render: s => <StatusBadge status={s.status} /> },
     ],
     fields: [
-      { key: 'serial_number', label: 'Serial Number' },
+      { key: 'serial_number', label: 'Serial Number', required: true },
       { key: 'name', label: 'Name' },
       { key: 'type', label: 'Type' },
       { key: 'manufacturer', label: 'Manufacturer' },
@@ -397,7 +401,7 @@ const TAB_CONFIGS = {
       { key: 'status', label: 'Status', render: a => <StatusBadge status={a.status} /> },
     ],
     fields: [
-      { key: 'serial_number', label: 'Serial Number' },
+      { key: 'serial_number', label: 'Serial Number', required: true },
       { key: 'name', label: 'Name' },
       { key: 'type', label: 'Type' },
       { key: 'manufacturer', label: 'Manufacturer' },
@@ -423,7 +427,7 @@ const TAB_CONFIGS = {
       { key: 'status', label: 'Status', render: o => <StatusBadge status={o.status} /> },
     ],
     fields: [
-      { key: 'name', label: 'Name' },
+      { key: 'name', label: 'Name', required: true },
       { key: 'category', label: 'Category' },
       { key: 'serial_number', label: 'Serial Number' },
       ...LIFECYCLE_FIELDS,

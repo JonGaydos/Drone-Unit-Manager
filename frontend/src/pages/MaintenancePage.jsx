@@ -73,6 +73,10 @@ function MaintenanceModal({ record, onSave, onClose, entityLists, pilots }) {
       setSubmitError(`Please select a ${data.entity_type}.`)
       return
     }
+    if (!(data.description || '').trim()) {
+      setSubmitError('Description is required.')
+      return
+    }
     if (data.entity_id) data.entity_id = Number.parseInt(data.entity_id, 10)
     Object.keys(data).forEach(k => { if (data[k] === '') delete data[k] })
     setSubmitting(true)
@@ -140,9 +144,10 @@ function MaintenanceModal({ record, onSave, onClose, entityLists, pilots }) {
           )}
         </div>
         <div>
-          <label htmlFor="description" className="block text-sm font-medium text-foreground mb-1">Description</label>
+          <label htmlFor="description" className="block text-sm font-medium text-foreground mb-1">Description *</label>
           <input id="description"
             type="text"
+            required
             value={form.description || ''}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
             className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring text-sm"
