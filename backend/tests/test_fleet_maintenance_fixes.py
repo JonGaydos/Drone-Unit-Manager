@@ -609,3 +609,17 @@ def test_component_validation(client, admin_headers):
     for extra in ({"flight_hours": -1}, {"name": " "}, {"name": None}, {"component_type": None}):
         resp = client.patch(f"/api/components/{cid}", headers=admin_headers, json=extra)
         assert resp.status_code == 422, f"{extra}: {resp.text}"
+
+
+# ── A-F14: a merge leaves the keeper with one current registration ──────────
+
+def test_vehicle_merge_keeps_one_current_registration(client, admin_headers):
+    keeper = _vehicle(client, admin_headers)["id"]
+    dup = _vehicle(client, admin_headers, serial_number="VEH-002")["id"]
+    _registration(client, admin_headers, keeper, "REG-KEEP", "2024-01-01")
+    _registration(client, admin_headers, dup, "REG-DUP", "2025-01-01")
+    resp = client.post(f"/api/vehicles/{keeper}/merge?merge_from_id={dup}", headers=admin_headers)
+    assert resp.status_code == 200, resp.text
+    assert [r["registration_number"] for r in _current(client, admin_headers, keeper)] == ["REG-DUP"]
+    regs = client.get(f"/api/vehicles/{keeper}/registrations", headers=admin_headers).json()
+    assert len(regs) == 2

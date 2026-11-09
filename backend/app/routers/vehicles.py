@@ -229,6 +229,10 @@ def merge_vehicles(target_id: int, merge_from_id: int, db: DBSession, admin: Man
     src_name = f"{source.manufacturer} {source.model}" + (f" ({source.nickname})" if source.nickname else "")
     tgt_name = f"{target.manufacturer} {target.model}" + (f" ({target.nickname})" if target.nickname else "")
     db.delete(source)
+    # Both vehicles may have brought a current registration; keep the latest.
+    from app.routers.vehicle_registrations import keep_one_current
+    db.flush()
+    keep_one_current(db, target_id)
     log_action(db, admin.id, admin.display_name, "merge", "vehicle", target.id, tgt_name, details=f"{src_name} -> {tgt_name}")
     db.commit()
     db.refresh(target)
