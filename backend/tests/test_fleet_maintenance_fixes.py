@@ -497,3 +497,24 @@ def test_maintenance_record_validation(client, admin_headers):
         assert resp.status_code == 422, f"{extra}: {resp.text}"
     assert client.patch(f"/api/maintenance/{rid}", headers=admin_headers,
                         json={"next_due_date": "2026-04-01", "maintenance_type": "inspection"}).status_code == 200
+
+
+# ── A-F20: schedule name and entity_id ──────────────────────────────────────
+
+def test_schedule_needs_a_name_and_an_entity_for_table_types(client, admin_headers):
+    vid = _vehicle(client, admin_headers)["id"]
+    url = "/api/maintenance/schedules"
+    for name in ("", "   "):
+        resp = client.post(url, headers=admin_headers, json={
+            "name": name, "entity_type": "vehicle", "entity_id": vid, "frequency": "monthly"})
+        assert resp.status_code == 422, resp.text
+    resp = client.post(url, headers=admin_headers, json={"name": "x", "entity_type": "vehicle", "frequency": "monthly"})
+    assert resp.status_code == 400, resp.text
+    assert "entity_id is required" in resp.json()["detail"]
+    sid = _schedule(client, admin_headers, vid)
+    assert client.patch(f"{url}/{sid}", headers=admin_headers, json={"entity_id": None}).status_code == 400
+    assert client.patch(f"{url}/{sid}", headers=admin_headers, json={"name": " "}).status_code == 422
+    # Org-wide and other tasks still take no entity.
+    for etype in ("organization", "other"):
+        resp = client.post(url, headers=admin_headers, json={"name": "x", "entity_type": etype, "frequency": "monthly"})
+        assert resp.status_code == 200, f"{etype}: {resp.text}"
