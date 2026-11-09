@@ -20,7 +20,7 @@ from app.deps import AdminUser, DBSession, UploadForm, require_form_user
 from app.models.certification import PilotCertification
 from app.models.document import Document
 from app.models.user import User
-from app.schemas.document import DocumentOut
+from app.schemas.document import DocumentOut, NameText
 from app.responses import responses
 from app.routers.auth import require_permission
 from app.services import evidence
@@ -129,7 +129,7 @@ class DocumentUploadFields(BaseModel):
 
     entity_type: str  # see ALLOWED_ENTITY_TYPES; "general" has no parent entity
     document_type: str  # classification label, e.g. "insurance", "manual"
-    title: str
+    title: NameText
     entity_id: int | None = None  # required unless entity_type is "general"
     notes: str | None = None
     folder_id: int | None = None
@@ -292,7 +292,7 @@ def view_document(
 
 class DocumentUpdate(BaseModel):
     """Schema for partial document metadata updates."""
-    title: str | None = None
+    title: NameText | None = None
     document_type: str | None = None
     notes: str | None = None
     folder_id: int | None = None

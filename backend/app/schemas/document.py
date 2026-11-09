@@ -1,7 +1,10 @@
 from datetime import datetime
-from typing import Optional
+from typing import Annotated, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, StringConstraints
+
+# A folder name or document title: trimmed, and never blank.
+NameText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
 
 
 class DocumentOut(BaseModel):

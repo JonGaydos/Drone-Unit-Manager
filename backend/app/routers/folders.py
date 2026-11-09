@@ -13,6 +13,7 @@ from app.deps import DBSession
 from app.models.user import User
 from app.routers.auth import require_permission
 from app.responses import responses
+from app.schemas.document import NameText
 from app.services.audit import compute_changes, log_action
 
 router = APIRouter(prefix="/api/folders", tags=["folders"])
@@ -22,13 +23,13 @@ ManageUser = Annotated[User, Depends(require_permission("folders.manage"))]
 
 
 class FolderCreate(BaseModel):
-    name: str
+    name: NameText
     parent_id: Optional[int] = None
     description: Optional[str] = None
 
 
 class FolderUpdate(BaseModel):
-    name: Optional[str] = None
+    name: Optional[NameText] = None
     description: Optional[str] = None
 
 

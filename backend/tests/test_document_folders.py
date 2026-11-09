@@ -109,3 +109,41 @@ def test_new_folder_under_a_live_parent(client, db, admin_headers):
 
     db.expire_all()
     assert db.get(Folder, child).parent_id == parent
+
+
+# D-19: blank names ---------------------------------------------------------
+
+@pytest.mark.parametrize("name", ["", "   "])
+def test_blank_folder_name_is_refused(client, db, admin_headers, name):
+    assert client.post(FOLDERS_URL, headers=admin_headers, json={"name": name}).status_code == 422
+    folder_id = _folder(client, admin_headers, "Named")
+    assert client.patch(f"{FOLDERS_URL}/{folder_id}", headers=admin_headers, json={"name": name}).status_code == 422
+    db.expire_all()
+    assert db.get(Folder, folder_id).name == "Named"
+
+
+def test_folder_name_is_trimmed(client, db, admin_headers):
+    folder_id = _folder(client, admin_headers, "  Forms  ")
+    db.expire_all()
+    assert db.get(Folder, folder_id).name == "Forms"
+
+
+@pytest.mark.parametrize("title", ["", "   "])
+def test_blank_document_title_is_refused(client, db, admin_headers, upload_dir, title):
+    doc_id = _upload(client, admin_headers).json()["id"]
+
+    resp = client.patch(f"/api/documents/{doc_id}", headers=admin_headers, json={"title": title})
+
+    assert resp.status_code == 422
+    db.expire_all()
+    assert db.get(Document, doc_id).title == "Form"
+
+
+def test_blank_upload_title_is_refused(client, db, admin_headers, upload_dir):
+    resp = client.post(UPLOAD_URL, headers=admin_headers,
+                       data={"entity_type": "general", "document_type": "other", "title": "   "},
+                       files={"file": ("form.pdf", b"%PDF-1.4 form", "application/pdf")})
+
+    assert resp.status_code == 422
+    db.expire_all()
+    assert db.query(Document).count() == 0
