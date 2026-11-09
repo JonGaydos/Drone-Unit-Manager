@@ -628,7 +628,7 @@ async def _sent_form_fields(request: Request) -> frozenset[str]:
     return frozenset((await request.form()).keys())
 
 
-@router.patch("/{photo_id}", responses=responses(400, 404))
+@router.patch("/{photo_id}", responses=responses(400, 404, 409))
 def update_photo(
 
     photo_id: int,
@@ -662,6 +662,7 @@ def update_photo(
     """
     photo = _live_photo(db, photo_id)
     permissions_service.require_record_access(db, user, FILES_EDIT, permissions_service.owns_photo(user, photo))
+    evidence.check_editable(photo)
 
     updates = {k: v or None for k, v in (("title", title), ("description", description)) if k in sent}
     if "date_taken" in sent:

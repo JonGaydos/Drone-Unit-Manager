@@ -59,7 +59,7 @@ Default settings:
 
 Admin only, never delegable: user management, the permission grid, settings and integrations, backup and restore, API tokens, bulk imports, flight purposes, and permanent purge. Your own password, theme, profile and notification preferences stay available to every signed-in user.
 
-Always enforced, whatever the grid says: nobody approves a flight plan they submitted; a legal hold blocks delete and purge; the last active admin cannot be demoted, deactivated or deleted; and a viewer can never hold a change permission. The grid greys out those cells, the server refuses to save them, and any stored value is ignored (including one from a restored backup).
+Always enforced, whatever the grid says: nobody approves a flight plan they submitted; a legal hold blocks edits, delete and purge; the last active admin cannot be demoted, deactivated or deleted; and a viewer can never hold a change permission. The grid greys out those cells, the server refuses to save them, and any stored value is ignored (including one from a restored backup).
 
 Reviewed flights and currency: a flight logged by hand always starts as Needs Review. When a user without the review permission changes a reviewed flight, it returns to the review queue; saving unchanged values does not count as a change. Only reviewed flights count toward pilot currency, so a flight waiting for review does not count until a supervisor reviews it.`
       },
@@ -368,7 +368,7 @@ When nothing is outstanding, the card shows an "All clear" message. The count of
         title: 'Deleting, Recently Deleted and Legal Hold',
         body: `Deleting a document or photo moves it to Recently deleted rather than removing it. Users with the restore permission (supervisors by default) can restore it from there, and admins can delete it permanently. Deleting a folder moves its documents to Unfiled.
 
-Users with the legal hold permission (supervisors by default) can place a document or photo on legal hold. A held item shows a lock and cannot be deleted or permanently removed until the hold is released. Viewing and downloading documents and photos is recorded in the audit log.`
+Users with the legal hold permission (supervisors by default) can place a document or photo on legal hold. A held item shows a lock and cannot be edited, deleted or permanently removed until the hold is released; a held document can still be moved to another folder. Viewing and downloading documents and photos is recorded in the audit log.`
       },
       {
         title: 'Photo Gallery',

@@ -99,6 +99,8 @@ describe('MediaPage', () => {
     const held = (await screen.findByText('Tower inspection')).closest('.group')
     const free = screen.getByText('Crash site').closest('.group')
     expect(within(held).queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    expect(within(held).queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(within(free).getByRole('button', { name: 'Edit' })).toBeInTheDocument()
     expect(within(free).getByRole('button', { name: 'Delete' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Recently deleted/ })).toBeInTheDocument()
 

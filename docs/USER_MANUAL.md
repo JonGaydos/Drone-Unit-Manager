@@ -515,7 +515,7 @@ Bulk flight actions follow the same settings as single ones. Selecting flights a
 **Always enforced, whatever the grid says**
 
 - Nobody approves a flight plan they submitted.
-- A legal hold blocks delete and purge.
+- A legal hold blocks edits, delete and purge.
 - The last active admin cannot be demoted, deactivated or deleted.
 - A viewer can never change unit data. Change settings for the Viewer column are locked to No or None. The server refuses them, ignores any stored value (including one from a restored backup), and the grid greys them out.
 

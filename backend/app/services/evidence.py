@@ -1,8 +1,8 @@
 """Soft delete, legal hold and purge rules shared by photos and documents.
 
 A delete hides the record and keeps its file; a supervisor can restore it, and
-only an admin can purge it for good. A legal hold blocks both delete and purge,
-so held material cannot leave the system by any route.
+only an admin can purge it for good. A legal hold blocks delete and purge, so
+held material cannot leave the system by any route, and freezes its metadata.
 """
 
 import logging
@@ -15,11 +15,22 @@ from pydantic import BaseModel
 logger = logging.getLogger(__name__)
 
 ON_HOLD = "This item is on legal hold. Release the hold before deleting it."
+HELD_EDIT = "This item is on legal hold. Release the hold before editing it."
 
 
 class HoldUpdate(BaseModel):
     """Body of the set-hold routes."""
     legal_hold: bool
+
+
+def check_editable(item) -> None:
+    """Refuse a metadata edit while the item is on legal hold.
+
+    Raises:
+        HTTPException: 409 while the item is on legal hold.
+    """
+    if item.legal_hold:
+        raise HTTPException(409, HELD_EDIT)
 
 
 def soft_delete(item, user) -> None:

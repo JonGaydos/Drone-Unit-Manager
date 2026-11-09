@@ -366,7 +366,7 @@ function PhotoActions({ canEdit, canCustody, legalHold, onEdit, onToggleHold, on
   const act = (handler) => (e) => { e.stopPropagation(); handler() }
   return (
     <div className="flex items-center gap-1 pt-1">
-      {canEdit && (
+      {canEdit && !legalHold && (
         <button
           onClick={act(onEdit)}
           className="p-1.5 text-muted-foreground hover:text-primary rounded-md hover:bg-primary/10 transition-colors"

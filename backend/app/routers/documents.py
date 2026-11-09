@@ -298,7 +298,7 @@ class DocumentUpdate(BaseModel):
     folder_id: int | None = None
 
 
-@router.patch("/{doc_id}", response_model=DocumentOut, responses=responses(404))
+@router.patch("/{doc_id}", response_model=DocumentOut, responses=responses(404, 409))
 def update_document(
     doc_id: int,
     data: DocumentUpdate,
@@ -317,6 +317,9 @@ def update_document(
     doc = _live_document(db, doc_id)
     permissions_service.require_record_access(db, user, FILES_EDIT, permissions_service.owns_document(db, user, doc))
     update_fields = data.model_dump(exclude_unset=True)
+    # A held document can still be refiled; what it says stays frozen.
+    if set(update_fields) - {"folder_id"}:
+        evidence.check_editable(doc)
     if update_fields.get("folder_id") is not None:
         _live_folder(db, update_fields["folder_id"])
     changes = compute_changes(doc, update_fields, list(update_fields))
