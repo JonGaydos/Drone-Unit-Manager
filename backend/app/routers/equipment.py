@@ -448,8 +448,8 @@ class DockCreate(BaseModel):
     serial_number: str
     name: Optional[str] = None
     location_name: Optional[str] = None
-    lat: Optional[float] = None
-    lon: Optional[float] = None
+    lat: Optional[float] = Field(None, ge=-90, le=90)
+    lon: Optional[float] = Field(None, ge=-180, le=180)
     status: str = "active"
     acquired_date: Optional[date] = None
     decommissioned_date: Optional[date] = None
@@ -459,8 +459,8 @@ class DockUpdate(BaseModel):
     serial_number: Optional[str] = None
     name: Optional[str] = None
     location_name: Optional[str] = None
-    lat: Optional[float] = None
-    lon: Optional[float] = None
+    lat: Optional[float] = Field(None, ge=-90, le=90)
+    lon: Optional[float] = Field(None, ge=-180, le=180)
     status: Optional[str] = None
     acquired_date: Optional[date] = None
     decommissioned_date: Optional[date] = None

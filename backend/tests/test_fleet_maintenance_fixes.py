@@ -467,3 +467,14 @@ def test_controller_stats_do_not_report_fake_zero_flights(client, admin_headers)
     body = client.get(f"/api/controllers/{cid}/stats", headers=admin_headers).json()
     assert "total_flights" not in body and "total_hours" not in body
     assert body["assigned_pilot"] is None
+
+
+# ── A-F18: dock coordinates in range ────────────────────────────────────────
+
+def test_dock_coordinates_out_of_range_are_refused(client, admin_headers):
+    for body in ({"lat": 200}, {"lon": -500}, {"lat": -90.1}, {"lon": 180.5}):
+        resp = client.post("/api/docks", headers=admin_headers, json={"serial_number": "D-1", **body})
+        assert resp.status_code == 422, f"{body}: {resp.text}"
+    did = client.post("/api/docks", headers=admin_headers,
+                      json={"serial_number": "D-1", "lat": -90, "lon": 180}).json()["id"]
+    assert client.patch(f"/api/docks/{did}", headers=admin_headers, json={"lat": 91}).status_code == 422
