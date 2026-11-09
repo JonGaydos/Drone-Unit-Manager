@@ -138,20 +138,23 @@ def _authenticate_image_request(
     sig: str | None,
     exp: int | None,
     db: Session,
+    request: Request,
     viewer: int | None = None,
 ) -> int | None:
-    """Allow either (a) a valid Bearer JWT (for API clients) or (b) a fresh
-    signed URL for this photo_id+action. Raises 401 on failure.
+    """Allow either (a) a valid Bearer token, a login JWT or an API token (for
+    API clients), or (b) a fresh signed URL for this photo_id+action. Raises 401
+    on failure.
 
     Returns the id of the user the request is for: the bearer's, or the one the
     signed URL was issued to (None for a URL issued without one). A signature
     needs no permission check, since one is only issued to a user holding
-    files.view; a login token is checked for files.view here."""
+    files.view; a bearer is checked for files.view here, and an API token for
+    its scopes too."""
     if _verify_photo_sig(photo_id, action, sig, exp, viewer):
         return viewer
     if credentials:
-        from app.routers.auth import user_from_login_token
-        user = user_from_login_token(credentials.credentials, db)  # 401 if invalid or revoked
+        from app.routers.auth import get_current_user
+        user = get_current_user(credentials, db, request)  # 401 if invalid or revoked, 403 out of scope
         if not permissions_service.can(db, user, FILES_VIEW):
             raise HTTPException(403, "You do not have permission to do this")
         return user.id
@@ -493,6 +496,7 @@ def _record_full_view(db, viewer_id: int | None, photo) -> None:
 def view_photo(
     photo_id: int,
     db: DBSession,
+    request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_security)] = None,
     sig: Annotated[str | None, Query()] = None,
     exp: Annotated[int | None, Query()] = None,
@@ -500,10 +504,10 @@ def view_photo(
 ):
     """Serve the full-resolution photo file.
 
-    Accepts EITHER a Bearer JWT (for API clients) OR a signed URL with
+    Accepts EITHER a Bearer login JWT or API token (for API clients) OR a signed URL with
     sig+exp query params (for <img src='...'> tags from the SPA). Every view
     of the full image is audited; thumbnails are not."""
-    viewer_id = _authenticate_image_request(photo_id, "view", credentials, sig, exp, db, u)
+    viewer_id = _authenticate_image_request(photo_id, "view", credentials, sig, exp, db, request, u)
     photo = _live_photo(db, photo_id)
     resolved = _resolve_photo_path(photo)
     if not resolved:
@@ -591,6 +595,7 @@ def _build_and_keep(db, photo_id: int, source: Path, failure_key: tuple[int, int
 def view_thumbnail(
     photo_id: int,
     db: DBSession,
+    request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_security)] = None,
     sig: Annotated[str | None, Query()] = None,
     exp: Annotated[int | None, Query()] = None,
@@ -599,7 +604,7 @@ def view_thumbnail(
 
     A missing thumbnail is built and kept. The full image is never served
     here: if no thumbnail can be built, a placeholder is."""
-    _authenticate_image_request(photo_id, "thumbnail", credentials, sig, exp, db)
+    _authenticate_image_request(photo_id, "thumbnail", credentials, sig, exp, db, request)
     photo = _live_photo(db, photo_id)
     stored = _stored_thumbnail(photo)
     if stored:

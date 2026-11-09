@@ -75,7 +75,7 @@ PUBLIC_ROUTES = frozenset({
     "GET /api/settings/logo/view",
     "GET /api/health",
     "GET /{full_path:path}",
-    # _authenticate_image_request: a signed URL, or a login holding files.view.
+    # _authenticate_image_request: a signed URL, or a login or API token holding files.view.
     # Pinned by test_photo_serving_needs_a_login_or_signature, the signed URL tests
     # in test_photos, and test_permissions_files.test_view_off_blocks_serving_by_login_token.
     "GET /api/photos/{photo_id}/view",
