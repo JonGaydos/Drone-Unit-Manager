@@ -58,11 +58,16 @@ def set_fields_with_lifecycle(entity, updates: dict) -> None:
     and is never cleared automatically.
 
     A status outside the type's list is refused (422) unless it is the value
-    already stored, so a record holding an old status can still be edited."""
+    already stored, so a record holding an old status can still be edited. A
+    decommissioned date before the acquired date is refused (422) as well."""
     allowed = EQUIPMENT_STATUSES.get(entity.__tablename__)
     status = updates.get("status")
     if allowed and "status" in updates and status != entity.status and status not in allowed:
         raise HTTPException(422, f"Status must be one of: {', '.join(allowed)}")
+    acquired = updates.get("acquired_date", getattr(entity, "acquired_date", None))
+    decommissioned = updates.get("decommissioned_date", getattr(entity, "decommissioned_date", None))
+    if acquired and decommissioned and decommissioned < acquired:
+        raise HTTPException(422, "Decommissioned date cannot be before the acquired date")
     for k, v in updates.items():
         setattr(entity, k, v)
     if updates.get("status") not in DECOMMISSIONED_STATUSES:

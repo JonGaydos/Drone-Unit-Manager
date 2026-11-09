@@ -328,3 +328,22 @@ def test_a_stored_legacy_status_does_not_block_other_edits(client, db, admin_hea
     resp = client.patch(f"/api/controllers/{c.id}", headers=admin_headers,
                         json={"nickname": "Spare", "status": "inactive"})
     assert resp.status_code == 200, resp.text
+
+
+# ── A-F3: decommissioned date cannot precede the acquired date ──────────────
+
+def test_decommissioned_before_acquired_is_refused(client, admin_headers):
+    dates = {"acquired_date": "2026-05-01", "decommissioned_date": "2025-01-01"}
+    resp = client.post("/api/vehicles", headers=admin_headers, json={
+        "serial_number": "VEH-D1", "manufacturer": "Acme", "model": "Hawk", **dates})
+    assert resp.status_code == 422, resp.text
+    for url, payload in [("/api/batteries", {"serial_number": "B-D"}), ("/api/docks", {"serial_number": "D-D"}),
+                         ("/api/other-equipment", {"name": "Case"})]:
+        assert client.post(url, headers=admin_headers, json={**payload, **dates}).status_code == 422, url
+
+    # A patch is checked against the stored date too.
+    vid = _vehicle(client, admin_headers, acquired_date="2026-05-01")["id"]
+    resp = client.patch(f"/api/vehicles/{vid}", headers=admin_headers, json={"decommissioned_date": "2026-04-30"})
+    assert resp.status_code == 422, resp.text
+    resp = client.patch(f"/api/vehicles/{vid}", headers=admin_headers, json={"decommissioned_date": "2026-05-01"})
+    assert resp.status_code == 200, resp.text
