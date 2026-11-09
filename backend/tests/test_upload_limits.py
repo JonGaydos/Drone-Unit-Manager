@@ -227,7 +227,10 @@ def _takes_a_file(context) -> bool:
     for dependant in _dependants(root):
         if any(isinstance(field.field_info, params.File) for field in dependant.body_params):
             return True
-        if getattr(dependant.call, "reads_form", False) or _reads_form_by_hand(dependant.call):
+        # A dependency may say outright whether it reads a file; otherwise its
+        # source is searched for a hand-read form.
+        reads_form = getattr(dependant.call, "reads_form", None)
+        if reads_form if reads_form is not None else _reads_form_by_hand(dependant.call):
             return True
     return False
 

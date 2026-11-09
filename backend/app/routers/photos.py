@@ -628,6 +628,11 @@ async def _sent_form_fields(request: Request) -> frozenset[str]:
     return frozenset((await request.form()).keys())
 
 
+# Only the names of a text form the route already declares: no file, so the
+# route keeps the default body limit and is not an upload path.
+_sent_form_fields.reads_form = False
+
+
 @router.patch("/{photo_id}", responses=responses(400, 404, 409))
 def update_photo(
 
