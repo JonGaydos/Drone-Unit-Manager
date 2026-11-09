@@ -39,6 +39,8 @@ from app.deps import AdminForm, DBSession
 from app.routers.auth import require_permission
 from app.services.audit import log_action
 from app.services.audit_capture import machine_run
+from app.services.flight_scope import vehicle_flight_totals
+from app.services.permissions import can
 from app.services.import_service import ImportTooLarge
 from app.responses import responses
 
@@ -230,14 +232,17 @@ def export_pilots_csv(db: DBSession, user: ExportUser, _manage: PilotsManage):
 @router.get("/vehicles/csv", responses=responses(401))
 def export_vehicles_csv(db: DBSession, user: ExportUser, _view: FleetView):
     vehicles = _cap_rows(db.query(Vehicle).order_by(Vehicle.manufacturer).all(), "vehicles")
+    # Counted flights, the same scope as the vehicle stats; blank without flights.view.
+    totals = vehicle_flight_totals(db) if can(db, user, "flights.view") else None
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(["Serial", "Manufacturer", "Model", "Nickname", "FAA Reg", "Status", "Flights", "Hours"])
     for v in vehicles:
+        flights, hours = totals.get(v.id, (0, 0.0)) if totals is not None else ("", None)
         writer.writerow([
             _csv_safe(v.serial_number), _csv_safe(v.manufacturer), _csv_safe(v.model),
             _csv_safe(v.nickname or ""), _csv_safe(v.faa_registration or ""), _csv_safe(v.status),
-            v.total_flights, round(v.total_flight_hours, 1),
+            flights, round(hours, 1) if hours is not None else "",
         ])
     output.seek(0)
     return StreamingResponse(

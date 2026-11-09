@@ -25,6 +25,23 @@ LocationUser = Annotated[User, Depends(require_permission("fleet.location"))]
 FlightsViewUser = Annotated[User, Depends(require_permission("flights.view"))]
 
 
+def _vehicle_out(db, user, vehicles) -> list[VehicleOut]:
+    """VehicleOut rows with flight totals from the counted flights. The totals
+    are flight figures, so they follow flights.view like the stats route."""
+    from app.services.flight_scope import vehicle_flight_totals
+    from app.services.permissions import can
+    totals = vehicle_flight_totals(db, [v.id for v in vehicles]) if can(db, user, "flights.view") else None
+    out = []
+    for v in vehicles:
+        row = VehicleOut.model_validate(v)
+        if totals is None:
+            row.total_flights = row.total_flight_hours = None
+        else:
+            row.total_flights, row.total_flight_hours = totals.get(v.id, (0, 0.0))
+        out.append(row)
+    return out
+
+
 @router.get("", response_model=list[VehicleOut])
 def list_vehicles(
     db: DBSession,
@@ -45,7 +62,7 @@ def list_vehicles(
         q = q.filter(Vehicle.status == status)
     if manufacturer:
         q = q.filter(Vehicle.manufacturer == manufacturer)
-    return [VehicleOut.model_validate(v) for v in q.order_by(Vehicle.nickname, Vehicle.serial_number).all()]
+    return _vehicle_out(db, user, q.order_by(Vehicle.nickname, Vehicle.serial_number).all())
 
 
 def _latest_vehicle_checkouts(db, vids):
@@ -109,7 +126,7 @@ def get_vehicle(vehicle_id: int, db: DBSession, user: ViewUser):
     vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
     if not vehicle:
         raise HTTPException(status_code=404, detail=VEHICLE_NOT_FOUND)
-    return VehicleOut.model_validate(vehicle)
+    return _vehicle_out(db, user, [vehicle])[0]
 
 
 @router.post("/{target_id}/merge", responses=responses(400, 401, 404))

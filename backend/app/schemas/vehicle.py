@@ -42,8 +42,9 @@ class VehicleOut(BaseModel):
     nickname: Optional[str] = None
     faa_registration: Optional[str] = None
     status: str
-    total_flight_hours: float
-    total_flights: int
+    # Counted flights only; None when the caller lacks flights.view.
+    total_flight_hours: Optional[float] = None
+    total_flights: Optional[int] = None
     provider_serial: Optional[str] = None
     api_provider: Optional[str] = None
     acquired_date: Optional[date] = None

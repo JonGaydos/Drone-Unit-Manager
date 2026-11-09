@@ -69,3 +69,41 @@ def test_vehicle_create_trims_required_fields(client, admin_headers):
     body = _vehicle(client, admin_headers, serial_number="  VEH-T1 ", manufacturer=" Acme")
     assert body["serial_number"] == "VEH-T1"
     assert body["manufacturer"] == "Acme"
+
+
+# ── A-F6: vehicle totals ────────────────────────────────────────────────────
+
+def _flight(db, vehicle_id, seconds, **extra):
+    from datetime import date as _date
+    from app.models.flight import Flight
+    f = Flight(vehicle_id=vehicle_id, date=_date(2026, 3, 1), duration_seconds=seconds, **extra)
+    db.add(f)
+    db.commit()
+    return f
+
+
+def test_vehicle_list_and_detail_carry_flight_totals(client, db, admin_headers):
+    vid = _vehicle(client, admin_headers)["id"]
+    _flight(db, vid, 3600)
+    _flight(db, vid, 1800)
+
+    listed = next(v for v in client.get("/api/vehicles", headers=admin_headers).json() if v["id"] == vid)
+    assert listed["total_flights"] == 2
+    assert listed["total_flight_hours"] == 1.5
+    one = client.get(f"/api/vehicles/{vid}", headers=admin_headers).json()
+    assert one["total_flights"] == 2
+    assert one["total_flight_hours"] == 1.5
+
+
+def test_vehicles_csv_totals_match_stats(client, db, admin_headers):
+    import csv
+    import io
+    vid = _vehicle(client, admin_headers)["id"]
+    _flight(db, vid, 7200)
+    stats = client.get(f"/api/vehicles/{vid}/stats", headers=admin_headers).json()
+    resp = client.get("/api/export/vehicles/csv", headers=admin_headers)
+    assert resp.status_code == 200, resp.text
+    rows = list(csv.DictReader(io.StringIO(resp.text)))
+    row = next(r for r in rows if r["Serial"] == "VEH-001")
+    assert int(row["Flights"]) == stats["total_flights"] == 1
+    assert float(row["Hours"]) == round(stats["total_flight_hours"], 1) == 2.0
