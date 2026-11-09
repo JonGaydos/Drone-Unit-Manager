@@ -247,7 +247,7 @@ def delete_schedule(
     return {"ok": True}
 
 
-@router.post("/{schedule_id}/complete", responses=responses(404))
+@router.post("/{schedule_id}/complete", responses=responses(400, 404))
 def complete_schedule(
     schedule_id: int,
     db: DBSession,
@@ -256,6 +256,9 @@ def complete_schedule(
     schedule = db.query(MaintenanceSchedule).filter(MaintenanceSchedule.id == schedule_id).first()
     if not schedule:
         raise HTTPException(404, SCHEDULE_NOT_FOUND)
+    if not schedule.is_active:
+        # A done one-time task, or the schedule of retired equipment.
+        raise HTTPException(400, "This task is already completed or no longer active")
 
     today = date.today()
     schedule.last_completed = today

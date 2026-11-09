@@ -197,3 +197,25 @@ def test_battery_with_readings_deletes_with_its_readings(client, db, admin_heade
     db.expire_all()
     assert db.query(BatteryReading).filter(BatteryReading.battery_id == bid).count() == 0
     assert db.query(BatteryReading).filter(BatteryReading.battery_id == other).count() == 1
+
+
+# ── A-F21: an inactive schedule cannot be completed again ───────────────────
+
+def _schedule(client, headers, vid, **extra):
+    payload = {"name": "Prop check", "entity_type": "vehicle", "entity_id": vid,
+               "frequency": "monthly", **extra}
+    resp = client.post("/api/maintenance/schedules", headers=headers, json=payload)
+    assert resp.status_code == 200, resp.text
+    return resp.json()["id"]
+
+
+def test_completed_one_time_schedule_cannot_be_completed_again(client, db, admin_headers):
+    from app.models.maintenance import MaintenanceRecord
+    vid = _vehicle(client, admin_headers)["id"]
+    sid = _schedule(client, admin_headers, vid, frequency="one_time", next_due="2026-01-01")
+    assert client.post(f"/api/maintenance/schedules/{sid}/complete", headers=admin_headers).status_code == 200
+    again = client.post(f"/api/maintenance/schedules/{sid}/complete", headers=admin_headers)
+    assert again.status_code == 400, again.text
+    assert "already completed" in again.json()["detail"].lower()
+    db.expire_all()
+    assert db.query(MaintenanceRecord).count() == 1
