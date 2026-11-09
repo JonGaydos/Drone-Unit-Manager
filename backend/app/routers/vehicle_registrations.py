@@ -38,6 +38,21 @@ class RegistrationOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+def keep_one_current(db, vehicle_id: int) -> None:
+    """Leave the vehicle with exactly one current registration when it has any.
+
+    With none current, the latest registration (by registration date, then id)
+    becomes current; with several, only the latest of them stays current.
+    """
+    regs = db.query(VehicleRegistration).filter(VehicleRegistration.vehicle_id == vehicle_id).all()
+    current = [r for r in regs if r.is_current]
+    if not regs or len(current) == 1:
+        return
+    keep = max(current or regs, key=lambda r: (r.registration_date or date.min, r.id))
+    for reg in regs:
+        reg.is_current = reg is keep
+
+
 def _three_years_after(d: date) -> date:
     """The same calendar date three years on; Feb 29 falls back to Feb 28."""
     try:
@@ -126,5 +141,7 @@ def delete_registration(
     if not reg:
         raise HTTPException(404, "Registration not found")
     db.delete(reg)
+    db.flush()
+    keep_one_current(db, reg.vehicle_id)
     db.commit()
     return {"ok": True}

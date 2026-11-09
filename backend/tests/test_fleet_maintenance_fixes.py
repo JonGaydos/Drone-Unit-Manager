@@ -144,3 +144,38 @@ def test_registration_expiry_is_same_date_three_years_later(client, admin_header
                            json={"registration_number": "FA0000TEST", "registration_date": reg_date})
         assert resp.status_code == 200, resp.text
         assert resp.json()["expiry_date"] == expected, reg_date
+
+
+# ── A-F11: deleting the current registration promotes the latest one left ──
+
+def _registration(client, headers, vid, number, reg_date):
+    resp = client.post(f"/api/vehicles/{vid}/registrations", headers=headers,
+                       json={"registration_number": number, "registration_date": reg_date})
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+def _current(client, headers, vid):
+    rows = client.get("/api/vehicle-registrations/current", headers=headers).json()
+    return [r for r in rows if r["vehicle_id"] == vid]
+
+
+def test_deleting_current_registration_promotes_latest_remaining(client, admin_headers):
+    vid = _vehicle(client, admin_headers)["id"]
+    _registration(client, admin_headers, vid, "REG-A", "2020-01-01")
+    _registration(client, admin_headers, vid, "REG-C", "2024-01-01")
+    _registration(client, admin_headers, vid, "REG-B", "2022-01-01")
+    newest = _registration(client, admin_headers, vid, "REG-D", "2025-01-01")
+
+    resp = client.delete(f"/api/vehicle-registrations/{newest['id']}", headers=admin_headers)
+    assert resp.status_code == 200, resp.text
+    current = _current(client, admin_headers, vid)
+    assert [r["registration_number"] for r in current] == ["REG-C"]
+
+
+def test_deleting_an_old_registration_keeps_the_current_one(client, admin_headers):
+    vid = _vehicle(client, admin_headers)["id"]
+    old = _registration(client, admin_headers, vid, "REG-A", "2020-01-01")
+    _registration(client, admin_headers, vid, "REG-B", "2019-01-01")
+    client.delete(f"/api/vehicle-registrations/{old['id']}", headers=admin_headers)
+    assert [r["registration_number"] for r in _current(client, admin_headers, vid)] == ["REG-B"]
