@@ -318,3 +318,77 @@ def test_backup_import_surfaces_telemetry_failure(client, db, telemetry_db, tmp_
                        files={"file": ("b.zip", buf.getvalue(), "application/zip")})
     assert resp.status_code == 500
     assert "telemetry" in resp.text.lower()
+
+
+# --- uploads folder matches the archive ----------------------------------------
+
+def _uploads_zip(entries: dict) -> zipfile.ZipFile:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        for name, data in entries.items():
+            zf.writestr(name, data)
+    buf.seek(0)
+    return zipfile.ZipFile(buf)
+
+
+def test_restore_uploads_removes_files_not_in_the_backup(tmp_path, monkeypatch):
+    """A restore onto an existing data folder must not keep uploads added after
+    the backup: the folder ends up matching the archive. Nothing outside the
+    upload folder is touched."""
+    from app.routers.backup import _restore_uploads
+    monkeypatch.setattr(app_settings, "DATA_DIR", tmp_path)
+    upload_dir = tmp_path / "uploads"
+    (upload_dir / "documents").mkdir(parents=True)
+    (upload_dir / "photos").mkdir()
+    (upload_dir / "documents" / "kept.txt").write_text("old copy")
+    (upload_dir / "documents" / "added-later.txt").write_text("orphan")
+    (upload_dir / "photos" / "added-later.jpg").write_bytes(b"jpg")
+    (tmp_path / "outside.txt").write_text("not an upload")
+
+    zf = _uploads_zip({"manifest.json": "{}", "uploads/documents/kept.txt": "backup copy",
+                       "uploads/org/logo.png": "png"})
+    assert _restore_uploads(zf, str(upload_dir)) == 2
+
+    assert (upload_dir / "documents" / "kept.txt").read_text() == "backup copy"
+    assert (upload_dir / "org" / "logo.png").read_text() == "png"
+    assert not (upload_dir / "documents" / "added-later.txt").exists()
+    assert not (upload_dir / "photos" / "added-later.jpg").exists()
+    assert (tmp_path / "outside.txt").read_text() == "not an upload"
+
+
+def test_restore_uploads_keeps_a_file_whose_backup_entry_was_refused(tmp_path, monkeypatch):
+    """An entry refused for size is still in the backup, so the copy on disk stays."""
+    from app.routers import backup as backup_router
+    monkeypatch.setattr(app_settings, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(backup_router, "MAX_UPLOAD_ENTRY_BYTES", 3)
+    upload_dir = tmp_path / "uploads"
+    upload_dir.mkdir()
+    (upload_dir / "big.bin").write_text("on disk")
+
+    zf = _uploads_zip({"uploads/big.bin": "too large"})
+    assert backup_router._restore_uploads(zf, str(upload_dir)) == 0
+    assert (upload_dir / "big.bin").read_text() == "on disk"
+
+
+def test_restore_uploads_never_cleans_a_folder_that_holds_the_data_dir(tmp_path, monkeypatch):
+    """If the upload folder were configured as the data folder, a cleanup would
+    delete the databases. It is skipped instead."""
+    from app.routers.backup import _restore_uploads
+    monkeypatch.setattr(app_settings, "DATA_DIR", tmp_path)
+    (tmp_path / "drone_unit_manager.db").write_bytes(b"db")
+
+    zf = _uploads_zip({"uploads/a.txt": "a"})
+    assert _restore_uploads(zf, str(tmp_path)) == 1
+    assert (tmp_path / "drone_unit_manager.db").exists()
+
+
+def test_restore_uploads_refuses_entries_that_escape_the_folder(tmp_path, monkeypatch):
+    from app.routers.backup import _restore_uploads
+    monkeypatch.setattr(app_settings, "DATA_DIR", tmp_path)
+    upload_dir = tmp_path / "uploads"
+    upload_dir.mkdir()
+
+    zf = _uploads_zip({"uploads/../escaped.txt": "x", "uploads/ok.txt": "ok"})
+    assert _restore_uploads(zf, str(upload_dir)) == 1
+    assert not (tmp_path / "escaped.txt").exists()
+    assert (upload_dir / "ok.txt").read_text() == "ok"

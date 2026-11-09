@@ -513,27 +513,31 @@ def _safe_zip_member_path(upload_dir: str, relative: str) -> str:
 
 
 def _restore_uploads(zf: zipfile.ZipFile, upload_dir: str) -> int:
-    """Extract every 'uploads/...' entry in the backup ZIP into upload_dir on
-    disk. Rejects entries that try to escape upload_dir via absolute paths,
-    '..' segments, or symlinks. Runs inside _restore_archive, which import_backup
+    """Make upload_dir match the backup: extract every 'uploads/...' entry in
+    the ZIP, then remove files under upload_dir that the backup does not name.
+    Rejects entries that try to escape upload_dir via absolute paths, '..'
+    segments, or symlinks. Runs inside _restore_archive, which import_backup
     keeps off the event loop."""
     files_restored = 0
     files_rejected = 0
+    in_backup = set()
     upload_prefix = "uploads/"
     for name in zf.namelist():
         if not name.startswith(upload_prefix) or name.endswith("/"):
             continue
         relative = name[len(upload_prefix):]
-        # Reject entries whose declared decompressed size exceeds the cap before
-        # reading them into memory (zip-bomb guard).
-        if zf.getinfo(name).file_size > MAX_UPLOAD_ENTRY_BYTES:
-            logger.warning("Refused backup entry %s: decompressed size exceeds cap", name)
-            files_rejected += 1
-            continue
         try:
             dest = _safe_zip_member_path(upload_dir, relative)
         except ValueError as exc:
             logger.warning("Refused backup entry %s: %s", name, exc)
+            files_rejected += 1
+            continue
+        # Named by the backup, so kept on disk even if refused below.
+        in_backup.add(os.path.realpath(dest))
+        # Reject entries whose declared decompressed size exceeds the cap before
+        # reading them into memory (zip-bomb guard).
+        if zf.getinfo(name).file_size > MAX_UPLOAD_ENTRY_BYTES:
+            logger.warning("Refused backup entry %s: decompressed size exceeds cap", name)
             files_rejected += 1
             continue
         os.makedirs(os.path.dirname(dest), exist_ok=True)
@@ -542,7 +546,35 @@ def _restore_uploads(zf: zipfile.ZipFile, upload_dir: str) -> int:
         files_restored += 1
     if files_rejected:
         logger.warning("Skipped %d unsafe backup entries", files_rejected)
+    _remove_uploads_not_in(upload_dir, in_backup)
     return files_restored
+
+
+def _remove_uploads_not_in(upload_dir: str, keep: set[str]) -> None:
+    """Delete files under upload_dir whose real path is not in keep.
+
+    Runs after extraction, so a failed restore never loses a file first. Only
+    files are removed (a symlink is unlinked, never followed). Skipped entirely
+    when upload_dir holds the data folder, where the databases live.
+    """
+    real_root = os.path.realpath(upload_dir)
+    real_data = os.path.realpath(str(app_settings.DATA_DIR))
+    if real_data == real_root or real_data.startswith(real_root + os.sep):
+        logger.warning("Upload folder %s holds the data folder; stale uploads not removed", upload_dir)
+        return
+    removed = 0
+    for dirpath, _, filenames in os.walk(upload_dir):
+        for fname in filenames:
+            path = os.path.join(dirpath, fname)
+            if os.path.realpath(path) in keep:
+                continue
+            try:
+                os.remove(path)
+                removed += 1
+            except OSError as exc:
+                logger.warning("Could not remove stale upload %s: %s", path, exc)
+    if removed:
+        logger.info("Removed %d uploads not in the backup", removed)
 
 
 @router.get("/export")
