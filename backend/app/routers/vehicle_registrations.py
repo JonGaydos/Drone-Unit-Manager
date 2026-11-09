@@ -2,7 +2,7 @@ from datetime import date
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, StringConstraints, model_validator
 
 from app.constants import DOCUMENT_NOT_FOUND
 from app.deps import DBSession
@@ -20,11 +20,19 @@ ManageUser = Annotated[User, Depends(require_permission("registrations.manage"))
 
 
 class RegistrationCreate(BaseModel):
-    registration_number: Optional[str] = None
+    registration_number: Optional[Annotated[str, StringConstraints(strip_whitespace=True, max_length=100)]] = None
     registration_date: Optional[date] = None
     expiry_date: Optional[date] = None
     document_id: Optional[int] = None
     notes: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _check(self):
+        if not self.registration_number and not self.registration_date:
+            raise ValueError("Give a registration number or a registration date")
+        if self.registration_date and self.expiry_date and self.expiry_date < self.registration_date:
+            raise ValueError("Expiry date cannot be before the registration date")
+        return self
 
 
 class RegistrationOut(BaseModel):

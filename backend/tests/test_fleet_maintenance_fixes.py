@@ -422,3 +422,19 @@ def test_vehicle_location_place_blank_or_long_is_refused(client, admin_headers):
     assert resp.status_code == 200, resp.text
     row = next(r for r in client.get("/api/vehicles/locations", headers=admin_headers).json() if r["vehicle_id"] == vid)
     assert row["location_text"] == "Hangar 2"
+
+
+# ── A-F10: registration needs a number or date; expiry after registration ───
+
+def test_registration_validation(client, admin_headers):
+    vid = _vehicle(client, admin_headers)["id"]
+    url = f"/api/vehicles/{vid}/registrations"
+    for body in ({}, {"registration_number": "  ", "notes": "x"},
+                 {"registration_date": "2025-01-01", "expiry_date": "2024-12-31"},
+                 {"registration_number": "R" * 101}):
+        resp = client.post(url, headers=admin_headers, json=body)
+        assert resp.status_code == 422, f"{body}: {resp.text}"
+    assert _current(client, admin_headers, vid) == []
+    assert client.post(url, headers=admin_headers, json={"registration_date": "2025-01-01"}).status_code == 200
+    assert client.post(url, headers=admin_headers, json={"registration_number": "FA-1"}).status_code == 200
+
