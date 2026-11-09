@@ -20,6 +20,7 @@ from app.services.local_time import display_zone, stamped_on_or_after, stamped_o
 from app.services.pilot_contacts import hides_contacts, redact_audit_changes, redact_audit_details
 from app.models.pilot import Pilot
 from app.models.vehicle import Vehicle
+from app.models.vehicle_registration import VehicleRegistration
 from app.models.maintenance import MaintenanceRecord
 from app.models.certification import PilotCertification, CertificationType
 from app.models.training_log import TrainingLog
@@ -234,15 +235,23 @@ def export_vehicles_csv(db: DBSession, user: ExportUser, _view: FleetView):
     vehicles = _cap_rows(db.query(Vehicle).order_by(Vehicle.manufacturer).all(), "vehicles")
     # Counted flights, the same scope as the vehicle stats; blank without flights.view.
     totals = vehicle_flight_totals(db) if can(db, user, "flights.view") else None
+    # FAA Reg is the current registration's number, as on the Fleet page, with
+    # the legacy field as the fallback (and the only source without registrations.view).
+    current_regs = {}
+    if can(db, user, "registrations.view"):
+        current_regs = {r.vehicle_id: r.registration_number for r in db.query(VehicleRegistration).filter(
+            VehicleRegistration.is_current.is_(True)).all()}
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["Serial", "Manufacturer", "Model", "Nickname", "FAA Reg", "Status", "Flights", "Hours"])
+    writer.writerow(["Serial", "Manufacturer", "Model", "Nickname", "FAA Reg", "Status", "Flights", "Hours",
+                     "Acquired", "Decommissioned"])
     for v in vehicles:
         flights, hours = totals.get(v.id, (0, 0.0)) if totals is not None else ("", None)
         writer.writerow([
             _csv_safe(v.serial_number), _csv_safe(v.manufacturer), _csv_safe(v.model),
-            _csv_safe(v.nickname or ""), _csv_safe(v.faa_registration or ""), _csv_safe(v.status),
-            flights, round(hours, 1) if hours is not None else "",
+            _csv_safe(v.nickname or ""), _csv_safe(current_regs.get(v.id) or v.faa_registration or ""),
+            _csv_safe(v.status), flights, round(hours, 1) if hours is not None else "",
+            v.acquired_date or "", v.decommissioned_date or "",
         ])
     output.seek(0)
     return StreamingResponse(

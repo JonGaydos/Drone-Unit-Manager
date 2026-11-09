@@ -391,3 +391,21 @@ def test_registration_with_unknown_document_is_404(client, admin_headers):
                        json={"registration_number": "FA0000TEST", "document_id": 9999})
     assert resp.status_code == 404, resp.text
     assert resp.json()["detail"] == "Document not found"
+
+
+# ── A-F7: Vehicles CSV lifecycle columns and current registration ───────────
+
+def test_vehicles_csv_has_lifecycle_dates_and_current_registration(client, admin_headers):
+    import csv
+    import io
+    vid = _vehicle(client, admin_headers, faa_registration="LEGACY-1", acquired_date="2024-02-03",
+                   decommissioned_date="2026-01-02")["id"]
+    _vehicle(client, admin_headers, serial_number="VEH-002", faa_registration="LEGACY-2")
+    _registration(client, admin_headers, vid, "FA-CURRENT", "2025-01-01")
+    rows = list(csv.DictReader(io.StringIO(client.get("/api/export/vehicles/csv", headers=admin_headers).text)))
+    by_serial = {r["Serial"]: r for r in rows}
+    assert by_serial["VEH-001"]["Acquired"] == "2024-02-03"
+    assert by_serial["VEH-001"]["Decommissioned"] == "2026-01-02"
+    assert by_serial["VEH-001"]["FAA Reg"] == "FA-CURRENT"
+    assert by_serial["VEH-002"]["FAA Reg"] == "LEGACY-2"
+    assert by_serial["VEH-002"]["Acquired"] == ""
