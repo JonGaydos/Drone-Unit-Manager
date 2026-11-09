@@ -21,6 +21,8 @@ from app.config import settings
 from app.models.battery import Battery
 from app.models.document import Document
 from app.models.folder import Folder
+from app.models.maintenance import MaintenanceRecord
+from app.models.maintenance_schedule import MaintenanceSchedule
 
 
 @pytest.fixture
@@ -100,12 +102,16 @@ def test_equipment_entity_upload_succeeds(client, db, admin_headers, upload_dir)
 def test_maintenance_entity_upload_and_filter(client, db, admin_headers, upload_dir):
     """Documents attach to maintenance records/schedules and come back through
     the entity_type/entity_id list filter."""
-    resp = _upload(client, admin_headers, entity_type="maintenance", entity_id=42)
+    record = MaintenanceRecord(entity_type="vehicle", entity_id=1, maintenance_type="inspection", description="d")
+    schedule = MaintenanceSchedule(name="Annual", entity_type="vehicle", entity_id=1, frequency="yearly")
+    db.add_all([record, schedule])
+    db.commit()
+    resp = _upload(client, admin_headers, entity_type="maintenance", entity_id=record.id)
     assert resp.status_code == 200, resp.text
-    resp = _upload(client, admin_headers, entity_type="maintenance_schedule", entity_id=7)
+    resp = _upload(client, admin_headers, entity_type="maintenance_schedule", entity_id=schedule.id)
     assert resp.status_code == 200, resp.text
 
-    listed = client.get("/api/documents?entity_type=maintenance&entity_id=42", headers=admin_headers)
+    listed = client.get(f"/api/documents?entity_type=maintenance&entity_id={record.id}", headers=admin_headers)
     assert listed.status_code == 200, listed.text
     docs = listed.json()
     assert len(docs) == 1

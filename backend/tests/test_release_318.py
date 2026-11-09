@@ -17,6 +17,7 @@ from app.routers.auth import create_token
 from app.config import settings
 from app.models.certification import CertificationType, PilotCertification
 from app.models.flight import Flight
+from app.models.maintenance import MaintenanceRecord
 from app.models.mission_log import MissionLog
 from app.models.mission_log_pilot import MissionLogPilot
 from app.models.pilot import Pilot
@@ -64,12 +65,12 @@ def _upload(client, headers, entity_type, entity_id):
 
 # 1. A folder the app cannot write to -------------------------------------------------
 
-def test_an_unwritable_folder_is_named_not_a_bare_500(client, admin_headers, upload_root, monkeypatch):
+def test_an_unwritable_folder_is_named_not_a_bare_500(client, admin_headers, upload_root, pilot_record, monkeypatch):
     def refuse(self, data):
         raise PermissionError(13, "Permission denied", str(self))
 
     monkeypatch.setattr(Path, "write_bytes", refuse)
-    resp = _upload(client, admin_headers, "general", 1)
+    resp = _upload(client, admin_headers, "pilot", pilot_record.id)
     assert resp.status_code == 500
     assert "not writable" in resp.json()["detail"]
 
@@ -231,10 +232,11 @@ def test_a_pilot_attaches_documents_to_their_own_record_only(client, db, pilot_u
     db.add(cert_type)
     db.commit()
     other_cert = PilotCertification(pilot_id=other.id, certification_type_id=cert_type.id, status="complete")
-    db.add(other_cert)
+    record = MaintenanceRecord(entity_type="vehicle", entity_id=1, maintenance_type="inspection", description="d")
+    db.add_all([other_cert, record])
     db.commit()
 
     assert _upload(client, pilot_headers, "pilot", own.id).status_code == 200
     assert _upload(client, pilot_headers, "pilot", other.id).status_code == 403
     assert _upload(client, pilot_headers, "certification", other_cert.id).status_code == 403
-    assert _upload(client, pilot_headers, "maintenance", 42).status_code == 200
+    assert _upload(client, pilot_headers, "maintenance", record.id).status_code == 200
