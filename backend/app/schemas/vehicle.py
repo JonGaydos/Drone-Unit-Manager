@@ -1,13 +1,16 @@
 from datetime import datetime, date
-from typing import Optional
+from typing import Annotated, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, StringConstraints
+
+# Serial number, manufacturer and model are required text: trimmed, never blank.
+RequiredText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
 
 
 class VehicleCreate(BaseModel):
-    serial_number: str
-    manufacturer: str
-    model: str
+    serial_number: RequiredText
+    manufacturer: RequiredText
+    model: RequiredText
     nickname: Optional[str] = None
     provider_serial: Optional[str] = None
     faa_registration: Optional[str] = None
@@ -18,9 +21,9 @@ class VehicleCreate(BaseModel):
 
 
 class VehicleUpdate(BaseModel):
-    serial_number: Optional[str] = None
-    manufacturer: Optional[str] = None
-    model: Optional[str] = None
+    serial_number: Optional[RequiredText] = None
+    manufacturer: Optional[RequiredText] = None
+    model: Optional[RequiredText] = None
     nickname: Optional[str] = None
     provider_serial: Optional[str] = None
     faa_registration: Optional[str] = None
