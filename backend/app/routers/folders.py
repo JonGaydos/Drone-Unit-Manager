@@ -90,8 +90,10 @@ def get_folder_documents(folder_id: int, db: DBSession, _user: ViewUser):
     } for d in docs]
 
 
-@router.post("", responses=responses(401))
+@router.post("", responses=responses(401, 404))
 def create_folder(data: FolderCreate, db: DBSession, user: ManageUser):
+    if data.parent_id is not None:
+        _live_folder(db, data.parent_id)
     folder = Folder(
         name=data.name,
         parent_id=data.parent_id,

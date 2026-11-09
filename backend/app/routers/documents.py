@@ -27,6 +27,7 @@ from app.services import evidence
 from app.services import permissions as permissions_service
 from app.services.audit import compute_changes, log_action
 from app.services.file_validation import is_inline_safe, mime_for_filename, user_file_headers
+from app.routers.folders import _live_folder
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
@@ -134,7 +135,7 @@ class DocumentUploadFields(BaseModel):
     folder_id: int | None = None
 
 
-@router.post("/upload", response_model=DocumentOut, responses=responses(400, 403, 413))
+@router.post("/upload", response_model=DocumentOut, responses=responses(400, 403, 404, 413))
 async def upload_document(db: DBSession, upload: UploadPermissionForm):
     """Upload a document, optionally attached to a parent entity.
 
@@ -158,6 +159,8 @@ async def upload_document(db: DBSession, upload: UploadPermissionForm):
     ext = Path(safe_filename).suffix.lower()
     _validate_document_request(entity_type, entity_id, ext)
     _check_own_record(db, admin, entity_type, entity_id)
+    if fields.folder_id is not None:
+        _live_folder(db, fields.folder_id)
 
     # Path build + realpath containment stays inline: the resolved.relative_to
     # check is the taint sanitizer for the write below, and moving it into a
@@ -314,6 +317,8 @@ def update_document(
     doc = _live_document(db, doc_id)
     permissions_service.require_record_access(db, user, FILES_EDIT, permissions_service.owns_document(db, user, doc))
     update_fields = data.model_dump(exclude_unset=True)
+    if update_fields.get("folder_id") is not None:
+        _live_folder(db, update_fields["folder_id"])
     changes = compute_changes(doc, update_fields, list(update_fields))
     for key, value in update_fields.items():
         setattr(doc, key, value)
