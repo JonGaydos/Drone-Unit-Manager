@@ -118,7 +118,7 @@ function EquipmentModal({ title, record, fields, onSave, onClose, vehicleModels 
 
 // ─── Generic Equipment Table ────────────────────────────────────────────────
 
-function EquipmentTable({ items, columns, canManage, onEdit, onDelete, onMerge, emptyMessage, sortKey, sortDir, onToggleSort }) {
+function EquipmentTable({ items, columns, canManage, onEdit, onDelete, deleteLabel = 'Delete', onMerge, emptyMessage, sortKey, sortDir, onToggleSort }) {
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden">
       <div className="overflow-x-auto">
@@ -157,7 +157,7 @@ function EquipmentTable({ items, columns, canManage, onEdit, onDelete, onMerge, 
                         <Merge className="w-4 h-4" />
                       </button>
                     )}
-                    <button onClick={() => onDelete(item.id)} className="p-1.5 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10" aria-label="Delete">
+                    <button onClick={() => onDelete(item.id)} className="p-1.5 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10" aria-label={deleteLabel} title={deleteLabel}>
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -221,6 +221,8 @@ const TAB_CONFIGS = {
     icon: QuadcopterIcon,
     label: 'Vehicles',
     endpoint: '/vehicles',
+    // The API keeps a vehicle and its flight history, marking it retired.
+    retireOnDelete: true,
     columns: [
       { key: 'nickname', label: 'Vehicle', primary: true, value: v => v.nickname || v.serial_number, render: v => {
         const name = v.nickname || v.serial_number || '—'
@@ -559,9 +561,17 @@ export default function FleetPage() {
   }
 
   const handleDelete = (id) => {
+    const noun = singularize(config.label)
+    const wording = config.retireOnDelete ? {
+      title: `Retire ${noun}`,
+      message: `Retire this ${noun.toLowerCase()}? It stays on record with its flight history, marked retired. Edit it to set it back in service.`,
+      confirmLabel: 'Retire',
+    } : {
+      title: `Delete ${noun}`,
+      message: `Are you sure you want to delete this ${noun.toLowerCase()}? This cannot be undone.`,
+    }
     requestConfirm({
-      title: `Delete ${singularize(config.label)}`,
-      message: `Are you sure you want to delete this ${singularize(config.label).toLowerCase()}? This cannot be undone.`,
+      ...wording,
       onConfirm: async () => {
         try {
           await api.delete(`${config.endpoint}/${id}`)
@@ -702,6 +712,7 @@ export default function FleetPage() {
           canManage={canManage}
           onEdit={(item) => setModal(item)}
           onDelete={handleDelete}
+          deleteLabel={config.retireOnDelete ? 'Retire' : 'Delete'}
           onMerge={['vehicles', 'batteries', 'sensors', 'attachments'].includes(activeTab) && canManage ? (item) => { setMergeTarget(item); setMergeFromId('') } : null}
           emptyMessage={`No ${config.label.toLowerCase()} found`}
           sortKey={sortKey}

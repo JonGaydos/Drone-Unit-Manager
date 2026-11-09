@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { screen, within } from '@testing-library/react'
+import { screen, within, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { withPermissions } from '@/test/permissions'
@@ -340,5 +340,20 @@ describe('FleetPage', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Add Vehicle' }))
     expect(await screen.findByText('Required: Serial Number, Manufacturer, Model')).toBeInTheDocument()
     expect(posted).toBe(false)
+  })
+
+  it('offers Retire, not Delete, for a vehicle and says what it does', async () => {
+    mockVehicles()
+    let deleted = null
+    server.use(http.delete('/api/vehicles/:id', ({ params }) => { deleted = params.id; return HttpResponse.json({ ok: true }) }))
+    const { user } = renderWithProviders(<FleetPage />, { role: 'admin' })
+    await screen.findByRole('link', { name: 'Falcon' })
+    expect(screen.queryAllByRole('button', { name: 'Delete' })).toHaveLength(0)
+    await user.click(screen.getAllByRole('button', { name: 'Retire' })[0])
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('Retire Vehicle')).toBeInTheDocument()
+    expect(within(dialog).queryByText(/cannot be undone/)).toBeNull()
+    await user.click(within(dialog).getByRole('button', { name: 'Retire' }))
+    await waitFor(() => expect(deleted).toBe('1'))
   })
 })
