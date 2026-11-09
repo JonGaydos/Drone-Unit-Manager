@@ -184,8 +184,10 @@ def get_battery_flights(bid: int, db: DBSession, user: ViewUser, _flights: Fligh
             "date": str(f.date) if f.date else None,
             "pilot_name": f"{f.pilot.first_name} {f.pilot.last_name}" if f.pilot else None,
             "pilot_id": f.pilot_id,
+            "vehicle_id": f.vehicle_id,
             "vehicle_name": f.vehicle.nickname or f"{f.vehicle.manufacturer} {f.vehicle.model}" if f.vehicle else None,
             "duration_seconds": f.duration_seconds,
+            "takeoff_address": f.takeoff_address,
             "purpose": f.purpose,
             "max_altitude_m": f.max_altitude_m,
         }
@@ -601,7 +603,8 @@ def get_sensor_stats(sid: int, db: DBSession, user: ViewUser, _flights: FlightsV
         raise HTTPException(404, SENSOR_NOT_FOUND)
     flight_count = db.query(func.count(Flight.id)).filter(counted_flight_clause(), Flight.sensor_package == sensor.serial_number).scalar()
     total_seconds = db.query(func.coalesce(func.sum(Flight.duration_seconds), 0)).filter(counted_flight_clause(), Flight.sensor_package == sensor.serial_number).scalar()
-    return {"total_flights": flight_count, "total_hours": round(total_seconds / 3600, 2)}
+    unique_pilots = db.query(func.count(func.distinct(Flight.pilot_id))).filter(counted_flight_clause(), Flight.sensor_package == sensor.serial_number).scalar()
+    return {"total_flights": flight_count, "total_hours": round(total_seconds / 3600, 2), "unique_pilots": unique_pilots}
 
 
 @router.get("/sensors/{sid}/flights", responses=responses(401, 404))
@@ -619,8 +622,10 @@ def get_sensor_flights(sid: int, db: DBSession, user: ViewUser, _flights: Flight
             "date": str(f.date) if f.date else None,
             "pilot_name": f"{f.pilot.first_name} {f.pilot.last_name}" if f.pilot else None,
             "pilot_id": f.pilot_id,
+            "vehicle_id": f.vehicle_id,
             "vehicle_name": f.vehicle.nickname or f"{f.vehicle.manufacturer} {f.vehicle.model}" if f.vehicle else None,
             "duration_seconds": f.duration_seconds,
+            "takeoff_address": f.takeoff_address,
             "purpose": f.purpose,
             "max_altitude_m": f.max_altitude_m,
         }
@@ -738,7 +743,8 @@ def get_attachment_stats(aid: int, db: DBSession, user: ViewUser, _flights: Flig
     )
     flight_count = db.query(func.count(Flight.id)).filter(counted_flight_clause(), attachment_filter).scalar()
     total_seconds = db.query(func.coalesce(func.sum(Flight.duration_seconds), 0)).filter(counted_flight_clause(), attachment_filter).scalar()
-    return {"total_flights": flight_count, "total_hours": round(total_seconds / 3600, 2)}
+    unique_pilots = db.query(func.count(func.distinct(Flight.pilot_id))).filter(counted_flight_clause(), attachment_filter).scalar()
+    return {"total_flights": flight_count, "total_hours": round(total_seconds / 3600, 2), "unique_pilots": unique_pilots}
 
 
 def _attachment_flight_item(f, sn) -> dict:
@@ -758,8 +764,10 @@ def _attachment_flight_item(f, sn) -> dict:
         "date": str(f.date) if f.date else None,
         "pilot_name": f"{f.pilot.first_name} {f.pilot.last_name}" if f.pilot else None,
         "pilot_id": f.pilot_id,
+        "vehicle_id": f.vehicle_id,
         "vehicle_name": f.vehicle.nickname or f"{f.vehicle.manufacturer} {f.vehicle.model}" if f.vehicle else None,
         "duration_seconds": f.duration_seconds,
+        "takeoff_address": f.takeoff_address,
         "purpose": f.purpose,
         "max_altitude_m": f.max_altitude_m,
         "positions": positions,

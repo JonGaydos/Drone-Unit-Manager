@@ -213,7 +213,7 @@ export default function AttachmentDetailPage() {
                   </td>
                   <td className="px-4 py-2 text-foreground hidden md:table-cell">{f.purpose || '--'}</td>
                   <td className="px-4 py-2 text-foreground">{formatDuration(f.duration_seconds)}</td>
-                  <td className="px-4 py-2 text-foreground hidden lg:table-cell">{f.position || '--'}</td>
+                  <td className="px-4 py-2 text-foreground hidden lg:table-cell">{f.positions?.length ? f.positions.join(', ') : '--'}</td>
                 </tr>
               ))}
               {flights.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">No flights recorded for this attachment</td></tr>}

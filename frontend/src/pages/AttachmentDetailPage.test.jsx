@@ -77,4 +77,16 @@ describe('AttachmentDetailPage', () => {
     expect(buttons).toHaveLength(1)
     expect(buttons[0]).toHaveAccessibleName(/Upload/)
   })
+
+  it('shows the mount positions and links the vehicle of each flight', async () => {
+    mockMount({
+      flights: () => HttpResponse.json([
+        { id: 41, date: '2026-05-02', pilot_id: null, vehicle_id: 5, vehicle_name: 'Hawk',
+          duration_seconds: 600, positions: ['top', 'left'] },
+      ]),
+    })
+    render()
+    expect(await screen.findByText('top, left')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Hawk' })).toHaveAttribute('href', '/fleet/vehicles/5')
+  })
 })

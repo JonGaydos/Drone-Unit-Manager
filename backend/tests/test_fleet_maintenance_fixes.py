@@ -261,3 +261,31 @@ def test_alert_check_dismisses_alerts_whose_schedule_is_no_longer_overdue(client
     db.commit()
     check_maintenance_schedules(db)
     assert _open_maintenance_alerts(db) == []
+
+
+# ── A-F37: equipment flight history returns what the detail pages read ──────
+
+def test_equipment_flight_items_carry_vehicle_id_and_location(client, db, admin_headers):
+    from app.models.pilot import Pilot
+    vid = _vehicle(client, admin_headers)["id"]
+    bid = client.post("/api/batteries", headers=admin_headers, json={"serial_number": "BAT-1"}).json()["id"]
+    sid = client.post("/api/sensors", headers=admin_headers, json={"serial_number": "SEN-1"}).json()["id"]
+    aid = client.post("/api/attachments", headers=admin_headers, json={"serial_number": "ATT-1"}).json()["id"]
+    pilots = [Pilot(first_name="Ann", last_name="One", status="active"),
+              Pilot(first_name="Bo", last_name="Two", status="active")]
+    db.add_all(pilots)
+    db.commit()
+    gear = dict(battery_serial="BAT-1", sensor_package="SEN-1", attachment_top="ATT-1",
+                attachment_left="ATT-1", takeoff_address="1 Test Field")
+    _flight(db, vid, 600, pilot_id=pilots[0].id, **gear)
+    _flight(db, vid, 600, pilot_id=pilots[1].id, **gear)
+    _flight(db, vid, 600, pilot_id=pilots[1].id, **gear)
+
+    for url in (f"/api/batteries/{bid}/flights", f"/api/sensors/{sid}/flights", f"/api/attachments/{aid}/flights"):
+        item = client.get(url, headers=admin_headers).json()[0]
+        assert item["vehicle_id"] == vid, url
+        assert item["takeoff_address"] == "1 Test Field", url
+    att = client.get(f"/api/attachments/{aid}/flights", headers=admin_headers).json()[0]
+    assert att["positions"] == ["top", "left"]
+    for url in (f"/api/sensors/{sid}/stats", f"/api/attachments/{aid}/stats"):
+        assert client.get(url, headers=admin_headers).json()["unique_pilots"] == 2, url
