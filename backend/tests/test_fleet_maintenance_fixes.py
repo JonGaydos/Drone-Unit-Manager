@@ -571,3 +571,27 @@ def test_checkout_expected_return_carries_the_display_zone(client, db, admin_hea
         "entity_type": "vehicle", "entity_id": vid, "checked_out_by_id": pid,
         "expected_return": "2026-11-10T18:00:00Z"}).json()
     assert co["expected_return"] == "2026-11-10T12:00:00-06:00"
+
+
+# ── A-F25: a check-in replaces the place set before the checkout ────────────
+
+def test_vehicle_location_after_check_in_is_not_the_old_place(client, db, admin_headers):
+    pid = _pilot(db)
+    vid = _vehicle(client, admin_headers)["id"]
+
+    def location():
+        rows = client.get("/api/vehicles/locations", headers=admin_headers).json()
+        return next(r for r in rows if r["vehicle_id"] == vid)
+
+    client.patch(f"/api/vehicles/{vid}/location", headers=admin_headers, json={"place": "Hangar 2"})
+    co = client.post("/api/equipment-checkouts", headers=admin_headers, json={
+        "entity_type": "vehicle", "entity_id": vid, "checked_out_by_id": pid}).json()
+    assert location()["source"] == "checkout"
+    client.post(f"/api/equipment-checkouts/{co['id']}/checkin", headers=admin_headers, json={"checked_in_by_id": pid})
+    row = location()
+    assert row["location_text"] == "Returned"
+    assert row["source"] == "checkin"
+
+    # A place set after the check-in wins again.
+    client.patch(f"/api/vehicles/{vid}/location", headers=admin_headers, json={"place": "Truck 1"})
+    assert location()["location_text"] == "Truck 1"

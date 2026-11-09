@@ -83,11 +83,36 @@ def _latest_vehicle_checkouts(db, vids):
     return active
 
 
-def _resolve_vehicle_location(v, co, names):
+def _last_vehicle_checkins(db, vids):
+    """Map each vehicle id to the time it was last checked in."""
+    from sqlalchemy import func
+    from app.models.equipment_checkout import EquipmentCheckout
+    if not vids:
+        return {}
+    rows = db.query(EquipmentCheckout.entity_id, func.max(EquipmentCheckout.checked_in_at)).filter(
+        EquipmentCheckout.entity_type == "vehicle",
+        EquipmentCheckout.entity_id.in_(vids),
+        EquipmentCheckout.checked_in_at.isnot(None),
+    ).group_by(EquipmentCheckout.entity_id).all()
+    return dict(rows)
+
+
+def _aware(t):
+    """Treat a naive time as UTC, so it compares with the aware manual-set time."""
+    from datetime import timezone
+    return t.replace(tzinfo=timezone.utc) if t is not None and t.tzinfo is None else t
+
+
+def _resolve_vehicle_location(v, co, names, last_checkin=None):
     """Resolve a vehicle's location text/source from the more recent of a manual
-    set or an open checkout. Returns (location_text, source)."""
+    set or an open checkout. With neither open nor newer than the last check-in,
+    the vehicle is "Returned": the place set before it went out is stale.
+    Returns (location_text, source)."""
     co_time = co.checked_out_at if co else None
     man_time = v.location_set_at
+    last_checkin = _aware(last_checkin)
+    if co is None and last_checkin is not None and (man_time is None or last_checkin > man_time):
+        return "Returned", "checkin"
     manual_newer = man_time is not None and (co_time is None or man_time >= co_time)
     if manual_newer:
         if v.manual_location_pilot_id:
@@ -107,6 +132,7 @@ def vehicle_locations(db: DBSession, user: ViewUser):
     from app.models.pilot import Pilot
     vehicles = db.query(Vehicle).filter(Vehicle.status != "retired").all()
     active = _latest_vehicle_checkouts(db, [v.id for v in vehicles])
+    checkins = _last_vehicle_checkins(db, [v.id for v in vehicles])
     pilot_ids = {c.checked_out_by_id for c in active.values()}
     pilot_ids |= {v.manual_location_pilot_id for v in vehicles if v.manual_location_pilot_id}
     names = {}
@@ -115,7 +141,7 @@ def vehicle_locations(db: DBSession, user: ViewUser):
     result = []
     for v in vehicles:
         label = v.nickname or f"{v.manufacturer} {v.model}"
-        location_text, source = _resolve_vehicle_location(v, active.get(v.id), names)
+        location_text, source = _resolve_vehicle_location(v, active.get(v.id), names, checkins.get(v.id))
         result.append({"vehicle_id": v.id, "label": label, "location_text": location_text, "source": source})
     return result
 
