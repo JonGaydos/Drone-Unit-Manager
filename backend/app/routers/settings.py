@@ -149,6 +149,9 @@ def set_setting(data: SettingValue, db: DBSession, admin: AdminUser):
 
 
 ALLOWED_LOGO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
+# The stored logo's extension comes from what the file holds, not its name, so
+# it is always served as the type it is.
+LOGO_EXT_BY_TYPE = {"png": ".png", "jpeg": ".jpg", "webp": ".webp"}
 
 
 @router.post("/logo", responses=responses(400, 401, 413))
@@ -158,19 +161,21 @@ async def upload_logo(upload: AdminForm, db: DBSession):
     user = upload.user
     upload_dir = Path(app_settings.UPLOAD_DIR) / "org"
     upload_dir.mkdir(parents=True, exist_ok=True)
-    ext = Path(file.filename).suffix.lower() or ".png"
-    if ext not in ALLOWED_LOGO_EXTENSIONS:
+    ext = Path(file.filename).suffix.lower()
+    if ext and ext not in ALLOWED_LOGO_EXTENSIONS:
         raise HTTPException(400, f"File type '{ext}' not allowed for logo.")
     content = await file.read()
     if len(content) > app_settings.MAX_UPLOAD_SIZE:
         raise HTTPException(413, f"File too large. Maximum size is {app_settings.MAX_UPLOAD_SIZE // (1024 * 1024)}MB")
-    from app.services.file_validation import is_image
-    if not is_image(content[:512]):
-        raise HTTPException(400, "File content is not a recognized image")
-    for old in upload_dir.glob("logo.*"):
-        old.unlink()
+    from app.services.file_validation import sniff_type
+    ext = LOGO_EXT_BY_TYPE.get(sniff_type(content[:512]))
+    if ext is None:
+        raise HTTPException(400, "Logo must be a PNG, JPEG or WebP image")
     filepath = upload_dir / f"logo{ext}"
     await anyio.Path(filepath).write_bytes(content)
+    for old in upload_dir.glob("logo.*"):
+        if old.name != filepath.name:
+            old.unlink()
     setting = db.query(Setting).filter(Setting.key == "org_logo").first()
     if setting:
         setting.value = LOGO_VIEW_PATH
@@ -187,10 +192,11 @@ async def upload_logo(upload: AdminForm, db: DBSession):
 def view_logo():
     """Serve the organization logo image file."""
     logo_dir = Path(app_settings.UPLOAD_DIR) / "org"
+    from app.services.file_validation import mime_for_filename
     for ext in [".png", ".jpg", ".jpeg", ".webp"]:
         p = logo_dir / f"logo{ext}"
         if p.exists():
-            return FileResponse(p)
+            return FileResponse(p, media_type=mime_for_filename(p.name))
     raise HTTPException(404, "No logo found")
 
 
