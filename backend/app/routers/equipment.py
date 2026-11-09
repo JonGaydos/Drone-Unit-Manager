@@ -20,6 +20,7 @@ from app.responses import responses
 from app.services.audit_capture import update_recorded
 from app.services.equipment_lifecycle import end_schedules
 from app.services.equipment_lifecycle import set_fields_with_lifecycle as _set_fields_with_lifecycle
+from app.services.flight_scope import counted_flight_clause
 
 router = APIRouter(prefix="/api", tags=["equipment"])
 
@@ -158,8 +159,8 @@ def get_battery_stats(bid: int, db: DBSession, user: ViewUser, _flights: Flights
     battery = db.query(Battery).filter(Battery.id == bid).first()
     if not battery:
         raise HTTPException(404, BATTERY_NOT_FOUND)
-    flight_count = db.query(func.count(Flight.id)).filter(Flight.battery_serial == battery.serial_number).scalar()
-    total_seconds = db.query(func.coalesce(func.sum(Flight.duration_seconds), 0)).filter(Flight.battery_serial == battery.serial_number).scalar()
+    flight_count = db.query(func.count(Flight.id)).filter(counted_flight_clause(), Flight.battery_serial == battery.serial_number).scalar()
+    total_seconds = db.query(func.coalesce(func.sum(Flight.duration_seconds), 0)).filter(counted_flight_clause(), Flight.battery_serial == battery.serial_number).scalar()
     return {"total_flights": flight_count, "total_hours": round(total_seconds / 3600, 2)}
 
 
@@ -593,8 +594,8 @@ def get_sensor_stats(sid: int, db: DBSession, user: ViewUser, _flights: FlightsV
     sensor = db.query(SensorPackage).filter(SensorPackage.id == sid).first()
     if not sensor:
         raise HTTPException(404, SENSOR_NOT_FOUND)
-    flight_count = db.query(func.count(Flight.id)).filter(Flight.sensor_package == sensor.serial_number).scalar()
-    total_seconds = db.query(func.coalesce(func.sum(Flight.duration_seconds), 0)).filter(Flight.sensor_package == sensor.serial_number).scalar()
+    flight_count = db.query(func.count(Flight.id)).filter(counted_flight_clause(), Flight.sensor_package == sensor.serial_number).scalar()
+    total_seconds = db.query(func.coalesce(func.sum(Flight.duration_seconds), 0)).filter(counted_flight_clause(), Flight.sensor_package == sensor.serial_number).scalar()
     return {"total_flights": flight_count, "total_hours": round(total_seconds / 3600, 2)}
 
 
@@ -730,8 +731,8 @@ def get_attachment_stats(aid: int, db: DBSession, user: ViewUser, _flights: Flig
         Flight.attachment_left == sn,
         Flight.attachment_right == sn,
     )
-    flight_count = db.query(func.count(Flight.id)).filter(attachment_filter).scalar()
-    total_seconds = db.query(func.coalesce(func.sum(Flight.duration_seconds), 0)).filter(attachment_filter).scalar()
+    flight_count = db.query(func.count(Flight.id)).filter(counted_flight_clause(), attachment_filter).scalar()
+    total_seconds = db.query(func.coalesce(func.sum(Flight.duration_seconds), 0)).filter(counted_flight_clause(), attachment_filter).scalar()
     return {"total_flights": flight_count, "total_hours": round(total_seconds / 3600, 2)}
 
 

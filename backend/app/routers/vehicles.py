@@ -211,9 +211,13 @@ def merge_vehicles(target_id: int, merge_from_id: int, db: DBSession, admin: Man
 
 @router.get("/{vehicle_id}/stats", responses=responses(401, 404))
 def get_vehicle_stats(vehicle_id: int, db: DBSession, user: ViewUser, _flights: FlightsViewUser):
-    """Get aggregated flight statistics for a vehicle (total flights, hours, last flight date)."""
+    """Get aggregated flight statistics for a vehicle (total flights, hours, last flight date).
+
+    Counts only flights that count toward the unit's totals, like fleet health.
+    """
     from sqlalchemy import func
     from app.models.flight import Flight
+    from app.services.flight_scope import counted_flight_clause
 
     vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
     if not vehicle:
@@ -222,7 +226,7 @@ def get_vehicle_stats(vehicle_id: int, db: DBSession, user: ViewUser, _flights: 
         func.count(Flight.id).label("total_flights"),
         func.coalesce(func.sum(Flight.duration_seconds), 0).label("total_seconds"),
         func.max(Flight.date).label("last_flight"),
-    ).filter(Flight.vehicle_id == vehicle_id).first()
+    ).filter(counted_flight_clause(), Flight.vehicle_id == vehicle_id).first()
     return {
         "total_flights": stats.total_flights,
         "total_flight_hours": stats.total_seconds / 3600,

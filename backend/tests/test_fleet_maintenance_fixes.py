@@ -107,3 +107,27 @@ def test_vehicles_csv_totals_match_stats(client, db, admin_headers):
     row = next(r for r in rows if r["Serial"] == "VEH-001")
     assert int(row["Flights"]) == stats["total_flights"] == 1
     assert float(row["Hours"]) == round(stats["total_flight_hours"], 1) == 2.0
+
+
+# ── A-F23: equipment stats use the counted-flight scope ─────────────────────
+
+def test_equipment_stats_skip_flights_that_do_not_count(client, db, admin_headers):
+    from app.models.pilot import Pilot
+    guest = Pilot(first_name="Guest", last_name="Operator", status="active", counts_toward_totals=False)
+    db.add(guest)
+    db.commit()
+    vid = _vehicle(client, admin_headers)["id"]
+    bid = client.post("/api/batteries", headers=admin_headers, json={"serial_number": "BAT-1"}).json()["id"]
+    sid = client.post("/api/sensors", headers=admin_headers, json={"serial_number": "SEN-1"}).json()["id"]
+    aid = client.post("/api/attachments", headers=admin_headers, json={"serial_number": "ATT-1"}).json()["id"]
+    gear = dict(battery_serial="BAT-1", sensor_package="SEN-1", attachment_top="ATT-1")
+    _flight(db, vid, 3600, **gear)
+    _flight(db, vid, 999_999, counts_toward_totals=False, **gear)
+    _flight(db, vid, 7200, pilot_id=guest.id, **gear)
+
+    v = client.get(f"/api/vehicles/{vid}/stats", headers=admin_headers).json()
+    assert v["total_flights"] == 1 and v["total_flight_hours"] == 1.0
+    for url in (f"/api/batteries/{bid}/stats", f"/api/sensors/{sid}/stats", f"/api/attachments/{aid}/stats"):
+        body = client.get(url, headers=admin_headers).json()
+        assert body["total_flights"] == 1, url
+        assert body["total_hours"] == 1.0, url
