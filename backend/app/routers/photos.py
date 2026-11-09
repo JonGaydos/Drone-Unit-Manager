@@ -709,7 +709,10 @@ def link_photo_flight(photo_id: int, flight_id: int, db: DBSession, user: Custod
 
 @router.delete("/{photo_id}/flight/{flight_id}", responses=responses(401, 404))
 def unlink_photo_flight(photo_id: int, flight_id: int, db: DBSession, user: CustodyUser):
-    """Unlink a photo from a flight."""
+    """Unlink a photo from a flight. 404 when either does not exist."""
+    _live_photo(db, photo_id)
+    if not db.query(Flight).filter(Flight.id == flight_id).first():
+        raise HTTPException(404, FLIGHT_NOT_FOUND)
     link = delete_links(db.query(PhotoFlight).filter(PhotoFlight.photo_id == photo_id, PhotoFlight.flight_id == flight_id))
     if link:
         log_action(db, user.id, user.display_name, "unlink", "photo", photo_id, changes=link,
@@ -734,7 +737,10 @@ def link_photo_incident(photo_id: int, incident_id: int, db: DBSession, user: Cu
 
 @router.delete("/{photo_id}/incident/{incident_id}", responses=responses(401, 404))
 def unlink_photo_incident(photo_id: int, incident_id: int, db: DBSession, user: CustodyUser):
-    """Unlink a photo from an incident."""
+    """Unlink a photo from an incident. 404 when either does not exist."""
+    _live_photo(db, photo_id)
+    if not db.query(Incident).filter(Incident.id == incident_id).first():
+        raise HTTPException(404, INCIDENT_NOT_FOUND)
     link = delete_links(db.query(PhotoIncident).filter(PhotoIncident.photo_id == photo_id, PhotoIncident.incident_id == incident_id))
     if link:
         log_action(db, user.id, user.display_name, "unlink", "photo", photo_id, changes=link,

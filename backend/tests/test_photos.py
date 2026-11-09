@@ -560,3 +560,25 @@ def test_api_token_out_of_scope_is_refused(client, db, admin_headers, upload_dir
     resp = client.get(f"/api/photos/{photo.id}/view", headers=_api_token(client, admin_headers, scopes=["flights"]))
 
     assert resp.status_code == 403
+
+
+# 5. Unlinking needs a real photo and a real flight or incident (H-2) --------
+
+@pytest.mark.parametrize("kind, seed", [("flight", _seed_flight), ("incident", _seed_incident)])
+def test_unlink_with_a_missing_photo_or_target_is_404(client, db, admin_headers, kind, seed):
+    photo = _seed_photo(db)
+    target = seed(db)
+
+    assert client.delete(f"/api/photos/{photo.id}/{kind}/999999", headers=admin_headers).status_code == 404
+    assert client.delete(f"/api/photos/999999/{kind}/{target.id}", headers=admin_headers).status_code == 404
+
+
+@pytest.mark.parametrize("kind, seed", [("flight", _seed_flight), ("incident", _seed_incident)])
+def test_unlink_of_real_records_still_succeeds(client, db, admin_headers, kind, seed):
+    photo = _seed_photo(db)
+    target = seed(db)
+    assert client.post(f"/api/photos/{photo.id}/{kind}/{target.id}", headers=admin_headers).status_code == 200
+
+    assert client.delete(f"/api/photos/{photo.id}/{kind}/{target.id}", headers=admin_headers).status_code == 200
+    # Unlinking again is a no-op, like linking twice.
+    assert client.delete(f"/api/photos/{photo.id}/{kind}/{target.id}", headers=admin_headers).status_code == 200
