@@ -251,7 +251,7 @@ def create_vehicle(data: VehicleCreate, db: DBSession, admin: ManageUser):
     return VehicleOut.model_validate(vehicle)
 
 
-@router.patch("/{vehicle_id}", response_model=VehicleOut, responses=responses(401, 404))
+@router.patch("/{vehicle_id}", response_model=VehicleOut, responses=responses(400, 401, 404))
 def update_vehicle(vehicle_id: int, data: VehicleUpdate, db: DBSession, admin: ManageUser):
     """Update a vehicle's details with audit-logged change tracking. Needs the fleet.manage permission."""
     from app.services.audit import log_action, compute_changes
@@ -260,6 +260,11 @@ def update_vehicle(vehicle_id: int, data: VehicleUpdate, db: DBSession, admin: M
         raise HTTPException(status_code=404, detail=VEHICLE_NOT_FOUND)
     from app.services.equipment_lifecycle import set_fields_with_lifecycle
     update_data = data.model_dump(exclude_unset=True)
+    new_serial = update_data.get("serial_number")
+    if new_serial and new_serial != vehicle.serial_number and db.query(Vehicle).filter(
+        Vehicle.serial_number == new_serial, Vehicle.id != vehicle_id
+    ).first():
+        raise HTTPException(status_code=400, detail="Vehicle with this serial number already exists")
     changes = compute_changes(vehicle, update_data, ["nickname", "status", "manufacturer", "model", "serial_number"])
     set_fields_with_lifecycle(vehicle, update_data)
     if changes:

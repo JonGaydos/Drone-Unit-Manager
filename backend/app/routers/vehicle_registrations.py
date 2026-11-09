@@ -4,7 +4,9 @@ from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from app.constants import DOCUMENT_NOT_FOUND
 from app.deps import DBSession
+from app.models.document import Document
 from app.models.user import User
 from app.routers.auth import require_permission
 from app.models.vehicle import Vehicle
@@ -71,6 +73,10 @@ def create_registration(
     vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
     if not vehicle:
         raise HTTPException(404, "Vehicle not found")
+    if data.document_id is not None and not db.query(Document).filter(
+        Document.id == data.document_id, Document.deleted_at.is_(None)
+    ).first():
+        raise HTTPException(404, DOCUMENT_NOT_FOUND)
 
     # Auto-calculate expiry if not provided: registration_date + 3 years (FAA Part 107)
     expiry = data.expiry_date

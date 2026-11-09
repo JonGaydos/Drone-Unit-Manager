@@ -1,7 +1,7 @@
 from datetime import datetime, date
 from typing import Annotated, Optional
 
-from pydantic import BaseModel, StringConstraints
+from pydantic import BaseModel, StringConstraints, field_validator
 
 # Serial number, manufacturer and model are required text: trimmed, never blank.
 RequiredText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
@@ -32,6 +32,14 @@ class VehicleUpdate(BaseModel):
     decommissioned_date: Optional[date] = None
     photo_url: Optional[str] = None
     notes: Optional[str] = None
+
+    @field_validator("serial_number", "manufacturer", "model", "status")
+    @classmethod
+    def _not_null(cls, v):
+        # Optional only so a patch can leave them out; a sent null is refused.
+        if v is None:
+            raise ValueError("cannot be empty")
+        return v
 
 
 class VehicleOut(BaseModel):

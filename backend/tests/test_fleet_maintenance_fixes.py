@@ -363,3 +363,31 @@ def test_fleet_text_longer_than_its_column_is_refused(client, admin_headers):
     assert resp.status_code == 422, resp.text
     resp = client.post("/api/docks", headers=admin_headers, json={"serial_number": "D-L", "name": "x" * 201})
     assert resp.status_code == 422, resp.text
+
+
+# ── A-F5: specific errors instead of the generic 409 ────────────────────────
+
+def test_vehicle_patch_to_duplicate_serial_says_so(client, admin_headers):
+    _vehicle(client, admin_headers)
+    vid = _vehicle(client, admin_headers, serial_number="VEH-002")["id"]
+    resp = client.patch(f"/api/vehicles/{vid}", headers=admin_headers, json={"serial_number": "VEH-001"})
+    assert resp.status_code == 400, resp.text
+    assert "serial number already exists" in resp.json()["detail"]
+    # Re-sending its own serial is fine.
+    assert client.patch(f"/api/vehicles/{vid}", headers=admin_headers,
+                        json={"serial_number": "VEH-002"}).status_code == 200
+
+
+def test_vehicle_patch_null_required_field_is_422(client, admin_headers):
+    vid = _vehicle(client, admin_headers)["id"]
+    for field in ("serial_number", "manufacturer", "model", "status"):
+        resp = client.patch(f"/api/vehicles/{vid}", headers=admin_headers, json={field: None})
+        assert resp.status_code == 422, f"{field}: {resp.text}"
+
+
+def test_registration_with_unknown_document_is_404(client, admin_headers):
+    vid = _vehicle(client, admin_headers)["id"]
+    resp = client.post(f"/api/vehicles/{vid}/registrations", headers=admin_headers,
+                       json={"registration_number": "FA0000TEST", "document_id": 9999})
+    assert resp.status_code == 404, resp.text
+    assert resp.json()["detail"] == "Document not found"
