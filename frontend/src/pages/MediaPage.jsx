@@ -559,7 +559,7 @@ function EditModal({ photo, pilots, onClose, onSuccess }) {
       const fd = new FormData()
       fd.append('title', title)
       fd.append('description', description)
-      if (dateTaken) fd.append('date_taken', dateTaken)
+      fd.append('date_taken', dateTaken)
       fd.append('pilot_ids', selectedPilots.join(','))
 
       const token = localStorage.getItem('token')

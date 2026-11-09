@@ -20,7 +20,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Iterator, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Form
+from fastapi import APIRouter, Depends, HTTPException, Query, Form, Request
 from fastapi.responses import FileResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from PIL import Image as PILImage
@@ -621,7 +621,14 @@ def get_signed_urls(photo_id: int, db: DBSession, user: ViewUser):
     return _photo_urls(photo_id, user.id)
 
 
-@router.patch("/{photo_id}", responses=responses(404))
+async def _sent_form_fields(request: Request) -> frozenset[str]:
+    """Names of the form fields a request sent, empty ones included. FastAPI
+    reads an empty form value as missing, so this tells "" (clear) from a
+    field left out (keep)."""
+    return frozenset((await request.form()).keys())
+
+
+@router.patch("/{photo_id}", responses=responses(400, 404))
 def update_photo(
 
     photo_id: int,
@@ -629,6 +636,8 @@ def update_photo(
     db: DBSession,
 
     user: EditUser,
+
+    sent: Annotated[frozenset[str], Depends(_sent_form_fields)],
 
     title: Annotated[Optional[str], Form()] = None,
 
@@ -642,10 +651,11 @@ def update_photo(
 
     Args:
         photo_id: The photo record ID.
-        title: New title (or None to keep existing).
-        description: New description (or None to keep existing).
-        date_taken: New date-taken ISO string (or None to keep existing).
-        pilot_ids: Comma-separated pilot IDs (replaces all existing associations).
+        title: New title. Left out keeps it; sent empty clears it.
+        description: New description, the same way.
+        date_taken: New date-taken ISO string, the same way.
+        pilot_ids: Comma-separated pilot IDs (replaces all existing associations;
+            sent empty removes them all, left out keeps them).
 
     Returns:
         Success message dict.
@@ -653,23 +663,21 @@ def update_photo(
     photo = _live_photo(db, photo_id)
     permissions_service.require_record_access(db, user, FILES_EDIT, permissions_service.owns_photo(user, photo))
 
-    updates = {k: v for k, v in (("title", title), ("description", description)) if v is not None}
-    if date_taken is not None:
-        try:
-            updates["date_taken"] = datetime.fromisoformat(date_taken.replace("Z", UTC_OFFSET).replace(UTC_OFFSET, ""))
-        except (ValueError, AttributeError):
-            raise HTTPException(400, "Invalid date format. Use ISO 8601 (e.g., 2026-04-02).")
+    updates = {k: v or None for k, v in (("title", title), ("description", description)) if k in sent}
+    if "date_taken" in sent:
+        updates["date_taken"] = _parse_date_taken(date_taken)
     changes = compute_changes(photo, updates, list(updates))
     for key, value in updates.items():
         setattr(photo, key, value)
 
-    if pilot_ids is not None:
+    pilots_sent = "pilot_ids" in sent
+    if pilots_sent:
         changes.update(_replace_photo_pilots(db, photo_id, pilot_ids))
 
-    if changes or pilot_ids is not None:
+    if changes or pilots_sent:
         log_action(db, user.id, user.display_name, "update", "photo", photo.id, photo.original_filename,
                    changes=changes or None,
-                   details=f"Pilots set to [{pilot_ids}]" if pilot_ids is not None else None)
+                   details=f"Pilots set to [{pilot_ids or ''}]" if pilots_sent else None)
     db.commit()
     return {"message": "Photo updated"}
 
