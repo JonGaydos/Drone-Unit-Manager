@@ -438,3 +438,23 @@ def test_registration_validation(client, admin_headers):
     assert client.post(url, headers=admin_headers, json={"registration_date": "2025-01-01"}).status_code == 200
     assert client.post(url, headers=admin_headers, json={"registration_number": "FA-1"}).status_code == 200
 
+
+
+# ── A-F16: battery reading validation ───────────────────────────────────────
+
+def test_battery_reading_validation(client, admin_headers):
+    bid = client.post("/api/batteries", headers=admin_headers,
+                      json={"serial_number": "BAT-V", "cycle_count": 30}).json()["id"]
+    url = f"/api/batteries/{bid}/readings"
+    for body in ({}, {"notes": "only a note"}, {"voltage": -1}, {"capacity_mah": -5},
+                 {"temperature_c": -500}, {"temperature_c": 600}, {"health_pct": 80, "notes": "n" * 501}):
+        resp = client.post(url, headers=admin_headers, json=body)
+        assert resp.status_code == 422, f"{body}: {resp.text}"
+    resp = client.post(url, headers=admin_headers, json={"cycle_count": 5})
+    assert resp.status_code == 422, resp.text
+    assert "30" in resp.json()["detail"]
+    assert client.get(f"/api/batteries/{bid}", headers=admin_headers).json()["cycle_count"] == 30
+    assert client.get(f"/api/batteries/{bid}/health-history", headers=admin_headers).json() == []
+
+    resp = client.post(url, headers=admin_headers, json={"cycle_count": 31, "voltage": 15.2, "temperature_c": -10})
+    assert resp.status_code == 200, resp.text

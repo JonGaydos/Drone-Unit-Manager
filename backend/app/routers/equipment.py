@@ -2,7 +2,7 @@ from datetime import date
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func
 
 from app.constants import BATTERY_NOT_FOUND, CONTROLLER_NOT_FOUND, SENSOR_NOT_FOUND, ATTACHMENT_NOT_FOUND, DOCK_NOT_FOUND
@@ -287,10 +287,19 @@ class BatteryReadingCreate(BaseModel):
     """Schema for manually recording a battery health reading."""
     health_pct: Optional[float] = Field(None, ge=0, le=100)
     cycle_count: Optional[int] = Field(None, ge=0)
-    voltage: Optional[float] = None
-    capacity_mah: Optional[float] = None
-    temperature_c: Optional[float] = None
-    notes: Optional[str] = None
+    voltage: Optional[float] = Field(None, ge=0)
+    capacity_mah: Optional[float] = Field(None, ge=0)
+    temperature_c: Optional[float] = Field(None, ge=-50, le=100)
+    notes: Optional[str] = Field(None, max_length=500)
+
+    @model_validator(mode="after")
+    def _has_a_value(self):
+        if all(getattr(self, f) is None for f in READING_VALUES):
+            raise ValueError(f"Give at least one of: {', '.join(READING_VALUES)}")
+        return self
+
+
+READING_VALUES = ("health_pct", "cycle_count", "voltage", "capacity_mah", "temperature_c")
 
 
 @router.get("/batteries/{bid}/health-history", responses=responses(401, 404))
@@ -319,13 +328,16 @@ def get_battery_health_history(bid: int, db: DBSession, user: ViewUser):
     ]
 
 
-@router.post("/batteries/{bid}/readings", responses=responses(401, 404))
+@router.post("/batteries/{bid}/readings", responses=responses(401, 404, 422))
 def add_battery_reading(bid: int, data: BatteryReadingCreate, db: DBSession, admin: ManageUser):
     """Manually record a battery health reading."""
     from app.models.battery_reading import BatteryReading
     b = db.query(Battery).filter(Battery.id == bid).first()
     if not b:
         raise HTTPException(404, BATTERY_NOT_FOUND)
+    if data.cycle_count is not None and b.cycle_count and data.cycle_count < b.cycle_count:
+        # Cycle counts only grow; a lower one is a typo or the wrong battery.
+        raise HTTPException(422, f"Cycle count cannot be lower than the battery's current count ({b.cycle_count})")
     reading = BatteryReading(
         battery_id=bid,
         health_pct=data.health_pct,
