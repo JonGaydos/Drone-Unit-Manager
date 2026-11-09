@@ -1088,7 +1088,9 @@ def test_id_reused_after_delete_writes_a_new_entry(session, db):
 
     session.delete(first)
     session.flush()
-    second = RolePermission(role="pilot", permission_key="b.b", value="on")
+    # AUTOINCREMENT never hands the id out again (H-3), so the reuse is explicit,
+    # as a restore inserting by id would do.
+    second = RolePermission(id=reused_id, role="pilot", permission_key="b.b", value="on")
     session.add(second)
     session.commit()
 
@@ -1184,7 +1186,7 @@ def test_settled_delete_entry_takes_nothing_further(session, db, admin_user):
     session.delete(first)
     log_action(session, admin_user.id, "Admin", "delete", "role_permission", reused_id)
     session.flush()
-    second = RolePermission(role="pilot", permission_key="b.b", value="on")
+    second = RolePermission(id=reused_id, role="pilot", permission_key="b.b", value="on")  # explicit, see above
     session.add(second)
     session.commit()
 
