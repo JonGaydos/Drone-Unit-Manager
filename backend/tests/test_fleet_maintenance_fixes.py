@@ -179,3 +179,21 @@ def test_deleting_an_old_registration_keeps_the_current_one(client, admin_header
     _registration(client, admin_headers, vid, "REG-B", "2019-01-01")
     client.delete(f"/api/vehicle-registrations/{old['id']}", headers=admin_headers)
     assert [r["registration_number"] for r in _current(client, admin_headers, vid)] == ["REG-B"]
+
+
+# ── A-F15: a battery with readings can be deleted ───────────────────────────
+
+def test_battery_with_readings_deletes_with_its_readings(client, db, admin_headers):
+    from app.models.battery_reading import BatteryReading
+    bid = client.post("/api/batteries", headers=admin_headers, json={"serial_number": "BAT-R1"}).json()["id"]
+    other = client.post("/api/batteries", headers=admin_headers, json={"serial_number": "BAT-R2"}).json()["id"]
+    for b in (bid, other):
+        resp = client.post(f"/api/batteries/{b}/readings", headers=admin_headers, json={"health_pct": 70})
+        assert resp.status_code == 200, resp.text
+
+    resp = client.delete(f"/api/batteries/{bid}", headers=admin_headers)
+    assert resp.status_code == 200, resp.text
+    assert client.get(f"/api/batteries/{bid}", headers=admin_headers).status_code == 404
+    db.expire_all()
+    assert db.query(BatteryReading).filter(BatteryReading.battery_id == bid).count() == 0
+    assert db.query(BatteryReading).filter(BatteryReading.battery_id == other).count() == 1

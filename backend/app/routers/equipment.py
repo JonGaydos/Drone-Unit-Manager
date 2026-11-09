@@ -142,6 +142,11 @@ def delete_battery(bid: int, db: DBSession, admin: ManageUser):
     if not b:
         raise HTTPException(404, BATTERY_NOT_FOUND)
     end_schedules(db, b)
+    # Health readings belong to the battery and go with it.
+    from app.models.battery_reading import BatteryReading
+    for reading in db.query(BatteryReading).filter(BatteryReading.battery_id == bid).all():
+        db.delete(reading)
+    db.flush()
     db.delete(b)
     db.commit()
     return {"ok": True}
