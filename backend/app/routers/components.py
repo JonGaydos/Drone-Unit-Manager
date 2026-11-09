@@ -2,7 +2,7 @@ from datetime import date
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, StringConstraints, field_validator
 
 from app.constants import COMPONENT_NOT_FOUND
 from app.deps import DBSession
@@ -19,19 +19,23 @@ ManageUser = Annotated[User, Depends(require_permission("fleet.manage"))]
 
 
 
+ComponentName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
+ComponentType = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+
+
 class ComponentCreate(BaseModel):
-    name: str
-    component_type: str
+    name: ComponentName
+    component_type: ComponentType
     serial_number: Optional[str] = None
     vehicle_id: Optional[int] = None
     manufacturer: Optional[str] = None
     model: Optional[str] = None
     status: str = "active"
     install_date: Optional[date] = None
-    flight_hours: float = 0.0
-    max_flight_hours: Optional[float] = None
+    flight_hours: float = Field(0.0, ge=0)
+    max_flight_hours: Optional[float] = Field(None, ge=0)
     warranty_expiry: Optional[date] = None
-    replacement_cost: Optional[float] = None
+    replacement_cost: Optional[float] = Field(None, ge=0)
     notes: Optional[str] = None
 
     _blank_dates = field_validator("install_date", "warranty_expiry", mode="before")(
@@ -40,23 +44,31 @@ class ComponentCreate(BaseModel):
 
 
 class ComponentUpdate(BaseModel):
-    name: Optional[str] = None
-    component_type: Optional[str] = None
+    name: Optional[ComponentName] = None
+    component_type: Optional[ComponentType] = None
     serial_number: Optional[str] = None
     vehicle_id: Optional[int] = None
     manufacturer: Optional[str] = None
     model: Optional[str] = None
     status: Optional[str] = None
     install_date: Optional[date] = None
-    flight_hours: Optional[float] = None
-    max_flight_hours: Optional[float] = None
+    flight_hours: Optional[float] = Field(None, ge=0)
+    max_flight_hours: Optional[float] = Field(None, ge=0)
     warranty_expiry: Optional[date] = None
-    replacement_cost: Optional[float] = None
+    replacement_cost: Optional[float] = Field(None, ge=0)
     notes: Optional[str] = None
 
     _blank_dates = field_validator("install_date", "warranty_expiry", mode="before")(
         lambda v: None if v == "" else v
     )
+
+    @field_validator("name", "component_type", "status", "flight_hours")
+    @classmethod
+    def _not_null(cls, v):
+        # Optional only so a patch can leave them out; a sent null is refused.
+        if v is None:
+            raise ValueError("cannot be empty")
+        return v
 
 
 def _serialize(c: Component) -> dict:

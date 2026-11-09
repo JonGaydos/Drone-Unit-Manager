@@ -595,3 +595,17 @@ def test_vehicle_location_after_check_in_is_not_the_old_place(client, db, admin_
     # A place set after the check-in wins again.
     client.patch(f"/api/vehicles/{vid}/location", headers=admin_headers, json={"place": "Truck 1"})
     assert location()["location_text"] == "Truck 1"
+
+
+# ── A-F27: component validation ─────────────────────────────────────────────
+
+def test_component_validation(client, admin_headers):
+    for extra in ({"flight_hours": -5}, {"max_flight_hours": -1}, {"replacement_cost": -10},
+                  {"name": ""}, {"name": "  "}, {"component_type": ""}):
+        resp = client.post("/api/components", headers=admin_headers,
+                           json={"name": "x", "component_type": "motor", **extra})
+        assert resp.status_code == 422, f"{extra}: {resp.text}"
+    cid = _component(client, admin_headers)["id"]
+    for extra in ({"flight_hours": -1}, {"name": " "}, {"name": None}, {"component_type": None}):
+        resp = client.patch(f"/api/components/{cid}", headers=admin_headers, json=extra)
+        assert resp.status_code == 422, f"{extra}: {resp.text}"
