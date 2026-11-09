@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
@@ -11,6 +11,8 @@ import SetupPage from './SetupPage'
 // the interactive submit flow instead.
 
 describe('SetupPage', () => {
+  afterEach(() => { vi.unstubAllGlobals() })
+
   it('renders step 1 (organization) without crashing', () => {
     renderWithProviders(<SetupPage />, { route: '/setup' })
     expect(screen.getByRole('heading', { name: 'Drone Unit Manager' })).toBeInTheDocument()
@@ -104,6 +106,28 @@ describe('SetupPage', () => {
     await user.click(screen.getByRole('button', { name: /Reactivate & Sign In/ }))
 
     await waitFor(() => expect(sentToken).toBe('the-install-token'))
+  })
+
+  it('goes straight into the app after reactivating an admin, skipping fresh-install setup', async () => {
+    // Writable location so the redirect does not navigate the jsdom window.
+    vi.stubGlobal('location', { href: 'http://localhost/setup', origin: 'http://localhost' })
+    server.use(http.post('/api/auth/setup', () =>
+      HttpResponse.json({ token: 'reclaimed', user: { id: 1, username: 'chief', role: 'admin' } })))
+    const { user } = renderWithProviders(<SetupPage recovery />, { route: '/setup' })
+    await user.type(screen.getByLabelText('Username'), 'chief')
+    await user.type(screen.getByLabelText('Password'), 'Recovered1234')
+    await user.type(screen.getByLabelText('Confirm Password'), 'Recovered1234')
+    await user.type(screen.getByLabelText('Install Token'), 'the-install-token')
+    await user.click(screen.getByRole('button', { name: /Reactivate & Sign In/ }))
+
+    await waitFor(() => expect(globalThis.location.href).toBe('/'))
+    expect(localStorage.getItem('token')).toBe('reclaimed')
+    expect(screen.queryByText('Account created')).not.toBeInTheDocument()
+  })
+
+  it('tells the operator what an older backup could not bring back', () => {
+    renderWithProviders(<SetupPage recovery />, { route: '/setup' })
+    expect(screen.getByText(/reset the other users' passwords/)).toBeInTheDocument()
   })
 
   it('omits the recovery banner on a normal fresh install', () => {

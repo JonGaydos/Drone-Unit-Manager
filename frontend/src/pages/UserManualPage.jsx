@@ -573,7 +573,7 @@ Every change to unit data is recorded automatically, including changes made by i
 
 A restore brings back everything: data, files, settings, users with their passwords, API tokens, and the SMTP password and Skydio token. Everyone signs in again with their usual password, and the install token is retired.
 
-Older backups, made before passwords were included, left them out. After restoring one of those, no one can sign in yet, so the setup screen reopens in recovery mode ("Restored backup detected"): enter the username of an administrator from the restored data, a new password, and the install token to reactivate that admin. Other restored users keep blank passwords until that admin resets them from Settings → Users, and API tokens, the SMTP password and the Skydio token need to be set again.
+Older backups, made before passwords were included, left them out. After restoring one of those, no one can sign in yet, so the setup screen reopens in recovery mode ("Restored backup detected"): enter the username of an administrator from the restored data, a new password, and the install token to reactivate that admin. The app then opens directly. Other restored users keep blank passwords until that admin resets them from Settings → Users, and API tokens, the SMTP password and the Skydio token need to be set again.
 
 Audit entries from the backup are added to this install's own and marked Imported.
 
