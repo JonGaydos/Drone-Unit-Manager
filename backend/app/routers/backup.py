@@ -11,8 +11,10 @@ import io
 import json
 import logging
 import os
+import queue
 import secrets
 import tempfile
+import threading
 import zipfile
 from datetime import date, datetime, timezone
 
@@ -176,11 +178,23 @@ def _serialize_database(db: Session) -> tuple[dict, dict]:
 
 def build_backup_archive(db: Session, include_telemetry: bool = False) -> tuple[tempfile.SpooledTemporaryFile, dict]:
     """Build a full backup ZIP into a SpooledTemporaryFile and return it
-    seeked to position 0, along with the manifest.
+    seeked to position 0, along with the manifest. Used by the scheduled
+    backup job; the download streams instead (stream_backup_archive).
+    """
+    spooled = tempfile.SpooledTemporaryFile(max_size=50 * 1024 * 1024)
+    manifest = write_backup_archive(db, spooled, include_telemetry)
+    spooled.seek(0)
+    return spooled, manifest
+
+
+def write_backup_archive(db: Session, out, include_telemetry: bool = False) -> dict:
+    """Write a full backup ZIP to the file object ``out`` and return the manifest.
 
     The ZIP contains manifest.json, database.json, optionally telemetry.json,
-    and every uploaded file under 'uploads/...'. This is the reusable core
-    shared by the download endpoint and the scheduled backup job.
+    and every uploaded file under 'uploads/...'. ``out`` need not be seekable:
+    zipfile then writes each entry's sizes after its data, so the archive can
+    be sent while it is being built. This is the reusable core shared by the
+    download endpoint and the scheduled backup job.
     """
     database, table_counts = _serialize_database(db)
     manifest = {
@@ -202,9 +216,7 @@ def build_backup_archive(db: Session, include_telemetry: bool = False) -> tuple[
             tel_db.close()
         manifest["tables"]["telemetry_points"] = telemetry_count
 
-    # Create ZIP
-    spooled = tempfile.SpooledTemporaryFile(max_size=50 * 1024 * 1024)
-    with zipfile.ZipFile(spooled, "w", zipfile.ZIP_DEFLATED) as zf:
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(MANIFEST_FILE, json.dumps(manifest, cls=_BackupEncoder, indent=2))
         zf.writestr(DATABASE_FILE, json.dumps(database, cls=_BackupEncoder))
 
@@ -220,8 +232,92 @@ def build_backup_archive(db: Session, include_telemetry: bool = False) -> tuple[
                     arc_name = "uploads/" + os.path.relpath(full_path, upload_dir).replace("\\", "/")
                     zf.write(full_path, arc_name)
 
-    spooled.seek(0)
-    return spooled, manifest
+    return manifest
+
+
+# Chunks held between the archive builder and the response. Bounded, so a slow
+# client slows the build instead of letting the archive pile up in memory.
+EXPORT_QUEUE_CHUNKS = 64
+
+
+class _ExportStopped(Exception):
+    """The download went away; the builder stops."""
+
+
+def _put_unless_stopped(q: queue.Queue, item, stopped: threading.Event) -> None:
+    while True:
+        if stopped.is_set():
+            raise _ExportStopped()
+        try:
+            q.put(item, timeout=0.5)
+            return
+        except queue.Full:
+            continue
+
+
+class _QueueWriter:
+    """Write end handed to zipfile: every write becomes a chunk on the queue.
+
+    It has no tell() or seek(), so zipfile treats it as a stream.
+    """
+
+    def __init__(self, q: queue.Queue, stopped: threading.Event):
+        self._q = q
+        self._stopped = stopped
+
+    def write(self, data) -> int:
+        if data:
+            _put_unless_stopped(self._q, bytes(data), self._stopped)
+        return len(data)
+
+    def flush(self) -> None:
+        pass
+
+
+def stream_backup_archive(include_telemetry: bool = False):
+    """Yield a full backup ZIP chunk by chunk while it is being built.
+
+    The archive is written on a worker thread (with its own session) into a
+    bounded queue, and each chunk is yielded as soon as it exists, so the first
+    bytes reach the browser at once rather than after minutes of telemetry. If
+    the consumer stops early, the worker stops at its next write. A build error
+    is raised here, which cuts the download short rather than ending it as if
+    it were complete.
+    """
+    q: queue.Queue = queue.Queue(maxsize=EXPORT_QUEUE_CHUNKS)
+    stopped = threading.Event()
+    finished = object()
+
+    def build():
+        outcome = finished
+        db = database.SessionLocal()   # call-time resolution, see import_backup
+        try:
+            write_backup_archive(db, _QueueWriter(q, stopped), include_telemetry)
+            logger.info("Backup export complete")
+        except _ExportStopped:
+            logger.info("Backup export stopped: the download ended early")
+            return
+        except Exception as exc:
+            logger.exception("Backup export failed")
+            outcome = exc
+        finally:
+            db.close()
+        try:
+            _put_unless_stopped(q, outcome, stopped)
+        except _ExportStopped:
+            pass
+
+    threading.Thread(target=build, name="backup-export", daemon=True).start()
+    try:
+        while True:
+            item = q.get()
+            if item is finished:
+                return
+            if isinstance(item, Exception):
+                raise item
+            yield item
+    finally:
+        stopped.set()
 
 
 class _BackupEncoder(json.JSONEncoder):
@@ -590,14 +686,12 @@ def export_backup(
                details=f"include_telemetry={include_telemetry}")
     db.commit()
 
-    spooled, _ = build_backup_archive(db, include_telemetry=include_telemetry)
-
     today = date.today().isoformat()
     filename = f"drone_unit_manager_backup_{today}.zip"
-    logger.info("Backup export complete: %s", filename)
 
+    # Streamed as it is built: headers and the first bytes go out at once.
     return StreamingResponse(
-        spooled,
+        stream_backup_archive(include_telemetry=include_telemetry),
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

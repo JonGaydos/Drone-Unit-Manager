@@ -78,6 +78,24 @@ function parseFilename(disposition, fallback) {
   return fallback
 }
 
+/** Read a response body chunk by chunk, reporting the bytes received so far.
+ *  @param {Response} res - The response to read.
+ *  @param {(bytes: number) => void} onProgress - Called after each chunk.
+ *  @returns {Promise<Blob>} The whole body, typed as the response was. */
+async function readWithProgress(res, onProgress) {
+  const reader = res.body.getReader()
+  const chunks = []
+  let received = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    chunks.push(value)
+    received += value.length
+    onProgress(received)
+  }
+  return new Blob(chunks, { type: res.headers.get('Content-Type') || '' })
+}
+
 /** Build a request AbortSignal that fires when the caller's signal aborts or the
  *  timeout elapses (whichever first). Pass timeoutMs 0/falsy to skip the timeout.
  *  @returns {{signal: AbortSignal|undefined, timeoutId: ReturnType<typeof setTimeout>|null}} */
@@ -304,17 +322,19 @@ export const api = {
    * GET a file and trigger a browser download from the response blob.
    * Extracts the filename from Content-Disposition, defaulting to "export.csv".
    * @param {string} path - API endpoint path.
-   * @param {{timeout?: number, signal?: AbortSignal}} [options={}] - timeout in
-   *   ms (default 30s, 0 disables) and an optional caller AbortSignal.
+   * @param {{timeout?: number, signal?: AbortSignal, onProgress?: (bytes: number) => void}} [options={}] -
+   *   timeout in ms (default 30s, 0 disables), an optional caller AbortSignal,
+   *   and an optional callback told the bytes received so far as they arrive.
    * @returns {Promise<void>}
    */
   download: async (path, options = {}) => {
+    const { onProgress, ...fetchOptions } = options
     const token = localStorage.getItem('token')
     const res = await fetchWithTimeout(`${API_BASE}${path}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
-    }, options)
+    }, fetchOptions)
     if (!res.ok) throw new Error('Download failed')
-    const blob = await res.blob()
+    const blob = onProgress && res.body ? await readWithProgress(res, onProgress) : await res.blob()
     const filename = parseFilename(res.headers.get('Content-Disposition'), 'export.csv')
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')

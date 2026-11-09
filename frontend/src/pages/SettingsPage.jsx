@@ -69,6 +69,7 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState({})
   const [saving, setSaving] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [exportedBytes, setExportedBytes] = useState(0)
   const [includeTelemetry, setIncludeTelemetry] = useState(false)
 
   // Automated backup state
@@ -1045,12 +1046,14 @@ export default function SettingsPage() {
           <button
             onClick={async () => {
               setExporting(true)
+              setExportedBytes(0)
               try {
-                // No timeout: build_backup_archive assembles the entire zip,
-                // every table plus every uploaded file, before the first byte
-                // is sent, so the 30s default aborted any sizeable backup.
+                // No timeout: a full backup with telemetry runs for minutes,
+                // so the 30s default aborted any sizeable backup. The archive
+                // streams while it is built, so show how much has arrived.
                 // The restore path in SetupPage does the same for the same reason.
-                await api.download(`/backup/export?include_telemetry=${includeTelemetry}`, { timeout: 0 })
+                await api.download(`/backup/export?include_telemetry=${includeTelemetry}`,
+                  { timeout: 0, onProgress: setExportedBytes })
                 toast.success('Backup exported successfully')
               } catch (err) { toast.error(err.message) }
               finally { setExporting(false) }
@@ -1059,7 +1062,7 @@ export default function SettingsPage() {
             className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50"
           >
             {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-            {exporting ? 'Exporting...' : 'Export Backup'}
+            {exporting ? `Exporting... ${(exportedBytes / (1024 * 1024)).toFixed(1)} MB` : 'Export Backup'}
           </button>
         </div>
     )

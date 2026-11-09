@@ -271,6 +271,16 @@ describe('download filename parsing', () => {
     spy.mockRestore()
   })
 
+  it('reports the bytes received while api.download reads the body', async () => {
+    const { spy } = spyOnAnchor()
+    server.use(http.get('/api/file', () => new HttpResponse('0123456789')))
+    const seen = []
+    await api.download('/file', { onProgress: n => seen.push(n) })
+    expect(seen.length).toBeGreaterThan(0)
+    expect(seen.at(-1)).toBe(10)
+    spy.mockRestore()
+  })
+
   it('falls back to report.pdf for api.downloadPost with no disposition', async () => {
     const { spy, getAnchor } = spyOnAnchor()
     server.use(http.post('/api/file', () => new HttpResponse('data')))

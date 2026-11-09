@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { withPermissions } from '@/test/permissions'
@@ -370,6 +370,30 @@ describe('SettingsPage', () => {
       const [path, options] = spy.mock.calls[0]
       expect(path).toMatch(/^\/backup\/export/)
       expect(options).toMatchObject({ timeout: 0 })
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  // The archive streams while it is built, so a long backup shows how much has
+  // arrived instead of a spinner with no sign of life.
+  it('shows how much of the backup has downloaded', async () => {
+    const { api } = await import('@/api/client')
+    let report
+    let finish
+    const spy = vi.spyOn(api, 'download').mockImplementation((_path, options) => {
+      report = options.onProgress
+      return new Promise(resolve => { finish = resolve })
+    })
+    try {
+      mockMount()
+      const { user } = renderWithProviders(<SettingsPage />, { role: 'admin' })
+      await screen.findByText('Settings')
+      await user.click(await screen.findByRole('button', { name: /Download Backup|Export Backup/i }))
+
+      act(() => report(5 * 1024 * 1024))
+      expect(await screen.findByText(/5\.0 MB/)).toBeInTheDocument()
+      await act(async () => finish())
     } finally {
       spy.mockRestore()
     }
