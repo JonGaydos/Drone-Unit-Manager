@@ -59,7 +59,13 @@ def set_fields_with_lifecycle(entity, updates: dict) -> None:
 
     A status outside the type's list is refused (422) unless it is the value
     already stored, so a record holding an old status can still be edited. A
-    decommissioned date before the acquired date is refused (422) as well."""
+    decommissioned date before the acquired date, and text longer than its
+    column (SQLite would store it whole), are refused (422) as well."""
+    columns = entity.__table__.columns
+    for k, v in updates.items():
+        length = getattr(columns[k].type, "length", None) if k in columns else None
+        if isinstance(v, str) and length and len(v) > length:
+            raise HTTPException(422, f"{k} must be at most {length} characters")
     allowed = EQUIPMENT_STATUSES.get(entity.__tablename__)
     status = updates.get("status")
     if allowed and "status" in updates and status != entity.status and status not in allowed:

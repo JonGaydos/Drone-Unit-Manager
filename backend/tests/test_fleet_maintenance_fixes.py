@@ -347,3 +347,19 @@ def test_decommissioned_before_acquired_is_refused(client, admin_headers):
     assert resp.status_code == 422, resp.text
     resp = client.patch(f"/api/vehicles/{vid}", headers=admin_headers, json={"decommissioned_date": "2026-05-01"})
     assert resp.status_code == 200, resp.text
+
+
+# ── A-F4: text longer than its column is refused ────────────────────────────
+
+def test_fleet_text_longer_than_its_column_is_refused(client, admin_headers):
+    resp = client.post("/api/vehicles", headers=admin_headers, json={
+        "serial_number": "S" * 310, "manufacturer": "Acme", "model": "Hawk"})
+    assert resp.status_code == 422, resp.text
+    resp = client.post("/api/vehicles", headers=admin_headers, json={
+        "serial_number": "VEH-L1", "manufacturer": "Acme", "model": "Hawk", "nickname": "N" * 101})
+    assert resp.status_code == 422, resp.text
+    assert "100" in str(resp.json()["detail"])
+    resp = client.post("/api/batteries", headers=admin_headers, json={"serial_number": "B" * 101})
+    assert resp.status_code == 422, resp.text
+    resp = client.post("/api/docks", headers=admin_headers, json={"serial_number": "D-L", "name": "x" * 201})
+    assert resp.status_code == 422, resp.text
