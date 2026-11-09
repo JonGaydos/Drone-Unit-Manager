@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { screen } from '@testing-library/react'
+import { screen, fireEvent } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { withPermissions } from '@/test/permissions'
@@ -141,5 +141,15 @@ describe('VehicleDetailPage', () => {
     const img = await screen.findByRole('img', { name: /DJI Mavic 3 \(Falcon\)/ })
     expect(img.getAttribute('src')).toMatch(/^blob:/)
     expect(auth).toBe('Bearer test-token')
+  })
+
+  it('previews the registration expiry as the same date three years on', async () => {
+    mockMount()
+    render()
+    fireEvent.click(await screen.findByRole('button', { name: /Add Registration/ }))
+    fireEvent.change(screen.getByLabelText('Registration Date'), { target: { value: '2023-01-01' } })
+    expect(screen.getByLabelText('Expiry (auto: +3 years)')).toHaveValue('2026-01-01')
+    fireEvent.change(screen.getByLabelText('Registration Date'), { target: { value: '2024-02-29' } })
+    expect(screen.getByLabelText('Expiry (auto: +3 years)')).toHaveValue('2027-02-28')
   })
 })

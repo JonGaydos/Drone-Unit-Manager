@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -38,6 +38,14 @@ class RegistrationOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+def _three_years_after(d: date) -> date:
+    """The same calendar date three years on; Feb 29 falls back to Feb 28."""
+    try:
+        return d.replace(year=d.year + 3)
+    except ValueError:
+        return d.replace(year=d.year + 3, day=28)
+
+
 @router.post("/api/vehicles/{vehicle_id}/registrations", response_model=RegistrationOut, responses=responses(404))
 def create_registration(
     vehicle_id: int,
@@ -52,7 +60,7 @@ def create_registration(
     # Auto-calculate expiry if not provided: registration_date + 3 years (FAA Part 107)
     expiry = data.expiry_date
     if not expiry and data.registration_date:
-        expiry = data.registration_date + timedelta(days=1095)
+        expiry = _three_years_after(data.registration_date)
 
     for current in db.query(VehicleRegistration).filter(
         VehicleRegistration.vehicle_id == vehicle_id,

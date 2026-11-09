@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { useConfirm } from '@/hooks/useConfirm'
-import { addDays, daysUntil, formatHours, formatDuration, normalizeDateValue } from '@/lib/utils'
+import { addMonths, daysUntil, formatHours, formatDuration, normalizeDateValue } from '@/lib/utils'
 import { STATUS_COLORS } from '@/lib/constants'
 import { ArrowLeft, Clock, Calendar, Battery, Edit, Gamepad2, Cpu, Paperclip, Camera, ShieldCheck, Plus, Trash2, AlertTriangle, Cog, X, Save } from 'lucide-react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
@@ -526,7 +526,7 @@ export default function VehicleDetailPage() {
                 <label htmlFor="expiry-auto-3-years" className="block text-xs font-medium text-foreground mb-1">Expiry (auto: +3 years)</label>
                 <input id="expiry-auto-3-years" type="text" readOnly
                   value={regForm.registration_date ? (() => {
-                    return addDays(regForm.registration_date, 1095)
+                    return addMonths(regForm.registration_date, 36)
                   })() : '--'}
                   className="w-full px-3 py-1.5 bg-muted border border-border rounded-lg text-muted-foreground text-sm cursor-not-allowed" />
               </div>

@@ -131,3 +131,16 @@ def test_equipment_stats_skip_flights_that_do_not_count(client, db, admin_header
         body = client.get(url, headers=admin_headers).json()
         assert body["total_flights"] == 1, url
         assert body["total_hours"] == 1.0, url
+
+
+# ── A-F9: registration auto expiry is three calendar years ──────────────────
+
+def test_registration_expiry_is_same_date_three_years_later(client, admin_headers):
+    vid = _vehicle(client, admin_headers)["id"]
+    cases = [("2023-01-01", "2026-01-01"), ("2025-06-01", "2028-06-01"),
+             ("2024-02-29", "2027-02-28")]
+    for reg_date, expected in cases:
+        resp = client.post(f"/api/vehicles/{vid}/registrations", headers=admin_headers,
+                           json={"registration_number": "FA0000TEST", "registration_date": reg_date})
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["expiry_date"] == expected, reg_date
