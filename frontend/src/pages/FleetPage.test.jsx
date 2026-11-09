@@ -278,4 +278,47 @@ describe('FleetPage', () => {
     expect(within(onDocks).getByRole('button', { name: /Export CSV/ })).toBeInTheDocument()
     expect(within(onDocks).getByRole('button', { name: /Add Dock/ })).toBeInTheDocument()
   })
+
+  it('opens each tab sorted by its first column, ascending, with the arrow shown', async () => {
+    mockVehicles([
+      { id: 2, nickname: 'Hawk', manufacturer: 'Skydio', model: 'X10', serial_number: 'SN-002', status: 'active' },
+      { id: 3, nickname: null, manufacturer: 'DJI', model: 'Air', serial_number: 'Bravo-SN', status: 'active' },
+      { id: 1, nickname: 'Falcon', manufacturer: 'DJI', model: 'Mavic 3', serial_number: 'SN-001', status: 'active' },
+    ])
+    server.use(http.get('/api/batteries', () => HttpResponse.json([
+      { id: 6, nickname: 'Zulu', serial_number: 'B-2', status: 'active' },
+      { id: 5, nickname: 'Alpha', serial_number: 'B-1', status: 'active' },
+    ])))
+    const { user } = renderWithProviders(<FleetPage />, { role: 'admin' })
+    await screen.findByRole('link', { name: 'Falcon' })
+    const names = () => screen.getAllByRole('row').slice(1).map(r => within(r).getAllByRole('cell')[0].textContent)
+    expect(names()).toEqual(['Bravo-SN', 'Falcon', 'Hawk'])
+    expect(screen.getByRole('columnheader', { name: /Vehicle/ }).querySelector('svg')).not.toBeNull()
+
+    await user.click(screen.getByRole('button', { name: /Batteries/ }))
+    await screen.findByRole('link', { name: 'Alpha' })
+    expect(names()).toEqual(['Alpha', 'Zulu'])
+    expect(screen.getByRole('columnheader', { name: /Battery/ }).querySelector('svg')).not.toBeNull()
+  })
+
+  it('searches and sorts the FAA Reg column on the number it shows', async () => {
+    mockVehicles([
+      { id: 1, nickname: 'Falcon', manufacturer: 'DJI', model: 'Mavic 3', serial_number: 'SN-001', faa_registration: 'AAA-OLD', status: 'active' },
+      { id: 2, nickname: 'Hawk', manufacturer: 'Skydio', model: 'X10', serial_number: 'SN-002', faa_registration: 'ZZZ-OLD', status: 'active' },
+    ])
+    server.use(http.get(CURRENT_REGS, () => HttpResponse.json([
+      { id: 9, vehicle_id: 1, registration_number: 'FA-ZULU', is_current: true },
+      { id: 8, vehicle_id: 2, registration_number: 'FA-ALPHA', is_current: true },
+    ])))
+    const { user } = renderWithProviders(<FleetPage />, { role: 'admin' })
+    await screen.findByText('FA-ZULU')
+
+    await user.click(screen.getByRole('columnheader', { name: /FAA Reg/ }))
+    const regs = screen.getAllByRole('row').slice(1).map(r => within(r).getAllByRole('cell')[4].textContent)
+    expect(regs).toEqual(['FA-ALPHA', 'FA-ZULU'])
+
+    await user.type(screen.getByPlaceholderText('Search vehicles...'), 'FA-ZULU')
+    expect(screen.getByRole('link', { name: 'Falcon' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Hawk' })).toBeNull()
+  })
 })

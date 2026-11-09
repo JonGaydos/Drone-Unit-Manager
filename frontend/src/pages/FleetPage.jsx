@@ -218,14 +218,14 @@ const TAB_CONFIGS = {
     label: 'Vehicles',
     endpoint: '/vehicles',
     columns: [
-      { key: 'nickname', label: 'Vehicle', primary: true, render: v => {
+      { key: 'nickname', label: 'Vehicle', primary: true, value: v => v.nickname || v.serial_number, render: v => {
         const name = v.nickname || v.serial_number || '—'
         return <Link to={`/fleet/vehicles/${v.id}`} className="text-primary hover:underline">{name}</Link>
       }},
       { key: 'manufacturer', label: 'Manufacturer' },
       { key: 'model', label: 'Model' },
       { key: 'serial_number', label: 'Serial Number' },
-      { key: 'faa_registration', label: 'FAA Reg', render: v => v._reg_number || v.faa_registration || '—' },
+      { key: 'faa_registration', label: 'FAA Reg', value: v => v._reg_number || v.faa_registration, render: v => v._reg_number || v.faa_registration || '—' },
       { key: 'next_due', label: 'Next Due', sortable: true, render: v => {
         if (!v._reg_expiry) return <span className="text-muted-foreground">--</span>
         const days = daysUntil(v._reg_expiry)
@@ -266,7 +266,7 @@ const TAB_CONFIGS = {
     label: 'Batteries',
     endpoint: '/batteries',
     columns: [
-      { key: 'nickname', label: 'Battery', primary: true, render: b => {
+      { key: 'nickname', label: 'Battery', primary: true, value: b => b.nickname || b.serial_number, render: b => {
         const name = b.nickname || b.serial_number || '—'
         return <Link to={`/fleet/batteries/${b.id}`} className="text-primary hover:underline">{name}</Link>
       }},
@@ -300,7 +300,7 @@ const TAB_CONFIGS = {
     label: 'Controllers',
     endpoint: '/controllers',
     columns: [
-      { key: 'nickname', label: 'Controller', primary: true, render: c => {
+      { key: 'nickname', label: 'Controller', primary: true, value: c => c.nickname || c.serial_number, render: c => {
         const name = c.nickname || c.serial_number || '—'
         return <Link to={`/fleet/controllers/${c.id}`} className="text-primary hover:underline">{name}</Link>
       }},
@@ -327,7 +327,7 @@ const TAB_CONFIGS = {
     label: 'Docks',
     endpoint: '/docks',
     columns: [
-      { key: 'name', label: 'Name', primary: true, render: d => {
+      { key: 'name', label: 'Name', primary: true, value: d => d.name || d.serial_number, render: d => {
         const name = d.name || d.serial_number || '—'
         return <Link to={`/fleet/docks/${d.id}`} className="text-primary hover:underline">{name}</Link>
       }},
@@ -356,7 +356,7 @@ const TAB_CONFIGS = {
     label: 'Sensors',
     endpoint: '/sensors',
     columns: [
-      { key: 'name', label: 'Name', primary: true, render: s => {
+      { key: 'name', label: 'Name', primary: true, value: s => s.name || s.serial_number, render: s => {
         const name = s.name || s.serial_number || '—'
         return <Link to={`/fleet/sensors/${s.id}`} className="text-primary hover:underline">{name}</Link>
       }},
@@ -385,7 +385,7 @@ const TAB_CONFIGS = {
     label: 'Attachments',
     endpoint: '/attachments',
     columns: [
-      { key: 'name', label: 'Name', primary: true, render: a => {
+      { key: 'name', label: 'Name', primary: true, value: a => a.name || a.serial_number, render: a => {
         const name = a.name || a.serial_number || '—'
         return <Link to={`/fleet/attachments/${a.id}`} className="text-primary hover:underline">{name}</Link>
       }},
@@ -436,6 +436,11 @@ const TAB_CONFIGS = {
   },
 }
 
+// Each tab opens sorted by its first column. A column's `value` is what its
+// cell shows, so sort and search work on that rather than the raw field.
+const firstColumnKey = (tab) => TAB_CONFIGS[tab]?.columns[0].key
+const cellValue = (column, item) => (column?.value ? column.value(item) : item[column?.key])
+
 // ─── Main Component ─────────────────────────────────────────────────────────
 
 export default function FleetPage() {
@@ -452,7 +457,7 @@ export default function FleetPage() {
   const [modal, setModal] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [sortKey, setSortKey] = useState('name')
+  const [sortKey, setSortKey] = useState(() => firstColumnKey(initialTab))
   const [sortDir, setSortDir] = useState('asc')
   const [vehicleModels, setVehicleModels] = useState([])
   const { can } = useAuth()
@@ -510,7 +515,7 @@ export default function FleetPage() {
   useEffect(() => {
     setSearch('')
     setModal(null)
-    setSortKey('name')
+    setSortKey(firstColumnKey(activeTab))
     setSortDir('asc')
     void load()
   }, [activeTab])
@@ -572,28 +577,26 @@ export default function FleetPage() {
       }
       const searchable = config.columns.map(c => {
         if (c.key === 'status') return item.status || ''
-        return item[c.key] || ''
+        return cellValue(c, item) ?? ''
       }).join(' ')
       return searchable.toLowerCase().includes(search.toLowerCase())
     })
+    const sortColumn = config.columns.find(c => c.key === sortKey) || { key: sortKey }
     return [...list].sort((a, b) => {
-      let aVal, bVal
-      // For vehicle nickname column, sort by nickname or serial_number
-      if (sortKey === 'nickname' && activeTab === 'vehicles') {
-        aVal = (a.nickname || a.serial_number || '').toLowerCase()
-        bVal = (b.nickname || b.serial_number || '').toLowerCase()
-      } else if (typeof a[sortKey] === 'number' || typeof b[sortKey] === 'number') {
-        aVal = a[sortKey] ?? 0
-        bVal = b[sortKey] ?? 0
+      let aVal = cellValue(sortColumn, a)
+      let bVal = cellValue(sortColumn, b)
+      if (typeof aVal === 'number' || typeof bVal === 'number') {
+        aVal = aVal ?? 0
+        bVal = bVal ?? 0
       } else {
-        aVal = (a[sortKey] || '').toString().toLowerCase()
-        bVal = (b[sortKey] || '').toString().toLowerCase()
+        aVal = (aVal || '').toString().toLowerCase()
+        bVal = (bVal || '').toString().toLowerCase()
       }
       if (aVal < bVal) return sortDir === 'asc' ? -1 : 1
       if (aVal > bVal) return sortDir === 'asc' ? 1 : -1
       return 0
     })
-  }, [items, search, statusFilter, sortKey, sortDir, config.columns, activeTab])
+  }, [items, search, statusFilter, sortKey, sortDir, config.columns])
 
   // Items withheld by the status filter alone. Search narrowing is visible to
   // the user as they type; a status filter they did not set is not, so only the
