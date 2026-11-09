@@ -311,17 +311,19 @@ async def upload_vehicle_photo(vehicle_id: int, upload: AdminForm, db: DBSession
     if ext not in ALLOWED_IMAGE_EXTENSIONS:
         raise HTTPException(400, FILE_TYPE_NOT_ALLOWED.format(ext))
     upload_dir = Path(settings.UPLOAD_DIR) / "photos" / "vehicles" / str(vehicle_id)
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    for old in upload_dir.glob("profile.*"):
-        old.unlink()
-    filepath = upload_dir / f"profile{ext}"
     content = await file.read()
     if len(content) > settings.MAX_UPLOAD_SIZE:
         raise HTTPException(413, FILE_TOO_LARGE.format(settings.MAX_UPLOAD_SIZE // (1024 * 1024)))
     from app.services.file_validation import is_image
     if not is_image(content[:512]):
         raise HTTPException(400, "File content is not a recognized image")
+    # Only a valid upload replaces the photo: write it, then drop the old one.
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    filepath = upload_dir / f"profile{ext}"
     await anyio.Path(filepath).write_bytes(content)
+    for old in upload_dir.glob("profile.*"):
+        if old.name != filepath.name:
+            old.unlink()
     vehicle.photo_url = f"/api/vehicles/{vehicle_id}/photo/view"
     db.commit()
     return {"ok": True, "photo_url": vehicle.photo_url}
