@@ -2,7 +2,7 @@ from datetime import date
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app.constants import COMPONENT_NOT_FOUND
 from app.deps import DBSession
@@ -27,12 +27,16 @@ class ComponentCreate(BaseModel):
     manufacturer: Optional[str] = None
     model: Optional[str] = None
     status: str = "active"
-    install_date: Optional[str] = None
+    install_date: Optional[date] = None
     flight_hours: float = 0.0
     max_flight_hours: Optional[float] = None
-    warranty_expiry: Optional[str] = None
+    warranty_expiry: Optional[date] = None
     replacement_cost: Optional[float] = None
     notes: Optional[str] = None
+
+    _blank_dates = field_validator("install_date", "warranty_expiry", mode="before")(
+        lambda v: None if v == "" else v
+    )
 
 
 class ComponentUpdate(BaseModel):
@@ -43,12 +47,16 @@ class ComponentUpdate(BaseModel):
     manufacturer: Optional[str] = None
     model: Optional[str] = None
     status: Optional[str] = None
-    install_date: Optional[str] = None
+    install_date: Optional[date] = None
     flight_hours: Optional[float] = None
     max_flight_hours: Optional[float] = None
-    warranty_expiry: Optional[str] = None
+    warranty_expiry: Optional[date] = None
     replacement_cost: Optional[float] = None
     notes: Optional[str] = None
+
+    _blank_dates = field_validator("install_date", "warranty_expiry", mode="before")(
+        lambda v: None if v == "" else v
+    )
 
 
 def _serialize(c: Component) -> dict:
@@ -107,10 +115,10 @@ def create_component(data: ComponentCreate, db: DBSession, user: ManageUser):
         manufacturer=data.manufacturer,
         model=data.model,
         status=data.status,
-        install_date=date.fromisoformat(data.install_date) if data.install_date else None,
+        install_date=data.install_date,
         flight_hours=data.flight_hours,
         max_flight_hours=data.max_flight_hours,
-        warranty_expiry=date.fromisoformat(data.warranty_expiry) if data.warranty_expiry else None,
+        warranty_expiry=data.warranty_expiry,
         replacement_cost=data.replacement_cost,
         notes=data.notes,
     )
@@ -127,9 +135,6 @@ def update_component(component_id: int, data: ComponentUpdate, db: DBSession, us
     if not c:
         raise HTTPException(404, COMPONENT_NOT_FOUND)
     update_data = data.model_dump(exclude_unset=True)
-    for field in ("install_date", "warranty_expiry"):
-        if field in update_data and update_data[field]:
-            update_data[field] = date.fromisoformat(update_data[field])
     for key, val in update_data.items():
         setattr(c, key, val)
     db.commit()
