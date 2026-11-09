@@ -518,3 +518,56 @@ def test_schedule_needs_a_name_and_an_entity_for_table_types(client, admin_heade
     for etype in ("organization", "other"):
         resp = client.post(url, headers=admin_headers, json={"name": "x", "entity_type": etype, "frequency": "monthly"})
         assert resp.status_code == 200, f"{etype}: {resp.text}"
+
+
+# ── A-F24: checkout validation ──────────────────────────────────────────────
+
+def _pilot(db):
+    from app.models.pilot import Pilot
+    p = Pilot(first_name="Test", last_name="Pilot", status="active")
+    db.add(p)
+    db.commit()
+    return p.id
+
+
+def test_retired_or_damaged_equipment_cannot_be_checked_out(client, db, admin_headers):
+    pid = _pilot(db)
+    for status in ("retired", "damaged"):
+        cid = client.post("/api/controllers", headers=admin_headers,
+                          json={"serial_number": f"C-{status}", "status": status}).json()["id"]
+        resp = client.post("/api/equipment-checkouts", headers=admin_headers, json={
+            "entity_type": "controller", "entity_id": cid, "checked_out_by_id": pid})
+        assert resp.status_code == 400, resp.text
+        assert "cannot be checked out" in resp.json()["detail"]
+
+
+def test_checkout_condition_must_be_a_known_value(client, db, admin_headers):
+    pid = _pilot(db)
+    vid = _vehicle(client, admin_headers)["id"]
+    body = {"entity_type": "vehicle", "entity_id": vid, "checked_out_by_id": pid}
+    resp = client.post("/api/equipment-checkouts", headers=admin_headers, json={**body, "condition_out": "exploded"})
+    assert resp.status_code == 422, resp.text
+    co = client.post("/api/equipment-checkouts", headers=admin_headers, json={**body, "condition_out": "fair"})
+    assert co.status_code == 200, co.text
+    resp = client.post(f"/api/equipment-checkouts/{co.json()['id']}/checkin", headers=admin_headers,
+                       json={"checked_in_by_id": pid, "condition_in": "broken"})
+    assert resp.status_code == 422, resp.text
+
+
+def test_checkout_expected_return_carries_the_display_zone(client, db, admin_headers):
+    from app.models.setting import Setting
+    db.add(Setting(key="display_timezone", value="America/Chicago"))
+    db.commit()
+    pid = _pilot(db)
+    vid = _vehicle(client, admin_headers)["id"]
+    co = client.post("/api/equipment-checkouts", headers=admin_headers, json={
+        "entity_type": "vehicle", "entity_id": vid, "checked_out_by_id": pid,
+        "expected_return": "2026-11-10"}).json()
+    assert co["expected_return"] == "2026-11-10T00:00:00-06:00"
+    assert co["checked_out_at"].endswith("+00:00")
+    client.post(f"/api/equipment-checkouts/{co['id']}/checkin", headers=admin_headers, json={"checked_in_by_id": pid})
+    # An aware value is turned into the same wall-clock zone.
+    co = client.post("/api/equipment-checkouts", headers=admin_headers, json={
+        "entity_type": "vehicle", "entity_id": vid, "checked_out_by_id": pid,
+        "expected_return": "2026-11-10T18:00:00Z"}).json()
+    assert co["expected_return"] == "2026-11-10T12:00:00-06:00"

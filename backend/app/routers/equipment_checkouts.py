@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import Annotated, Optional
+from typing import Annotated, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -18,6 +18,8 @@ from app.models.other_equipment import OtherEquipment
 from app.models.sensor import SensorPackage
 from app.models.vehicle import Vehicle
 from app.responses import responses
+from app.services.equipment_lifecycle import DECOMMISSIONED_STATUSES
+from app.services.local_time import display_zone
 
 router = APIRouter(prefix="/api/equipment-checkouts", tags=["equipment-checkouts"])
 
@@ -38,18 +40,23 @@ ENTITY_MODELS = {
 }
 
 
-def _validate_entity(db, entity_type: str, entity_id: int) -> None:
-    """Reject unknown entity_type (400) and a missing entity_id row (404)."""
+def _validate_entity(db, entity_type: str, entity_id: int):
+    """Reject unknown entity_type (400) and a missing entity_id row (404).
+    Returns the item."""
     if entity_type not in ENTITY_MODELS:
         raise HTTPException(
             status_code=400,
             detail=f"Invalid entity_type '{entity_type}'. Allowed: {', '.join(sorted(ENTITY_MODELS))}",
         )
     model = ENTITY_MODELS[entity_type]
-    if model is not None:
-        if not db.query(model).filter(model.id == entity_id).first():
-            raise HTTPException(status_code=404, detail=f"{entity_type} #{entity_id} not found")
+    item = db.query(model).filter(model.id == entity_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail=f"{entity_type} #{entity_id} not found")
+    return item
 
+
+
+Condition = Literal["good", "fair", "needs_attention"]
 
 
 class CheckoutCreate(BaseModel):
@@ -57,14 +64,15 @@ class CheckoutCreate(BaseModel):
     entity_id: int
     entity_name: Optional[str] = None
     checked_out_by_id: int
+    # A wall-clock time in the display zone, like other times a person picks.
     expected_return: Optional[datetime] = None
-    condition_out: Optional[str] = None  # good, fair, needs_attention
+    condition_out: Optional[Condition] = None
     notes_out: Optional[str] = None
 
 
 class CheckinData(BaseModel):
     checked_in_by_id: int
-    condition_in: Optional[str] = None
+    condition_in: Optional[Condition] = None
     notes_in: Optional[str] = None
 
 
@@ -131,7 +139,7 @@ def list_active_checkouts(
     return [_enrich(r, db) for r in rows]
 
 
-@router.post("", responses=responses(409))
+@router.post("", responses=responses(400, 404, 409))
 def create_checkout(
     data: CheckoutCreate,
     db: DBSession,
@@ -144,7 +152,9 @@ def create_checkout(
     from app.services.audit import log_action
     from app.models.pilot import Pilot
 
-    _validate_entity(db, data.entity_type, data.entity_id)
+    item = _validate_entity(db, data.entity_type, data.entity_id)
+    if item.status in DECOMMISSIONED_STATUSES:
+        raise HTTPException(status_code=400, detail=f"A {item.status} {data.entity_type} cannot be checked out")
 
     # Prevent double-checkout (best-effort; a unique partial index would
     # close the race definitively but requires a migration).
@@ -164,7 +174,11 @@ def create_checkout(
     if not pilot:
         raise HTTPException(status_code=400, detail="checked_out_by_id does not match a known pilot")
 
-    checkout = EquipmentCheckout(**data.model_dump())
+    values = data.model_dump()
+    expected = values["expected_return"]
+    if expected is not None and expected.tzinfo is not None:
+        values["expected_return"] = expected.astimezone(display_zone(db)).replace(tzinfo=None)
+    checkout = EquipmentCheckout(**values)
     db.add(checkout)
     db.flush()
     # Audit lines are read on their own and exported to CSV, so name who
@@ -238,7 +252,9 @@ def delete_checkout(
 
 
 def _enrich(checkout: EquipmentCheckout, db: Session) -> dict:
-    """Add pilot names to the checkout record."""
+    """Add pilot names to the checkout record. The expected return is stored as
+    display-zone wall-clock time and sent with that zone's offset, so it carries
+    a zone like checked_out_at."""
     from app.models.pilot import Pilot
     out_pilot = db.query(Pilot).filter(Pilot.id == checkout.checked_out_by_id).first()
     in_pilot = None
@@ -253,7 +269,8 @@ def _enrich(checkout: EquipmentCheckout, db: Session) -> dict:
         "checked_out_by_id": checkout.checked_out_by_id,
         "checked_out_by_name": out_pilot.full_name if out_pilot else None,
         "checked_out_at": checkout.checked_out_at.isoformat() if checkout.checked_out_at else None,
-        "expected_return": checkout.expected_return.isoformat() if checkout.expected_return else None,
+        "expected_return": (checkout.expected_return.replace(tzinfo=display_zone(db)).isoformat()
+                            if checkout.expected_return else None),
         "checked_in_at": checkout.checked_in_at.isoformat() if checkout.checked_in_at else None,
         "checked_in_by_id": checkout.checked_in_by_id,
         "checked_in_by_name": in_pilot.full_name if in_pilot else None,

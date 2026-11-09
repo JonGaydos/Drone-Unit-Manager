@@ -94,6 +94,24 @@ describe('CheckoutsPage', () => {
     expect(captured).toMatchObject({ entity_type: 'vehicle', entity_id: 10, checked_out_by_id: 5 })
   })
 
+  it('leaves retired and damaged items out of the Check Out item list', async () => {
+    mockMount({
+      checkouts: () => HttpResponse.json([]),
+      vehicles: [
+        ...VEHICLES,
+        vehicleOption({ id: 11, manufacturer: 'DJI', model: 'Air', nickname: 'Old', status: 'retired' }),
+        vehicleOption({ id: 12, manufacturer: 'DJI', model: 'Air', nickname: 'Broken', status: 'damaged' }),
+      ],
+    })
+    const { user } = renderWithProviders(<CheckoutsPage />, { role: 'admin' })
+    await screen.findByText('Nothing checked out.')
+    await user.click(screen.getByRole('button', { name: /Check Out/ }))
+    const dialog = await screen.findByRole('dialog')
+    await within(dialog).findByRole('option', { name: 'DJI Mavic 3 (Falcon)' })
+    expect(within(dialog).queryByRole('option', { name: /Old/ })).toBeNull()
+    expect(within(dialog).queryByRole('option', { name: /Broken/ })).toBeNull()
+  })
+
   it('hides the history delete control for a non-supervisor (pilot)', async () => {
     server.use(http.get('/api/auth/me', () => HttpResponse.json(withPermissions({ id: 3, username: 'p', role: 'pilot' }))))
     // A returned record so the History table has a row to carry the delete action.
