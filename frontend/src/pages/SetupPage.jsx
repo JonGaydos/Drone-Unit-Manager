@@ -14,7 +14,7 @@ function RecoveryBanner({ recovery }) {
         <AlertTriangle className="w-4 h-4 text-amber-500" /> Restored backup detected
       </p>
       <p className="mt-1 text-muted-foreground">
-        Your data is back, but passwords are never included in a backup. Enter the{' '}
+        Your data is back, but this backup was made before passwords were included. Enter the{' '}
         <span className="font-medium text-foreground">username of an administrator from the restored data</span>, a
         new password, and the install token to regain access. Organization and name fields are ignored in this step.
       </p>

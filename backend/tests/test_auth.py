@@ -26,8 +26,8 @@ INSTALL_TOKEN = "recovery-install-token"
 
 
 def _seed_blank_hash_user(db, username, role):
-    """Insert a user whose password_hash is blank, mimicking a restored backup
-    (backup redacts every hash), so no one can log in."""
+    """Insert a user whose password_hash is blank, mimicking a restore of a
+    backup made before hashes were included, so no one can log in."""
     db.add(User(username=username, password_hash="", display_name=username.title(),
                 role=role, is_active=True))
     db.commit()

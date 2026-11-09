@@ -315,11 +315,11 @@ docker logs drone-unit-manager 2>&1 | grep -A1 "install token"
 cat /path/to/data/install_token.txt
 ```
 
-The token is automatically retired after a successful fresh-install restore.
+A backup holds everything, with no encryption: password hashes, API tokens, and the SMTP password and Skydio token included. Store it as carefully as the data volume. After a restore everyone signs in with their usual password, and the install token is retired. A backup made before passwords were included restores with blank passwords; the setup screen then reopens in recovery mode to reactivate an administrator with the install token.
 
 ### Restore (existing install)
 
-Once any user exists, the in-app restore option is no longer shown. The `POST /backup/import` endpoint still accepts a backup ZIP, but requires an Admin bearer token, so an existing-install restore is performed against the API directly (for example with `curl`) rather than through the UI. The simplest path to a clean restore is a fresh data volume plus the fresh-install flow above.
+Once any user exists, the in-app restore option is no longer shown. The `POST /backup/import` endpoint still accepts a backup ZIP, but requires an Admin bearer token, so an existing-install restore is performed against the API directly (for example with `curl`) rather than through the UI. Because it replaces all data and signs everyone out, the first call returns 409 and changes nothing; send it again with the form field `confirm_restore=REPLACE ALL DATA`. The simplest path to a clean restore is a fresh data volume plus the fresh-install flow above.
 
 ### Filesystem backup (fallback)
 

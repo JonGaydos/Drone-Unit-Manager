@@ -1035,7 +1035,7 @@ export default function SettingsPage() {
         <div className="bg-card border border-border rounded-xl p-6">
           <h3 className="text-lg font-semibold text-foreground mb-1">Backup & Restore</h3>
           <p className="text-sm text-muted-foreground mb-4">
-            Download a complete backup of your database, settings, and uploaded files as a ZIP archive. To restore, use the Setup page on a fresh install.
+            Download a complete backup of your database, settings, and uploaded files as a ZIP archive. The backup includes password hashes, API tokens, and the SMTP password and Skydio token, unencrypted, so store it securely. To restore, use the Setup page on a fresh install, or the backup API on this install (it asks for a typed confirmation).
           </p>
           <label className="flex items-center gap-2 mb-4 cursor-pointer">
             <input type="checkbox" checked={includeTelemetry} onChange={e => setIncludeTelemetry(e.target.checked)} className="rounded border-border" />

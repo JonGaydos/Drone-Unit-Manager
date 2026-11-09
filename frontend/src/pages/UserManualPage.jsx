@@ -561,7 +561,7 @@ Every change to unit data is recorded automatically, including changes made by i
     content: [
       {
         title: 'In-App Backup',
-        body: `Admins can download a full backup from Settings → General → Backup & Restore. Click "Export Backup" to download a ZIP containing every table as JSON plus all uploaded files. A checkbox controls whether flight telemetry (GPS, altitude, speed) is included; telemetry can be very large, so it is optional. The export is admin-only and recorded in the audit log.`
+        body: `Admins can download a full backup from Settings → General → Backup & Restore. Click "Export Backup" to download a ZIP containing every table as JSON plus all uploaded files. The backup holds everything a restore needs, including password hashes, API tokens, and the SMTP password and Skydio token, with no encryption, so keep it as safe as the server itself. A checkbox controls whether flight telemetry (GPS, altitude, speed) is included; telemetry can be very large, so it is optional. The export is admin-only and recorded in the audit log.`
       },
       {
         title: 'Automated Backups',
@@ -569,13 +569,15 @@ Every change to unit data is recorded automatically, including changes made by i
       },
       {
         title: 'Restoring From Backup',
-        body: `Restore is done on a fresh install. On the setup screen, choose "Restore from a backup instead?", upload the backup ZIP, and enter the install token. The token is written to install_token.txt in the container's data directory (/app/data) and also printed to the container logs at first boot.
+        body: `On a fresh install, open the setup screen, choose "Restore from a backup instead?", upload the backup ZIP, and enter the install token. The token is written to install_token.txt in the container's data directory (/app/data) and also printed to the container logs at first boot.
 
-Passwords are never included in a backup, so right after a restore no one can sign in yet. The setup screen reopens in recovery mode ("Restored backup detected"): enter the username of an administrator from the restored data, a new password, and the install token to reactivate that admin. The token is required for this step (it proves host access) and is retired once an admin is reactivated. Other restored users keep blank passwords until that admin resets them from Settings → Users.
+A restore brings back everything: data, files, settings, users with their passwords, API tokens, and the SMTP password and Skydio token. Everyone signs in again with their usual password, and the install token is retired.
+
+Older backups, made before passwords were included, left them out. After restoring one of those, no one can sign in yet, so the setup screen reopens in recovery mode ("Restored backup detected"): enter the username of an administrator from the restored data, a new password, and the install token to reactivate that admin. Other restored users keep blank passwords until that admin resets them from Settings → Users, and API tokens, the SMTP password and the Skydio token need to be set again.
 
 Audit entries from the backup are added to this install's own and marked Imported.
 
-Restoring into an install that already has working logins is an operator task done against the backup API (POST /api/backup/import) with an admin token rather than through the app. If the backup would remove or change a photo or document under legal hold, the API refuses it with a list of the held items and changes nothing. To go ahead, send the call again with the form field confirm_holds set to the exact text RESTORE HELD ITEMS. Each held item that is removed or changed gets its own audit entry.`
+Restoring into an install that already has working logins is an operator task done against the backup API (POST /api/backup/import) with an admin token rather than through the app. It replaces all data, users, API tokens, settings and files and signs everyone out, so the API first refuses with 409 and changes nothing. To go ahead, send the call again with the form field confirm_restore set to the exact text REPLACE ALL DATA. If the backup would also remove or change a photo or document under legal hold, the API then refuses with a list of the held items; send the call again with confirm_holds set to the exact text RESTORE HELD ITEMS as well. Each held item that is removed or changed gets its own audit entry.`
       },
       {
         title: 'Filesystem Backup (Fallback)',

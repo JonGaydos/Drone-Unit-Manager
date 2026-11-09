@@ -655,6 +655,8 @@ def _prepare_restore_rows(db: Session, name: str, rows: list[dict]) -> list[dict
 
 
 CONFIRM_HOLDS_TEXT = "RESTORE HELD ITEMS"
+# Typed by the operator to restore onto an install that people can sign in to.
+CONFIRM_RESTORE_TEXT = "REPLACE ALL DATA"
 
 # Held tables: the fields that, if the backup disagrees with the live row,
 # mean the restore changes the held item.
@@ -853,7 +855,7 @@ def _restore_telemetry(zf: zipfile.ZipFile) -> tuple[bool, int]:
     return count > 0, count
 
 
-async def _read_backup_upload(request: Request) -> tuple[bytes, str]:
+async def _read_backup_upload(request: Request) -> tuple[bytes, str, str]:
     """The uploaded ZIP from the multipart body. Read by hand, after the caller
     is authorized: as a declared File() parameter FastAPI would spool the whole
     body (up to the archive cap) before this route could refuse the caller."""
@@ -862,7 +864,8 @@ async def _read_backup_upload(request: Request) -> tuple[bytes, str]:
         file = form.get("file")
         if not isinstance(file, StarletteUploadFile):
             raise HTTPException(400, "No backup file in the request")
-        return await file.read(), str(form.get("confirm_holds") or "")
+        return (await file.read(), str(form.get("confirm_holds") or ""),
+                str(form.get("confirm_restore") or ""))
     finally:
         await form.close()
 
@@ -873,7 +876,8 @@ def _note_restore_steps(db, summary: AuditLog, outcome: str) -> None:
     db.commit()
 
 
-def _restore_archive(db, content: bytes, principal: str, confirm_holds: str = "") -> dict | JSONResponse:
+def _restore_archive(db, content: bytes, principal: str, confirm_holds: str = "",
+                     confirm_restore: str = "") -> dict | JSONResponse:
     """Restore a backup ZIP: main tables, telemetry, then uploaded files.
     Synchronous and slow (minutes for a large install); the route runs it
     off the event loop so the rest of the app keeps answering meanwhile."""
@@ -890,6 +894,19 @@ def _restore_archive(db, content: bytes, principal: str, confirm_holds: str = ""
     manifest = json.loads(zf.read(MANIFEST_FILE))
     logger.info("Importing backup from %s (version %s), principal=%s",
                 manifest.get("export_date"), manifest.get("app_version"), principal)
+
+    # A live install (anyone can sign in) is replaced only on the typed
+    # confirmation: the restore swaps every table and signs everyone out. A
+    # fresh install, or one locked out by an older backup, has nothing to lose.
+    from app.routers.auth import _has_usable_login
+    if _has_usable_login(db) and confirm_restore != CONFIRM_RESTORE_TEXT:
+        return JSONResponse(status_code=409, content={
+            "detail": ("This install is in use. Restoring replaces all data, users, API tokens, "
+                       "settings and uploaded files with the backup's copy, and signs everyone out. "
+                       f"Type {CONFIRM_RESTORE_TEXT} to restore anyway."),
+            "confirm_restore_text": CONFIRM_RESTORE_TEXT,
+            "backup_date": manifest.get("export_date"),
+        })
 
     db_tables = json.loads(zf.read(DATABASE_FILE))
     # Decided before the first delete: a restore that would remove or change a
@@ -952,9 +969,14 @@ async def import_backup(request: Request):
     """Import a full backup from a ZIP file (multipart field ``file``).
 
     Authorization:
-    - Existing install (any user present): requires Admin JWT.
+    - Existing install (any user present): requires Admin JWT. When anyone can
+      sign in, the form field ``confirm_restore`` must also be the exact text
+      REPLACE ALL DATA; without it the response is 409 with
+      ``confirm_restore_text`` and nothing changes.
     - Fresh install (no users): requires X-Install-Token header matching
       the token generated at startup (printed to container logs).
+    A restore that would remove or change a held item also needs
+    ``confirm_holds`` (409 with ``held_items`` otherwise).
     """
     # Resolved at call time (like _telemetry_session) so the test suite's
     # per-test engines are used; an imported-by-name SessionLocal binds at
@@ -963,12 +985,13 @@ async def import_backup(request: Request):
     try:
         principal = _verify_admin_or_install_token(request, db)
 
-        content, confirm_holds = await _read_backup_upload(request)
+        content, confirm_holds, confirm_restore = await _read_backup_upload(request)
         if len(content) > 500 * 1024 * 1024:
             raise HTTPException(413, "Backup file too large (max 500MB)")
 
         # No sync or scheduled backup may run while tables are being replaced.
         with sync_guard_http(), restoring():
-            return await run_in_threadpool(_restore_archive, db, content, principal, confirm_holds)
+            return await run_in_threadpool(_restore_archive, db, content, principal, confirm_holds,
+                                           confirm_restore)
     finally:
         db.close()

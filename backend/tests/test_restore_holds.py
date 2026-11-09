@@ -41,6 +41,8 @@ def _archive(db):
 
 
 def _post(client, headers, archive, **form):
+    # These tests restore onto a live install; that confirmation has its own tests.
+    form.setdefault("confirm_restore", "REPLACE ALL DATA")
     return client.post(IMPORT_URL, headers=headers, data=form,
                        files={"file": ("b.zip", archive, "application/zip")})
 

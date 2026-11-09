@@ -271,7 +271,7 @@ def test_backup_import_replaces_existing_rows(client, db, admin_user, admin_head
     db.add(Setting(key="added_later", value="x"))
     db.commit()
 
-    resp = client.post(IMPORT_URL, headers=admin_headers,
+    resp = client.post(IMPORT_URL, headers=admin_headers, data={"confirm_restore": "REPLACE ALL DATA"},
                        files={"file": ("b.zip", archive, "application/zip")})
     assert resp.status_code == 200, resp.text
 
