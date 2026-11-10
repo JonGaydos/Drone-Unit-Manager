@@ -205,3 +205,24 @@ def test_dateless_report_masthead_reads_as_of_today_not_the_date_range():
     config = ReportConfig(report_type="flight_summary", date_from=date(2026, 1, 1))
     texts = [p.text for p in _pdf_masthead({"title": "Report", "summary": {}}, config, "Unit", None, _pdf_theme())]
     assert any("Date Range: 2026-01-01 to Present" in t for t in texts)
+
+
+# --- E-11: per-pilot ZIP entry names are unique and short ---
+
+
+def test_per_pilot_zip_names_are_unique_and_length_capped(client, db, admin_headers):
+    import io
+    import zipfile
+    from app.models.pilot import Pilot
+    twin_a, twin_b, long_name = _add(db,
+                                     Pilot(first_name="Robin", last_name="Vale", status="active"),
+                                     Pilot(first_name="Robin", last_name="Vale", status="active"),
+                                     Pilot(first_name="Long", last_name="N" * 10000, status="active"))
+    r = client.post("/api/reports/per-pilot/zip", headers=admin_headers, json={
+        "report_type": "per_pilot_annual_review", "date_from": "2025-01-01", "date_to": "2025-12-31"})
+    assert r.status_code == 200, r.text[:300]
+    names = zipfile.ZipFile(io.BytesIO(r.content)).namelist()
+    assert len(names) == 3 and len(set(names)) == 3
+    assert all(len(n) <= 120 for n in names), [len(n) for n in names]
+    assert any(f"_{twin_a.id}_" in n for n in names) and any(f"_{twin_b.id}_" in n for n in names)
+    assert any(f"_{long_name.id}_" in n for n in names)

@@ -1,5 +1,6 @@
 import io
 import logging
+import re
 import os
 from datetime import date
 from types import SimpleNamespace
@@ -511,8 +512,7 @@ def generate_per_pilot_zip(config: ReportConfig, db: DBSession, user: ReportUser
             )
             data = _dispatch_report(single_config, db)
             pdf_buf = _render_report_pdf(data, single_config, org_name, logo_path)
-            safe_name = (pilot.full_name or f"pilot_{pilot.id}").replace("/", "_").replace("\\", "_").replace(" ", "_")
-            zf.writestr(f"{safe_name}_review_{period_label}.pdf", pdf_buf.read())
+            zf.writestr(_review_file_name(pilot, period_label), pdf_buf.read())
 
     zip_buffer.seek(0)
     return StreamingResponse(
@@ -520,6 +520,14 @@ def generate_per_pilot_zip(config: ReportConfig, db: DBSession, user: ReportUser
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="per_pilot_reviews_{period_label}.zip"'},
     )
+
+
+def _review_file_name(pilot, period_label: str) -> str:
+    """A per-pilot ZIP entry name: the name cut to 60 characters (Windows cannot
+    extract a 10,000-character one) and the pilot id, so two pilots sharing a
+    name do not overwrite each other on extract."""
+    name = re.sub(r'[<>:"/\\|?*\s]+', "_", pilot.full_name or "pilot").strip("_")[:60] or "pilot"
+    return f"{name}_{pilot.id}_review_{period_label}.pdf"
 
 
 def _chart_bar_by_key(ax, rows, key, value_key, title, ylabel, colors, plt):
