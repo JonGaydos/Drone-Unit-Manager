@@ -350,4 +350,25 @@ describe('MaintenancePage', () => {
     await waitFor(() => expect(posted).not.toBeNull())
     expect(posted).toMatchObject({ entity_type: 'sensor', entity_id: 3, cost: 0, next_due_hours: 25.5, next_due_date: '2026-12-01' })
   })
+
+  it('drops Overdue on a done task, names the row buttons and gives the edit hint that holds', async () => {
+    mockMount({
+      schedules: () => HttpResponse.json([
+        { id: 40, name: 'One-off fix', entity_type: 'vehicle', entity_id: 1, frequency: 'one_time',
+          is_active: false, last_completed: '2026-01-05', next_due: '2026-01-01' },
+        { ...SCHEDULES[0], next_due: '2026-01-01' },
+      ]),
+    })
+    const { user } = renderWithProviders(<MaintenancePage />, { role: 'admin' })
+    const doneRow = (await screen.findByText('One-off fix')).closest('tr')
+    expect(within(doneRow).getByText('Done')).toBeInTheDocument()
+    expect(within(doneRow).queryByText(/Overdue/)).toBeNull()
+    const liveRow = screen.getByText('Monthly check').closest('tr')
+    expect(within(liveRow).getByText('(Overdue)')).toBeInTheDocument()
+
+    expect(within(liveRow).getByRole('button', { name: 'Delete schedule' })).toBeInTheDocument()
+    await user.click(within(liveRow).getByRole('button', { name: 'Edit schedule' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Schedule / Task' })
+    expect(within(dialog).getByText('Leave blank to keep the current due date.')).toBeInTheDocument()
+  })
 })

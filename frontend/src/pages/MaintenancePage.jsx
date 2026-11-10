@@ -374,7 +374,9 @@ function ScheduleModal({ schedule, onSave, onClose, entityLists }) {
             className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring text-sm"
           />
           {form.frequency !== 'one_time' && (
-            <p className="text-xs text-muted-foreground mt-1">Leave blank to auto-calculate from the frequency.</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {schedule ? 'Leave blank to keep the current due date.' : 'Leave blank to auto-calculate from the frequency.'}
+            </p>
           )}
         </div>
         <div>
@@ -716,7 +718,8 @@ export default function MaintenancePage() {
             </thead>
             <tbody>
               {filteredSchedules.map(s => {
-                const days = daysUntil(s.next_due)
+                // A done or ended schedule is not due, so it gets no countdown.
+                const days = s.is_active ? daysUntil(s.next_due) : null
                 const urgencyColor = (() => {
                   if (days === null) return 'text-muted-foreground'
                   if (days < 0) return 'text-red-400'
@@ -758,6 +761,7 @@ export default function MaintenancePage() {
                         <button
                           onClick={() => setDocsModal({ entityType: 'maintenance_schedule', entityId: s.id, title: s.name })}
                           title="Documents"
+                          aria-label="Documents"
                           className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent"
                         >
                           <Paperclip className="w-4 h-4" />
@@ -766,6 +770,7 @@ export default function MaintenancePage() {
                           <button
                             onClick={() => handleScheduleComplete(s.id)}
                             title="Mark Complete"
+                            aria-label="Mark Complete"
                             className="p-1.5 text-muted-foreground hover:text-emerald-400 rounded-lg hover:bg-emerald-500/10"
                           >
                             <CheckCircle className="w-4 h-4" />
@@ -775,12 +780,16 @@ export default function MaintenancePage() {
                           <>
                             <button
                               onClick={() => setScheduleModal(s)}
+                              title="Edit schedule"
+                              aria-label="Edit schedule"
                               className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent"
                             >
                               <Edit className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => handleScheduleDelete(s.id)}
+                              title="Delete schedule"
+                              aria-label="Delete schedule"
                               className="p-1.5 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10"
                             >
                               <Trash2 className="w-4 h-4" />
