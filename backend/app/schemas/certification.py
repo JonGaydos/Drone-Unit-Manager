@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Annotated, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, StringConstraints, field_validator, model_validator
 
 # The statuses the Certifications page offers (CERT_STATUS_COLORS in the frontend).
 CertStatus = Literal[
@@ -10,6 +10,11 @@ CertStatus = Literal[
 ]
 NistLevel = Annotated[int, Field(ge=1, le=5)]
 EquipmentQualStatus = Literal["qualified", "in_training", "expired"]
+# Cert type fields: the categories the Certifications page offers, a trimmed
+# non-blank name, and a renewal period of one month to fifty years.
+CertCategory = Literal["faa", "nist", "equipment", "insurance", "training", "custom"]
+CertTypeName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+RenewalMonths = Annotated[int, Field(ge=1, le=600)]
 
 EXPIRY_BEFORE_ISSUE = "Expiration date cannot be before the issue date"
 
@@ -30,23 +35,25 @@ def _not_null(v):
 # --- CertificationType schemas ---
 
 class CertificationTypeCreate(BaseModel):
-    name: str
-    category: str = "custom"
+    name: CertTypeName
+    category: CertCategory = "custom"
     has_expiration: bool = True
-    renewal_period_months: Optional[int] = None
+    renewal_period_months: Optional[RenewalMonths] = None
     description: Optional[str] = None
     sort_order: int = 0
     is_active: bool = True
 
 
 class CertificationTypeUpdate(BaseModel):
-    name: Optional[str] = None
-    category: Optional[str] = None
+    name: Optional[CertTypeName] = None
+    category: Optional[CertCategory] = None
     has_expiration: Optional[bool] = None
-    renewal_period_months: Optional[int] = None
+    renewal_period_months: Optional[RenewalMonths] = None
     description: Optional[str] = None
     sort_order: Optional[int] = None
     is_active: Optional[bool] = None
+
+    _fields_not_null = field_validator("name", "category")(_not_null)
 
 
 class CertificationTypeOut(BaseModel):

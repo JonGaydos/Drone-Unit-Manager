@@ -261,3 +261,27 @@ def test_duplicate_badge_number_is_refused(client, db, admin_headers):
     for name in ("C", "D"):
         assert client.post("/api/pilots", headers=admin_headers,
                            json={"first_name": name, "last_name": "Z", "badge_number": ""}).status_code == 200
+
+
+# --- C-F6: certification type validation ---
+
+
+def test_cert_type_fields_are_checked(client, db, admin_headers):
+    url = "/api/certification-types"
+    for body in ({"name": ""}, {"name": "   "}, {"name": "X", "renewal_period_months": -5},
+                 {"name": "X", "renewal_period_months": 0}, {"name": "X", "category": "banana"}):
+        r = client.post(url, headers=admin_headers, json=body)
+        assert r.status_code == 422, body
+    ok = client.post(url, headers=admin_headers, json={"name": " Night Ops 12mo ", "renewal_period_months": 12})
+    assert ok.status_code == 200
+    assert ok.json()["name"] == "Night Ops 12mo"
+    for name in ("night ops 12mo", "NIGHT OPS 12MO "):
+        r = client.post(url, headers=admin_headers, json={"name": name})
+        assert r.status_code == 400, name
+    other = client.post(url, headers=admin_headers, json={"name": "Other"}).json()
+    for body in ({"name": "Night ops 12MO"}, ):
+        assert client.patch(f"{url}/{other['id']}", headers=admin_headers, json=body).status_code == 400
+    for body in ({"name": ""}, {"name": None}, {"category": "zzz"}, {"renewal_period_months": -1}):
+        assert client.patch(f"{url}/{other['id']}", headers=admin_headers, json=body).status_code == 422, body
+    # Renaming a type to its own name in another case is fine.
+    assert client.patch(f"{url}/{other['id']}", headers=admin_headers, json={"name": "OTHER"}).status_code == 200

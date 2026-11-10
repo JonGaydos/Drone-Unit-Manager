@@ -4,6 +4,7 @@ from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import func
 
 from app.constants import CERTIFICATION_TYPE_NOT_FOUND, PILOT_CERTIFICATION_NOT_FOUND, EQUIPMENT_QUAL_NOT_FOUND
 from app.deps import DBSession
@@ -43,6 +44,16 @@ def list_certification_types(
     return [CertificationTypeOut.model_validate(r) for r in rows]
 
 
+def _check_type_name_free(db, name: str, ct_id: int | None = None) -> None:
+    """Refuse a cert type name another type already has, ignoring case and
+    surrounding spaces."""
+    q = db.query(CertificationType).filter(func.lower(func.trim(CertificationType.name)) == name.strip().lower())
+    if ct_id is not None:
+        q = q.filter(CertificationType.id != ct_id)
+    if q.first():
+        raise HTTPException(status_code=400, detail="Certification type already exists")
+
+
 @router.post("/api/certification-types", response_model=CertificationTypeOut, responses=responses(400))
 def create_certification_type(
     data: CertificationTypeCreate,
@@ -50,8 +61,7 @@ def create_certification_type(
     admin: ManageUser,
 ):
     from app.services.audit import log_action
-    if db.query(CertificationType).filter(CertificationType.name == data.name).first():
-        raise HTTPException(status_code=400, detail="Certification type already exists")
+    _check_type_name_free(db, data.name)
     ct = CertificationType(**data.model_dump())
     db.add(ct)
     db.flush()
@@ -75,7 +85,7 @@ def reorder_certification_types(
     return {"ok": True}
 
 
-@router.patch("/api/certification-types/{ct_id}", response_model=CertificationTypeOut, responses=responses(404))
+@router.patch("/api/certification-types/{ct_id}", response_model=CertificationTypeOut, responses=responses(400, 404))
 def update_certification_type(
     ct_id: int,
     data: CertificationTypeUpdate,
@@ -86,7 +96,10 @@ def update_certification_type(
     ct = db.query(CertificationType).filter(CertificationType.id == ct_id).first()
     if not ct:
         raise HTTPException(status_code=404, detail=CERTIFICATION_TYPE_NOT_FOUND)
-    for key, value in data.model_dump(exclude_unset=True).items():
+    update_data = data.model_dump(exclude_unset=True)
+    if "name" in update_data:
+        _check_type_name_free(db, update_data["name"], ct_id)
+    for key, value in update_data.items():
         setattr(ct, key, value)
     log_action(db, admin.id, admin.display_name, "update", "certification_type", ct.id, ct.name)
     db.commit()
