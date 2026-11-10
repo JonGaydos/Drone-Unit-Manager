@@ -214,10 +214,16 @@ describe('CompliancePage', () => {
     it('sends the optional message typed in the confirm dialog', async () => {
       let sent = null
       mockMount()
-      server.use(http.post('/api/currency/send-reminders', async ({ request }) => {
-        sent = await request.json()
-        return HttpResponse.json({ sent: 1, skipped_no_email: 0, skipped_current: 0, failed: 0 })
-      }))
+      server.use(
+        http.post('/api/currency/send-reminders/start', async ({ request }) => {
+          sent = await request.json()
+          return HttpResponse.json({ job_id: 'j1' })
+        }),
+        http.get('/api/currency/jobs/j1', () => HttpResponse.json({
+          id: 'j1', status: 'done', progress: { done: 1, total: 1 },
+          result: { sent: 1, skipped_no_email: 0, skipped_current: 0, failed: 0 },
+        })),
+      )
       const { user } = renderWithProviders(<CompliancePage />, { role: 'admin' })
       await user.click(await screen.findByRole('button', { name: /Send Reminders/ }))
       const dialog = await screen.findByRole('dialog')
@@ -233,13 +239,50 @@ describe('CompliancePage', () => {
     it('sends nothing when the dialog is cancelled', async () => {
       let posted = false
       mockMount()
-      server.use(http.post('/api/currency/send-reminders', () => { posted = true; return HttpResponse.json({}) }))
+      server.use(http.post('/api/currency/send-reminders/start', () => { posted = true; return HttpResponse.json({}) }))
       const { user } = renderWithProviders(<CompliancePage />, { role: 'admin' })
       await user.click(await screen.findByRole('button', { name: /Send Reminders/ }))
       const dialog = await screen.findByRole('dialog')
       await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
       await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
       expect(posted).toBe(false)
+    })
+
+    // G-8: reminders ran inside one request, with only a disabled button for
+    // minutes on a large unit.
+    it('runs the reminders as a job and shows its progress', async () => {
+      let polls = 0
+      mockMount()
+      server.use(
+        http.post('/api/currency/send-reminders/start', () => HttpResponse.json({ job_id: 'j2' })),
+        http.get('/api/currency/jobs/j2', () => {
+          polls += 1
+          if (polls === 1) return HttpResponse.json({ id: 'j2', status: 'running', progress: { done: 1, total: 2 } })
+          return HttpResponse.json({
+            id: 'j2', status: 'done', progress: { done: 2, total: 2 },
+            result: { sent: 1, skipped_no_email: 1, skipped_current: 0, failed: 0 },
+          })
+        }),
+      )
+      const { user } = renderWithProviders(<CompliancePage />, { role: 'admin' })
+      await user.click(await screen.findByRole('button', { name: /Send Reminders/ }))
+      await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Send' }))
+
+      expect(await screen.findByText('Sending 1 of 2')).toBeInTheDocument()
+      expect(await screen.findByText('Reminders: 1 sent, 1 skipped (no email)', {}, { timeout: 3000 })).toBeInTheDocument()
+      expect(screen.queryByText(/Sending \d/)).toBeNull()
+    })
+
+    it('reports a failed reminder job', async () => {
+      mockMount()
+      server.use(
+        http.post('/api/currency/send-reminders/start', () => HttpResponse.json({ job_id: 'j3' })),
+        http.get('/api/currency/jobs/j3', () => HttpResponse.json({ id: 'j3', status: 'failed', error: 'SMTP down' })),
+      )
+      const { user } = renderWithProviders(<CompliancePage />, { role: 'admin' })
+      await user.click(await screen.findByRole('button', { name: /Send Reminders/ }))
+      await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Send' }))
+      expect(await screen.findByText('SMTP down')).toBeInTheDocument()
     })
   })
 })

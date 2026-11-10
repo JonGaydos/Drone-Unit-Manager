@@ -33,15 +33,21 @@ def _prune() -> None:
         del _jobs[job["id"]]
 
 
-def start(kind: str, work: Callable[[], dict], on_finish: Callable[[], None] | None = None) -> str:
+def start(kind: str, work: Callable[..., dict], on_finish: Callable[[], None] | None = None,
+          with_progress: bool = False) -> str:
     """Run ``work`` on a thread and return the job id at once.
 
     ``work`` returns the result to report; an exception marks the job failed.
     ``on_finish`` runs afterwards either way (a caller releases a lock here).
+    With ``with_progress``, ``work`` is called with a function that takes a
+    dict and shows it as the job's ``progress`` to pollers.
     """
     job_id = uuid.uuid4().hex
     job = {"id": job_id, "kind": kind, "status": "running", "started_at": _now(),
-           "finished_at": None, "result": None, "error": None}
+           "finished_at": None, "result": None, "error": None, "progress": None}
+
+    def report(progress: dict) -> None:
+        job["progress"] = dict(progress)
     with _jobs_lock:
         _prune()
         _jobs[job_id] = job
@@ -49,7 +55,7 @@ def start(kind: str, work: Callable[[], dict], on_finish: Callable[[], None] | N
     def run():
         status = "failed"
         try:
-            job["result"] = work()
+            job["result"] = work(report) if with_progress else work()
             status = "done"
         except Exception as exc:
             logger.exception("Job %s (%s) failed", job_id, kind)

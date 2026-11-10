@@ -288,31 +288,25 @@ def _send_one_reminder(pilot, rules, flights, org_name: str, intro: str, db) -> 
     return "failed", None
 
 
-@router.post("/send-reminders", responses=responses(401, 503))
-def send_currency_reminders(
-    data: ReminderRequest,
-    db: DBSession,
-    admin: ManageUser,
-):
-    """Email currency reminders to lapsed pilots. If pilot_ids is provided,
-    only those are notified; otherwise every active pilot lapsed on any rule
-    is notified. Uses the configured SMTP server.
+def _check_reminders_ready(db) -> None:
+    """Refuse up front when no reminder could go out: SMTP off (503) or no
+    active currency rule (400)."""
+    from app.models.setting import Setting
+    smtp_enabled_row = db.query(Setting).filter(Setting.key == "smtp_enabled").first()
+    if not smtp_enabled_row or smtp_enabled_row.value != "true":
+        raise HTTPException(503, "SMTP is not enabled. Configure it in Settings → Integrations.")
+    if not db.query(CurrencyRule).filter(CurrencyRule.is_active.is_(True)).first():
+        raise HTTPException(400, "No active currency rules — nothing to remind about.")
 
-    Returns counts of emails sent vs. skipped (no email on file / SMTP off /
-    already current)."""
+
+def _send_reminders(db, data: ReminderRequest, actor_id: int, actor_name: str, report=None) -> dict:
+    """Send the reminders and audit them; returns the counts. ``report``, when
+    given, is called with {"done", "total"} after each pilot."""
     from app.constants import APP_TITLE
     from app.models.setting import Setting
     from app.services.audit import log_action
 
-    # SMTP must be configured + enabled
-    smtp_enabled_row = db.query(Setting).filter(Setting.key == "smtp_enabled").first()
-    if not smtp_enabled_row or smtp_enabled_row.value != "true":
-        raise HTTPException(503, "SMTP is not enabled. Configure it in Settings → Integrations.")
-
     rules = db.query(CurrencyRule).filter(CurrencyRule.is_active.is_(True)).all()
-    if not rules:
-        raise HTTPException(400, "No active currency rules — nothing to remind about.")
-
     counts = {"sent": 0, "skipped_no_email": 0, "skipped_current": 0, "failed": 0,
               "skipped_inactive": 0, "not_found": 0}
     if data.pilot_ids:
@@ -331,20 +325,78 @@ def send_currency_reminders(
     intro = (data.custom_message or "").strip()
 
     flights = flights_by_pilot(db, [p.id for p in pilots], rules)
-    for pilot in pilots:
+    if report:
+        report({"done": 0, "total": len(pilots)})
+    for done, pilot in enumerate(pilots, start=1):
         status, recipient = _send_one_reminder(pilot, rules, flights.get(pilot.id, []), org_name, intro, db)
         counts[status] += 1
         if recipient:
             recipients_logged.append(recipient)
+        if report:
+            report({"done": done, "total": len(pilots)})
 
-    log_action(db, admin.id, admin.display_name, "send_reminders", "currency",
+    log_action(db, actor_id, actor_name, "send_reminders", "currency",
                details=f"sent={counts['sent']}, skipped_no_email={counts['skipped_no_email']}, "
                        f"skipped_current={counts['skipped_current']}, failed={counts['failed']}, "
                        f"skipped_inactive={counts['skipped_inactive']}, not_found={counts['not_found']}; "
                        f"recipients={'; '.join(recipients_logged) if recipients_logged else 'none'}")
     db.commit()
-
     return counts
+
+
+@router.post("/send-reminders", responses=responses(401, 503))
+def send_currency_reminders(
+    data: ReminderRequest,
+    db: DBSession,
+    admin: ManageUser,
+):
+    """Email currency reminders to lapsed pilots. If pilot_ids is provided,
+    only those are notified; otherwise every active pilot lapsed on any rule
+    is notified. Uses the configured SMTP server.
+
+    Returns counts of emails sent vs. skipped (no email on file / SMTP off /
+    already current). A large unit can take minutes: the page uses
+    /send-reminders/start instead."""
+    _check_reminders_ready(db)
+    return _send_reminders(db, data, admin.id, admin.display_name)
+
+
+# Kind of the background job, so the jobs route serves only reminder jobs.
+REMINDER_JOB = "reminders"
+
+
+@router.post("/send-reminders/start", responses=responses(401, 503))
+def start_currency_reminders(data: ReminderRequest, db: DBSession, admin: ManageUser):
+    """Start the reminders as a background job and return its id at once; poll
+    /jobs/{id} for progress and the counts. Sending one email after another
+    outlasts the browser's and Cloudflare's request limits on a large unit."""
+    from app import database
+    from app.services import jobs
+    from app.services.audit_capture import actor_fields, set_actor
+    _check_reminders_ready(db)
+    # Plain values, not the ORM user: the job outlives this request's session.
+    actor_id, actor_name, actor = admin.id, admin.display_name, actor_fields(admin)
+
+    def run(report):
+        job_db = database.SessionLocal()
+        set_actor(job_db, actor)
+        try:
+            return _send_reminders(job_db, data, actor_id, actor_name, report)
+        finally:
+            job_db.close()
+
+    return {"job_id": jobs.start(REMINDER_JOB, run, with_progress=True)}
+
+
+@router.get("/jobs/{job_id}", responses=responses(401, 404))
+def get_reminder_job(job_id: str, user: ManageUser):
+    """A reminder job's status: running (with progress), done (with the
+    counts) or failed."""
+    from app.services import jobs
+    job = jobs.get(job_id)
+    if not job or job["kind"] != REMINDER_JOB:
+        raise HTTPException(404, "Job not found")
+    return job
 
 
 @router.get("/status/{pilot_id}", responses=responses(401, 404))

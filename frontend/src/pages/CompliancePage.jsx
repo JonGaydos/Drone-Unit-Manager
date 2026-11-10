@@ -11,6 +11,26 @@ import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 import { Modal } from '@/components/ui/Modal'
 import { daysUntil } from '@/lib/utils'
 
+// How often a running reminder job is checked on.
+const REMINDER_POLL_MS = 1000
+
+/**
+ * Start the currency reminders as a server job and wait for it, passing each
+ * progress report ({done, total}) to onProgress. Sending one email after
+ * another took longer than a request may on a large unit.
+ * @returns {Promise<Object>} The job's counts.
+ */
+async function runReminderJob(body, onProgress) {
+  const { job_id: jobId } = await api.post('/currency/send-reminders/start', body)
+  for (;;) {
+    const job = await api.get(`/currency/jobs/${jobId}`)
+    if (job.status === 'done') return job.result
+    if (job.status === 'failed') throw new Error(job.error || 'Sending reminders failed')
+    if (job.progress) onProgress(job.progress)
+    await new Promise(resolve => setTimeout(resolve, REMINDER_POLL_MS))
+  }
+}
+
 function getScoreTheme(score) {
   if (score > 80) return { color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30' }
   if (score > 60) return { color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/30' }
@@ -146,7 +166,7 @@ function buildAttentionItems(data) {
   return items
 }
 
-function CurrencyStatusSection({ data, onSendReminders, sending, canSendReminders }) {
+function CurrencyStatusSection({ data, onSendReminders, sending, progress, canSendReminders }) {
   const [filter, setFilter] = useState('lapsed-and-soon')  // 'all' | 'lapsed' | 'lapsed-and-soon'
   const [expanded, setExpanded] = useState(false)
   const navigate = useNavigate()
@@ -225,7 +245,7 @@ function CurrencyStatusSection({ data, onSendReminders, sending, canSendReminder
               title={data.pilots_lapsed === 0 ? 'No lapsed pilots to remind' : 'Email a reminder to every lapsed pilot with an email on file'}
             >
               {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-              Send Reminders
+              {sending && progress ? `Sending ${progress.done} of ${progress.total}` : 'Send Reminders'}
             </button>
           )}
         </div>
@@ -318,6 +338,7 @@ export default function CompliancePage() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
+  const [reminderProgress, setReminderProgress] = useState(null)
   const toast = useToast()
   const navigate = useNavigate()
   // The reminder confirm dialog is open while this holds its intro message.
@@ -347,7 +368,7 @@ export default function CompliancePage() {
     setReminderIntro(null)
     setSending(true)
     try {
-      const res = await api.post('/currency/send-reminders', intro ? { custom_message: intro } : {}, { timeout: 120000 })
+      const res = await runReminderJob(intro ? { custom_message: intro } : {}, setReminderProgress)
       const bits = [`${res.sent} sent`]
       if (res.skipped_no_email) bits.push(`${res.skipped_no_email} skipped (no email)`)
       if (res.skipped_current) bits.push(`${res.skipped_current} already current`)
@@ -355,7 +376,10 @@ export default function CompliancePage() {
       toast.success(`Reminders: ${bits.join(', ')}`)
     } catch (err) {
       toast.error(err.message)
-    } finally { setSending(false) }
+    } finally {
+      setSending(false)
+      setReminderProgress(null)
+    }
   }
 
   if (loading) {
@@ -536,6 +560,7 @@ export default function CompliancePage() {
         data={data}
         sending={sending}
         onSendReminders={handleSendReminders}
+        progress={reminderProgress}
         canSendReminders={can('certifications.manage')}
       />
 

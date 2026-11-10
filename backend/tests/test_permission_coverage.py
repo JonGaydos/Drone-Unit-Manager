@@ -315,6 +315,8 @@ EXPECTED_ROUTE_KEYS = {
     "PATCH /api/currency/rules/{rule_id}": {CERTIFICATIONS_MANAGE},
     "DELETE /api/currency/rules/{rule_id}": {CERTIFICATIONS_MANAGE},
     "POST /api/currency/send-reminders": {CERTIFICATIONS_MANAGE},
+    "POST /api/currency/send-reminders/start": {CERTIFICATIONS_MANAGE},
+    "GET /api/currency/jobs/{job_id}": {CERTIFICATIONS_MANAGE},
     # checklists
     "GET /api/checklists/templates": {CHECKLISTS_VIEW},
     "GET /api/checklists/templates/{template_id}": {CHECKLISTS_VIEW},
