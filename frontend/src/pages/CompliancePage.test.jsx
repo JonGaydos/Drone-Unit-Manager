@@ -89,6 +89,19 @@ describe('CompliancePage', () => {
     expect(item).toHaveTextContent('Expiring Certification Robin Vale - Part 107 - 22 days remaining')
   })
 
+  it('offers Generate Compliance Report only to a role that can generate reports', async () => {
+    mockMount()
+    renderWithProviders(<CompliancePage />, { role: 'supervisor' })
+    expect(await screen.findByRole('button', { name: /Generate Compliance Report/ })).toBeInTheDocument()
+  })
+
+  it('hides Generate Compliance Report from a viewer', async () => {
+    mockMount()
+    renderWithProviders(<CompliancePage />, { role: 'viewer' })
+    await screen.findByText('Ada Lovelace')
+    expect(screen.queryByRole('button', { name: /Generate Compliance Report/ })).toBeNull()
+  })
+
   it('shows the failure fallback when /dashboard/compliance 500s', async () => {
     mockMount({ compliance: () => HttpResponse.json({ detail: 'boom' }, { status: 500 }) })
     renderWithProviders(<CompliancePage />, { role: 'admin' })

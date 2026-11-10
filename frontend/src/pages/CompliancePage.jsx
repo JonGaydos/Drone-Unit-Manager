@@ -577,15 +577,17 @@ export default function CompliancePage() {
       </div>
 
       {/* Generate Report Button */}
-      <div className="flex justify-end">
-        <button
-          onClick={() => navigate('/reports')}
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium"
-        >
-          <FileText className="w-4 h-4" />
-          Generate Compliance Report
-        </button>
-      </div>
+      {can('reports.generate') && (
+        <div className="flex justify-end">
+          <button
+            onClick={() => navigate('/reports')}
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium"
+          >
+            <FileText className="w-4 h-4" />
+            Generate Compliance Report
+          </button>
+        </div>
+      )}
 
       <ConfirmDialog {...confirmProps} />
     </div>
