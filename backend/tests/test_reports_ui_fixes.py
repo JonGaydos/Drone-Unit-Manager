@@ -190,3 +190,18 @@ def test_pdf_chart_image_keeps_the_chart_aspect_ratio():
     flowable = _chart_image(buf, max_width=468, max_height=216)
     assert flowable.drawWidth <= 468 and flowable.drawHeight <= 216
     assert abs(flowable.drawWidth / flowable.drawHeight - ratio) < 0.01
+
+
+# --- E-10: point-in-time reports do not claim a date range ---
+
+
+def test_dateless_report_masthead_reads_as_of_today_not_the_date_range():
+    from app.routers.reports import ReportConfig, _pdf_masthead, _pdf_theme
+    for report_type in ("battery_status", "pilot_certifications"):
+        config = ReportConfig(report_type=report_type, date_from=date(2026, 1, 1))
+        texts = [p.text for p in _pdf_masthead({"title": "Report", "summary": {}}, config, "Unit", None, _pdf_theme())]
+        assert not any("Date Range" in t for t in texts), (report_type, texts)
+        assert any(f"As of {TODAY}" in t for t in texts), (report_type, texts)
+    config = ReportConfig(report_type="flight_summary", date_from=date(2026, 1, 1))
+    texts = [p.text for p in _pdf_masthead({"title": "Report", "summary": {}}, config, "Unit", None, _pdf_theme())]
+    assert any("Date Range: 2026-01-01 to Present" in t for t in texts)

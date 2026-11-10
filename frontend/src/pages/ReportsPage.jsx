@@ -11,19 +11,20 @@ import { FileBarChart, Upload, Loader2, Download, FileText, FileDown } from 'luc
  * worse than not offering it: the report looks filtered and is not.
  */
 const REPORT_FILTERS = {
-  flight_summary: { pilots: true, vehicles: true },
-  pilot_hours: { pilots: true, vehicles: true },
-  equipment_utilization: { pilots: true, vehicles: true },
-  pilot_certifications: { pilots: true, vehicles: false },
-  battery_status: { pilots: false, vehicles: false },
-  maintenance_history: { pilots: false, vehicles: false },
-  pilot_activity_summary: { pilots: true, vehicles: true },
-  annual_unit_report: { pilots: false, vehicles: false },
-  per_pilot_annual_review: { pilots: true, vehicles: false },
+  flight_summary: { pilots: true, vehicles: true, dates: true },
+  pilot_hours: { pilots: true, vehicles: true, dates: true },
+  equipment_utilization: { pilots: true, vehicles: true, dates: true },
+  // Current-state reports (DATELESS_REPORTS in the backend): no date range.
+  pilot_certifications: { pilots: true, vehicles: false, dates: false },
+  battery_status: { pilots: false, vehicles: false, dates: false },
+  maintenance_history: { pilots: false, vehicles: false, dates: true },
+  pilot_activity_summary: { pilots: true, vehicles: true, dates: true },
+  annual_unit_report: { pilots: false, vehicles: false, dates: true },
+  per_pilot_annual_review: { pilots: true, vehicles: false, dates: true },
 }
 
-/** Unknown types keep both pickers rather than silently hiding controls. */
-const filtersFor = (type) => REPORT_FILTERS[type] || { pilots: true, vehicles: true }
+/** Unknown types keep every control rather than silently hiding one. */
+const filtersFor = (type) => REPORT_FILTERS[type] || { pilots: true, vehicles: true, dates: true }
 
 const FLIGHTS = 'flights.view'
 const LOGS = 'logs.view'
@@ -150,6 +151,8 @@ export default function ReportsPage() {
   // filter the generator ignores would also make the preview header claim a
   // narrowing that never happened.
   const filterPayload = () => ({
+    date_from: activeFilters.dates && dateFrom ? dateFrom : undefined,
+    date_to: activeFilters.dates && dateTo ? dateTo : undefined,
     pilot_ids: activeFilters.pilots && selectedPilots.length > 0 ? selectedPilots : undefined,
     vehicle_ids: activeFilters.vehicles && selectedVehicles.length > 0 ? selectedVehicles : undefined,
     include_non_unit: includeNonUnit || undefined,
@@ -185,8 +188,6 @@ export default function ReportsPage() {
     try {
       const config = {
         report_type: reportType,
-        date_from: dateFrom || undefined,
-        date_to: dateTo || undefined,
         ...filterPayload(),
       }
 
@@ -237,8 +238,6 @@ export default function ReportsPage() {
     try {
       const config = {
         report_type: reportType,
-        date_from: dateFrom || undefined,
-        date_to: dateTo || undefined,
         ...filterPayload(),
       }
       await api.downloadPost('/reports/generate/pdf', config, { timeout: 120000 })
@@ -311,8 +310,9 @@ export default function ReportsPage() {
                     </select>
                   </div>
 
-                  {/* Date Range */}
+                  {/* Date Range — hidden for current-state reports it would not filter */}
                   <div>
+                    {activeFilters.dates && (<>
                     <label htmlFor="date-range" className="block text-sm font-medium text-foreground mb-1">Date Range</label>
                     <div className="flex flex-wrap gap-1 mb-2">
                       <button type="button" onClick={() => applyDatePreset('last30')} className="px-2 py-0.5 text-xs bg-secondary hover:bg-accent border border-border rounded-full text-foreground">Last 30d</button>
@@ -337,6 +337,7 @@ export default function ReportsPage() {
                         className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                       />
                     </div>
+                    </>)}
 
                     {/* Vendor and guest operators are excluded by default: their
                         sorties are real, but they are not the unit's own activity. */}

@@ -342,6 +342,12 @@ def _chart_image(buf, max_width: float, max_height: float):
     return RLImage(buf, width=img_w * scale, height=img_h * scale)
 
 
+# Reports that describe the current state (every battery, every live cert)
+# rather than a period: a date range would not filter them, so none is offered
+# or printed. Mirrored by REPORT_FILTERS in frontend/src/pages/ReportsPage.jsx.
+DATELESS_REPORTS = {"battery_status", "pilot_certifications"}
+
+
 def _pdf_masthead(data: dict, config: ReportConfig, org_name: str, logo_path: str | None, theme: SimpleNamespace) -> list:
     """The masthead flowables: logo on the left with organization over report
     title to its right, or the text stacked when there is no logo."""
@@ -355,11 +361,15 @@ def _pdf_masthead(data: dict, config: ReportConfig, org_name: str, logo_path: st
         except Exception:
             logo_flowable = None
 
-    date_range = data.get("summary", {}).get("date_range") or f"{config.date_from or 'All'} to {config.date_to or 'Present'}"
+    if config.report_type in DATELESS_REPORTS:
+        period = f"As of {date.today()}"
+    else:
+        date_range = data.get("summary", {}).get("date_range") or f"{config.date_from or 'All'} to {config.date_to or 'Present'}"
+        period = f"Date Range: {_esc(date_range)}  |  Generated: {date.today()}"
     masthead_text = [
         Paragraph(_esc(org_name), theme.title_style),
         Paragraph(_esc(data.get("title", "Report")), theme.title_h1_style),
-        Paragraph(f"Date Range: {_esc(date_range)}  |  Generated: {date.today()}", theme.subtitle_style),
+        Paragraph(period, theme.subtitle_style),
     ]
 
     if not logo_flowable:

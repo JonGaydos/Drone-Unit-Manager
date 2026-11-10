@@ -153,6 +153,20 @@ describe('ReportsPage', () => {
     expect(captured.body.vehicle_ids).toBeUndefined()
   })
 
+  // E-10: Battery Status and Pilot Certifications describe the current state;
+  // the date range never filtered them, so it is not offered or sent.
+  it.each(['battery_status', 'pilot_certifications'])('offers and sends no date range on %s', async (type) => {
+    const { user, captured } = await mountCapturingRequest()
+    await user.click(screen.getByRole('button', { name: 'YTD' }))
+    await selectReportType(user, type)
+    expect(screen.queryByLabelText('Date Range')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'YTD' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/Include non-unit flights/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Generate/ }))
+    expect(captured.body.date_from).toBeUndefined()
+    expect(captured.body.date_to).toBeUndefined()
+  })
+
   it('keeps the selection so switching report types and back restores it', async () => {
     const { user, captured } = await mountCapturingRequest()
 
