@@ -467,7 +467,7 @@ export default function CertificationsPage() {
   const handleDeleteCert = (certId) => {
     requestConfirm({
       title: 'Remove Certification',
-      message: 'Remove this certification from the pilot? This cannot be undone.',
+      message: 'Remove this certification and its renewal history from the pilot? Attached documents are kept. This cannot be undone.',
       onConfirm: async () => {
         try {
           await api.delete(`/pilot-certifications/${certId}`)

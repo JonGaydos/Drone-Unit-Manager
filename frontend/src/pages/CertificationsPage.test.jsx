@@ -129,7 +129,8 @@ describe('CertificationsPage', () => {
     const dialog = await screen.findByRole('dialog')
     await user.click(within(dialog).getByRole('button', { name: 'Remove' }))
 
-    // Confirm dialog appears on top; confirm the removal.
+    // Confirm dialog appears on top, says the renewal history goes too; confirm.
+    expect(await screen.findByText(/and its renewal history/)).toBeInTheDocument()
     await user.click(await screen.findByRole('button', { name: 'Confirm' }))
 
     expect(deleted).toBe('100')

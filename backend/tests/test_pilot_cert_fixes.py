@@ -335,3 +335,51 @@ def test_currency_rule_fields_are_checked(client, db, admin_headers):
         r = client.patch(f"{url}/{rid}", headers=admin_headers, json=body)
         assert r.status_code == 422, body
     assert client.patch(f"{url}/{rid}", headers=admin_headers, json={"required_flights": None}).status_code == 200
+
+
+# --- C-F20: deleting a certification takes its renewal history with it ---
+
+
+def _doc_for(db, cert):
+    from app.models.document import Document
+    d = Document(certification_id=cert.id, entity_type="certification", entity_id=cert.id,
+                 document_type="part_107", title="Card", filename="card.pdf", file_path="x/card.pdf",
+                 mime_type="application/pdf", file_size_bytes=10)
+    db.add(d)
+    db.commit()
+    db.refresh(d)
+    return d
+
+
+def test_deleting_current_cert_removes_its_history_and_keeps_documents(client, db, admin_headers):
+    from app.models.document import Document
+    pilot = _pilot(db)
+    ct = _cert_type(db, months=24)
+    first = _cert(db, pilot.id, ct.id, issue=date(2022, 1, 1), expiry=date(2024, 1, 1))
+    doc = _doc_for(db, first)
+    second = client.post(f"/api/pilot-certifications/{first.id}/renew", headers=admin_headers,
+                         json={"issue_date": "2024-01-01"}).json()
+    third = client.post(f"/api/pilot-certifications/{second['id']}/renew", headers=admin_headers,
+                        json={"issue_date": "2026-01-01"}).json()
+    # An older record that was renewed into another explains instead of 409-ing generically.
+    r = client.delete(f"/api/pilot-certifications/{first.id}", headers=admin_headers)
+    assert r.status_code == 409
+    assert "renewed" in r.json()["detail"]
+    r = client.delete(f"/api/pilot-certifications/{third['id']}", headers=admin_headers)
+    assert r.status_code == 200
+    db.expire_all()
+    assert db.query(PilotCertification).filter(PilotCertification.pilot_id == pilot.id).count() == 0
+    assert db.get(Document, doc.id).certification_id is None
+    # The type is no longer in use, so it can be deleted.
+    assert client.delete(f"/api/certification-types/{ct.id}", headers=admin_headers).status_code == 200
+
+
+def test_matrix_shows_an_orphaned_renewed_cert_so_it_can_be_removed(client, db, admin_headers):
+    pilot = _pilot(db)
+    ct = _cert_type(db)
+    orphan = _cert(db, pilot.id, ct.id, status="renewed", expiry=date(2025, 1, 1))
+    cell = client.get("/api/certifications/matrix", headers=admin_headers).json()["matrix"][0]["certs"][str(ct.id)]
+    assert (cell["id"], cell["status"]) == (orphan.id, "renewed")
+    live = _cert(db, pilot.id, ct.id, status="complete", expiry=date(2030, 1, 1))
+    cell = client.get("/api/certifications/matrix", headers=admin_headers).json()["matrix"][0]["certs"][str(ct.id)]
+    assert cell["id"] == live.id

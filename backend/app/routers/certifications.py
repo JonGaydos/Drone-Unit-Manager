@@ -331,20 +331,36 @@ def get_certification_history(
     return history
 
 
-@router.delete("/api/pilot-certifications/{pc_id}", responses=responses(404))
+@router.delete("/api/pilot-certifications/{pc_id}", responses=responses(404, 409))
 def delete_pilot_certification(
     pc_id: int,
     db: DBSession,
     admin: ManageUser,
 ):
+    """Delete a certification with its renewal history (the records it was
+    renewed from). A record that was itself renewed is removed through the
+    current one. Attached documents are kept and released from the record."""
     from app.services.audit import log_action
     pc = db.query(PilotCertification).filter(PilotCertification.id == pc_id).first()
     if not pc:
         raise HTTPException(status_code=404, detail=PILOT_CERTIFICATION_NOT_FOUND)
-    log_action(db, admin.id, admin.display_name, "delete", "pilot_certification", pc_id)
-    db.delete(pc)
+    if db.query(PilotCertification).filter(PilotCertification.renewed_from_id == pc_id).first():
+        raise HTTPException(status_code=409, detail=(
+            "This record was renewed into a newer one. Remove the current certification "
+            "to remove it with its renewal history."))
+    chain = [pc]
+    while chain[-1].renewed_from_id and len(chain) <= 50:
+        prev = db.query(PilotCertification).filter(PilotCertification.id == chain[-1].renewed_from_id).first()
+        if not prev or prev in chain:
+            break
+        chain.append(prev)
+    # Newest first, so no remaining row points at a deleted one.
+    for cert in chain:
+        log_action(db, admin.id, admin.display_name, "delete", "pilot_certification", cert.id)
+        db.delete(cert)
+        db.flush()
     db.commit()
-    return {"ok": True}
+    return {"ok": True, "deleted": len(chain)}
 
 
 @router.get("/api/pilot-equipment-quals", response_model=list[PilotEquipmentQualOut])
@@ -439,13 +455,17 @@ def certification_matrix(
     pilot_ids = [p.id for p in pilots]
     all_certs = db.query(PilotCertification).filter(
         PilotCertification.pilot_id.in_(pilot_ids),
-        PilotCertification.status != "renewed",
-    ).all()
+    ).order_by(PilotCertification.id).all()
 
-    # Index by (pilot_id, cert_type_id) — latest cert wins
+    # Index by (pilot_id, cert_type_id): the latest live cert wins. A renewed
+    # record shows only when no live one exists (its renewal was removed), so
+    # it can still be opened and removed.
     cert_map: dict[tuple[int, int], PilotCertification] = {}
     for pc in all_certs:
-        cert_map[(pc.pilot_id, pc.certification_type_id)] = pc
+        key = (pc.pilot_id, pc.certification_type_id)
+        held = cert_map.get(key)
+        if held is None or pc.status != "renewed" or held.status == "renewed":
+            cert_map[key] = pc
 
     matrix = []
     for pilot in pilots:
