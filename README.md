@@ -207,6 +207,7 @@ The database schema is managed by Alembic. On startup the container runs `alembi
 | `PORT` | `8000` | Internal server port |
 | `SECRET_KEY` | Auto-generated, persisted to `data/.secret_key` | JWT signing + photo URL signing key. Set explicitly to share sessions across containers. |
 | `TZ` | `UTC` | Timezone |
+| `CORS_ORIGINS` | none | Extra browser origins allowed to call the API, as a JSON list (for example `["http://localhost:5173"]`). Not needed in production, where the app serves its own pages, or in development through the Vite dev server, which proxies `/api` to the backend on port 8000. Set it only when a page on another origin calls the API directly. |
 
 ### First-Run Setup
 

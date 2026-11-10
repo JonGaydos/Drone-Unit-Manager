@@ -445,3 +445,19 @@ def test_admin_may_resend_own_unchanged_role(client, db, admin_user, admin_heade
                         json={"display_name": "Chief", "role": "admin", "is_active": True})
     assert resp.status_code == 200, resp.text
     assert resp.json()["display_name"] == "Chief"
+
+
+# --- F-19: no default CORS origin --------------------------------------------------------
+
+def test_cors_allows_no_origin_by_default(client, monkeypatch):
+    from app.config import Settings
+    monkeypatch.delenv("CORS_ORIGINS", raising=False)
+    assert Settings(_env_file=None).CORS_ORIGINS == []
+    resp = client.get("/api/health", headers={"Origin": "http://localhost:5173"})
+    assert "access-control-allow-origin" not in resp.headers
+
+
+def test_cors_origins_set_explicitly_are_allowed(monkeypatch):
+    from app.config import Settings
+    monkeypatch.setenv("CORS_ORIGINS", '["http://localhost:5173"]')
+    assert Settings(_env_file=None).CORS_ORIGINS == ["http://localhost:5173"]
