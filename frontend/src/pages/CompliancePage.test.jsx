@@ -75,6 +75,20 @@ describe('CompliancePage', () => {
     expect(screen.queryByText(/\[object Object\]/)).toBeNull()
   })
 
+  it('names the pilot and certification on an expiring-cert item, apart from its label', async () => {
+    mockMount({
+      compliance: () => HttpResponse.json({
+        ...COMPLIANCE,
+        expiring_certifications: [
+          { pilot_id: 32, pilot_name: 'Robin Vale', cert_type_id: 1, cert_type_name: 'Part 107', days_remaining: 22 },
+        ],
+      }),
+    })
+    renderWithProviders(<CompliancePage />, { role: 'admin' })
+    const item = await screen.findByRole('button', { name: /Expiring Certification/ })
+    expect(item).toHaveTextContent('Expiring Certification Robin Vale - Part 107 - 22 days remaining')
+  })
+
   it('shows the failure fallback when /dashboard/compliance 500s', async () => {
     mockMount({ compliance: () => HttpResponse.json({ detail: 'boom' }, { status: 500 }) })
     renderWithProviders(<CompliancePage />, { role: 'admin' })

@@ -383,3 +383,16 @@ def test_matrix_shows_an_orphaned_renewed_cert_so_it_can_be_removed(client, db, 
     live = _cert(db, pilot.id, ct.id, status="complete", expiry=date(2030, 1, 1))
     cell = client.get("/api/certifications/matrix", headers=admin_headers).json()["matrix"][0]["certs"][str(ct.id)]
     assert cell["id"] == live.id
+
+
+# --- C-F22: the compliance expiring-cert item names the pilot and the cert ---
+
+
+def test_compliance_expiring_cert_carries_pilot_and_cert_names(client, db, admin_headers):
+    pilot = _pilot(db, first="Robin", last="Vale")
+    ct = _cert_type(db, "Part 107")
+    _cert(db, pilot.id, ct.id, expiry=TODAY + timedelta(days=20))
+    items = client.get("/api/dashboard/compliance", headers=admin_headers).json()["expiring_certifications"]
+    assert len(items) == 1
+    assert items[0]["pilot_name"] == "Robin Vale"
+    assert items[0]["cert_type_name"] == "Part 107"

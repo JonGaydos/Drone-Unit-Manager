@@ -4,6 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, extract
+from sqlalchemy.orm import joinedload
 
 from app.deps import DBSession, CurrentUser
 from app.responses import responses
@@ -642,7 +643,9 @@ def compliance_dashboard(db: DBSession, user: CurrentUser):
     ).scalar()
 
     # Count certs expiring within 90 days (exclude renewed and inactive pilots)
-    expiring_soon = db.query(PilotCertification).filter(
+    expiring_soon = db.query(PilotCertification).options(
+        joinedload(PilotCertification.pilot), joinedload(PilotCertification.certification_type),
+    ).filter(
         PilotCertification.expiration_date.between(today, soon),
         PilotCertification.status.notin_(["not_issued", "renewed"]),
         PilotCertification.pilot_id.in_(active_pilot_ids),
@@ -731,7 +734,9 @@ def _certification_brief(c, today) -> dict:
     """Compact expiring-certification payload for the compliance dashboard."""
     return {
         "pilot_id": c.pilot_id,
+        "pilot_name": c.pilot.full_name if c.pilot else None,
         "cert_type_id": c.certification_type_id,
+        "cert_type_name": c.certification_type.name if c.certification_type else None,
         "expiration_date": c.expiration_date.isoformat() if c.expiration_date else None,
         "days_remaining": (c.expiration_date - today).days if c.expiration_date else None,
     }

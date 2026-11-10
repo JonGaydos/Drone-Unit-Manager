@@ -81,7 +81,7 @@ const COUNT_ATTENTION_ALERTS = [
 function expiringCertItem(c) {
   return {
     type: 'Expiring Certification',
-    detail: `Pilot #${c.pilot_id} - ${c.days_remaining} days remaining`,
+    detail: `${c.pilot_name || `Pilot #${c.pilot_id}`} - ${c.cert_type_name || 'Certification'} - ${c.days_remaining} days remaining`,
     severity: c.days_remaining <= 30 ? 'high' : 'medium',
     link: '/certifications',
   }
@@ -566,8 +566,8 @@ export default function CompliancePage() {
                 </span>
                 <span className="flex-1 text-sm text-foreground">
                   {item.type}
-                  {item.count ? <span className="text-muted-foreground ml-1">({item.count})</span> : null}
-                  {item.detail ? <span className="text-muted-foreground ml-2 text-xs">{item.detail}</span> : null}
+                  {item.count ? <>{' '}<span className="text-muted-foreground">({item.count})</span></> : null}
+                  {item.detail ? <>{' '}<span className="text-muted-foreground ml-1 text-xs">{item.detail}</span></> : null}
                 </span>
                 <ChevronRight className="w-4 h-4 text-muted-foreground" />
               </button>
