@@ -330,6 +330,18 @@ def _logo_image(logo_path: str, width: float):
     return flowable
 
 
+def _chart_image(buf, max_width: float, max_height: float):
+    """The chart PNG as a flowable, as large as fits the box at its own aspect
+    ratio. Forced into a fixed box, a pie chart printed as an ellipse."""
+    from PIL import Image as PILImage
+    from reportlab.platypus import Image as RLImage
+    with PILImage.open(buf) as img:
+        img_w, img_h = img.size
+    buf.seek(0)
+    scale = min(max_width / img_w, max_height / img_h)
+    return RLImage(buf, width=img_w * scale, height=img_h * scale)
+
+
 def _pdf_masthead(data: dict, config: ReportConfig, org_name: str, logo_path: str | None, theme: SimpleNamespace) -> list:
     """The masthead flowables: logo on the left with organization over report
     title to its right, or the text stacked when there is no logo."""
@@ -395,7 +407,7 @@ def _render_report_pdf(data: dict, config: ReportConfig, org_name: str, logo_pat
     matplotlib.use("Agg")
     from reportlab.lib.pagesizes import letter
     from reportlab.lib.units import inch
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RLImage
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 
     theme = _pdf_theme()
     buffer = io.BytesIO()
@@ -415,7 +427,7 @@ def _render_report_pdf(data: dict, config: ReportConfig, org_name: str, logo_pat
     if chart_buf:
         elements.extend([
             Paragraph("Chart", theme.heading_style),
-            RLImage(chart_buf, width=6.5 * inch, height=3 * inch),
+            _chart_image(chart_buf, 6.5 * inch, 3 * inch),
             Spacer(1, 12),
         ])
 

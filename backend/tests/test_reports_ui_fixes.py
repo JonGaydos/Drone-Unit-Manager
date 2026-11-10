@@ -175,3 +175,18 @@ def test_pilot_hours_report_keeps_inactive_pilots_who_flew_in_the_period(client,
     summary = client.post("/api/reports/generate", headers=admin_headers,
                           json={**body, "report_type": "flight_summary"}).json()["summary"]
     assert data["summary"]["total_hours"] == summary["total_hours"]
+
+
+# --- E-9: PDF charts keep their aspect ratio ---
+
+
+def test_pdf_chart_image_keeps_the_chart_aspect_ratio():
+    from PIL import Image
+    from app.routers.reports import _chart_image, _generate_chart
+    buf = _generate_chart("battery_status", {"rows": [{"status": "active"}, {"status": "retired"}]})
+    with Image.open(buf) as img:
+        ratio = img.size[0] / img.size[1]
+    buf.seek(0)
+    flowable = _chart_image(buf, max_width=468, max_height=216)
+    assert flowable.drawWidth <= 468 and flowable.drawHeight <= 216
+    assert abs(flowable.drawWidth / flowable.drawHeight - ratio) < 0.01
