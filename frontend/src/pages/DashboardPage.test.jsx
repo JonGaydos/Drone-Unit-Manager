@@ -100,6 +100,23 @@ describe('DashboardPage', () => {
     expect(screen.getByText(/authority current/)).toBeInTheDocument()
   })
 
+  it('names the pilot and certification on a cert expiration and links to the pilot (E-2)', async () => {
+    mockDashboard({
+      ...POPULATED,
+      compliance: {
+        ...POPULATED.compliance,
+        expiring_certifications: [
+          { pilot_id: 9, pilot_name: 'Robin Vale', cert_type_name: 'Part 107', days_remaining: 12 },
+        ],
+      },
+    })
+    renderWithProviders(<DashboardPage />, { role: 'admin' })
+
+    const entry = await screen.findByText('Robin Vale - Part 107')
+    expect(entry.closest('a')).toHaveAttribute('href', '/pilots/9')
+    expect(screen.queryByText(/Pilot #9/)).toBeNull()
+  })
+
   it('surfaces the compliance score cap reason on the hero tile', async () => {
     mockDashboard({
       ...POPULATED,

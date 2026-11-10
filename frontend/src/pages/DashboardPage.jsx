@@ -539,13 +539,15 @@ export default function DashboardPage() {
           const days = c.days_remaining
           return (
             <li key={`${c.pilot_id}-${idx}`}>
-              <Link to="/certifications" className="flex items-center gap-2 px-4 py-2 hover:bg-secondary/50 transition-colors">
+              <Link to={`/pilots/${c.pilot_id}`} className="flex items-center gap-2 px-4 py-2 hover:bg-secondary/50 transition-colors">
                 <span className={`inline-flex w-14 justify-center px-1.5 py-0.5 rounded-full text-[10px] font-medium border ${
                   countdownTone(days < 0, days <= 30)
                 }`}>
                   {countdownLabel(days)}
                 </span>
-                <span className="text-xs text-foreground truncate flex-1">Pilot #{c.pilot_id}</span>
+                <span className="text-xs text-foreground truncate flex-1">
+                  {[c.pilot_name || `Pilot #${c.pilot_id}`, c.cert_type_name].filter(Boolean).join(' - ')}
+                </span>
               </Link>
             </li>
           )
