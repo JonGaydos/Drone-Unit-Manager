@@ -3,7 +3,7 @@ from html import escape
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session, joinedload
 
 from app.deps import DBSession
@@ -19,6 +19,10 @@ router = APIRouter(prefix="/api/currency", tags=["currency"])
 ViewUser = Annotated[User, Depends(require_permission("certifications.view"))]
 ManageUser = Annotated[User, Depends(require_permission("certifications.manage"))]
 
+# A rule's look-back window: at least one day, at most ten years. Larger values
+# overflow the date arithmetic.
+MAX_PERIOD_DAYS = 3650
+PeriodDays = Annotated[int, Field(ge=1, le=MAX_PERIOD_DAYS)]
 
 
 class RuleCreate(BaseModel):
@@ -26,7 +30,7 @@ class RuleCreate(BaseModel):
     description: Optional[str] = None
     vehicle_model: Optional[str] = None
     required_hours: float
-    period_days: int
+    period_days: PeriodDays
     required_flights: Optional[int] = None
     is_active: bool = True
 
@@ -36,7 +40,7 @@ class RuleUpdate(BaseModel):
     description: Optional[str] = None
     vehicle_model: Optional[str] = None
     required_hours: Optional[float] = None
-    period_days: Optional[int] = None
+    period_days: Optional[PeriodDays] = None
     required_flights: Optional[int] = None
     is_active: Optional[bool] = None
 
@@ -90,6 +94,13 @@ def delete_rule(rule_id: int, db: DBSession, user: ManageUser):
     return {"ok": True}
 
 
+def _period(rule) -> timedelta:
+    """The rule's window, kept inside the allowed range so a row stored before
+    validation (huge, zero or negative period_days) cannot crash or invert the
+    date arithmetic."""
+    return timedelta(days=min(max(rule.period_days or 1, 1), MAX_PERIOD_DAYS))
+
+
 def _currency_expiry(flights_in_period, rule):
     """The date currency lapses: walk newest -> oldest accumulating hours and
     flights, find the flight that first meets ALL minimums, and age it out by the
@@ -103,13 +114,13 @@ def _currency_expiry(flights_in_period, rule):
         hours_ok = cum_hours >= rule.required_hours
         flights_ok = rule.required_flights is None or cum_flights >= rule.required_flights
         if hours_ok and flights_ok and f.date:
-            return str(f.date + timedelta(days=rule.period_days))
+            return str(f.date + _period(rule))
     return None
 
 
 def _evaluate_rule(rule: CurrencyRule, flights: list[Flight], today):
     """Evaluate one currency rule against an already-loaded flight list."""
-    cutoff = today - timedelta(days=rule.period_days)
+    cutoff = today - _period(rule)
     model = rule.vehicle_model.lower() if rule.vehicle_model else None
     # In-period flights, matching the prior SQL filter: date >= cutoff, and for
     # model-specific rules an inner join on a matching vehicle model (flights
@@ -166,7 +177,7 @@ def flights_by_pilot(db: Session, pilot_ids: list[int], rules: list[CurrencyRule
     """
     if not pilot_ids or not rules:
         return {}
-    since = date.today() - timedelta(days=max(rule.period_days for rule in rules))
+    since = date.today() - max(_period(rule) for rule in rules)
     grouped: dict[int, list[Flight]] = {}
     for f in db.query(Flight).options(joinedload(Flight.vehicle)).filter(
         Flight.pilot_id.in_(pilot_ids), Flight.date >= since, counted_flights_filter(),
