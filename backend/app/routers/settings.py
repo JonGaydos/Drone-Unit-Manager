@@ -144,6 +144,8 @@ def _check_value(key: str, value: str) -> None:
         raise HTTPException(422, f"{key} must be true or false")
     if key == "weather_thresholds":
         _check_weather_thresholds(value)
+    if key == "org_name" and not value.strip():
+        raise HTTPException(422, "Organization name is required")
 
 
 def _redact_value(key: str, value: str | None) -> str:

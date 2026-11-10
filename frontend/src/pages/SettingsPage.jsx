@@ -515,9 +515,13 @@ export default function SettingsPage() {
   }
 
   const handleSave = async () => {
+    const changed = changedInputs()
+    if ('org_name' in changed) {
+      changed.org_name = changed.org_name.trim()
+      if (!changed.org_name) { toast.error('Required: Organization Name'); return }
+    }
     setSaving(true)
     try {
-      const changed = changedInputs()
       const items = Object.entries(changed).map(([key, value]) => ({ key, value }))
       if (items.length) await api.put('/settings/bulk', items)
       setSettings(prev => ({ ...prev, ...changed }))

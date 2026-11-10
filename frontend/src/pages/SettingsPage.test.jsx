@@ -657,4 +657,20 @@ describe('SettingsPage settings fixes', () => {
     expect(await screen.findByRole('heading', { name: 'Email Digest' })).toBeInTheDocument()
     expect(await screen.findByLabelText('Send me email digests')).toBeChecked()
   })
+
+  // F-07: a blank organization name was saved.
+  it('refuses a blank organization name without saving', async () => {
+    let saved = false
+    mockMount()
+    server.use(http.put('/api/settings/bulk', () => { saved = true; return HttpResponse.json({ ok: true }) }))
+    const { user } = renderWithProviders(<SettingsPage />, { role: 'admin' })
+    await screen.findByText('Quarterly currency')
+    const orgInput = await screen.findByDisplayValue('Metro PD Drone Unit')
+    await user.clear(orgInput)
+    await user.type(orgInput, '   ')
+    await user.click(screen.getByRole('button', { name: /Save Settings/ }))
+
+    expect(await screen.findByText('Required: Organization Name')).toBeInTheDocument()
+    expect(saved).toBe(false)
+  })
 })

@@ -201,3 +201,16 @@ def test_weather_thresholds_accept_a_sound_set(client, db, admin_headers):
     resp = client.put(BULK_URL, headers=admin_headers, json=[{"key": "weather_thresholds", "value": value}])
     assert resp.status_code == 200, resp.text
     assert _stored(db, "weather_thresholds") == value
+
+
+# --- F-07: organization name is required ----------------------------------------
+
+@pytest.mark.parametrize("value", ["", "   "])
+def test_org_name_refuses_blank(client, db, admin_headers, value):
+    db.add(Setting(key="org_name", value="Sample Unit"))
+    db.commit()
+    resp = client.put(BULK_URL, headers=admin_headers, json=[{"key": "org_name", "value": value}])
+    assert resp.status_code == 422, resp.text
+    resp = client.put("/api/settings", headers=admin_headers, json={"key": "org_name", "value": value})
+    assert resp.status_code == 422, resp.text
+    assert _stored(db, "org_name") == "Sample Unit"
