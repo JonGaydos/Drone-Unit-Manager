@@ -267,7 +267,7 @@ function ProviderCard({ provider, settings }) {
             )}
             <div className="flex flex-wrap gap-2">
               <div className="flex flex-col items-start">
-                <button onClick={() => handleSync(false)} disabled={!!syncType}
+                <button onClick={() => handleSync(false)} disabled={!!syncType || !tokenConfigured}
                   title="Everyday sync. Imports flights added since the last sync, refreshes drones, batteries, controllers, sensor packages and attachments, and pulls telemetry for up to 10 flights."
                   className="px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90 flex items-center gap-1.5 disabled:opacity-50">
                   {syncType === 'sync' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />} Sync Now
@@ -275,7 +275,7 @@ function ProviderCard({ provider, settings }) {
                 <span className="text-[10px] text-muted-foreground mt-0.5 px-1">New flights + fleet &amp; telemetry refresh</span>
               </div>
               <div className="flex flex-col items-start">
-                <button onClick={() => handleSync(true)} disabled={!!syncType}
+                <button onClick={() => handleSync(true)} disabled={!!syncType || !tokenConfigured}
                   title="Catch-up sync. Like Sync Now but ignores the last-sync date to re-check the recent flights the Skydio API returns (about 200 — the API does not expose older history), and deletes empty flights (no date or duration). Also pulls telemetry for 10. For older history, use the flight-log import instead."
                   className="px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90 flex items-center gap-1.5 disabled:opacity-50">
                   {syncType === 'full' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />} Full Sync
@@ -283,7 +283,7 @@ function ProviderCard({ provider, settings }) {
                 <span className="text-[10px] text-muted-foreground mt-0.5 px-1">Re-check recent flights, clear empties, + telemetry</span>
               </div>
               <div className="flex flex-col items-start">
-                <button onClick={handleSyncTelemetry} disabled={syncingTelemetry}
+                <button onClick={handleSyncTelemetry} disabled={syncingTelemetry || !tokenConfigured}
                   title="Fetches only detailed flight-path data (GPS, altitude, speed) for the next 10 flights missing it. Press again to backfill more; also runs on a schedule."
                   className="px-3 py-1.5 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90 flex items-center gap-1.5 disabled:opacity-50">
                   {syncingTelemetry ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />} Sync Telemetry (10)

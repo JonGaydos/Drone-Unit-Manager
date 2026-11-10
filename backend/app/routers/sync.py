@@ -105,6 +105,16 @@ def _run_telemetry(db) -> dict:
     return {"synced": synced, "remaining": max(0, remaining)}
 
 
+TOKEN_NOT_CONFIGURED = "Skydio API token not configured. Save a token under Integrations first."
+
+
+def _require_token(db) -> None:
+    """A sync with no stored token can only fail, so refuse it up front."""
+    from app.services.sync_manager import _build_creds
+    if not _build_creds(db, "skydio").api_token:
+        raise HTTPException(400, TOKEN_NOT_CONFIGURED)
+
+
 def _start_job(kind: str, work, actor: dict) -> dict:
     """Take the sync lock here, so a busy lock is a 409 on this request, and
     run work(db) as a job on its own session; the job releases the lock.
@@ -127,7 +137,7 @@ def _start_job(kind: str, work, actor: dict) -> dict:
         raise
 
 
-@router.post("/now", response_model=SyncResultResponse, responses=responses(409))
+@router.post("/now", response_model=SyncResultResponse, responses=responses(400, 409))
 def sync_now(
     db: DBSession,
     admin: AdminUser,
@@ -139,33 +149,38 @@ def sync_now(
         full: If True, fetch all flights and clean up empties.
         sync_telemetry: If True (default), auto-fetch telemetry for up to 10 un-synced flights after sync.
     """
+    _require_token(db)
     logger.info("Manual sync triggered by admin (full=%s, sync_telemetry=%s)", full, sync_telemetry)
     with sync_guard_http():
         return SyncResultResponse(**_run_sync(db, full, sync_telemetry, admin.id, admin.display_name))
 
 
-@router.post("/now/start", responses=responses(401, 409))
+@router.post("/now/start", responses=responses(400, 401, 409))
 def start_sync(
+    db: DBSession,
     admin: AdminUser,
     full: bool = False,
     sync_telemetry: bool = True):
     """Start a sync as a background job and return its id; poll /jobs/{id}."""
+    _require_token(db)
     logger.info("Background sync started by admin (full=%s, sync_telemetry=%s)", full, sync_telemetry)
     # Plain values, not the ORM user: the job outlives this request's session.
     admin_id, admin_name = admin.id, admin.display_name
     return _start_job("sync", lambda db: _run_sync(db, full, sync_telemetry, admin_id, admin_name), actor_fields(admin))
 
 
-@router.post("/telemetry", responses=responses(401, 409))
+@router.post("/telemetry", responses=responses(400, 401, 409))
 def sync_telemetry_batch(db: DBSession, user: AdminUser):
     """Fetch telemetry for up to 10 flights that don't have it yet."""
+    _require_token(db)
     with sync_guard_http():
         return _run_telemetry(db)
 
 
-@router.post("/telemetry/start", responses=responses(401, 409))
-def start_telemetry(user: AdminUser):
+@router.post("/telemetry/start", responses=responses(400, 401, 409))
+def start_telemetry(db: DBSession, user: AdminUser):
     """Start a telemetry batch as a background job; poll /jobs/{id}."""
+    _require_token(db)
     return _start_job("telemetry", _run_telemetry, actor_fields(user))
 
 

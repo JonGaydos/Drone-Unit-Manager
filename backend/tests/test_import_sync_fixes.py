@@ -5,6 +5,8 @@ import csv
 import io
 from datetime import date
 
+import pytest
+
 from app.models import Flight, Pilot
 from app.services.excel_import import import_skydio_csv
 
@@ -74,3 +76,38 @@ def test_mixed_import_creates_only_the_pilot_who_flew(db):
     emails = _pilot_emails(db)
     assert "flew.once@example.com" in emails
     assert "skipped.only@example.com" not in emails
+
+
+# --- I-4: no sync starts without a Skydio token ------------------------------
+
+SYNC_STARTS = ["/api/sync/now/start", "/api/sync/now", "/api/sync/telemetry/start", "/api/sync/telemetry"]
+
+
+def _set_token(db, value):
+    from app.models.setting import Setting
+    db.add(Setting(key="skydio_api_token", value=value))
+    db.commit()
+
+
+def _sync_lock_free():
+    from app.services.sync_lock import acquire_or_409, release
+    acquire_or_409()
+    release()
+    return True
+
+
+@pytest.mark.parametrize("path", SYNC_STARTS)
+def test_sync_start_without_a_token_is_400(client, admin_headers, path):
+    resp = client.post(path, headers=admin_headers)
+    assert resp.status_code == 400, resp.text
+    assert "token" in resp.json()["detail"].lower()
+    assert _sync_lock_free()
+
+
+@pytest.mark.parametrize("path", SYNC_STARTS)
+def test_sync_start_after_disconnect_is_400(client, db, admin_headers, path):
+    _set_token(db, "t")
+    assert client.post("/api/sync/disconnect", headers=admin_headers).status_code == 200
+
+    resp = client.post(path, headers=admin_headers)
+    assert resp.status_code == 400, resp.text

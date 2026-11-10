@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { renderWithProviders } from '@/test/render'
@@ -188,6 +188,31 @@ describe('IntegrationsPage', () => {
     await user.click(await screen.findByRole('button', { name: /Sync Now/ }))
     expect(await screen.findByText(/Synced: 3 new flights/)).toBeInTheDocument()
     expect(started).toBe('?full=false')
+  })
+
+  it('disables the sync buttons when no token is stored', async () => {
+    mockMount({ settings: () => HttpResponse.json([]) })
+    const { user } = renderWithProviders(<IntegrationsPage />, { role: 'admin' })
+    await user.click(await screen.findByText('Skydio'))
+    expect(await screen.findByRole('button', { name: /Sync Now/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Full Sync/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Sync Telemetry/ })).toBeDisabled()
+  })
+
+  it('disables the sync buttons after Disconnect', async () => {
+    mockMount()
+    server.use(http.post('/api/sync/disconnect', () => HttpResponse.json({ ok: true })))
+    const { user } = renderWithProviders(<IntegrationsPage />, { role: 'admin' })
+    await user.click(await screen.findByText('Skydio'))
+    expect(await screen.findByRole('button', { name: /Sync Now/ })).toBeEnabled()
+
+    await user.click(screen.getByRole('button', { name: /Disconnect/ }))
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Disconnect' }))
+
+    expect(await screen.findByText('Skydio disconnected')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Sync Now/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Sync Telemetry/ })).toBeDisabled()
   })
 
   it('shows the reason when the sync job fails', async () => {
