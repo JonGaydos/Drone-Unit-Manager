@@ -262,10 +262,11 @@ function rowEditForm(flight, canReview) {
 }
 
 /** The PATCH body for an inline edit. A duration cannot be cleared, so an emptied
- *  field drops out rather than being sent. */
+ *  field drops out rather than being sent; an emptied date is sent as null. */
 function rowEditPayload(changed) {
   const data = { ...changed }
   if ('pilot_id' in data) data.pilot_id = data.pilot_id ? Number.parseInt(data.pilot_id, 10) : null
+  if (data.date === '') data.date = null
   if (data.duration_seconds) data.duration_seconds = Number.parseInt(data.duration_seconds, 10)
   else delete data.duration_seconds
   return data

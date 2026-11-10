@@ -450,6 +450,18 @@ describe('FlightsPage', () => {
     await waitFor(() => expect(body).toEqual({ duration_seconds: 700 }))
   })
 
+  it('clearing the date in the row editor sends null', async () => {
+    let body = null
+    mockMount()
+    server.use(http.patch('/api/flights/:id', async ({ request }) => { body = await request.json(); return HttpResponse.json({}) }))
+    const { user, container } = renderWithProviders(<FlightsPage />, { user: { id: 7, username: 'pilot', role: 'pilot', pilot_id: 5 } })
+    await screen.findByRole('link', { name: 'Jane Doe' })
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.clear(container.querySelector('tr input[type="date"]'))
+    await user.click(screen.getByTitle('Save'))
+    await waitFor(() => expect(body).toEqual({ date: null }))
+  })
+
   it('clearing the duration alone sends no PATCH and shows no update message', async () => {
     let patched = false
     mockMount()
