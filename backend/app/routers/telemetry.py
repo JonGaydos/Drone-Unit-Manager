@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.deps import DBSession, TelemetryDBSession
 from app.models.flight import Flight
@@ -74,13 +74,13 @@ def _downsample_with_averaging(points, max_points):
     return result
 
 
-@router.get("/flight/{flight_id}", responses=responses(404))
+@router.get("/flight/{flight_id}", responses=responses(404, 422))
 def get_flight_telemetry(
     flight_id: int,
     db: DBSession,
     tdb: TelemetryDBSession,
     user: Annotated[User, Depends(require_permission("flights.view"))],
-    max_points: int = 2000):
+    max_points: Annotated[int, Query(ge=1)] = 2000):
     """Get telemetry data points for a specific flight.
 
     Returns up to max_points telemetry records. When the flight has more

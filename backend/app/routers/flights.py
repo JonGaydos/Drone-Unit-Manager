@@ -3,7 +3,7 @@ from datetime import date
 from math import ceil
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload
@@ -141,8 +141,9 @@ def list_flights(
     search: str | None = None,
     sort: str = "date",
     order: str = "desc",
-    page: int = 1,
-    per_page: int = 100):
+    page: Annotated[int, Query(ge=1)] = 1,
+    # 1000 is what the Analytics page asks for when it pages through every flight.
+    per_page: Annotated[int, Query(ge=1, le=1000)] = 100):
     filters = []
     if pilot_id:
         filters.append(Flight.pilot_id == pilot_id)
@@ -172,7 +173,7 @@ def list_flights(
         "total": total,
         "page": page,
         "per_page": per_page,
-        "total_pages": ceil(total / per_page) if per_page > 0 else 1,
+        "total_pages": ceil(total / per_page),
     }
 
 

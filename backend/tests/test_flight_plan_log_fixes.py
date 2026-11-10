@@ -201,3 +201,24 @@ def test_flight_addresses_have_a_max_length(client, db, admin_headers):
     f = _flight(db)
     assert client.patch(f"{FLIGHTS_URL}/{f.id}", headers=admin_headers,
                         json={"landing_address": "B" * 2009}).status_code == 422
+
+
+# --- B-4 / B-6: query bounds ---
+
+
+def test_telemetry_max_points_must_be_positive(client, db, admin_headers):
+    f = _flight(db)
+    for bad in (0, -5):
+        r = client.get(f"/api/telemetry/flight/{f.id}?max_points={bad}", headers=admin_headers)
+        assert r.status_code == 422, r.text
+    assert client.get(f"/api/telemetry/flight/{f.id}?max_points=1", headers=admin_headers).status_code == 200
+
+
+def test_flights_pagination_is_bounded(client, db, admin_headers):
+    _flight(db)
+    # The Analytics page pages through every flight 1000 at a time.
+    for query in ("page=0", "page=-1", "per_page=0", "per_page=-1", "per_page=1001"):
+        r = client.get(f"{FLIGHTS_URL}?{query}", headers=admin_headers)
+        assert r.status_code == 422, (query, r.text)
+    r = client.get(f"{FLIGHTS_URL}?page=1&per_page=1000", headers=admin_headers)
+    assert r.status_code == 200
