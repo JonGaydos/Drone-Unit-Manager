@@ -313,15 +313,20 @@ def send_currency_reminders(
     if not rules:
         raise HTTPException(400, "No active currency rules — nothing to remind about.")
 
+    counts = {"sent": 0, "skipped_no_email": 0, "skipped_current": 0, "failed": 0,
+              "skipped_inactive": 0, "not_found": 0}
     if data.pilot_ids:
-        pilots = db.query(Pilot).filter(Pilot.id.in_(data.pilot_ids), Pilot.status == "active").all()
+        named = db.query(Pilot).filter(Pilot.id.in_(data.pilot_ids)).all()
+        pilots = [p for p in named if p.status == "active"]
+        # Named ids that get no reminder say why, rather than vanishing.
+        counts["skipped_inactive"] = len(named) - len(pilots)
+        counts["not_found"] = len(set(data.pilot_ids) - {p.id for p in named})
     else:
         pilots = db.query(Pilot).filter(Pilot.status == "active").all()
 
     org_name_row = db.query(Setting).filter(Setting.key == "org_name").first()
     org_name = org_name_row.value if org_name_row else APP_TITLE
 
-    counts = {"sent": 0, "skipped_no_email": 0, "skipped_current": 0, "failed": 0}
     recipients_logged: list[str] = []
     intro = (data.custom_message or "").strip()
 
@@ -334,7 +339,8 @@ def send_currency_reminders(
 
     log_action(db, admin.id, admin.display_name, "send_reminders", "currency",
                details=f"sent={counts['sent']}, skipped_no_email={counts['skipped_no_email']}, "
-                       f"skipped_current={counts['skipped_current']}, failed={counts['failed']}; "
+                       f"skipped_current={counts['skipped_current']}, failed={counts['failed']}, "
+                       f"skipped_inactive={counts['skipped_inactive']}, not_found={counts['not_found']}; "
                        f"recipients={'; '.join(recipients_logged) if recipients_logged else 'none'}")
     db.commit()
 

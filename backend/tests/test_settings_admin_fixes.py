@@ -319,3 +319,42 @@ def test_preferences_leave_out_keeps(client, db, pilot_headers):
 def test_preferences_refuse_null_on_required_fields(client, db, pilot_headers, field):
     resp = client.put(PREFS_URL, headers=pilot_headers, json={field: None})
     assert resp.status_code == 400, resp.text
+
+
+# --- G-5: reminders to unknown or inactive pilots -----------------------------------
+
+REMINDERS_URL = "/api/currency/send-reminders"
+
+
+@pytest.fixture
+def reminder_setup(db):
+    """SMTP on, one active rule, an active lapsed pilot and an inactive one."""
+    from app.models.currency_rule import CurrencyRule
+    from app.models.pilot import Pilot
+    db.add(Setting(key="smtp_enabled", value="true"))
+    db.add(CurrencyRule(name="Monthly hour", required_hours=1, period_days=30, is_active=True))
+    active = Pilot(first_name="Robin", last_name="Vale", status="active", email="robin@example.test")
+    gone = Pilot(first_name="Sam", last_name="Reed", status="inactive", email="sam@example.test")
+    db.add_all([active, gone])
+    db.commit()
+    return active, gone
+
+
+def test_reminders_count_unknown_and_inactive_pilots(client, db, admin_headers, reminder_setup, monkeypatch):
+    from app.services import email_digest
+    active, gone = reminder_setup
+    monkeypatch.setattr(email_digest, "send_email", lambda *a, **k: True)
+    resp = client.post(REMINDERS_URL, headers=admin_headers,
+                       json={"pilot_ids": [active.id, gone.id, 99999]})
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["sent"] == 1
+    assert body["skipped_inactive"] == 1
+    assert body["not_found"] == 1
+
+
+def test_reminders_to_all_report_no_unknown_or_inactive(client, db, admin_headers, reminder_setup, monkeypatch):
+    from app.services import email_digest
+    monkeypatch.setattr(email_digest, "send_email", lambda *a, **k: True)
+    body = client.post(REMINDERS_URL, headers=admin_headers, json={}).json()
+    assert body["sent"] == 1 and body["skipped_inactive"] == 0 and body["not_found"] == 0
