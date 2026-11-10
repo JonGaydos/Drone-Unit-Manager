@@ -1,9 +1,16 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { screen } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { renderWithProviders } from '@/test/render'
 import WeatherPage from './WeatherPage'
+
+// The map is replaced by a button that "clicks" one fixed point.
+vi.mock('@/components/FlightMap', () => ({
+  LocationPickerMap: ({ onSelect }) => (
+    <button type="button" onClick={() => onSelect(30.4734, -87.1866)}>Pick map point</button>
+  ),
+}))
 
 // Mount: GET /settings -> resolveOrgLocation -> GET /weather/briefing?lat&lon.
 // LocationPickerMap renders under the react-leaflet stub. recharts charts use
@@ -114,5 +121,42 @@ describe('WeatherPage', () => {
     expect(requested.some(r => r.startsWith('30.371,-86.203'))).toBe(true)
     // the resolved address replaces what was typed
     expect(screen.getByLabelText('Coordinates or Address')).toHaveValue('Freeport, FL 32439')
+  })
+
+  it('uses edited latitude and longitude fields instead of geocoding the address text', async () => {
+    let geocoded = false
+    const requested = mockBriefingRecorder([
+      http.get('/api/geocode', () => { geocoded = true; return HttpResponse.json({ lat: 1, lon: 2 }) }),
+    ])
+    const { user } = renderWithProviders(<WeatherPage />, { role: 'admin' })
+    await screen.findByText('GO')
+
+    await user.clear(screen.getByLabelText('Latitude'))
+    await user.type(screen.getByLabelText('Latitude'), '30.4734')
+    await user.clear(screen.getByLabelText('Longitude'))
+    await user.type(screen.getByLabelText('Longitude'), '-87.1866')
+    await user.click(screen.getByRole('button', { name: /Check Weather/ }))
+
+    await screen.findByText('GO')
+    expect(geocoded).toBe(false)
+    expect(requested.at(-1)).toBe('30.4734,-87.1866')
+  })
+
+  it('uses a map point instead of geocoding the address text', async () => {
+    let geocoded = false
+    const requested = mockBriefingRecorder([
+      http.get('/api/geocode', () => { geocoded = true; return HttpResponse.json({ lat: 1, lon: 2 }) }),
+      http.get('/api/geocode/reverse', () => HttpResponse.json({ display_name: 'Somewhere, FL' })),
+    ])
+    const { user } = renderWithProviders(<WeatherPage />, { role: 'admin' })
+    await screen.findByText('GO')
+
+    await user.click(screen.getByRole('button', { name: 'Pick map point' }))
+    await screen.findByDisplayValue('Somewhere, FL')
+    await user.click(screen.getByRole('button', { name: /Check Weather/ }))
+
+    await screen.findByText('GO')
+    expect(geocoded).toBe(false)
+    expect(requested.at(-1)).toBe('30.473400,-87.186600')
   })
 })
