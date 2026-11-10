@@ -751,4 +751,36 @@ describe('SettingsPage settings fixes', () => {
       expect(patched).toBe(false)
     })
   })
+
+  // F-13: the reset said 6 characters while the server needs 12 with an
+  // uppercase letter and a number.
+  it('checks a reset password against the server policy before sending it', async () => {
+    let posted = false
+    mockMount()
+    server.use(
+      http.get('/api/permissions', () => HttpResponse.json({ registry: [], values: {} })),
+      http.post('/api/auth/users/2/reset-password', () => { posted = true; return HttpResponse.json({ ok: true }) }),
+    )
+    const { user } = renderWithProviders(<SettingsPage />, { role: 'admin' })
+    await user.click(await screen.findByRole('button', { name: 'Users' }))
+    const row = (await screen.findByText('Jamie Pilot')).closest('tr')
+    await user.click(within(row).getByTitle('Reset password'))
+    const field = within(row).getByPlaceholderText('New password')
+
+    await user.click(within(row).getByRole('button', { name: 'Set' }))
+    expect(await screen.findByText('Password must be at least 12 characters')).toBeInTheDocument()
+    await user.type(field, 'longenough123')
+    await user.click(within(row).getByRole('button', { name: 'Set' }))
+    expect(await screen.findByText('Password must contain at least one uppercase letter')).toBeInTheDocument()
+    await user.clear(field)
+    await user.type(field, 'LongEnoughPass')
+    await user.click(within(row).getByRole('button', { name: 'Set' }))
+    expect(await screen.findByText('Password must contain at least one number')).toBeInTheDocument()
+    expect(posted).toBe(false)
+
+    await user.clear(field)
+    await user.type(field, 'LongEnough123')
+    await user.click(within(row).getByRole('button', { name: 'Set' }))
+    await waitFor(() => expect(posted).toBe(true))
+  })
 })

@@ -53,6 +53,14 @@ function buildSidebarItems(rawConfig) {
   }).sort((a, b) => a.order - b.order)
 }
 
+/** Why the server would refuse a new password (auth.py _validate_password), or null. */
+function passwordProblem(password) {
+  if (password.length < 12) return 'Password must be at least 12 characters'
+  if (!/[A-Z]/.test(password)) return 'Password must contain at least one uppercase letter'
+  if (!/\d/.test(password)) return 'Password must contain at least one number'
+  return null
+}
+
 /** A pilot login with no linked pilot record owns no profile and only the flights
  *  it logged, so Own settings do little for it until an admin links it. */
 function NoLinkedPilotBadge({ user }) {
@@ -498,7 +506,8 @@ export default function SettingsPage() {
   }
 
   const handleResetPassword = async (userId) => {
-    if (resetPw.length < 6) { toast.warning('Password must be at least 6 characters'); return }
+    const problem = passwordProblem(resetPw)
+    if (problem) { toast.warning(problem); return }
     try {
       await api.post(`/auth/users/${userId}/reset-password`, { new_password: resetPw })
       setResetUserId(null)
@@ -618,7 +627,7 @@ export default function SettingsPage() {
                 </div>
                 <div>
                   <label htmlFor="confirm-new-password" className="block text-sm font-medium text-foreground mb-1">Confirm New Password</label>
-                  <input id="confirm-new-password" type="password" value={pwForm.confirm_password} onChange={e => setPwForm({...pwForm, confirm_password: e.target.value})} required minLength={6}
+                  <input id="confirm-new-password" type="password" value={pwForm.confirm_password} onChange={e => setPwForm({...pwForm, confirm_password: e.target.value})} required minLength={12}
                     className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                 </div>
                 <button type="submit" disabled={changingPw}
@@ -667,7 +676,7 @@ export default function SettingsPage() {
                   </div>
                   <div>
                     <label htmlFor="password" className="block text-sm font-medium text-foreground mb-1">Password</label>
-                    <input id="password" type="password" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} required minLength={6}
+                    <input id="password" type="password" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} required minLength={12}
                       className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                     <p className="text-xs text-muted-foreground mt-2">Username and password are case-sensitive.</p>
                   </div>
