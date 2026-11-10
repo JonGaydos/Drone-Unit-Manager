@@ -252,3 +252,16 @@ def test_user_display_name_is_trimmed(client, db, admin_headers, pilot_user):
     resp = client.patch(f"/api/auth/users/{pilot_user.id}", headers=admin_headers, json={"display_name": "  Robin Vale  "})
     assert resp.status_code == 200, resp.text
     assert resp.json()["display_name"] == "Robin Vale"
+
+
+# --- F-17: exporting the audit log is itself audited ------------------------------
+
+def test_audit_csv_export_is_audited(client, db, admin_user, admin_headers):
+    from app.models.audit_log import AuditLog
+    resp = client.get("/api/export/audit/csv?date_from=2026-03-01&action=update", headers=admin_headers)
+    assert resp.status_code == 200, resp.text
+    db.expire_all()
+    entries = db.query(AuditLog).filter(AuditLog.action == "export", AuditLog.entity_type == "audit_log").all()
+    assert len(entries) == 1
+    assert entries[0].user_id == admin_user.id
+    assert "date_from=2026-03-01" in entries[0].details and "action=update" in entries[0].details

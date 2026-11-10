@@ -706,6 +706,15 @@ def export_audit_csv(
     local_tz = display_zone(db)
     q = filtered_audit_logs(db, entity_type=entity_type, user_id=user_id, action=action,
                             date_from=date_from, date_to=date_to)
+    filters = {"date_from": date_from, "date_to": date_to, "user_id": user_id,
+               "entity_type": entity_type, "action": action}
+    shown = ", ".join(f"{k}={v}" for k, v in filters.items() if v not in (None, ""))
+    # The file holds the log as it stood when asked for, not this export's own entry.
+    from sqlalchemy import func
+    q = q.filter(AuditLog.id <= (db.query(func.max(AuditLog.id)).scalar() or 0))
+    log_action(db, user.id, user.display_name, "export", "audit_log",
+               details=f"audit_log_export.csv, {shown or 'all entries'}")
+    db.commit()
     q = q.order_by(AuditLog.created_at.desc(), AuditLog.id.desc()).execution_options(stream_results=True)
     return StreamingResponse(
         _audit_csv_stream(q, local_tz, hides_contacts(db, user)),

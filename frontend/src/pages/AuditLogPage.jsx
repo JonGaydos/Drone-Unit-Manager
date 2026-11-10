@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom'
 
 // Every entity type and action the backend records, so any entry can be filtered.
 const ENTITY_TYPES = [
-  '', 'alert', 'api_token', 'attachment', 'auth', 'backup', 'battery', 'battery_reading',
+  '', 'alert', 'api_token', 'attachment', 'audit_log', 'auth', 'backup', 'battery', 'battery_reading',
   'calendar_event', 'certification_type', 'checklist_completion', 'checklist_template',
   'component', 'controller', 'currency', 'currency_rule', 'dock', 'document', 'equipment',
   'flight', 'flight_plan', 'flight_purpose', 'folder', 'incident', 'maintenance',

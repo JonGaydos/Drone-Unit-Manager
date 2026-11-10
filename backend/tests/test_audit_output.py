@@ -96,7 +96,9 @@ def test_csv_date_filters(client, db, admin_headers):
 
     def names(**params):
         rows = _rows(client.get(CSV_URL, params=params, headers=admin_headers))
-        return sorted(r[rows[0].index("Entity Name")] for r in rows[1:])
+        # Each export is itself logged (F-17); leave the earlier exports out.
+        action = rows[0].index("Action")
+        return sorted(r[rows[0].index("Entity Name")] for r in rows[1:] if r[action] != "export")
 
     assert names(date_from="2026-10-07", date_to="2026-10-07") == ["day7"]
     assert names(date_from="2026-10-07") == ["day7", "day8"]
