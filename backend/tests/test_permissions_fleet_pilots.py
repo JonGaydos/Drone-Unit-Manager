@@ -263,7 +263,6 @@ def test_options_sorted_with_inactive(client, db, viewer_headers):
     ("certifications.view", "/api/currency/rules"),
     ("certifications.view", "/api/currency/status"),
     ("authority.view", "/api/operating-authorities"),
-    ("authority.view", "/api/geofences"),
     ("registrations.view", REGISTRATIONS_URL),
     (FILES_VIEW, FOLDERS_URL),
 ])
@@ -305,7 +304,6 @@ def test_registrations_manage_grantable(client, db, admin_headers, supervisor_he
 @pytest.mark.parametrize("key,method,url,body", [
     ("certifications.manage", "post", CERT_TYPES_URL, {"name": "Part 107"}),
     ("authority.manage", "post", "/api/operating-authorities", {}),
-    ("authority.manage", "post", "/api/geofences", {}),
     ("certifications.manage", "post", "/api/currency/rules", {}),
 ])
 def test_manage_keys_grantable(client, admin_headers, pilot_headers, supervisor_headers, key, method, url, body):

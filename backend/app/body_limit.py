@@ -40,10 +40,6 @@ LARGE_JSON_PATHS = frozenset({
     # The reports page sends the logo inside the request, as base64, and a logo
     # may be as large as any upload.
     "/api/reports/generate",
-    # polygon_points has no upper bound, and a boundary traced from survey data
-    # can run past the 25,000 or so vertices that fit in the default.
-    "/api/geofences",
-    "/api/geofences/{geofence_id}",
 })
 
 DEFAULT_BODY_LIMIT = 1024 * 1024

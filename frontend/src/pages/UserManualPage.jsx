@@ -53,7 +53,7 @@ Default settings:
 • **Create**: Supervisor and Pilot can create flights, flight plans, incidents, logs, maintenance records and calendar events. Viewer cannot.
 • **Edit**: Supervisor All, Pilot Own, Viewer None, for flights, flight plans, incidents, logs, maintenance records, calendar events, pilot profiles, documents and photos.
 • **Delete flights**: Supervisor All, Pilot None.
-• **Supervisor only**: Review and bulk actions on flights, approving and denying flight plans, resolving and deleting incidents, maintenance schedules, fleet management, deleting checkouts, creating, deleting or merging pilots, certifications, checklist templates, document restore and legal hold, folders, alerts, operating authority and geofences, and sending the email digest to another address.
+• **Supervisor only**: Review and bulk actions on flights, approving and denying flight plans, resolving and deleting incidents, maintenance schedules, fleet management, deleting checkouts, creating, deleting or merging pilots, certifications, checklist templates, document restore and legal hold, folders, alerts, operating authority, and sending the email digest to another address.
 • **Pilot and Supervisor**: Completing maintenance schedules, updating vehicle location, checking equipment out and in, completing checklists, viewing pilot email and phone, and generating reports.
 • **Nobody but admin**: Vehicle registrations management and the audit log.
 

@@ -80,7 +80,6 @@ from app.models.currency_rule import CurrencyRule
 from app.models.equipment_checkout import EquipmentCheckout
 from app.models.checklist import ChecklistTemplate, ChecklistCompletion
 from app.models.component import Component
-from app.models.geofence import Geofence
 from app.models.notification_preference import NotificationPreference
 from app.models.notification_log import NotificationLog
 from app.models.telemetry import TelemetryPoint
@@ -107,7 +106,6 @@ EXPORT_ORDER = [
     ("flight_purposes", FlightPurpose),
     ("certification_types", CertificationType),
     ("currency_rules", CurrencyRule),
-    ("geofences", Geofence),
     ("operating_authorities", OperatingAuthority),
     ("role_permissions", RolePermission),
     # Tier 2: Base entities

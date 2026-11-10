@@ -12,7 +12,7 @@ from app.database import Base
 from app.models import (
     ApiToken, Attachment, AuditLog, Battery, BatteryReading, CalendarEvent, CertificationType,
     ChecklistCompletion, ChecklistTemplate, Component, Controller, CurrencyRule, Dock, Document,
-    EquipmentCheckout, Flight, FlightPlan, FlightPurpose, Folder, Geofence, Incident,
+    EquipmentCheckout, Flight, FlightPlan, FlightPurpose, Folder, Incident,
     MaintenanceRecord, MaintenanceSchedule, MediaFile, MissionLog, MissionLogPilot,
     NotificationPreference, OperatingAuthority, OtherEquipment, Photo, Pilot, PilotCertification,
     PilotEquipmentQual, SavedReport, SensorPackage, Setting, TrainingLog, TrainingLogPilot, User,
@@ -94,7 +94,6 @@ BUILDERS = {
     FlightPlan: (lambda p: FlightPlan(title="Plan", date_planned=datetime(2026, 1, 1), pilot_id=p["pilot"], submitted_by_id=p["user"]), "title", "Plan2"),
     FlightPurpose: (_fixed(FlightPurpose, name="Purpose"), "name", "Purpose2"),
     Folder: (_fixed(Folder, name="F"), "name", "F2"),
-    Geofence: (_fixed(Geofence, name="G", zone_type="z", geometry_type="circle"), "name", "G2"),
     Incident: (_fixed(Incident, date=date(2026, 1, 1), title="I", severity="low", category="c", description="d"), "title", "I2"),
     MaintenanceRecord: (lambda p: MaintenanceRecord(entity_type="vehicle", entity_id=p["vehicle"], maintenance_type="m", description="d"), "description", "d2"),
     MaintenanceSchedule: (_fixed(MaintenanceSchedule, name="S", entity_type="vehicle", frequency="monthly"), "name", "S2"),

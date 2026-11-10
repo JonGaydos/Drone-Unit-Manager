@@ -507,7 +507,7 @@ Bulk flight actions follow the same settings as single ones. Selecting flights a
 | Mark alerts read or dismiss them (shared for everyone) | Yes | No | No |
 | Generate reports | Yes | Yes | No |
 | Export CSV | Yes | Yes | Yes |
-| Manage operating authority and geofences | Yes | No | No |
+| Manage operating authority | Yes | No | No |
 | Manage vehicle registrations | No | No | No |
 | View the audit log | No | No | No |
 | Send the email digest to another address | Yes | No | No |

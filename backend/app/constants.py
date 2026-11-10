@@ -19,7 +19,6 @@ MISSION_LOG_NOT_FOUND = "Mission log not found"
 FLIGHT_PLAN_NOT_FOUND = "Flight plan not found"
 ALERT_NOT_FOUND = "Alert not found"
 USER_NOT_FOUND = "User not found"
-GEOFENCE_NOT_FOUND = "Geofence not found"
 PHOTO_NOT_FOUND = "Photo not found"
 CERTIFICATION_TYPE_NOT_FOUND = "Certification type not found"
 PILOT_CERTIFICATION_NOT_FOUND = "Pilot certification not found"
@@ -68,7 +67,7 @@ APP_TITLE = "Drone Unit Manager"
 # Bump this in the same commit as the release tag.
 APP_VERSION = "3.4.2"
 
-# ── Folder / geofence messages ───────────────────────────────────────────────
+# ── Folder messages ──────────────────────────────────────────────────────────
 FOLDER_NOT_FOUND = "Folder not found"
 
 # ── API paths ────────────────────────────────────────────────────────────────

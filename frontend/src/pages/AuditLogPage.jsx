@@ -9,7 +9,7 @@ const ENTITY_TYPES = [
   '', 'alert', 'api_token', 'attachment', 'auth', 'backup', 'battery', 'battery_reading',
   'calendar_event', 'certification_type', 'checklist_completion', 'checklist_template',
   'component', 'controller', 'currency', 'currency_rule', 'dock', 'document', 'equipment',
-  'flight', 'flight_plan', 'flight_purpose', 'folder', 'geofence', 'incident', 'maintenance',
+  'flight', 'flight_plan', 'flight_purpose', 'folder', 'incident', 'maintenance',
   'maintenance_schedule', 'media_file', 'mission_log', 'mission_log_pilot', 'notification',
   'notification_log', 'notification_preference', 'operating_authority', 'other_equipment', 'photo',
   'photo_flight', 'photo_incident', 'photo_pilot', 'pilot', 'pilot_certification',

@@ -45,7 +45,7 @@ SCOPE_PREFIXES = {
     "maintenance": ["/api/maintenance"],
     "operations": [
         "/api/calendar", "/api/checklists", "/api/incidents", "/api/alerts",
-        "/api/geofences", "/api/weather", "/api/adsb", "/api/search",
+        "/api/weather", "/api/adsb", "/api/search",
     ],
     "documents": ["/api/documents", "/api/folders", "/api/photos", "/api/media"],
     "reports": ["/api/reports", "/api/export", "/api/dashboard", "/api/compliance"],

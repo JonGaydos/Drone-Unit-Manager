@@ -111,7 +111,7 @@ def test_migration_rebuilds_tables_keeping_rows_ids_indexes_and_keys(tmp_path, m
     finally:
         engine.dispose()
 
-    command.upgrade(cfg, "head")
+    command.upgrade(cfg, "0014_autoincrement_ids")
 
     engine = create_engine(url)
     try:

@@ -373,13 +373,6 @@ EXPECTED_ROUTE_KEYS = {
     "POST /api/operating-authorities": {AUTHORITY_MANAGE},
     "PATCH /api/operating-authorities/{authority_id}": {AUTHORITY_MANAGE},
     "DELETE /api/operating-authorities/{authority_id}": {AUTHORITY_MANAGE},
-    # geofences
-    "GET /api/geofences": {AUTHORITY_VIEW},
-    "GET /api/geofences/check": {AUTHORITY_VIEW},
-    "GET /api/geofences/{geofence_id}": {AUTHORITY_VIEW},
-    "POST /api/geofences": {AUTHORITY_MANAGE},
-    "PATCH /api/geofences/{geofence_id}": {AUTHORITY_MANAGE},
-    "DELETE /api/geofences/{geofence_id}": {AUTHORITY_MANAGE},
     # vehicle_registrations
     "GET /api/vehicles/{vehicle_id}/registrations": {REGISTRATIONS_VIEW},
     "GET /api/vehicle-registrations/current": {REGISTRATIONS_VIEW},

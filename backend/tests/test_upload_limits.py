@@ -38,7 +38,6 @@ SKYDIO_URL = "/api/export/flights/import"
 LOGIN_URL = "/api/auth/login"
 LOGO_URL = "/api/settings/logo"
 DOCUMENT_URL = "/api/documents/upload"
-GEOFENCE_URL = "/api/geofences"
 PNG_MIME = "image/png"
 LARGE_PNG_NAME = "big.png"
 
@@ -390,20 +389,6 @@ def test_report_carrying_a_large_logo_still_runs(client, admin_headers):
     resp = client.post("/api/reports/generate", headers=admin_headers, json=config)
 
     assert resp.status_code == 200, resp.text
-
-
-def test_detailed_geofence_polygon_still_saves(client, admin_headers):
-    """A boundary traced from survey data can hold tens of thousands of vertices."""
-    points = [[28.123456 + i * 1e-6, -81.123456 - i * 1e-6] for i in range(50_000)]
-    body = {"name": "County line", "zone_type": "restricted", "geometry_type": "polygon", "polygon_points": points}
-    assert len(json.dumps(body)) > DEFAULT_BODY_LIMIT
-
-    created = client.post(GEOFENCE_URL, headers=admin_headers, json=body)
-    assert created.status_code in (200, 201), created.text
-
-    updated = client.patch(f"/api/geofences/{created.json()['id']}", headers=admin_headers,
-                           json={"polygon_points": points})
-    assert updated.status_code == 200, updated.text
 
 
 # 7. Who may send a file is settled before any of it is read ---------------------
