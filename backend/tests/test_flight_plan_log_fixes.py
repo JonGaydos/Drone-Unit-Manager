@@ -340,3 +340,22 @@ def test_log_patch_validation(client, db, admin_headers):
                     {"total_cost": -3}, {"pilots": [{"pilot_id": 1, "hours": -1}]}):
             r = client.patch(f"{url}/{created['id']}", headers=admin_headers, json=bad)
             assert r.status_code == 422, (url, bad, r.text)
+
+
+# --- B-12: a pilot is listed once per mission or training ---
+
+
+def test_same_pilot_cannot_be_listed_twice(client, db, admin_headers):
+    pilot = _pilot(db)
+    twice = [{"pilot_id": pilot.id, "hours": 1}, {"pilot_id": pilot.id, "hours": 2}]
+    for url, base in ((MISSIONS_URL, {"date": "2026-11-03", "title": "Mission"}),
+                      (TRAINING_URL, _training_body())):
+        r = client.post(url, headers=admin_headers, json={**base, "pilots": twice})
+        assert r.status_code == 422, (url, r.text)
+        created = client.post(url, headers=admin_headers, json={**base, "pilots": twice[:1]}).json()
+        r = client.patch(f"{url}/{created['id']}", headers=admin_headers, json={"pilots": twice})
+        assert r.status_code == 422, (url, r.text)
+        r = client.post(f"{url}/{created['id']}/pilots", headers=admin_headers, json={"pilot_id": pilot.id})
+        assert r.status_code == 409, (url, r.text)
+        got = client.get(f"{url}/{created['id']}", headers=admin_headers).json()
+        assert [p["pilot_id"] for p in got["pilots"]] == [pilot.id]

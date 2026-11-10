@@ -13,6 +13,13 @@ class MissionLogPilotIn(BaseModel):
     hours: float = Field(default=0.0, ge=0)
 
 
+def _pilots_once(pilots):
+    """A pilot is listed once; a second row would double their hours."""
+    if pilots is not None and len({p.pilot_id for p in pilots}) != len(pilots):
+        raise ValueError("each pilot can be listed only once")
+    return pilots
+
+
 class MissionLogPilotOut(BaseModel):
     id: int
     pilot_id: int
@@ -40,6 +47,8 @@ class MissionLogCreate(BaseModel):
     notes: str | None = None
     pilots: list[MissionLogPilotIn] = []
 
+    _unique_pilots = field_validator("pilots")(_pilots_once)
+
 
 class MissionLogUpdate(BaseModel):
     date: DateType | None = None
@@ -57,6 +66,8 @@ class MissionLogUpdate(BaseModel):
     cost_breakdown: str | None = None
     notes: str | None = None
     pilots: list[MissionLogPilotIn] | None = None
+
+    _unique_pilots = field_validator("pilots")(_pilots_once)
 
     @field_validator("date", "title", "man_hours", "status")
     @classmethod

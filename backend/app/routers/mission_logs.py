@@ -235,12 +235,14 @@ def delete_mission_log(mission_id: int, db: DBSession, admin: EditUser):
     return {"ok": True}
 
 
-@router.post("/{mission_id}/pilots", response_model=MissionLogPilotOut, responses=responses(401, 404))
+@router.post("/{mission_id}/pilots", response_model=MissionLogPilotOut, responses=responses(401, 404, 409))
 def add_pilot_to_mission(mission_id: int, data: MissionLogPilotIn, db: DBSession, admin: EditUser):
     mission = db.query(MissionLog).filter(MissionLog.id == mission_id).first()
     if not mission:
         raise HTTPException(status_code=404, detail=MISSION_LOG_NOT_FOUND)
     _require_edit(db, admin, mission)
+    if db.query(MissionLogPilot).filter(MissionLogPilot.mission_log_id == mission_id, MissionLogPilot.pilot_id == data.pilot_id).first():
+        raise HTTPException(status_code=409, detail="This pilot is already on this mission")
     mp = MissionLogPilot(
         mission_log_id=mission_id,
         pilot_id=data.pilot_id,

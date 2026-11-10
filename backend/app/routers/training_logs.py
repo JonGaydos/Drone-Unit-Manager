@@ -215,12 +215,14 @@ def delete_training_log(training_id: int, db: DBSession, admin: EditUser):
     return {"ok": True}
 
 
-@router.post("/{training_id}/pilots", response_model=TrainingLogPilotOut, responses=responses(401, 404))
+@router.post("/{training_id}/pilots", response_model=TrainingLogPilotOut, responses=responses(401, 404, 409))
 def add_pilot_to_training(training_id: int, data: TrainingLogPilotIn, db: DBSession, admin: EditUser):
     training = db.query(TrainingLog).filter(TrainingLog.id == training_id).first()
     if not training:
         raise HTTPException(status_code=404, detail=TRAINING_LOG_NOT_FOUND)
     _require_edit(db, admin, training)
+    if db.query(TrainingLogPilot).filter(TrainingLogPilot.training_log_id == training_id, TrainingLogPilot.pilot_id == data.pilot_id).first():
+        raise HTTPException(status_code=409, detail="This pilot is already on this training")
     tp = TrainingLogPilot(
         training_log_id=training_id,
         pilot_id=data.pilot_id,
