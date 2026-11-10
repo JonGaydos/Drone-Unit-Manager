@@ -168,8 +168,15 @@ def export_flights_csv(
     user: ExportUser,
     _view: FlightsView,
     date_from: date | None = None,
-    date_to: date | None = None):
+    date_to: date | None = None,
+    pilot_id: int | None = None,
+    vehicle_id: int | None = None,
+    purpose: str | None = None,
+    review_status: str | None = None,
+    search: str | None = None):
     """Export flights as CSV in the Skydio flight-list column order (plus Purpose).
+
+    Takes the Flights page's filters, so the file holds the flights in view.
 
     Columns match the Skydio Cloud export so the file round-trips through the
     Skydio importer, with Purpose, Date, Case Number and Notes appended at the
@@ -181,11 +188,9 @@ def export_flights_csv(
     local_tz = display_zone(db)
     with_email = not hides_contacts(db, user)
 
-    q = db.query(Flight).options(joinedload(Flight.pilot), joinedload(Flight.vehicle))
-    if date_from:
-        q = q.filter(Flight.date >= date_from)
-    if date_to:
-        q = q.filter(Flight.date <= date_to)
+    from app.routers.flights import filtered_flights
+    q = filtered_flights(db, pilot_id, vehicle_id, purpose, date_from, date_to, review_status, search)
+    q = q.options(joinedload(Flight.pilot), joinedload(Flight.vehicle))
     flights = _cap_rows(q.order_by(Flight.date.desc()).all(), "flights")
 
     output = io.StringIO()

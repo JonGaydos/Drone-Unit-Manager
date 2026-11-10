@@ -230,6 +230,28 @@ describe('FlightsPage', () => {
     })
   })
 
+  it('Export CSV sends the active filters', async () => {
+    let exported = null
+    mockMount()
+    server.use(http.get('/api/export/flights/csv', ({ request }) => {
+      exported = new URL(request.url)
+      return new HttpResponse('Flight ID', { headers: { 'Content-Type': 'text/csv' } })
+    }))
+    const { user, container } = renderWithProviders(<FlightsPage />, { role: 'admin' })
+    await screen.findByRole('link', { name: 'Jane Doe' })
+    await user.selectOptions(container.querySelector('#pilot-1'), '6')
+    await user.selectOptions(container.querySelector('#purpose-1'), 'Search')
+    // The status toggle comes before the per-row status badges.
+    await user.click(screen.getAllByRole('button', { name: 'Reviewed' })[0])
+    await user.click(screen.getByRole('button', { name: /Export CSV/ }))
+
+    await waitFor(() => expect(exported).not.toBeNull())
+    expect(exported.searchParams.get('pilot_id')).toBe('6')
+    expect(exported.searchParams.get('purpose')).toBe('Search')
+    expect(exported.searchParams.get('review_status')).toBe('reviewed')
+    expect(exported.searchParams.get('page')).toBeNull()
+  })
+
   it('hides bulk-selection checkboxes from a pilot but shows them to a supervisor', async () => {
     server.use(http.get('/api/auth/me', () => HttpResponse.json(withPermissions({ id: 7, username: 'pilot', role: 'pilot' }))))
     mockMount()

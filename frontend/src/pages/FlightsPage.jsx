@@ -228,9 +228,9 @@ function SortIndicator({ column, sortKey, sortDir }) {
     : <ChevronDown className="w-3 h-3 inline ml-1" />
 }
 
-// Build the /flights request path from the active filters. Only set params that
-// are present so the backend sees a clean query string.
-function buildFlightsPath({ filterDateFrom, filterDateTo, filterPilotId, filterVehicleId, filterPurpose, statusFilter, query, sortKey, sortDir, page }) {
+// The active filters as query params. Only set params that are present so the
+// backend sees a clean query string. The list and the CSV export share them.
+function filterParams({ filterDateFrom, filterDateTo, filterPilotId, filterVehicleId, filterPurpose, statusFilter, query }) {
   const qp = new URLSearchParams()
   if (filterDateFrom) qp.set('date_from', filterDateFrom)
   if (filterDateTo) qp.set('date_to', filterDateTo)
@@ -238,9 +238,14 @@ function buildFlightsPath({ filterDateFrom, filterDateTo, filterPilotId, filterV
   if (filterVehicleId) qp.set('vehicle_id', filterVehicleId)
   if (filterPurpose) qp.set('purpose', filterPurpose)
   if (statusFilter && statusFilter !== 'all') qp.set('review_status', statusFilter)
-  // Search and sort run on the server, so they cover every flight, not just
-  // the page in view.
+  // Search runs on the server, so it covers every flight, not just the page in view.
   if (query) qp.set('search', query)
+  return qp
+}
+
+// Build the /flights request path from the active filters, sort and page.
+function buildFlightsPath({ sortKey, sortDir, page, ...filters }) {
+  const qp = filterParams(filters)
   qp.set('sort', sortKey)
   qp.set('order', sortDir)
   qp.set('page', page)
@@ -427,7 +432,11 @@ export default function FlightsPage() {
 
   const handleExport = async () => {
     try {
-      await api.download('/export/flights/csv')
+      // The file holds the flights the filters select, on every page.
+      const qs = filterParams({
+        filterDateFrom, filterDateTo, filterPilotId, filterVehicleId, filterPurpose, statusFilter, query,
+      }).toString()
+      await api.download(qs ? `/export/flights/csv?${qs}` : '/export/flights/csv')
     } catch (err) { toast.error(err.message) }
   }
 

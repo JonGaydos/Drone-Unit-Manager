@@ -390,3 +390,31 @@ def test_checklist_template_patch_has_the_create_rules(client, admin_headers):
         assert r.status_code == 422, (bad, r.text)
     got = client.get(url, headers=admin_headers).json()
     assert got["items"][0]["label"] == "Props"
+
+
+# --- B-21: the flights CSV takes the list's filters ---
+
+
+def test_flights_csv_applies_the_list_filters(client, db, admin_headers):
+    import csv
+    import io
+    from app.models.pilot import Pilot
+    a = Pilot(first_name="Avery", last_name="Stone", status="active")
+    b = Pilot(first_name="Blake", last_name="Rivers", status="active")
+    db.add_all([a, b])
+    db.commit()
+    _flight(db, pilot_id=a.id, purpose="Patrol", case_number="K-1", review_status="reviewed")
+    _flight(db, pilot_id=b.id, purpose="Search", case_number="K-2", review_status="needs_review")
+    _flight(db, pilot_id=b.id, purpose=None, case_number="K-3", review_status="needs_review")
+
+    def cases(query):
+        resp = client.get(f"/api/export/flights/csv?{query}", headers=admin_headers)
+        assert resp.status_code == 200, resp.text
+        return sorted(r["Case Number"] for r in csv.DictReader(io.StringIO(resp.text)))
+
+    assert cases(f"pilot_id={a.id}") == ["K-1"]
+    assert cases("purpose=Search") == ["K-2"]
+    assert cases("purpose=__none__") == ["K-3"]
+    assert cases("review_status=needs_review") == ["K-2", "K-3"]
+    assert cases("search=Rivers") == ["K-2", "K-3"]
+    assert cases("") == ["K-1", "K-2", "K-3"]

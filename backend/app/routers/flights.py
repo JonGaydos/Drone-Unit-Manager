@@ -128,22 +128,10 @@ def _flight_order(sort: str, order: str) -> list:
     return keys + [Flight.date.desc().nulls_first(), Flight.takeoff_time.desc().nulls_first(), Flight.id.desc()]
 
 
-@router.get("")
-def list_flights(
-    db: DBSession,
-    user: ViewUser,
-    pilot_id: int | None = None,
-    vehicle_id: int | None = None,
-    purpose: str | None = None,
-    date_from: date | None = None,
-    date_to: date | None = None,
-    review_status: str | None = None,
-    search: str | None = None,
-    sort: str = "date",
-    order: str = "desc",
-    page: Annotated[int, Query(ge=1)] = 1,
-    # 1000 is what the Analytics page asks for when it pages through every flight.
-    per_page: Annotated[int, Query(ge=1, le=1000)] = 100):
+def filtered_flights(db, pilot_id=None, vehicle_id=None, purpose=None, date_from=None,
+                     date_to=None, review_status=None, search=None):
+    """The Flights page's filters as a query, joined to pilot and vehicle for the
+    search. Shared by the list and the CSV export so both cover the same flights."""
     filters = []
     if pilot_id:
         filters.append(Flight.pilot_id == pilot_id)
@@ -161,8 +149,26 @@ def list_flights(
         filters.append(Flight.review_status == review_status)
     if search and search.strip():
         filters.append(_flight_search(search.strip()))
-    base = (db.query(Flight).outerjoin(Pilot, Pilot.id == Flight.pilot_id)
+    return (db.query(Flight).outerjoin(Pilot, Pilot.id == Flight.pilot_id)
             .outerjoin(Vehicle, Vehicle.id == Flight.vehicle_id).filter(*filters))
+
+@router.get("")
+def list_flights(
+    db: DBSession,
+    user: ViewUser,
+    pilot_id: int | None = None,
+    vehicle_id: int | None = None,
+    purpose: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    review_status: str | None = None,
+    search: str | None = None,
+    sort: str = "date",
+    order: str = "desc",
+    page: Annotated[int, Query(ge=1)] = 1,
+    # 1000 is what the Analytics page asks for when it pages through every flight.
+    per_page: Annotated[int, Query(ge=1, le=1000)] = 100):
+    base = filtered_flights(db, pilot_id, vehicle_id, purpose, date_from, date_to, review_status, search)
     total = base.with_entities(func.count(Flight.id)).scalar()
     offset = (page - 1) * per_page
     flights = base.options(
