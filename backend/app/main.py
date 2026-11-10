@@ -371,6 +371,9 @@ def serve_spa(full_path: str):
     Returns:
         The matching static file or index.html.
     """
+    # An API path no route matched is a client error, not a page to render.
+    if full_path == "api" or full_path.startswith("api/"):
+        raise HTTPException(404)
     if not _static_dir or not os.path.isdir(_static_dir):
         raise HTTPException(404)
     file_path = os.path.join(_static_dir, full_path)

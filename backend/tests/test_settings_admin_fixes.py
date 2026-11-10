@@ -265,3 +265,28 @@ def test_audit_csv_export_is_audited(client, db, admin_user, admin_headers):
     assert len(entries) == 1
     assert entries[0].user_id == admin_user.id
     assert "date_from=2026-03-01" in entries[0].details and "action=update" in entries[0].details
+
+
+# --- F-18: unmatched /api paths ------------------------------------------------------
+
+@pytest.fixture
+def spa_dir(tmp_path, monkeypatch):
+    import app.main
+    (tmp_path / "index.html").write_text("<div id=root></div>")
+    monkeypatch.setattr(app.main, "_static_dir", str(tmp_path))
+    return tmp_path
+
+
+@pytest.mark.parametrize("path", ["/api/weather/current", "/api/reports/templates", "/api", "/api/"])
+def test_unmatched_api_paths_are_404_json(client, spa_dir, path):
+    resp = client.get(path)
+    assert resp.status_code == 404
+    assert resp.headers["content-type"].startswith("application/json")
+    assert resp.json() == {"detail": "Not Found"}
+
+
+@pytest.mark.parametrize("path", ["/flights/12", "/apiary", "/settings"])
+def test_app_paths_still_get_the_spa(client, spa_dir, path):
+    resp = client.get(path)
+    assert resp.status_code == 200
+    assert "root" in resp.text
