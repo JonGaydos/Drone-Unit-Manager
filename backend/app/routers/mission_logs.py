@@ -38,6 +38,18 @@ def _require_edit(db: Session, user: User, log) -> None:
     permissions_service.require_record_access(db, user, LOGS_EDIT, permissions_service.owns_roster_log(user, log))
 
 
+def _require_end_after_start(update_data: dict, current) -> None:
+    """422 when the end time (sent, or stored) is before the start time."""
+    start = update_data.get("start_time", getattr(current, "start_time", None))
+    end = update_data.get("end_time", getattr(current, "end_time", None))
+    if start is None or end is None:
+        return
+    if (start.tzinfo is None) != (end.tzinfo is None):
+        start, end = start.replace(tzinfo=None), end.replace(tzinfo=None)
+    if end < start:
+        raise HTTPException(422, "End time must be after start time")
+
+
 def _vehicle_display(vehicle: Vehicle) -> str:
     name = f"{vehicle.manufacturer} {vehicle.model}"
     if vehicle.nickname:
@@ -166,12 +178,13 @@ def get_mission_log(mission_id: int, db: DBSession, user: ViewUser):
     return _mission_to_out(mission, db)
 
 
-@router.post("", response_model=MissionLogOut, responses=responses(401))
+@router.post("", response_model=MissionLogOut, responses=responses(401, 422))
 def create_mission_log(data: MissionLogCreate, db: DBSession, admin: CreateUser):
     from app.services.audit import log_action
     pilots_data = data.pilots
     mission_dict = data.model_dump(exclude={"pilots"})
     require_choices(mission_dict, None, MISSION_CHOICES)
+    _require_end_after_start(mission_dict, None)
     mission = MissionLog(**mission_dict, created_by_id=admin.id)
     db.add(mission)
     db.flush()
@@ -188,7 +201,7 @@ def create_mission_log(data: MissionLogCreate, db: DBSession, admin: CreateUser)
     return _mission_to_out(mission, db)
 
 
-@router.patch("/{mission_id}", response_model=MissionLogOut, responses=responses(401, 404))
+@router.patch("/{mission_id}", response_model=MissionLogOut, responses=responses(401, 404, 422))
 def update_mission_log(mission_id: int, data: MissionLogUpdate, db: DBSession, admin: EditUser):
     mission = db.query(MissionLog).filter(MissionLog.id == mission_id).first()
     if not mission:
@@ -197,6 +210,7 @@ def update_mission_log(mission_id: int, data: MissionLogUpdate, db: DBSession, a
     update_data = data.model_dump(exclude_unset=True)
     pilots_data = update_data.pop("pilots", None)
     require_choices(update_data, mission, MISSION_CHOICES)
+    _require_end_after_start(update_data, mission)
     for key, value in update_data.items():
         setattr(mission, key, value)
     if pilots_data is not None:

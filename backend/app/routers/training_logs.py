@@ -32,6 +32,18 @@ CreateUser = Annotated[User, Depends(require_permission("logs.create"))]
 EditUser = Annotated[User, Depends(require_permission(LOGS_EDIT))]
 
 
+def _require_end_after_start(update_data: dict, current) -> None:
+    """422 when the end time (sent, or stored) is before the start time."""
+    start = update_data.get("start_time", getattr(current, "start_time", None))
+    end = update_data.get("end_time", getattr(current, "end_time", None))
+    if start is None or end is None:
+        return
+    if (start.tzinfo is None) != (end.tzinfo is None):
+        start, end = start.replace(tzinfo=None), end.replace(tzinfo=None)
+    if end < start:
+        raise HTTPException(422, "End time must be after start time")
+
+
 def _vehicle_display(vehicle: Vehicle) -> str:
     name = f"{vehicle.manufacturer} {vehicle.model}"
     if vehicle.nickname:
@@ -152,6 +164,7 @@ def create_training_log(data: TrainingLogCreate, db: DBSession, admin: CreateUse
     pilots_data = data.pilots
     training_dict = data.model_dump(exclude={"pilots"})
     require_choices(training_dict, None, TRAINING_CHOICES)
+    _require_end_after_start(training_dict, None)
     training = TrainingLog(**training_dict, created_by_id=admin.id)
     db.add(training)
     db.flush()
@@ -177,6 +190,7 @@ def update_training_log(training_id: int, data: TrainingLogUpdate, db: DBSession
     update_data = data.model_dump(exclude_unset=True)
     pilots_data = update_data.pop("pilots", None)
     require_choices(update_data, training, TRAINING_CHOICES)
+    _require_end_after_start(update_data, training)
     for key, value in update_data.items():
         setattr(training, key, value)
     if pilots_data is not None:

@@ -1,14 +1,16 @@
 from datetime import datetime
 from datetime import date as DateType
-from typing import Optional
+from typing import Annotated, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints, field_validator
+
+LogTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
 
 
 class MissionLogPilotIn(BaseModel):
     pilot_id: int
     role: str | None = None
-    hours: float = 0.0
+    hours: float = Field(default=0.0, ge=0)
 
 
 class MissionLogPilotOut(BaseModel):
@@ -23,7 +25,7 @@ class MissionLogPilotOut(BaseModel):
 
 class MissionLogCreate(BaseModel):
     date: DateType
-    title: str
+    title: LogTitle
     description: str | None = None
     reason: str | None = None
     location: str | None = None
@@ -33,7 +35,7 @@ class MissionLogCreate(BaseModel):
     end_time: datetime | None = None
     vehicle_id: int | None = None
     status: str = "completed"
-    total_cost: float | None = None
+    total_cost: float | None = Field(None, ge=0)
     cost_breakdown: str | None = None
     notes: str | None = None
     pilots: list[MissionLogPilotIn] = []
@@ -41,7 +43,7 @@ class MissionLogCreate(BaseModel):
 
 class MissionLogUpdate(BaseModel):
     date: DateType | None = None
-    title: str | None = None
+    title: LogTitle | None = None
     description: str | None = None
     reason: str | None = None
     location: str | None = None
@@ -51,10 +53,18 @@ class MissionLogUpdate(BaseModel):
     end_time: datetime | None = None
     vehicle_id: int | None = None
     status: str | None = None
-    total_cost: float | None = None
+    total_cost: float | None = Field(None, ge=0)
     cost_breakdown: str | None = None
     notes: str | None = None
     pilots: list[MissionLogPilotIn] | None = None
+
+    @field_validator("date", "title", "man_hours", "status")
+    @classmethod
+    def _not_null(cls, v):
+        # Optional only so a patch can leave them out; a sent null is refused.
+        if v is None:
+            raise ValueError("cannot be empty")
+        return v
 
 
 class MissionLogOut(BaseModel):

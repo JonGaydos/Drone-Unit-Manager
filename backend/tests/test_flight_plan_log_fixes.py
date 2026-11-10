@@ -295,3 +295,48 @@ def test_editing_a_denied_plan_clears_the_denial(client, db, pilot_user, pilot_h
     assert r.status_code == 200
     assert r.json()["status"] == "pending"
     assert r.json()["denial_reason"] is None
+
+
+# --- B-11: mission and training field validation ---
+
+MISSIONS_URL = "/api/mission-logs"
+
+
+def _pilot(db):
+    from app.models.pilot import Pilot
+    p = Pilot(first_name="Log", last_name="Pilot", status="active")
+    db.add(p)
+    db.commit()
+    db.refresh(p)
+    return p
+
+
+def test_log_create_validation(client, db, admin_headers):
+    pilot = _pilot(db)
+    bads = (
+        {"title": ""}, {"title": "   "}, {"title": "T" * 301},
+        {"start_time": "2026-11-03T10:00:00", "end_time": "2026-11-03T08:00:00"},
+        {"pilots": [{"pilot_id": pilot.id, "hours": -5}]},
+        {"total_cost": -1},
+    )
+    for url, base in ((MISSIONS_URL, {"date": "2026-11-03", "title": "Mission"}),
+                      (TRAINING_URL, _training_body())):
+        for bad in bads + (({"training_type": ""},) if url == TRAINING_URL else ()):
+            r = client.post(url, headers=admin_headers, json={**base, **bad})
+            assert r.status_code == 422, (url, bad, r.text)
+        ok = client.post(url, headers=admin_headers, json={
+            **base, "title": "  Kept  ", "start_time": "2026-11-03T08:00:00", "end_time": "2026-11-03T10:00:00",
+            "pilots": [{"pilot_id": pilot.id, "hours": 2}], "total_cost": 0})
+        assert ok.status_code == 200, (url, ok.text)
+        assert ok.json()["title"] == "Kept"
+
+
+def test_log_patch_validation(client, db, admin_headers):
+    for url, base in ((MISSIONS_URL, {"date": "2026-11-03", "title": "Mission"}),
+                      (TRAINING_URL, _training_body())):
+        created = client.post(url, headers=admin_headers, json={
+            **base, "start_time": "2026-11-03T08:00:00", "end_time": "2026-11-03T10:00:00"}).json()
+        for bad in ({"title": ""}, {"title": None}, {"date": None}, {"end_time": "2026-11-03T07:00:00"},
+                    {"total_cost": -3}, {"pilots": [{"pilot_id": 1, "hours": -1}]}):
+            r = client.patch(f"{url}/{created['id']}", headers=admin_headers, json=bad)
+            assert r.status_code == 422, (url, bad, r.text)
