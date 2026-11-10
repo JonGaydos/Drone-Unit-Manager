@@ -1144,7 +1144,8 @@ class SyncManager:
 
     @staticmethod
     def batch_sync_telemetry(db: Session, limit: int = 10) -> int:
-        """Fetch telemetry for up to `limit` flights without it. Returns count synced."""
+        """Fetch telemetry for up to `limit` flights without it. Returns how
+        many flights returned telemetry points."""
         from app.models.telemetry import TelemetryPoint
         from app.database import TelemetrySessionLocal
 
@@ -1179,7 +1180,10 @@ class SyncManager:
                     _store_telemetry_points(flight, telemetry_data, TelemetrySessionLocal, TelemetryPoint)
                 flight.telemetry_synced = True
                 flight.has_telemetry = bool(telemetry_data)
-                synced += 1
+                # Count only flights that returned points; one with none is
+                # still marked checked so it stops taking a slot.
+                if telemetry_data:
+                    synced += 1
 
             _set_setting(db, "last_telemetry_sync_timestamp", datetime.now(timezone.utc).isoformat())
             _set_setting(db, "last_telemetry_sync_result", json.dumps({"synced": synced}))

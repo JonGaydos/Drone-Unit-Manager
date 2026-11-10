@@ -974,7 +974,8 @@ def test_telemetry_sync_writes_one_summary(session, db, monkeypatch):
     _seed(db, *[Flight(external_id=f"T{i}", telemetry_synced=False) for i in range(5)])
     _use_provider(monkeypatch, get_flight_telemetry=lambda creds, flight_id: [])
 
-    assert SyncManager.batch_sync_telemetry(session, limit=10) == 5
+    # Five flights checked, none returned points (I-5: only flights with points count).
+    assert SyncManager.batch_sync_telemetry(session, limit=10) == 0
 
     entry = _only_summary(db, TELEMETRY_RUN)
     assert entry.changes[FLIGHT_MODEL][COUNTS][UPDATE] == 5
