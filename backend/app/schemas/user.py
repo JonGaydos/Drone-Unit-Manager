@@ -21,6 +21,13 @@ def _validate_optional_email(value: Optional[str]) -> Optional[str]:
 # account that silently matches no check.
 Role = Literal["admin", "supervisor", "pilot", "viewer"]
 
+# The theme ids the app offers (frontend ThemeContext THEMES).
+Theme = Literal[
+    "dark", "light", "glass", "grafana", "blue", "high-contrast", "midnight-slate",
+    "ranger-green", "navy-brass", "arctic", "carbon-amber", "night-vision", "sandstone",
+    "field-sage",
+]
+
 
 class UserCreate(BaseModel):
     username: str = Field(min_length=1, max_length=150)
@@ -37,7 +44,7 @@ class UserUpdate(BaseModel):
     display_name: Optional[str] = Field(default=None, max_length=255)
     role: Optional[Role] = None
     is_active: Optional[bool] = None
-    theme: Optional[str] = None
+    theme: Optional[Theme] = None
     pilot_id: Optional[int] = None
     email: Optional[str] = Field(default=None, max_length=255)
 

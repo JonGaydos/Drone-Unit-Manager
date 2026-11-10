@@ -214,3 +214,20 @@ def test_org_name_refuses_blank(client, db, admin_headers, value):
     resp = client.put("/api/settings", headers=admin_headers, json={"key": "org_name", "value": value})
     assert resp.status_code == 422, resp.text
     assert _stored(db, "org_name") == "Sample Unit"
+
+
+# --- F-09: theme ids ----------------------------------------------------------------
+
+@pytest.mark.parametrize("theme", ["zztest-<b>bogus</b>", "", "Dark"])
+def test_theme_refuses_unknown_ids(client, db, pilot_user, pilot_headers, theme):
+    resp = client.patch("/api/auth/me", headers=pilot_headers, json={"theme": theme})
+    assert resp.status_code == 422, resp.text
+    db.refresh(pilot_user)
+    assert pilot_user.theme == "dark"
+
+
+@pytest.mark.parametrize("theme", ["sandstone", "high-contrast", "field-sage"])
+def test_theme_accepts_known_ids(client, db, pilot_headers, theme):
+    resp = client.patch("/api/auth/me", headers=pilot_headers, json={"theme": theme})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["theme"] == theme
