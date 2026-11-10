@@ -3,6 +3,7 @@
 
 from datetime import date, timedelta
 
+from app.models.certification import CertificationType, PilotCertification
 from app.models.currency_rule import CurrencyRule
 from app.models.flight import Flight
 from app.models.pilot import Pilot
@@ -66,3 +67,73 @@ def test_blank_pilot_names_are_refused(client, db, admin_headers):
     for body in ({"first_name": ""}, {"last_name": "   "}, {"first_name": None}):
         r = client.patch(f"/api/pilots/{pid}", headers=admin_headers, json=body)
         assert r.status_code == 422, (body, r.text)
+
+
+# --- C-F7: certification dates, status and NIST level ---
+
+
+def _cert_type(db, name="Part 107", months=None):
+    ct = CertificationType(name=name, category="faa", has_expiration=True, renewal_period_months=months)
+    db.add(ct)
+    db.commit()
+    db.refresh(ct)
+    return ct
+
+
+def _cert(db, pilot_id, ct_id, *, status="complete", issue=None, expiry=None):
+    pc = PilotCertification(pilot_id=pilot_id, certification_type_id=ct_id, status=status,
+                            issue_date=issue, expiration_date=expiry)
+    db.add(pc)
+    db.commit()
+    db.refresh(pc)
+    return pc
+
+
+def test_cert_expiry_before_issue_is_refused(client, db, admin_headers):
+    pilot = _pilot(db)
+    ct = _cert_type(db)
+    r = client.post("/api/pilot-certifications", headers=admin_headers, json={
+        "pilot_id": pilot.id, "certification_type_id": ct.id,
+        "issue_date": "2026-06-01", "expiration_date": "2025-01-01"})
+    assert r.status_code == 422
+    pc = _cert(db, pilot.id, ct.id, issue=date(2026, 6, 1), expiry=date(2028, 6, 1))
+    r = client.patch(f"/api/pilot-certifications/{pc.id}", headers=admin_headers,
+                     json={"expiration_date": "2026-01-01"})
+    assert r.status_code == 422
+    r = client.patch(f"/api/pilot-certifications/{pc.id}", headers=admin_headers,
+                     json={"issue_date": "2029-01-01"})
+    assert r.status_code == 422
+    r = client.post(f"/api/pilot-certifications/{pc.id}/renew", headers=admin_headers,
+                    json={"issue_date": "2028-06-01", "expiration_date": "2027-01-01"})
+    assert r.status_code == 422
+    db.refresh(pc)
+    assert pc.status == "complete"
+
+
+def test_cert_status_and_nist_level_are_checked(client, db, admin_headers):
+    pilot = _pilot(db)
+    ct = _cert_type(db)
+    for body in ({"status": "banana"}, {"nist_level": -3}, {"nist_level": 6}):
+        r = client.post("/api/pilot-certifications", headers=admin_headers,
+                        json={"pilot_id": pilot.id, "certification_type_id": ct.id, **body})
+        assert r.status_code == 422, body
+    pc = _cert(db, pilot.id, ct.id)
+    for body in ({"status": "zzz"}, {"status": None}, {"nist_level": 0}):
+        r = client.patch(f"/api/pilot-certifications/{pc.id}", headers=admin_headers, json=body)
+        assert r.status_code == 422, body
+    r = client.patch(f"/api/pilot-certifications/{pc.id}", headers=admin_headers,
+                     json={"status": "in_progress", "nist_level": 3})
+    assert r.status_code == 200
+
+
+def test_equipment_qual_status_is_checked(client, db, admin_headers):
+    pilot = _pilot(db)
+    r = client.post("/api/pilot-equipment-quals", headers=admin_headers,
+                    json={"pilot_id": pilot.id, "vehicle_model": "X10", "status": "banana"})
+    assert r.status_code == 422
+    r = client.post("/api/pilot-equipment-quals", headers=admin_headers,
+                    json={"pilot_id": pilot.id, "vehicle_model": "X10", "status": "qualified"})
+    assert r.status_code == 200
+    r = client.patch(f"/api/pilot-equipment-quals/{r.json()['id']}", headers=admin_headers,
+                     json={"status": "zzz"})
+    assert r.status_code == 422

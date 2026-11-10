@@ -16,7 +16,7 @@ from app.schemas.certification import (
     CertificationTypeCreate, CertificationTypeUpdate, CertificationTypeOut,
     PilotCertificationCreate, PilotCertificationUpdate, PilotCertificationOut,
     PilotEquipmentQualCreate, PilotEquipmentQualUpdate, PilotEquipmentQualOut,
-    CertRenewRequest,
+    CertRenewRequest, EXPIRY_BEFORE_ISSUE,
 )
 
 
@@ -159,7 +159,7 @@ def create_pilot_certification(
     return _pilot_cert_to_out(pc)
 
 
-@router.patch("/api/pilot-certifications/{pc_id}", response_model=PilotCertificationOut, responses=responses(404))
+@router.patch("/api/pilot-certifications/{pc_id}", response_model=PilotCertificationOut, responses=responses(404, 422))
 def update_pilot_certification(
     pc_id: int,
     data: PilotCertificationUpdate,
@@ -170,7 +170,12 @@ def update_pilot_certification(
     pc = db.query(PilotCertification).filter(PilotCertification.id == pc_id).first()
     if not pc:
         raise HTTPException(status_code=404, detail=PILOT_CERTIFICATION_NOT_FOUND)
-    for key, value in data.model_dump(exclude_unset=True).items():
+    update_data = data.model_dump(exclude_unset=True)
+    issue = update_data.get("issue_date", pc.issue_date)
+    expiry = update_data.get("expiration_date", pc.expiration_date)
+    if issue and expiry and expiry < issue:
+        raise HTTPException(status_code=422, detail=EXPIRY_BEFORE_ISSUE)
+    for key, value in update_data.items():
         setattr(pc, key, value)
     pilot = db.query(Pilot).filter(Pilot.id == pc.pilot_id).first()
     ct = db.query(CertificationType).filter(CertificationType.id == pc.certification_type_id).first()

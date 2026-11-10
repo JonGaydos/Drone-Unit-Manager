@@ -1,7 +1,30 @@
 from datetime import date, datetime
-from typing import Optional
+from typing import Annotated, Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+# The statuses the Certifications page offers (CERT_STATUS_COLORS in the frontend).
+CertStatus = Literal[
+    "not_issued", "not_eligible", "not_started", "in_progress", "pending",
+    "complete", "active", "expired", "renewed",
+]
+NistLevel = Annotated[int, Field(ge=1, le=5)]
+EquipmentQualStatus = Literal["qualified", "in_training", "expired"]
+
+EXPIRY_BEFORE_ISSUE = "Expiration date cannot be before the issue date"
+
+
+def check_cert_dates(issue_date, expiration_date):
+    """Raise ValueError when the expiration falls before the issue date."""
+    if issue_date and expiration_date and expiration_date < issue_date:
+        raise ValueError(EXPIRY_BEFORE_ISSUE)
+
+
+def _not_null(v):
+    # Optional only so a patch can leave the field out; a sent null is refused.
+    if v is None:
+        raise ValueError("cannot be empty")
+    return v
 
 
 # --- CertificationType schemas ---
@@ -45,21 +68,28 @@ class CertificationTypeOut(BaseModel):
 class PilotCertificationCreate(BaseModel):
     pilot_id: int
     certification_type_id: int
-    status: str = "not_started"
+    status: CertStatus = "not_started"
     issue_date: Optional[date] = None
     expiration_date: Optional[date] = None
     certificate_number: Optional[str] = None
-    nist_level: Optional[int] = None
+    nist_level: Optional[NistLevel] = None
     notes: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _dates(self):
+        check_cert_dates(self.issue_date, self.expiration_date)
+        return self
 
 
 class PilotCertificationUpdate(BaseModel):
-    status: Optional[str] = None
+    status: Optional[CertStatus] = None
     issue_date: Optional[date] = None
     expiration_date: Optional[date] = None
     certificate_number: Optional[str] = None
-    nist_level: Optional[int] = None
+    nist_level: Optional[NistLevel] = None
     notes: Optional[str] = None
+
+    _status_not_null = field_validator("status")(_not_null)
 
 
 class PilotCertificationOut(BaseModel):
@@ -87,6 +117,11 @@ class CertRenewRequest(BaseModel):
     certificate_number: Optional[str] = None
     notes: Optional[str] = None
 
+    @model_validator(mode="after")
+    def _dates(self):
+        check_cert_dates(self.issue_date, self.expiration_date)
+        return self
+
 
 # --- PilotEquipmentQual schemas ---
 
@@ -95,7 +130,7 @@ class PilotEquipmentQualCreate(BaseModel):
     vehicle_id: Optional[int] = None
     vehicle_model: Optional[str] = None
     qualification_date: Optional[date] = None
-    status: str = "in_training"
+    status: EquipmentQualStatus = "in_training"
     notes: Optional[str] = None
 
 
@@ -103,8 +138,10 @@ class PilotEquipmentQualUpdate(BaseModel):
     vehicle_id: Optional[int] = None
     vehicle_model: Optional[str] = None
     qualification_date: Optional[date] = None
-    status: Optional[str] = None
+    status: Optional[EquipmentQualStatus] = None
     notes: Optional[str] = None
+
+    _status_not_null = field_validator("status")(_not_null)
 
 
 class PilotEquipmentQualOut(BaseModel):
