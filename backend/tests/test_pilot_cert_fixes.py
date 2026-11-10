@@ -396,3 +396,22 @@ def test_compliance_expiring_cert_carries_pilot_and_cert_names(client, db, admin
     assert len(items) == 1
     assert items[0]["pilot_name"] == "Robin Vale"
     assert items[0]["cert_type_name"] == "Part 107"
+
+
+# --- C-F24: operating authority title and dates ---
+
+
+def test_operating_authority_title_and_dates_are_checked(client, db, admin_headers):
+    url = "/api/operating-authorities"
+    base = {"authority_type": "coa", "title": "Night COA"}
+    for extra in ({"title": "   "}, {"title": ""}, {"issue_date": "2026-06-01", "expiry_date": "2026-01-01"}):
+        r = client.post(url, headers=admin_headers, json={**base, **extra})
+        assert r.status_code == 422, extra
+    ok = client.post(url, headers=admin_headers, json={**base, "title": " Night COA ",
+                                                       "issue_date": "2026-01-01", "expiry_date": "2028-01-01"})
+    assert ok.status_code == 201
+    assert ok.json()["title"] == "Night COA"
+    aid = ok.json()["id"]
+    for body in ({"title": " "}, {"title": None}, {"expiry_date": "2025-12-31"}, {"issue_date": "2028-02-01"}):
+        r = client.patch(f"{url}/{aid}", headers=admin_headers, json=body)
+        assert r.status_code == 422, body

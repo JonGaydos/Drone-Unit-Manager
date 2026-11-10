@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { screen, within } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
@@ -131,6 +131,25 @@ describe('OperatingAuthorityPage', () => {
       record_status: 'active',
       grounds_unit: true,
     })
+  })
+
+  it('refuses a blank title or an expiry before the issue date without saving', async () => {
+    let posted = false
+    mockMount()
+    server.use(http.post('/api/operating-authorities', () => { posted = true; return HttpResponse.json({ id: 9 }, { status: 201 }) }))
+    const user = userEvent.setup()
+    renderWithProviders(<OperatingAuthorityPage />, { role: 'admin' })
+
+    await user.click(await screen.findByRole('button', { name: /Add Authority/ }))
+    await user.type(screen.getByLabelText('Title'), '   ')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Required: Title')).toBeInTheDocument()
+    await user.type(screen.getByLabelText('Title'), 'Night COA')
+    fireEvent.change(screen.getByLabelText('Issue date'), { target: { value: '2026-06-01' } })
+    fireEvent.change(screen.getByLabelText('Expiry date'), { target: { value: '2026-01-01' } })
+    fireEvent.submit(screen.getByRole('dialog').querySelector('form'))
+    expect(await screen.findByText('Expiry date cannot be before the issue date')).toBeInTheDocument()
+    expect(posted).toBe(false)
   })
 
   it('opens the edit form prefilled with the row it was opened from', async () => {
