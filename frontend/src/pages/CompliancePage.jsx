@@ -8,8 +8,7 @@ import {
   ClipboardCheck, Loader2, ChevronRight, RefreshCw, Download, Send, Users, Mail, Stamp,
 } from 'lucide-react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
-import { useConfirm } from '@/hooks/useConfirm'
+import { Modal } from '@/components/ui/Modal'
 import { daysUntil } from '@/lib/utils'
 
 function getScoreTheme(score) {
@@ -321,7 +320,8 @@ export default function CompliancePage() {
   const [sending, setSending] = useState(false)
   const toast = useToast()
   const navigate = useNavigate()
-  const [confirmProps, requestConfirm] = useConfirm()
+  // The reminder confirm dialog is open while this holds its intro message.
+  const [reminderIntro, setReminderIntro] = useState(null)
 
   const load = async () => {
     setLoading(true)
@@ -337,27 +337,25 @@ export default function CompliancePage() {
 
   useEffect(() => { void load() }, [])
 
-  const handleSendReminders = async () => {
+  const handleSendReminders = () => {
     if (!data || data.pilots_lapsed === 0) return
-    requestConfirm({
-      title: 'Send currency reminders',
-      message: `Send currency reminder emails to ${data.pilots_lapsed} lapsed pilot${data.pilots_lapsed === 1 ? '' : 's'}? Pilots without an email on file will be skipped.`,
-      confirmLabel: 'Send',
-      confirmVariant: 'primary',
-      onConfirm: async () => {
-        setSending(true)
-        try {
-          const res = await api.post('/currency/send-reminders', {}, { timeout: 120000 })
-          const bits = [`${res.sent} sent`]
-          if (res.skipped_no_email) bits.push(`${res.skipped_no_email} skipped (no email)`)
-          if (res.skipped_current) bits.push(`${res.skipped_current} already current`)
-          if (res.failed) bits.push(`${res.failed} failed`)
-          toast.success(`Reminders: ${bits.join(', ')}`)
-        } catch (err) {
-          toast.error(err.message)
-        } finally { setSending(false) }
-      },
-    })
+    setReminderIntro('')
+  }
+
+  const sendReminders = async () => {
+    const intro = reminderIntro.trim()
+    setReminderIntro(null)
+    setSending(true)
+    try {
+      const res = await api.post('/currency/send-reminders', intro ? { custom_message: intro } : {}, { timeout: 120000 })
+      const bits = [`${res.sent} sent`]
+      if (res.skipped_no_email) bits.push(`${res.skipped_no_email} skipped (no email)`)
+      if (res.skipped_current) bits.push(`${res.skipped_current} already current`)
+      if (res.failed) bits.push(`${res.failed} failed`)
+      toast.success(`Reminders: ${bits.join(', ')}`)
+    } catch (err) {
+      toast.error(err.message)
+    } finally { setSending(false) }
   }
 
   if (loading) {
@@ -589,7 +587,26 @@ export default function CompliancePage() {
         </div>
       )}
 
-      <ConfirmDialog {...confirmProps} />
+      <Modal open={reminderIntro !== null} onClose={() => setReminderIntro(null)} title="Send currency reminders">
+        <p className="text-sm text-muted-foreground mb-4">
+          {`Send currency reminder emails to ${data.pilots_lapsed} lapsed pilot${data.pilots_lapsed === 1 ? '' : 's'}? Pilots without an email on file will be skipped.`}
+        </p>
+        <label htmlFor="reminder-intro" className="block text-sm font-medium text-foreground mb-1">Message to pilots (optional)</label>
+        <textarea id="reminder-intro" rows={3} maxLength={2000} value={reminderIntro ?? ''}
+          onChange={e => setReminderIntro(e.target.value)}
+          placeholder="Shown at the top of each reminder"
+          className="w-full mb-6 px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+        <div className="flex gap-2 justify-end">
+          <button onClick={() => setReminderIntro(null)}
+            className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90">
+            Cancel
+          </button>
+          <button onClick={sendReminders}
+            className="px-4 py-2 rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:opacity-90">
+            Send
+          </button>
+        </div>
+      </Modal>
     </div>
   )
 }

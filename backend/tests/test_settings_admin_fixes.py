@@ -369,3 +369,10 @@ def test_smtp_test_is_rate_limited(client, db, admin_user, admin_headers, monkey
     monkeypatch.setattr(email_digest, "send_email", lambda *a, **k: True)
     codes = [client.post("/api/settings/smtp/test", headers=admin_headers).status_code for _ in range(4)]
     assert codes == [200, 200, 200, 429]
+
+
+# --- G-6: the reminder intro has the dialog's length cap ----------------------------
+
+def test_reminder_message_is_capped(client, db, admin_headers, reminder_setup):
+    resp = client.post(REMINDERS_URL, headers=admin_headers, json={"custom_message": "x" * 2001})
+    assert resp.status_code == 422

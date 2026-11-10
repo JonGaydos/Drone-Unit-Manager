@@ -228,7 +228,7 @@ def get_all_currency_status(db: DBSession, user: ViewUser):
 
 class ReminderRequest(BaseModel):
     pilot_ids: Optional[list[int]] = None  # If None, all lapsed pilots
-    custom_message: Optional[str] = None   # Optional intro text from supervisor
+    custom_message: Optional[str] = Field(None, max_length=2000)  # Optional intro text from supervisor
 
 
 def _reminder_html(pilot, lapsed_rules, org_name: str, intro: str) -> str:

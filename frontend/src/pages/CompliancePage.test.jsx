@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { renderWithProviders } from '@/test/render'
@@ -206,6 +206,40 @@ describe('CompliancePage', () => {
 
       await screen.findByRole('heading', { name: 'Compliance Dashboard' })
       expect(within(tile()).getByText('100%')).toBeInTheDocument()
+    })
+  })
+
+  describe('currency reminders', () => {
+    // G-6: the API takes an intro message but the dialog had no field for it.
+    it('sends the optional message typed in the confirm dialog', async () => {
+      let sent = null
+      mockMount()
+      server.use(http.post('/api/currency/send-reminders', async ({ request }) => {
+        sent = await request.json()
+        return HttpResponse.json({ sent: 1, skipped_no_email: 0, skipped_current: 0, failed: 0 })
+      }))
+      const { user } = renderWithProviders(<CompliancePage />, { role: 'admin' })
+      await user.click(await screen.findByRole('button', { name: /Send Reminders/ }))
+      const dialog = await screen.findByRole('dialog')
+      expect(within(dialog).getByText(/to 1 lapsed pilot\?/)).toBeInTheDocument()
+      await user.type(within(dialog).getByLabelText('Message to pilots (optional)'), 'Book a training flight this week.')
+      await user.click(within(dialog).getByRole('button', { name: 'Send' }))
+
+      await waitFor(() => expect(sent).not.toBeNull())
+      expect(sent.custom_message).toBe('Book a training flight this week.')
+      expect(await screen.findByText('Reminders: 1 sent')).toBeInTheDocument()
+    })
+
+    it('sends nothing when the dialog is cancelled', async () => {
+      let posted = false
+      mockMount()
+      server.use(http.post('/api/currency/send-reminders', () => { posted = true; return HttpResponse.json({}) }))
+      const { user } = renderWithProviders(<CompliancePage />, { role: 'admin' })
+      await user.click(await screen.findByRole('button', { name: /Send Reminders/ }))
+      const dialog = await screen.findByRole('dialog')
+      await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+      expect(posted).toBe(false)
     })
   })
 })
