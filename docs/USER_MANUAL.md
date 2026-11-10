@@ -57,7 +57,7 @@ The dashboard is your home page and provides an at-a-glance overview of your dro
 
 ### 2.1 Overview Cards
 
-Six cards at the top show key metrics: Total Flights, Total Flight Hours, Active Pilots, Fleet Size, Flights Needing Review, and Upcoming Certification Expirations. Each card is clickable and navigates to the relevant page.
+Six cards at the top show key metrics: Total Flights, Total Flight Hours, Pilots Flying (30d), Vehicles Flown (30d), Flights Needing Review, and Upcoming Certification Expirations. Each card is clickable and navigates to the relevant page.
 
 ### 2.2 Recent Flights
 

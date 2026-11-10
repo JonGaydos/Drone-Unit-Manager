@@ -463,19 +463,21 @@ export default function DashboardPage() {
         icon={Clock}
         to="/analytics"
       />
+      {/* Value and delta are who flew in the last 30 days; the roster total is
+          the subtitle, as on the flights and hours cards. */}
       <StatTile
-        label="Active Pilots"
-        value={stats?.active_pilots ?? 0}
+        label="Pilots Flying (30d)"
+        value={trends?.current?.active_pilots ?? '—'}
         deltaPct={trends?.deltas_pct?.active_pilots}
-        subtitle="flying last 30d"
+        subtitle={`${stats?.active_pilots ?? 0} active`}
         icon={Users}
         to="/pilots"
       />
       <StatTile
-        label="Fleet Size"
-        value={stats?.fleet_size ?? 0}
+        label="Vehicles Flown (30d)"
+        value={trends?.current?.active_vehicles ?? '—'}
         deltaPct={trends?.deltas_pct?.active_vehicles}
-        subtitle="flying last 30d"
+        subtitle={`${stats?.fleet_size ?? 0} in fleet`}
         icon={Box}
         to="/fleet"
       />
