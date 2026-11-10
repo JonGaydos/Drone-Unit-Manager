@@ -127,7 +127,11 @@ def get_pilot_needs_attention(pilot_id: int, db: DBSession, user: ViewUser, _cer
     ).join(
         CertificationType,
         PilotCertification.certification_type_id == CertificationType.id,
-    ).filter(PilotCertification.pilot_id == pilot_id).all()
+    ).filter(
+        PilotCertification.pilot_id == pilot_id,
+        # Archived (renewed) and never-issued records, as on the compliance dashboard.
+        PilotCertification.status.notin_(["not_issued", "renewed"]),
+    ).all()
     today = date.today()
     for expiration_date, name in certs:
         if expiration_date is None:

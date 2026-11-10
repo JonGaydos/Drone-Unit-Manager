@@ -164,3 +164,19 @@ def test_second_live_cert_of_a_type_is_refused(client, db, admin_headers):
     # Reviving the renewed one would make two live certs again.
     r = client.patch(f"/api/pilot-certifications/{old.id}", headers=admin_headers, json={"status": "complete"})
     assert r.status_code == 400
+
+
+# --- C-F10: Needs Attention leaves out renewed and not-issued certs ---
+
+
+def test_needs_attention_skips_renewed_and_not_issued_certs(client, db, admin_headers):
+    pilot = _pilot(db)
+    old_type = _cert_type(db, "Part 107")
+    other = _cert_type(db, "Night Ops")
+    soon = TODAY + timedelta(days=20)
+    _cert(db, pilot.id, old_type.id, status="renewed", expiry=TODAY - timedelta(days=5))
+    _cert(db, pilot.id, old_type.id, status="complete", expiry=TODAY + timedelta(days=700))
+    _cert(db, pilot.id, other.id, status="not_issued", expiry=soon)
+    r = client.get(f"/api/pilots/{pilot.id}/needs-attention", headers=admin_headers)
+    assert r.status_code == 200
+    assert r.json() == {"count": 0, "items": []}
