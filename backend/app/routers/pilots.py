@@ -153,10 +153,23 @@ def get_pilot_needs_attention(pilot_id: int, db: DBSession, user: ViewUser, _cer
     return {"count": len(items), "items": items}
 
 
-@router.post("", response_model=PilotOut, responses=responses(401))
+def _check_badge_free(db, badge: str | None, pilot_id: int | None = None) -> None:
+    """Refuse a badge number another pilot already has (trimmed, any case)."""
+    if not badge or not badge.strip():
+        return
+    q = db.query(Pilot).filter(func.lower(func.trim(Pilot.badge_number)) == badge.strip().lower())
+    if pilot_id is not None:
+        q = q.filter(Pilot.id != pilot_id)
+    holder = q.first()
+    if holder:
+        raise HTTPException(status_code=400, detail=f"Badge number {badge.strip()} is already used by {holder.full_name}")
+
+
+@router.post("", response_model=PilotOut, responses=responses(400, 401))
 def create_pilot(data: PilotCreate, db: DBSession, admin: ManageUser):
     """Create a new pilot record. Needs the pilots.manage permission."""
     from app.services.audit import log_action
+    _check_badge_free(db, data.badge_number)
     pilot = Pilot(**data.model_dump())
     db.add(pilot)
     db.flush()
@@ -172,7 +185,7 @@ def create_pilot(data: PilotCreate, db: DBSession, admin: ManageUser):
 SUPERVISOR_ONLY_PILOT_FIELDS = ("status", "counts_toward_totals", "photo_url")
 
 
-@router.patch("/{pilot_id}", response_model=PilotOut, responses=responses(401, 403, 404))
+@router.patch("/{pilot_id}", response_model=PilotOut, responses=responses(400, 401, 403, 404))
 def update_pilot(pilot_id: int, data: PilotUpdate, db: DBSession, user: EditUser):
     """Update a pilot's profile.
 
@@ -195,6 +208,8 @@ def update_pilot(pilot_id: int, data: PilotUpdate, db: DBSession, user: EditUser
         f in update_data and update_data[f] != getattr(pilot, f) for f in SUPERVISOR_ONLY_PILOT_FIELDS
     ):
         raise HTTPException(status_code=403, detail="Status, unit totals and photo URL need the pilots.manage permission")
+    if "badge_number" in update_data:
+        _check_badge_free(db, update_data["badge_number"], pilot_id)
     changes = compute_changes(pilot, update_data, list(update_data.keys()))
     for key, value in update_data.items():
         setattr(pilot, key, value)

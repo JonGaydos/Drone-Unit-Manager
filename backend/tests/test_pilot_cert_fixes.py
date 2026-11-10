@@ -222,3 +222,42 @@ def test_calendar_cert_events_skip_renewed_not_issued_and_inactive_pilots(client
     assert f"cert-{live.id}" in ids
     for pc in (renewed, not_issued, inactive):
         assert f"cert-{pc.id}" not in ids
+
+
+# --- C-F2: pilot status, email, lengths and badge numbers ---
+
+
+def test_pilot_status_email_and_lengths_are_checked(client, db, admin_headers):
+    base = {"first_name": "Test", "last_name": "X"}
+    for extra in ({"status": "banana"}, {"email": "not-an-email"}, {"badge_number": "B" * 51},
+                  {"phone": "1" * 51}, {"first_name": "A" * 101}):
+        r = client.post("/api/pilots", headers=admin_headers, json={**base, **extra})
+        assert r.status_code == 422, extra
+    ok = client.post("/api/pilots", headers=admin_headers,
+                     json={**base, "status": "inactive", "email": "t.x@example.org", "badge_number": ""})
+    assert ok.status_code == 200
+    pid = ok.json()["id"]
+    for body in ({"status": "zzz"}, {"status": None}, {"email": "a@b"}, {"notes": "n" * 10001}):
+        r = client.patch(f"/api/pilots/{pid}", headers=admin_headers, json=body)
+        assert r.status_code == 422, body
+    assert client.patch(f"/api/pilots/{pid}", headers=admin_headers, json={"status": "active"}).status_code == 200
+
+
+def test_duplicate_badge_number_is_refused(client, db, admin_headers):
+    first = client.post("/api/pilots", headers=admin_headers,
+                        json={"first_name": "A", "last_name": "One", "badge_number": "K-9"})
+    assert first.status_code == 200
+    r = client.post("/api/pilots", headers=admin_headers,
+                    json={"first_name": "B", "last_name": "Two", "badge_number": " k-9 "})
+    assert r.status_code == 400
+    assert "A One" in r.json()["detail"]
+    second = client.post("/api/pilots", headers=admin_headers,
+                         json={"first_name": "B", "last_name": "Two", "badge_number": "K-10"})
+    r = client.patch(f"/api/pilots/{second.json()['id']}", headers=admin_headers, json={"badge_number": "K-9"})
+    assert r.status_code == 400
+    # Re-saving a pilot's own badge, or leaving badges blank, is fine.
+    assert client.patch(f"/api/pilots/{first.json()['id']}", headers=admin_headers,
+                        json={"badge_number": "K-9"}).status_code == 200
+    for name in ("C", "D"):
+        assert client.post("/api/pilots", headers=admin_headers,
+                           json={"first_name": name, "last_name": "Z", "badge_number": ""}).status_code == 200
