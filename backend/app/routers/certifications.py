@@ -250,7 +250,7 @@ def _do_renew(db, old, issue_date, expiration_date=None, certificate_number=None
     return new_cert
 
 
-@router.post("/api/pilot-certifications/{pc_id}/renew", response_model=PilotCertificationOut, responses=responses(404))
+@router.post("/api/pilot-certifications/{pc_id}/renew", response_model=PilotCertificationOut, responses=responses(400, 404))
 def renew_pilot_certification(
     pc_id: int,
     data: CertRenewRequest,
@@ -263,6 +263,8 @@ def renew_pilot_certification(
     old = db.query(PilotCertification).filter(PilotCertification.id == pc_id).first()
     if not old:
         raise HTTPException(status_code=404, detail=PILOT_CERTIFICATION_NOT_FOUND)
+    if old.status == "renewed":
+        raise HTTPException(status_code=400, detail="This certification is already renewed; renew its current record instead")
 
     new_cert = _do_renew(db, old, data.issue_date, data.expiration_date,
                          data.certificate_number, data.notes)

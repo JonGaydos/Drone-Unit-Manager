@@ -285,3 +285,18 @@ def test_cert_type_fields_are_checked(client, db, admin_headers):
         assert client.patch(f"{url}/{other['id']}", headers=admin_headers, json=body).status_code == 422, body
     # Renaming a type to its own name in another case is fine.
     assert client.patch(f"{url}/{other['id']}", headers=admin_headers, json={"name": "OTHER"}).status_code == 200
+
+
+# --- C-F9: a renewed cert cannot be renewed again ---
+
+
+def test_renewing_a_renewed_cert_is_refused(client, db, admin_headers):
+    pilot = _pilot(db)
+    ct = _cert_type(db, months=24)
+    pc = _cert(db, pilot.id, ct.id, issue=date(2024, 1, 1), expiry=date(2026, 1, 1))
+    url = f"/api/pilot-certifications/{pc.id}/renew"
+    assert client.post(url, headers=admin_headers, json={"issue_date": "2026-01-01"}).status_code == 200
+    r = client.post(url, headers=admin_headers, json={"issue_date": "2026-02-01"})
+    assert r.status_code == 400
+    assert "already renewed" in r.json()["detail"]
+    assert db.query(PilotCertification).filter(PilotCertification.renewed_from_id == pc.id).count() == 1
