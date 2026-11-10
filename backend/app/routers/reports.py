@@ -709,9 +709,11 @@ def _pilot_hours(config: ReportConfig, db: Session):
     if config.pilot_ids:
         q = q.filter(Pilot.id.in_(config.pilot_ids))
 
-    # Only include active pilots when no specific pilots are filtered
+    # With no pilots chosen: every active pilot (at 0 hours if they did not
+    # fly), plus any pilot since made inactive who flew in the period, so the
+    # total matches the Flight Summary for the same range.
     if not config.pilot_ids:
-        q = q.filter(Pilot.status == "active")
+        q = q.having(or_(Pilot.status == "active", func.count(Flight.id) > 0))
 
     # A vendor or guest operator would otherwise sit in the report at 0.0
     # hours, which reads as a unit pilot who did not fly.

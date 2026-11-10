@@ -154,3 +154,24 @@ def test_upcoming_expirations_leave_out_certs_that_already_expired(client, db, a
     r = client.get("/api/dashboard/upcoming-expirations", headers=admin_headers)
     assert r.status_code == 200
     assert [row["expiration_date"] for row in r.json()] == [str(today.expiration_date), str(soon.expiration_date)]
+
+
+# --- E-8: Pilot Hours totals include pilots who flew and later left ---
+
+
+def test_pilot_hours_report_keeps_inactive_pilots_who_flew_in_the_period(client, db, admin_headers):
+    from app.models.flight import Flight
+    from app.models.pilot import Pilot
+    active, left, never = _add(db,
+                               Pilot(first_name="Robin", last_name="Vale", status="active"),
+                               Pilot(first_name="Casey", last_name="Moor", status="inactive"),
+                               Pilot(first_name="Avery", last_name="Stone", status="inactive"))
+    _add(db, Flight(pilot_id=active.id, date=date(2024, 3, 1), duration_seconds=3600),
+         Flight(pilot_id=left.id, date=date(2024, 4, 1), duration_seconds=7200))
+    body = {"report_type": "pilot_hours", "date_from": "2024-01-01", "date_to": "2024-12-31"}
+    data = client.post("/api/reports/generate", headers=admin_headers, json=body).json()
+    assert sorted(r["pilot"] for r in data["rows"]) == ["Casey Moor", "Robin Vale"]
+    assert data["summary"]["total_hours"] == 3.0
+    summary = client.post("/api/reports/generate", headers=admin_headers,
+                          json={**body, "report_type": "flight_summary"}).json()["summary"]
+    assert data["summary"]["total_hours"] == summary["total_hours"]
