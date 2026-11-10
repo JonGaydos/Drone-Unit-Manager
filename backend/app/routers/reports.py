@@ -250,7 +250,8 @@ def _build_pdf_data_table(rows: list, columns: list, header_bg, alt_row, white, 
     table_data = [table_header]
 
     for row in rows[:200]:
-        vals = list(row.values())
+        # "_links" (and any other underscore key) is for the preview, not a column.
+        vals = [v for k, v in row.items() if not k.startswith("_")]
         table_row = [Paragraph(_esc(_clip(v, PDF_CELL_MAX_CHARS)) if v is not None else "-", cell_style) for v in vals]
         table_data.append(table_row)
 
@@ -680,6 +681,7 @@ def _flight_summary_row(f) -> dict:
         "purpose": f.purpose or "—",
         "duration_min": round((f.duration_seconds or 0) / 60, 1),
         "location": f.takeoff_address or "—",
+        "_links": {"pilot": f.pilot_id, "vehicle": f.vehicle_id},
     }
 
 
@@ -757,6 +759,7 @@ def _pilot_hours(config: ReportConfig, db: Session):
             "flights": r.flights,
             "hours": round(r.seconds / 3600, 1),
             "avg_min": round(r.seconds / max(r.flights, 1) / 60, 1),
+            "_links": {"pilot": r.id},
         })
 
     return {
@@ -789,7 +792,7 @@ def _equipment_utilization(config: ReportConfig, db: Session):
         join_conditions.append(Flight.pilot_id.in_(config.pilot_ids))
 
     q = db.query(
-        Vehicle.manufacturer, Vehicle.model, Vehicle.nickname, Vehicle.serial_number,
+        Vehicle.id, Vehicle.manufacturer, Vehicle.model, Vehicle.nickname, Vehicle.serial_number,
         func.count(Flight.id).label("flights"),
         func.coalesce(func.sum(Flight.duration_seconds), 0).label("seconds"),
     ).select_from(Vehicle).outerjoin(Flight, and_(*join_conditions))
@@ -807,6 +810,7 @@ def _equipment_utilization(config: ReportConfig, db: Session):
             "serial": r.serial_number,
             "flights": r.flights,
             "hours": round(r.seconds / 3600, 1),
+            "_links": {"vehicle": r.id},
         })
 
     # Naming aircraft means "tell me about these", so they stay listed at 0.
@@ -898,6 +902,7 @@ def _certification_row(pc, today: date) -> dict:
         "issue_date": str(pc.issue_date) if pc.issue_date else "—",
         "expiration_date": str(pc.expiration_date) if pc.expiration_date else "—",
         "days_until_expiry": days_until if days_until is not None else "N/A",
+        "_links": {"pilot": pc.pilot_id},
     }
 
 
@@ -1123,6 +1128,7 @@ def _pilot_activity_summary(config: ReportConfig, db: Session):
             "mission_hours": mission_hrs,
             "training_hours": training_hrs,
             "total_hours": total_hrs,
+            "_links": {"pilot": pilot.id},
         })
 
     rows.sort(key=lambda r: r["total_hours"], reverse=True)

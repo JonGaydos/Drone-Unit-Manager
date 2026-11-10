@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { api } from '@/api/client'
 import { addDays, normalizeDateValue, todayLocal } from '@/lib/utils'
@@ -53,6 +54,20 @@ const CSV_EXPORTS = [
   { type: 'incidents', label: 'Incidents', needs: 'incidents.view' },
   { type: 'flight-plans', label: 'Flight Plans', needs: 'flight_plans.view' },
 ]
+
+/** A row's displayed cells: underscore keys (the API's "_links") are not columns. */
+const rowCells = (row) => Object.entries(row).filter(([key]) => !key.startsWith('_'))
+
+/** Where a preview cell links, from the ids the API sends in row._links. */
+const CELL_LINKS = { pilot: '/pilots', vehicle: '/fleet/vehicles' }
+
+function cellContent(row, colKey, val) {
+  const text = val == null ? '—' : String(val)
+  const id = row._links?.[colKey]
+  return id != null && CELL_LINKS[colKey]
+    ? <Link to={`${CELL_LINKS[colKey]}/${id}`} className="text-primary hover:underline">{text}</Link>
+    : text
+}
 
 /** The preview's header line: the period the report states (annual reports
  *  default to the current year), else the dates and filters it was generated
@@ -611,9 +626,9 @@ export default function ReportsPage() {
                                 </thead>
                                 <tbody>
                                   {sec.rows.map((row, ri) => (
-                                    <tr key={`r-${ri}-${Object.values(row).join('|')}`} className="border-b border-border/50 hover:bg-accent/30">
-                                      {Object.entries(row).map(([colKey, val]) => (
-                                        <td key={colKey} className="px-3 py-1.5 text-foreground text-xs">{val == null ? '—' : String(val)}</td>
+                                    <tr key={`r-${ri}-${rowCells(row).map(([, v]) => v).join('|')}`} className="border-b border-border/50 hover:bg-accent/30">
+                                      {rowCells(row).map(([colKey, val]) => (
+                                        <td key={colKey} className="px-3 py-1.5 text-foreground text-xs">{cellContent(row, colKey, val)}</td>
                                       ))}
                                     </tr>
                                   ))}
@@ -635,7 +650,7 @@ export default function ReportsPage() {
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="border-b border-border bg-muted/30">
-                            {(reportResult.columns || Object.keys(reportResult.rows[0])).map((col) => (
+                            {(reportResult.columns || rowCells(reportResult.rows[0]).map(([key]) => key)).map((col) => (
                               <th key={col} className="text-left px-4 py-2 font-medium text-muted-foreground text-xs capitalize">
                                 {typeof col === 'string' ? col.replaceAll('_', ' ') : col}
                               </th>
@@ -644,9 +659,9 @@ export default function ReportsPage() {
                         </thead>
                         <tbody>
                           {reportResult.rows.map((row) => (
-                            <tr key={Object.values(row).join('|')} className="border-b border-border/50 hover:bg-accent/30">
-                              {Object.entries(row).map(([colKey, val]) => (
-                                <td key={colKey} className="px-4 py-2 text-foreground text-xs">{val == null ? '—' : String(val)}</td>
+                            <tr key={rowCells(row).map(([, v]) => v).join('|')} className="border-b border-border/50 hover:bg-accent/30">
+                              {rowCells(row).map(([colKey, val]) => (
+                                <td key={colKey} className="px-4 py-2 text-foreground text-xs">{cellContent(row, colKey, val)}</td>
                               ))}
                             </tr>
                           ))}

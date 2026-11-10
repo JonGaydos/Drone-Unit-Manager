@@ -199,6 +199,24 @@ describe('ReportsPage', () => {
     expect(screen.getByText('2026', { selector: 'p.text-xs' })).toBeInTheDocument()
   })
 
+  // E-13: pilot and vehicle names in the preview link to their pages, using
+  // the ids the API sends in each row's _links (never shown as a column).
+  it('links pilot and vehicle names in the preview', async () => {
+    mockMount()
+    server.use(http.post('/api/reports/generate', () => HttpResponse.json({
+      title: 'Flight Summary Report', summary: { total_flights: 1 },
+      columns: ['Date', 'Pilot', 'Vehicle'],
+      rows: [{ date: '2026-05-01', pilot: 'Robin Vale', vehicle: 'Make One', _links: { pilot: 4, vehicle: 9 } }],
+    })))
+    const { user } = renderWithProviders(<ReportsPage />, { role: 'admin' })
+    await screen.findByText('Report Builder')
+    await user.click(screen.getByRole('button', { name: /Generate/ }))
+    expect(await screen.findByRole('link', { name: 'Robin Vale' })).toHaveAttribute('href', '/pilots/4')
+    expect(screen.getByRole('link', { name: 'Make One' })).toHaveAttribute('href', '/fleet/vehicles/9')
+    expect(screen.getAllByRole('columnheader')).toHaveLength(3)
+    expect(document.body.textContent).not.toContain('[object Object]')
+  })
+
   it('keeps the selection so switching report types and back restores it', async () => {
     const { user, captured } = await mountCapturingRequest()
 

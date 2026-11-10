@@ -226,3 +226,26 @@ def test_per_pilot_zip_names_are_unique_and_length_capped(client, db, admin_head
     assert all(len(n) <= 120 for n in names), [len(n) for n in names]
     assert any(f"_{twin_a.id}_" in n for n in names) and any(f"_{twin_b.id}_" in n for n in names)
     assert any(f"_{long_name.id}_" in n for n in names)
+
+
+# --- E-13: report rows carry the pilot and vehicle ids the preview links to ---
+
+
+def test_report_rows_carry_pilot_and_vehicle_links(client, db, admin_headers):
+    from app.models.flight import Flight
+    from app.models.pilot import Pilot
+    pilot = _add(db, Pilot(first_name="Robin", last_name="Vale", status="active"))
+    vehicle = _add(db, Vehicle(serial_number="V-1", manufacturer="Make", model="One", status="active"))
+    _add(db, Flight(pilot_id=pilot.id, vehicle_id=vehicle.id, date=TODAY, duration_seconds=600))
+    expected = {
+        "flight_summary": {"pilot": pilot.id, "vehicle": vehicle.id},
+        "pilot_hours": {"pilot": pilot.id},
+        "equipment_utilization": {"vehicle": vehicle.id},
+        "pilot_activity_summary": {"pilot": pilot.id},
+    }
+    for report_type, links in expected.items():
+        data = client.post("/api/reports/generate", headers=admin_headers, json={"report_type": report_type}).json()
+        assert data["rows"][0]["_links"] == links, report_type
+        assert len([k for k in data["rows"][0] if not k.startswith("_")]) == len(data["columns"]), report_type
+        pdf = client.post(REPORT_PDF_URL, headers=admin_headers, json={"report_type": report_type})
+        assert pdf.status_code == 200, report_type
