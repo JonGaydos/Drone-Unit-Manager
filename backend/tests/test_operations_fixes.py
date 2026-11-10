@@ -324,3 +324,66 @@ def test_open_meteo_is_asked_for_local_time(client, admin_headers, mock_httpx):
     meteo = next(r for r in seen if "open-meteo" in str(r.url))
     assert meteo.url.params["timezone"] == "auto"
     assert body["forecast"][0]["time"] == "2026-11-08T22:00"
+
+
+# D-3: coordinates and cost ranges
+
+
+def test_create_refuses_out_of_range_coordinates_and_negative_cost(client, admin_headers):
+    for extra in ({"lat": 999}, {"lat": -90.5}, {"lon": -999}, {"lon": 180.5}, {"estimated_cost": -50}):
+        r = client.post(INCIDENTS_URL, headers=admin_headers, json=_incident_body(**extra))
+        assert r.status_code == 422, (extra, r.text)
+    ok = client.post(INCIDENTS_URL, headers=admin_headers,
+                     json=_incident_body(lat=90, lon=-180, estimated_cost=0))
+    assert ok.status_code == 200, ok.text
+
+
+def test_patch_refuses_out_of_range_coordinates_and_negative_cost(client, db, admin_headers):
+    inc = _make_incident(db)
+    for extra in ({"lat": 91}, {"lon": 181}, {"estimated_cost": -1}):
+        r = client.patch(f"{INCIDENTS_URL}/{inc.id}", headers=admin_headers, json=extra)
+        assert r.status_code == 422, (extra, r.text)
+
+
+# D-5: incident and resolution dates
+
+
+def test_create_refuses_a_future_incident_date(client, admin_headers):
+    r = client.post(INCIDENTS_URL, headers=admin_headers, json=_incident_body(date="2030-01-01"))
+    assert r.status_code == 422
+    assert "Incident date cannot be in the future" in r.text
+
+
+def test_patch_refuses_a_future_incident_date(client, db, admin_headers):
+    inc = _make_incident(db)
+    r = client.patch(f"{INCIDENTS_URL}/{inc.id}", headers=admin_headers, json={"date": "2030-01-01"})
+    assert r.status_code == 422
+
+
+def test_patch_refuses_resolution_before_the_incident_date(client, db, admin_headers):
+    from datetime import date
+    inc = _make_incident(db, date=date(2026, 11, 1))
+    r = client.patch(f"{INCIDENTS_URL}/{inc.id}", headers=admin_headers,
+                     json={"status": "closed", "resolution_date": "2020-01-01"})
+    assert r.status_code == 422
+    assert "Resolution date cannot be before the incident date" in r.text
+    ok = client.patch(f"{INCIDENTS_URL}/{inc.id}", headers=admin_headers,
+                      json={"status": "closed", "resolution_date": "2026-11-01"})
+    assert ok.status_code == 200, ok.text
+
+
+def test_patch_refuses_moving_the_incident_date_after_its_resolution(client, db, admin_headers):
+    from datetime import date
+    inc = _make_incident(db, date=date(2026, 10, 1), status="closed", resolution_date=date(2026, 10, 5))
+    r = client.patch(f"{INCIDENTS_URL}/{inc.id}", headers=admin_headers, json={"date": "2026-10-20"})
+    assert r.status_code == 422
+
+
+# D-6: per_page bounds on the list
+
+
+def test_list_refuses_per_page_below_one(client, admin_headers):
+    for value in (-5, 0):
+        assert client.get(INCIDENTS_URL, headers=admin_headers,
+                          params={"per_page": value}).status_code == 422
+    assert client.get(INCIDENTS_URL, headers=admin_headers, params={"per_page": 1}).status_code == 200

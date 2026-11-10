@@ -2,7 +2,7 @@ from datetime import date, datetime
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, StringConstraints, field_validator
+from pydantic import BaseModel, Field, StringConstraints, field_validator
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -20,6 +20,7 @@ from app.constants import (
 from app.services.choices import require_choices
 from app.services.audit import log_action
 from app.services.audit_capture import delete_links
+from app.services.local_time import display_zone
 from app.responses import responses
 
 router = APIRouter(prefix="/api/incidents", tags=["incidents"])
@@ -40,6 +41,9 @@ RESOLVE_FIELDS = ("status", "resolution", "resolution_date", "corrective_actions
 
 IncidentTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
 IncidentText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+Latitude = Annotated[float, Field(ge=-90, le=90)]
+Longitude = Annotated[float, Field(ge=-180, le=180)]
+Cost = Annotated[float, Field(ge=0)]
 
 
 class IncidentCreate(BaseModel):
@@ -50,14 +54,14 @@ class IncidentCreate(BaseModel):
     status: Optional[str] = None  # checked only; a new incident always starts open
     description: IncidentText
     location: Optional[str] = None
-    lat: Optional[float] = None
-    lon: Optional[float] = None
+    lat: Optional[Latitude] = None
+    lon: Optional[Longitude] = None
     flight_id: Optional[int] = None
     pilot_id: Optional[int] = None
     vehicle_id: Optional[int] = None
     equipment_grounded: bool = False
     damage_description: Optional[str] = None
-    estimated_cost: Optional[float] = None
+    estimated_cost: Optional[Cost] = None
     notes: Optional[str] = None
     report_type: str = "incident"
     impact_level: Optional[str] = None
@@ -71,8 +75,8 @@ class IncidentUpdate(BaseModel):
     category: Optional[str] = None
     description: Optional[IncidentText] = None
     location: Optional[str] = None
-    lat: Optional[float] = None
-    lon: Optional[float] = None
+    lat: Optional[Latitude] = None
+    lon: Optional[Longitude] = None
     flight_id: Optional[int] = None
     pilot_id: Optional[int] = None
     vehicle_id: Optional[int] = None
@@ -82,7 +86,7 @@ class IncidentUpdate(BaseModel):
     equipment_grounded: Optional[bool] = None
     damage_description: Optional[str] = None
     corrective_actions: Optional[str] = None
-    estimated_cost: Optional[float] = None
+    estimated_cost: Optional[Cost] = None
     notes: Optional[str] = None
     report_type: Optional[str] = None
     impact_level: Optional[str] = None
@@ -159,6 +163,14 @@ def _enrich(incident: Incident, db: Session, pilot_cache=None, vehicle_cache=Non
     return out
 
 
+def _check_dates(db: Session, incident_date: date, resolution_date: date | None) -> None:
+    """Refuse an incident dated after today (display zone) or resolved before it happened."""
+    if incident_date > datetime.now(display_zone(db)).date():
+        raise HTTPException(status_code=422, detail="Incident date cannot be in the future")
+    if resolution_date is not None and resolution_date < incident_date:
+        raise HTTPException(status_code=422, detail="Resolution date cannot be before the incident date")
+
+
 def _ground_vehicle_if_needed(incident: Incident, db: Session, user, was_grounded: bool = False) -> None:
     """Auto-ground the linked vehicle when an incident flags equipment as grounded.
 
@@ -231,7 +243,7 @@ def list_incidents(
 
     page: Annotated[int, Query(ge=1)] = 1,
 
-    per_page: Annotated[int, Query(le=200)] = 50,
+    per_page: Annotated[int, Query(ge=1, le=200)] = 50,
 ):
     q = db.query(Incident)
     if status:
@@ -282,6 +294,7 @@ def create_incident(data: IncidentCreate, db: DBSession, user: CreateUser):
         parsed_date = date.fromisoformat(data.date)
     except ValueError:
         raise HTTPException(status_code=422, detail=f"Invalid date format: {data.date}")
+    _check_dates(db, parsed_date, None)
     incident = Incident(
         date=parsed_date,
         title=data.title,
@@ -344,6 +357,9 @@ def update_incident(incident_id: int, data: IncidentUpdate, db: DBSession, user:
             raise HTTPException(status_code=422, detail=f"Invalid resolution_date format: {update_data['resolution_date']}")
     require_choices(update_data, incident, INCIDENT_CHOICES)
     _check_resolve_allowed(db, user, incident, update_data)
+    if "date" in update_data or update_data.get("resolution_date") is not None:
+        _check_dates(db, update_data.get("date", incident.date),
+                     update_data.get("resolution_date", incident.resolution_date))
     for key, value in update_data.items():
         setattr(incident, key, value)
     log_action(db, user.id, user.display_name, "update", "incident", incident.id, incident.title,
