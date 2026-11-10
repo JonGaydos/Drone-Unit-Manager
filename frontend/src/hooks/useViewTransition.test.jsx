@@ -67,7 +67,7 @@ describe('useViewTransition', () => {
   it('handles the rejections of a skipped transition', async () => {
     const unhandled = []
     const onUnhandled = (reason) => unhandled.push(reason)
-    process.on('unhandledRejection', onUnhandled)
+    globalThis.process.on('unhandledRejection', onUnhandled)
     const skipped = () => Promise.reject(new DOMException('Transition was skipped', 'AbortError'))
     document.startViewTransition = vi.fn(() => ({
       ready: skipped(), finished: skipped(), updateCallbackDone: skipped(),
@@ -76,7 +76,7 @@ describe('useViewTransition', () => {
       renderHook(() => useViewTransition(), { wrapper })
       await new Promise(resolve => setTimeout(resolve, 10))
     } finally {
-      process.off('unhandledRejection', onUnhandled)
+      globalThis.process.off('unhandledRejection', onUnhandled)
     }
     expect(unhandled).toEqual([])
   })
