@@ -139,3 +139,40 @@ def test_reviewer_can_deny_someone_elses_plan(client, db, pilot_user, admin_head
     r = client.post(f"{PLANS_URL}/{plan.id}/deny", headers=admin_headers, json={"denial_reason": "Weather"})
     assert r.status_code == 200
     assert r.json()["status"] == "denied"
+
+
+# --- B-13: training outcome and type come from fixed lists ---
+
+TRAINING_URL = "/api/training-logs"
+
+
+def _training_body(**overrides):
+    body = {"date": "2026-11-04", "title": "Night ops", "training_type": "Recurrent", "outcome": "completed"}
+    body.update(overrides)
+    return body
+
+
+def test_training_outcome_and_type_must_be_listed(client, admin_headers):
+    for bad in ({"outcome": "banana"}, {"training_type": "Nonsense"}):
+        r = client.post(TRAINING_URL, headers=admin_headers, json=_training_body(**bad))
+        assert r.status_code == 422, (bad, r.text)
+    ok = client.post(TRAINING_URL, headers=admin_headers, json=_training_body())
+    assert ok.status_code == 200, ok.text
+    tid = ok.json()["id"]
+    for bad in ({"outcome": "zzz"}, {"training_type": "Nonsense"}):
+        r = client.patch(f"{TRAINING_URL}/{tid}", headers=admin_headers, json=bad)
+        assert r.status_code == 422, (bad, r.text)
+    r = client.patch(f"{TRAINING_URL}/{tid}", headers=admin_headers,
+                     json={"outcome": "failed", "training_type": "Special"})
+    assert r.status_code == 200
+    assert r.json()["outcome"] == "failed"
+
+
+def test_training_stored_legacy_type_can_be_resent(client, db, admin_headers):
+    from app.models.training_log import TrainingLog
+    t = TrainingLog(date=date(2026, 11, 4), title="Imported", training_type="Practice", outcome="completed")
+    db.add(t)
+    db.commit()
+    r = client.patch(f"{TRAINING_URL}/{t.id}", headers=admin_headers,
+                     json={"training_type": "Practice", "notes": "kept"})
+    assert r.status_code == 200, r.text

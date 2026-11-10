@@ -90,3 +90,6 @@ INCIDENT_SEVERITIES = ("minor", "moderate", "major", "critical")
 INCIDENT_STATUSES = ("open", "investigating", "resolved", "closed")
 INCIDENT_REPORT_TYPES = ("incident", "success")
 MISSION_STATUSES = ("planned", "in_progress", "completed", "cancelled")
+# The Training Log page's lists (TRAINING_TYPES and OUTCOME_OPTIONS in TrainingLogPage.jsx).
+TRAINING_TYPES = ("Initial", "Recurrent", "Proficiency", "Special")
+TRAINING_OUTCOMES = ("completed", "incomplete", "failed")

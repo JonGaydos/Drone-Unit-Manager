@@ -5,7 +5,8 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, selectinload
 
-from app.constants import TRAINING_LOG_NOT_FOUND
+from app.constants import TRAINING_LOG_NOT_FOUND, TRAINING_OUTCOMES, TRAINING_TYPES
+from app.services.choices import require_choices
 from app.deps import DBSession
 from app.models.user import User
 from app.routers.auth import require_permission
@@ -24,6 +25,7 @@ from app.schemas.training_log import (
 router = APIRouter(prefix="/api/training-logs", tags=["training-logs"])
 
 LOGS_EDIT = "logs.edit"
+TRAINING_CHOICES = {"training_type": TRAINING_TYPES, "outcome": TRAINING_OUTCOMES}
 
 ViewUser = Annotated[User, Depends(require_permission("logs.view"))]
 CreateUser = Annotated[User, Depends(require_permission("logs.create"))]
@@ -144,11 +146,12 @@ def get_training_log(training_id: int, db: DBSession, user: ViewUser):
     return _training_to_out(training, db)
 
 
-@router.post("", response_model=TrainingLogOut, responses=responses(401))
+@router.post("", response_model=TrainingLogOut, responses=responses(401, 422))
 def create_training_log(data: TrainingLogCreate, db: DBSession, admin: CreateUser):
     from app.services.audit import log_action
     pilots_data = data.pilots
     training_dict = data.model_dump(exclude={"pilots"})
+    require_choices(training_dict, None, TRAINING_CHOICES)
     training = TrainingLog(**training_dict, created_by_id=admin.id)
     db.add(training)
     db.flush()
@@ -165,7 +168,7 @@ def create_training_log(data: TrainingLogCreate, db: DBSession, admin: CreateUse
     return _training_to_out(training, db)
 
 
-@router.patch("/{training_id}", response_model=TrainingLogOut, responses=responses(401, 404))
+@router.patch("/{training_id}", response_model=TrainingLogOut, responses=responses(401, 404, 422))
 def update_training_log(training_id: int, data: TrainingLogUpdate, db: DBSession, admin: EditUser):
     training = db.query(TrainingLog).filter(TrainingLog.id == training_id).first()
     if not training:
@@ -173,6 +176,7 @@ def update_training_log(training_id: int, data: TrainingLogUpdate, db: DBSession
     _require_edit(db, admin, training)
     update_data = data.model_dump(exclude_unset=True)
     pilots_data = update_data.pop("pilots", None)
+    require_choices(update_data, training, TRAINING_CHOICES)
     for key, value in update_data.items():
         setattr(training, key, value)
     if pilots_data is not None:
