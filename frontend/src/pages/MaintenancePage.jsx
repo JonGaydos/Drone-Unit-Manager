@@ -370,18 +370,21 @@ function resolveEntityName(entityType, entityId, entityLists) {
   if (entityType === 'organization') return 'Organization-wide'
   // Legacy "other" records (and typeless ones) carry no entity reference.
   if (entityType === 'other' && !entityId) return 'Other'
+  const typeLabel = entityType ? entityType.charAt(0).toUpperCase() + entityType.slice(1) : 'Item'
+  if (!entityId) return `${typeLabel} (no item)`
   const list = entityLists[entityType] || []
   const entity = list.find(e => e.id === entityId)
-  return entity ? getEntityName(entity, entityType) : `${entityType} #${entityId}`
+  return entity ? getEntityName(entity, entityType) : `${typeLabel} #${entityId}`
 }
 
 // Render entity reference — clickable Link for vehicles, plain text for others
 function EntityRef({ entityType, entityId, entityLists }) {
   const name = resolveEntityName(entityType, entityId, entityLists)
-  if (entityType === 'vehicle') {
-    return <Link to={`/fleet/vehicles/${entityId}`} className="text-primary hover:underline capitalize">{name}</Link>
+  // Names are shown as stored: no CSS capitalizing, which altered serials.
+  if (entityType === 'vehicle' && entityId) {
+    return <Link to={`/fleet/vehicles/${entityId}`} className="text-primary hover:underline">{name}</Link>
   }
-  return <span className="text-foreground capitalize">{name}</span>
+  return <span className="text-foreground">{name}</span>
 }
 
 export default function MaintenancePage() {

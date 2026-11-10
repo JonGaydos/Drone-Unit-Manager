@@ -297,4 +297,20 @@ describe('MaintenancePage', () => {
     expect(await within(dialog).findByText('Description is required.')).toBeInTheDocument()
     expect(posted).toBe(false)
   })
+
+  it('shows entity names as stored and a schedule with no item plainly', async () => {
+    mockMount({
+      vehicles: [vehicleOption({ id: 1, nickname: 'Unit-ab7c', model: 'X10', serialNumber: 'SN-001' })],
+      maintenance: () => HttpResponse.json([]),
+      schedules: () => HttpResponse.json([
+        { ...SCHEDULES[0], id: 31, name: 'Prop check' },
+        { ...SCHEDULES[0], id: 32, name: 'Orphan task', entity_id: null },
+      ]),
+    })
+    renderWithProviders(<MaintenancePage />, { role: 'admin' })
+    const link = await screen.findByRole('link', { name: 'Unit-ab7c' })
+    expect(link).not.toHaveClass('capitalize')
+    expect(screen.getByText('Vehicle (no item)')).toBeInTheDocument()
+    expect(screen.queryByText(/#null/i)).toBeNull()
+  })
 })
