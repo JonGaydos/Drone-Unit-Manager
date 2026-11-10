@@ -103,9 +103,10 @@ export function CommandPalette() {
     }
   }, [])
 
+  // The input focuses itself on mount (autoFocus), so the first keys typed
+  // after opening land in it rather than on the page behind.
   useEffect(() => {
-    if (open) setTimeout(() => inputRef.current?.focus(), 20)
-    else { setQuery(''); setResults([]); setTypeFilter(null); setActive(0) }
+    if (!open) { setQuery(''); setResults([]); setTypeFilter(null); setActive(0) }
   }, [open])
 
   // Debounced entity search.
@@ -197,6 +198,7 @@ export function CommandPalette() {
           <Search className="w-4 h-4 text-muted-foreground shrink-0" />
           <input
             ref={inputRef}
+            autoFocus
             value={query}
             onChange={e => { setQuery(e.target.value); setActive(0) }}
             onKeyDown={onKeyDown}
