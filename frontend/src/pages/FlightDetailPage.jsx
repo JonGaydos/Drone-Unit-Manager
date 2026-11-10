@@ -238,11 +238,11 @@ function useFlightDetail(id) {
 
 function FlightActionBar({ flight, editing, isAdmin, canExport, canReview, canEdit, refreshing, onApprove, onRefresh, onEdit, onSave, onCancel }) {
   return (
-    <div className="flex items-center justify-between">
+    <div className="flex flex-wrap items-center justify-between gap-2">
       <Link to="/flights" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="w-4 h-4" /> Back to Flights
       </Link>
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         {flight.has_telemetry && canExport && (
           <>
             <button

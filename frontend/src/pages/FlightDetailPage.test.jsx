@@ -78,6 +78,18 @@ describe('FlightDetailPage', () => {
     expect(screen.getByText('No telemetry data available for this flight.')).toBeInTheDocument()
   })
 
+  // E-17: at 375 px the action row (Back, GPX, KML, Refresh from API, Edit)
+  // did not wrap and Edit was cut off; the row and its button group now wrap.
+  it('lets the header action row wrap on a narrow screen', async () => {
+    mockMount({ flight: () => HttpResponse.json({ ...FLIGHT, has_telemetry: true }) })
+    render()
+    await screen.findByText('Flight on 2026-05-01')
+    const bar = screen.getByRole('link', { name: /Back to Flights/ }).parentElement
+    expect(bar).toHaveClass('flex-wrap')
+    const buttons = screen.getByRole('button', { name: /GPX/ }).parentElement
+    expect(buttons).toHaveClass('flex-wrap')
+  })
+
   it('shows the no-telemetry empty state', async () => {
     mockMount()
     render()
