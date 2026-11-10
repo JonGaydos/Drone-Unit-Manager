@@ -349,6 +349,15 @@ function batterySerialDisplay(flight, batteries) {
     : flight.battery_serial
 }
 
+/** A sensor or attachment value as a link: to the item's detail page when the
+ *  stored value is its serial (or ends in "(serial)", as synced names do),
+ *  otherwise to that Fleet tab. A dash when unset. */
+function equipmentLink(value, items, detailPath, tab) {
+  if (!value) return '—'
+  const item = items.find(i => i.serial_number && (value === i.serial_number || value.endsWith(`(${i.serial_number})`)))
+  return <Link to={item ? `${detailPath}/${item.id}` : `/fleet?tab=${tab}`} className="text-primary hover:underline">{value}</Link>
+}
+
 /** The always-present cells of the info grid (pilot through carrier). Returns a
  *  fragment so each cell stays a direct child of the grid. */
 function FlightCoreFields({ editing, canReassign, flight, editForm, setEditForm, pilots, vehicles, purposes, batteries, sensors }) {
@@ -445,9 +454,7 @@ function FlightCoreFields({ editing, canReassign, flight, editForm, setEditForm,
             </datalist>
           </>
         }
-        display={<p className="text-sm text-foreground">{flight.sensor_package ? (
-          <Link to="/fleet?tab=sensors" className="text-primary hover:underline">{flight.sensor_package}</Link>
-        ) : '—'}</p>}
+        display={<p className="text-sm text-foreground">{equipmentLink(flight.sensor_package, sensors, '/fleet/sensors', 'sensors')}</p>}
       />
 
       <EditableField editing={editing} label="Carrier(s)" htmlFor="carriers"
@@ -511,19 +518,19 @@ function FlightExtraFields({ editing, canReview, flight, editForm, setEditForm, 
                 </datalist>
               </>
             }
-            display={<p className="text-sm text-foreground">{flight.attachment_top ? <Link to="/fleet?tab=attachments" className="text-primary hover:underline">{flight.attachment_top}</Link> : '—'}</p>}
+            display={<p className="text-sm text-foreground">{equipmentLink(flight.attachment_top, attachments, '/fleet/attachments', 'attachments')}</p>}
           />
           <EditableField editing={editing} label="Attachment (BOTTOM)" htmlFor="attachment-bottom"
             input={<PickerInput id="attachment-bottom" list="detail-attach-list" value={editForm.attachment_bottom} onChange={e => set({ attachment_bottom: e.target.value })} />}
-            display={<p className="text-sm text-foreground">{flight.attachment_bottom ? <Link to="/fleet?tab=attachments" className="text-primary hover:underline">{flight.attachment_bottom}</Link> : '—'}</p>}
+            display={<p className="text-sm text-foreground">{equipmentLink(flight.attachment_bottom, attachments, '/fleet/attachments', 'attachments')}</p>}
           />
           <EditableField editing={editing} label="Attachment (LEFT)" htmlFor="attachment-left"
             input={<PickerInput id="attachment-left" list="detail-attach-list" value={editForm.attachment_left} onChange={e => set({ attachment_left: e.target.value })} />}
-            display={<p className="text-sm text-foreground">{flight.attachment_left ? <Link to="/fleet?tab=attachments" className="text-primary hover:underline">{flight.attachment_left}</Link> : '—'}</p>}
+            display={<p className="text-sm text-foreground">{equipmentLink(flight.attachment_left, attachments, '/fleet/attachments', 'attachments')}</p>}
           />
           <EditableField editing={editing} label="Attachment (RIGHT)" htmlFor="attachment-right"
             input={<PickerInput id="attachment-right" list="detail-attach-list" value={editForm.attachment_right} onChange={e => set({ attachment_right: e.target.value })} />}
-            display={<p className="text-sm text-foreground">{flight.attachment_right ? <Link to="/fleet?tab=attachments" className="text-primary hover:underline">{flight.attachment_right}</Link> : '—'}</p>}
+            display={<p className="text-sm text-foreground">{equipmentLink(flight.attachment_right, attachments, '/fleet/attachments', 'attachments')}</p>}
           />
         </>
       )}

@@ -90,6 +90,24 @@ describe('FlightDetailPage', () => {
     expect(buttons).toHaveClass('flex-wrap')
   })
 
+  // E-16: the sensor and attachment values linked to the whole Fleet tab;
+  // they open the matching item's detail page, as the battery does.
+  it('links the sensor package and attachments to their detail pages', async () => {
+    mockMount({ flight: () => HttpResponse.json({
+      ...FLIGHT, sensor_package: 'SN-77', attachment_top: 'Spotlight (AT-5)', attachment_bottom: 'UNKNOWN-1',
+    }) })
+    server.use(http.get('/api/fleet/options', () => HttpResponse.json(fleetOptions({
+      vehicles: [vehicleOption({ id: 2, nickname: 'Falcon', model: 'Mavic 3' })],
+      sensors: [{ id: 7, serial_number: 'SN-77', name: 'Thermal' }],
+      attachments: [{ id: 5, serial_number: 'AT-5', name: 'Spotlight' }],
+    }))))
+    render()
+    expect(await screen.findByRole('link', { name: 'SN-77' })).toHaveAttribute('href', '/fleet/sensors/7')
+    expect(screen.getByRole('link', { name: 'Spotlight (AT-5)' })).toHaveAttribute('href', '/fleet/attachments/5')
+    // No matching item: the list tab, as before.
+    expect(screen.getByRole('link', { name: 'UNKNOWN-1' })).toHaveAttribute('href', '/fleet?tab=attachments')
+  })
+
   it('shows the no-telemetry empty state', async () => {
     mockMount()
     render()
