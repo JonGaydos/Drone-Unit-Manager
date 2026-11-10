@@ -137,3 +137,30 @@ def test_equipment_qual_status_is_checked(client, db, admin_headers):
     r = client.patch(f"/api/pilot-equipment-quals/{r.json()['id']}", headers=admin_headers,
                      json={"status": "zzz"})
     assert r.status_code == 422
+
+
+# --- C-F8: one live certification per pilot and type ---
+
+
+def test_second_live_cert_of_a_type_is_refused(client, db, admin_headers):
+    pilot = _pilot(db)
+    ct = _cert_type(db)
+    body = {"pilot_id": pilot.id, "certification_type_id": ct.id, "status": "complete"}
+    first = client.post("/api/pilot-certifications", headers=admin_headers,
+                        json={**body, "expiration_date": "2026-11-27"})
+    assert first.status_code == 200
+    r = client.post("/api/pilot-certifications", headers=admin_headers,
+                    json={**body, "expiration_date": "2030-01-01"})
+    assert r.status_code == 400
+    assert "already" in r.json()["detail"]
+    # Another pilot, or the same pilot once the first is renewed, is fine.
+    other = _pilot(db, first="Other")
+    assert client.post("/api/pilot-certifications", headers=admin_headers,
+                       json={**body, "pilot_id": other.id}).status_code == 200
+    old = db.get(PilotCertification, first.json()["id"])
+    old.status = "renewed"
+    db.commit()
+    assert client.post("/api/pilot-certifications", headers=admin_headers, json=body).status_code == 200
+    # Reviving the renewed one would make two live certs again.
+    r = client.patch(f"/api/pilot-certifications/{old.id}", headers=admin_headers, json={"status": "complete"})
+    assert r.status_code == 400

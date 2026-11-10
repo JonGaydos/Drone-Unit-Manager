@@ -140,13 +140,32 @@ def list_pilot_certifications(
     return [_pilot_cert_to_out(r) for r in rows]
 
 
-@router.post("/api/pilot-certifications", response_model=PilotCertificationOut)
+LIVE_CERT_EXISTS = "This pilot already holds this certification; edit or renew it instead"
+
+
+def _has_other_live_cert(db, pilot_id: int, cert_type_id: int, exclude_id: int | None = None) -> bool:
+    """Whether the pilot holds a non-renewed certification of this type (other
+    than exclude_id). One live record per pilot and type keeps the matrix and
+    compliance on the same row."""
+    q = db.query(PilotCertification).filter(
+        PilotCertification.pilot_id == pilot_id,
+        PilotCertification.certification_type_id == cert_type_id,
+        PilotCertification.status != "renewed",
+    )
+    if exclude_id is not None:
+        q = q.filter(PilotCertification.id != exclude_id)
+    return db.query(q.exists()).scalar()
+
+
+@router.post("/api/pilot-certifications", response_model=PilotCertificationOut, responses=responses(400))
 def create_pilot_certification(
     data: PilotCertificationCreate,
     db: DBSession,
     admin: ManageUser,
 ):
     from app.services.audit import log_action
+    if data.status != "renewed" and _has_other_live_cert(db, data.pilot_id, data.certification_type_id):
+        raise HTTPException(status_code=400, detail=LIVE_CERT_EXISTS)
     pc = PilotCertification(**data.model_dump())
     db.add(pc)
     db.flush()
@@ -159,7 +178,7 @@ def create_pilot_certification(
     return _pilot_cert_to_out(pc)
 
 
-@router.patch("/api/pilot-certifications/{pc_id}", response_model=PilotCertificationOut, responses=responses(404, 422))
+@router.patch("/api/pilot-certifications/{pc_id}", response_model=PilotCertificationOut, responses=responses(400, 404, 422))
 def update_pilot_certification(
     pc_id: int,
     data: PilotCertificationUpdate,
@@ -175,6 +194,8 @@ def update_pilot_certification(
     expiry = update_data.get("expiration_date", pc.expiration_date)
     if issue and expiry and expiry < issue:
         raise HTTPException(status_code=422, detail=EXPIRY_BEFORE_ISSUE)
+    if pc.status == "renewed" and update_data.get("status", "renewed") != "renewed"             and _has_other_live_cert(db, pc.pilot_id, pc.certification_type_id, pc.id):
+        raise HTTPException(status_code=400, detail=LIVE_CERT_EXISTS)
     for key, value in update_data.items():
         setattr(pc, key, value)
     pilot = db.query(Pilot).filter(Pilot.id == pc.pilot_id).first()
