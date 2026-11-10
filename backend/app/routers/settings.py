@@ -35,6 +35,7 @@ ALLOWED_SETTING_KEYS = {
     "org_default_lat", "org_default_lon", "org_location_name",
     "backup_enabled", "backup_retention", "backup_hour",
     "idle_lock_minutes",
+    "sidebar_show_groups",
 }
 
 # Minutes of no input before a browser locks. One value for every role.
@@ -92,6 +93,17 @@ def _check_idle_lock(key: str, value: str) -> None:
         raise HTTPException(422, "Idle lock must be 30, 60, 120, 240, 360, 480 or 720 minutes")
 
 
+# Settings stored as the text "true" or "false".
+BOOLEAN_KEYS = {"sidebar_show_groups"}
+
+
+def _check_value(key: str, value: str) -> None:
+    """Refuse a value the key cannot hold (422)."""
+    _check_idle_lock(key, value)
+    if key in BOOLEAN_KEYS and value not in ("true", "false"):
+        raise HTTPException(422, f"{key} must be true or false")
+
+
 def _redact_value(key: str, value: str | None) -> str:
     """Replace secret values with a presence marker so the UI can show
     'configured' / 'not set' without exposing entropy. Earlier code returned
@@ -133,7 +145,7 @@ def set_setting(data: SettingValue, db: DBSession, admin: AdminUser):
     """Create or update a single setting. Admin only. Key must be in ALLOWED_SETTING_KEYS."""
     if data.key not in ALLOWED_SETTING_KEYS:
         raise HTTPException(400, f"Setting key '{data.key}' is not allowed")
-    _check_idle_lock(data.key, data.value)
+    _check_value(data.key, data.value)
     data.value = _trimmed(data.key, data.value)
     from app.services.audit import log_action
     setting = db.query(Setting).filter(Setting.key == data.key).first()
@@ -243,7 +255,7 @@ def set_settings_bulk(data: list[SettingValue], db: DBSession, admin: AdminUser)
     values to avoid overwriting real secrets with redacted strings.
     """
     for item in data:
-        _check_idle_lock(item.key, item.value)
+        _check_value(item.key, item.value)
     changed = _upsert_settings(db, data)
     if changed:
         # Key names only: several of these hold credentials.
