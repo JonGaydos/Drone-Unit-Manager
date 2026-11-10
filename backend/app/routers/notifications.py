@@ -33,6 +33,7 @@ DEFAULT_CATEGORIES = [
 # Not RFC-complete; just rejects newlines/control chars and obvious non-emails.
 _CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f]")
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s.]+(?:\.[^@\s.]+)+\Z")
+DEFAULT_SEND_TIME = "07:00"
 # 24-hour HH:MM. A value the scheduler cannot read would silently never send.
 SEND_TIME_RE = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d\Z")
 
@@ -135,8 +136,17 @@ def update_preferences(
     db: DBSession,
     user: CurrentUser,
 ):
-    """Update the current user's email notification preferences."""
+    """Update the current user's email notification preferences.
+
+    A field left out keeps its value. A field sent as null clears it: send_day
+    and email_override become empty, send_time and categories go back to their
+    defaults; enabled and frequency cannot be null.
+    """
     _check_pref_values(data)
+    sent = data.model_fields_set
+    for field in ("enabled", "frequency"):
+        if field in sent and getattr(data, field) is None:
+            raise HTTPException(400, f"{field} cannot be empty")
     pref = _get_or_create_pref(db, user.id)
     if data.enabled is not None:
         pref.enabled = data.enabled
@@ -144,14 +154,14 @@ def update_preferences(
         if data.frequency not in ("daily", "weekly", "off"):
             raise HTTPException(400, "Frequency must be 'daily', 'weekly', or 'off'")
         pref.frequency = data.frequency
-    if data.send_time is not None:
-        pref.send_time = data.send_time
-    if data.send_day is not None:
+    if "send_time" in sent:
+        pref.send_time = data.send_time or DEFAULT_SEND_TIME
+    if "send_day" in sent:
         pref.send_day = data.send_day
-    if data.categories is not None:
-        pref.categories = json.dumps(data.categories)
-    if data.email_override is not None:
-        override = data.email_override.strip()
+    if "categories" in sent:
+        pref.categories = json.dumps(DEFAULT_CATEGORIES if data.categories is None else data.categories)
+    if "email_override" in sent:
+        override = (data.email_override or "").strip()
         if not override:
             pref.email_override = None
         elif not can(db, user, "digest.redirect"):

@@ -290,3 +290,32 @@ def test_app_paths_still_get_the_spa(client, spa_dir, path):
     resp = client.get(path)
     assert resp.status_code == 200
     assert "root" in resp.text
+
+
+# --- G-4: explicit null clears a preference ------------------------------------------
+
+def test_preferences_null_clears_or_resets(client, db, supervisor_headers):
+    client.put(PREFS_URL, headers=supervisor_headers, json={
+        "frequency": "weekly", "send_day": 3, "send_time": "18:00",
+        "categories": ["expiring_certs"], "email_override": "desk@example.test"})
+    resp = client.put(PREFS_URL, headers=supervisor_headers, json={
+        "send_day": None, "send_time": None, "categories": None, "email_override": None})
+    assert resp.status_code == 200, resp.text
+    got = client.get(PREFS_URL, headers=supervisor_headers).json()
+    assert got["send_day"] is None
+    assert got["send_time"] == "07:00"
+    assert got["email_override"] is None
+    assert len(got["categories"]) == 8
+    assert got["frequency"] == "weekly"
+
+
+def test_preferences_leave_out_keeps(client, db, pilot_headers):
+    client.put(PREFS_URL, headers=pilot_headers, json={"frequency": "weekly", "send_day": 3})
+    client.put(PREFS_URL, headers=pilot_headers, json={"send_time": "08:00"})
+    assert client.get(PREFS_URL, headers=pilot_headers).json()["send_day"] == 3
+
+
+@pytest.mark.parametrize("field", ["enabled", "frequency"])
+def test_preferences_refuse_null_on_required_fields(client, db, pilot_headers, field):
+    resp = client.put(PREFS_URL, headers=pilot_headers, json={field: None})
+    assert resp.status_code == 400, resp.text
