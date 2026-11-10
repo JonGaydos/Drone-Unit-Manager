@@ -30,8 +30,8 @@ export default function AlertsPage() {
       api.get('/alerts/count'),
     ]).then(([a, c]) => {
       setAlerts(a)
-      setCount(typeof c === 'object' ? c.count : c)
-    }).catch(() => {}).finally(() => setLoading(false))
+      setCount(c?.total ?? 0)
+    }).catch((err) => toast.error(`Could not load alerts: ${err.message}`)).finally(() => setLoading(false))
   }
 
   useEffect(() => { load() }, [severityFilter])
