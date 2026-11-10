@@ -535,7 +535,8 @@ export default function FlightsPage() {
     } catch (err) { toast.error(err.message) }
   }
 
-  const selectCls = "px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+  // Capped and clipped: a native select is as wide as its longest option (E-14).
+  const selectCls = "max-w-64 truncate px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
   const inputCls = "px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
 
   return (
@@ -626,13 +627,13 @@ export default function FlightsPage() {
           <span className="text-sm font-medium text-foreground">{selectedIds.size} selected</span>
           {canBulkEdit && <select disabled={bulkBusy} value="" aria-label="Reassign pilot for selected flights"
             onChange={e => { if (e.target.value) confirmBulkPilot(Number.parseInt(e.target.value, 10)) }}
-            className="px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm">
+            className="max-w-64 truncate px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm">
             <option value="">Reassign pilot…</option>
             {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
           </select>}
           {canBulkEdit && <select disabled={bulkBusy} value="" aria-label="Set purpose for selected flights"
             onChange={e => { if (e.target.value) confirmBulkPurpose(e.target.value) }}
-            className="px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm">
+            className="max-w-64 truncate px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm">
             <option value="">Set purpose…</option>
             {sortByName(purposes, 'name').map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
           </select>}

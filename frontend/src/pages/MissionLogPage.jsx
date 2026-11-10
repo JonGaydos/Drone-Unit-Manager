@@ -319,7 +319,7 @@ export default function MissionLogPage() {
             onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) { e.target.value = n; setDateTo(n) } }}
             className="px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
           <select value={filterPilot} onChange={e => setFilterPilot(e.target.value)}
-            className="px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
+            className="max-w-64 truncate px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm">
             <option value="">All Pilots</option>
             {activePilots.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
             {inactivePilots.length > 0 && (

@@ -68,4 +68,18 @@ describe('TrainingLogPage', () => {
     await screen.findByText('Night Ops Recurrent')
     expect(lastUrl.searchParams.get('training_type')).toBe('Initial')
   })
+
+  // E-14: a native select is as wide as its longest option, so one very long
+  // pilot name pushed the page sideways. The filter selects are capped and
+  // clip their text.
+  it('caps the width of the filter selects (E-14)', async () => {
+    mockMount()
+    renderWithProviders(<TrainingLogPage />, { role: 'admin' })
+    await screen.findByText('Night Ops Recurrent')
+    const filters = [...document.querySelectorAll('select')].filter(s => /^All /.test(s.options[0]?.text || ''))
+    expect(filters.length).toBeGreaterThan(0)
+    for (const select of filters) {
+      expect(select).toHaveClass('max-w-64', 'truncate')
+    }
+  })
 })

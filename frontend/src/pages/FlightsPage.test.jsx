@@ -555,4 +555,18 @@ describe('FlightsPage', () => {
       expect(bar.remove()).toBeInTheDocument()
     })
   })
+
+  // E-14: a native select is as wide as its longest option, so one very long
+  // pilot name pushed the page sideways. The filter selects are capped and
+  // clip their text.
+  it('caps the width of the filter selects (E-14)', async () => {
+    mockMount()
+    renderWithProviders(<FlightsPage />, { role: 'supervisor' })
+    await screen.findAllByText('Jane Doe')
+    const filters = [...document.querySelectorAll('select')].filter(s => /^All /.test(s.options[0]?.text || ''))
+    expect(filters.length).toBeGreaterThan(0)
+    for (const select of filters) {
+      expect(select).toHaveClass('max-w-64', 'truncate')
+    }
+  })
 })
