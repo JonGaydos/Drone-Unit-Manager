@@ -477,7 +477,9 @@ def fleet_health(db: DBSession, user: FleetUser):
 
     today = date.today()
 
-    vehicles = db.query(Vehicle).filter(Vehicle.status == "active").all()
+    # In service = not retired or damaged: a vehicle grounded for maintenance
+    # still belongs to the fleet, as on the Fleet page.
+    vehicles = db.query(Vehicle).filter(Vehicle.status.notin_(DECOMMISSIONED_STATUSES)).all()
     batteries = db.query(Battery).filter(Battery.status.notin_(DECOMMISSIONED_STATUSES)).all()
 
     # Pre-aggregate per-vehicle flight stats and overdue maintenance in two
@@ -533,7 +535,12 @@ def fleet_health(db: DBSession, user: FleetUser):
     # Only batteries with a reading: one never measured is unknown, not 0%.
     readings = [b.health_pct for b in batteries if b.health_pct is not None]
     avg_battery_health = round(sum(readings) / len(readings), 1) if readings else None
-    total_overdue = sum(v["overdue_maintenance"] for v in vehicle_stats)
+    # Every overdue schedule, not only vehicle ones: an overdue battery or dock
+    # task is fleet maintenance too (the compliance dashboard counts the same).
+    total_overdue = db.query(func.count(MaintenanceSchedule.id)).filter(
+        MaintenanceSchedule.is_active.is_(True),
+        MaintenanceSchedule.next_due < today,
+    ).scalar()
 
     # The unit total stays; the count against a named vehicle follows maintenance.view.
     if not can(db, user, "maintenance.view"):

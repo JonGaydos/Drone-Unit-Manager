@@ -45,3 +45,34 @@ def test_fleet_health_battery_average_is_null_without_readings(client, db, admin
     _add(db, Battery(serial_number="BAT-A", status="active", health_pct=None))
     data = _fleet_health(client, admin_headers)
     assert data["summary"]["avg_battery_health"] is None
+
+
+# --- A-F42: Fleet Health scope ---
+
+
+def _overdue(db, entity_type, entity_id):
+    return _add(db, MaintenanceSchedule(
+        name=f"{entity_type} check", entity_type=entity_type, entity_id=entity_id,
+        frequency="monthly", is_active=True, next_due=TODAY - timedelta(days=3)))
+
+
+def test_fleet_health_lists_every_in_service_vehicle(client, db, admin_headers):
+    _add(db,
+         Vehicle(serial_number="V-ACTIVE", manufacturer="Make", model="One", status="active"),
+         Vehicle(serial_number="V-GROUNDED", manufacturer="Make", model="Two", status="maintenance"),
+         Vehicle(serial_number="V-RETIRED", manufacturer="Make", model="Three", status="retired"),
+         Vehicle(serial_number="V-DAMAGED", manufacturer="Make", model="Four", status="damaged"))
+    data = _fleet_health(client, admin_headers)
+    assert sorted(v["serial"] for v in data["vehicles"]) == ["V-ACTIVE", "V-GROUNDED"]
+    assert data["summary"]["total_vehicles"] == 2
+
+
+def test_fleet_health_overdue_total_counts_every_equipment_schedule(client, db, admin_headers):
+    vehicle = _add(db, Vehicle(serial_number="V-GROUNDED", manufacturer="Make", model="Two", status="maintenance"))
+    battery = _add(db, Battery(serial_number="BAT-A", status="active"))
+    _overdue(db, "vehicle", vehicle.id)
+    _overdue(db, "battery", battery.id)
+    _overdue(db, "dock", 7)
+    data = _fleet_health(client, admin_headers)
+    assert data["vehicles"][0]["overdue_maintenance"] == 1
+    assert data["summary"]["total_overdue_maintenance"] == 3

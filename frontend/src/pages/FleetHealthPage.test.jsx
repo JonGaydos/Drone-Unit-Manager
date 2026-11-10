@@ -52,7 +52,7 @@ describe('FleetHealthPage', () => {
     })))
     renderWithProviders(<FleetHealthPage />, { role: 'admin' })
 
-    expect(await screen.findByText('No active vehicles')).toBeInTheDocument()
+    expect(await screen.findByText('No vehicles in service')).toBeInTheDocument()
     // No battery chart when there are no batteries.
     expect(screen.queryByText('Battery Health')).toBeNull()
   })
