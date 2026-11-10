@@ -514,31 +514,31 @@ export default function FlightsPage() {
       <div className="flex flex-wrap items-end gap-3">
         <div>
           <label htmlFor="date-from" className="block text-xs text-muted-foreground mb-1">Date From</label>
-          <input id="date-from" type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)}
-            onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) { e.target.value = n; setFilterDateFrom(n) } }} className={inputCls} />
+          <input id="date-from" type="date" value={filterDateFrom} onChange={e => { setFilterDateFrom(e.target.value); setPage(1) }}
+            onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) { e.target.value = n; setFilterDateFrom(n); setPage(1) } }} className={inputCls} />
         </div>
         <div>
           <label htmlFor="date-to" className="block text-xs text-muted-foreground mb-1">Date To</label>
-          <input id="date-to" type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)}
-            onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) { e.target.value = n; setFilterDateTo(n) } }} className={inputCls} />
+          <input id="date-to" type="date" value={filterDateTo} onChange={e => { setFilterDateTo(e.target.value); setPage(1) }}
+            onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) { e.target.value = n; setFilterDateTo(n); setPage(1) } }} className={inputCls} />
         </div>
         <div>
           <label htmlFor="pilot-1" className="block text-xs text-muted-foreground mb-1">Pilot</label>
-          <select id="pilot-1" value={filterPilotId} onChange={e => setFilterPilotId(e.target.value)} className={selectCls}>
+          <select id="pilot-1" value={filterPilotId} onChange={e => { setFilterPilotId(e.target.value); setPage(1) }} className={selectCls}>
             <option value="">All Pilots</option>
             {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
           </select>
         </div>
         <div>
           <label htmlFor="vehicle-1" className="block text-xs text-muted-foreground mb-1">Vehicle</label>
-          <select id="vehicle-1" value={filterVehicleId} onChange={e => setFilterVehicleId(e.target.value)} className={selectCls}>
+          <select id="vehicle-1" value={filterVehicleId} onChange={e => { setFilterVehicleId(e.target.value); setPage(1) }} className={selectCls}>
             <option value="">All Vehicles</option>
             {sortVehicles(vehicles).map(v => <option key={v.id} value={v.id}>{vehicleDisplayName(v)}</option>)}
           </select>
         </div>
         <div>
           <label htmlFor="purpose-1" className="block text-xs text-muted-foreground mb-1">Purpose</label>
-          <select id="purpose-1" value={filterPurpose} onChange={e => setFilterPurpose(e.target.value)} className={selectCls}>
+          <select id="purpose-1" value={filterPurpose} onChange={e => { setFilterPurpose(e.target.value); setPage(1) }} className={selectCls}>
             <option value="">All Purposes</option>
             <option value="__none__">No Purpose</option>
             {sortByName(purposes, 'name').map(p => <option key={p.id} value={p.name}>{p.name}</option>)}

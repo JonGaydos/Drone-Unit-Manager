@@ -50,6 +50,10 @@ async function selectEveryRow() {
   return user
 }
 
+// The search box's debounce runs once after mount and sets page 1; let it pass
+// before paging, so a test sees only the page changes it makes.
+const settleSearchDebounce = () => new Promise(resolve => setTimeout(resolve, 350))
+
 // Records the bulk-update POST body, or leaves it null if nothing was sent.
 function captureBulkUpdate() {
   const sent = { body: null }
@@ -146,6 +150,52 @@ describe('FlightsPage', () => {
 
     await screen.findByRole('link', { name: 'Jane Doe' })
     expect(lastFlightsUrl.searchParams.get('review_status')).toBe('reviewed')
+  })
+
+  it.each([
+    ['Pilot', 'pilot-1', 'pilot_id', '6'],
+    ['Vehicle', 'vehicle-1', 'vehicle_id', '3'],
+    ['Purpose', 'purpose-1', 'purpose', 'Search'],
+  ])('goes back to page 1 when the %s filter changes', async (_label, id, param, value) => {
+    let lastUrl = null
+    mockMount({
+      flights: ({ request }) => {
+        lastUrl = new URL(request.url)
+        return HttpResponse.json({ flights: FLIGHTS, total: 500, total_pages: 5 })
+      },
+    })
+    const { user, container } = renderWithProviders(<FlightsPage />, { role: 'admin' })
+    await screen.findByRole('link', { name: 'Jane Doe' })
+    await settleSearchDebounce()
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    await waitFor(() => expect(lastUrl.searchParams.get('page')).toBe('2'))
+
+    await user.selectOptions(container.querySelector(`#${id}`), value)
+
+    // The request that carries the new filter asks for page 1.
+    await waitFor(() => expect(lastUrl.searchParams.get(param)).toBe(value))
+    expect(lastUrl.searchParams.get('page')).toBe('1')
+    expect(screen.getByText('Page 1 of 5')).toBeInTheDocument()
+  })
+
+  it('goes back to page 1 when a date filter changes', async () => {
+    let lastUrl = null
+    mockMount({
+      flights: ({ request }) => {
+        lastUrl = new URL(request.url)
+        return HttpResponse.json({ flights: FLIGHTS, total: 500, total_pages: 5 })
+      },
+    })
+    const { user } = renderWithProviders(<FlightsPage />, { role: 'admin' })
+    await screen.findByRole('link', { name: 'Jane Doe' })
+    await settleSearchDebounce()
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    await waitFor(() => expect(lastUrl.searchParams.get('page')).toBe('2'))
+
+    await user.type(screen.getByLabelText('Date From'), '2026-05-01')
+
+    await waitFor(() => expect(lastUrl.searchParams.get('date_from')).toBe('2026-05-01'))
+    expect(lastUrl.searchParams.get('page')).toBe('1')
   })
 
   it('hides bulk-selection checkboxes from a pilot but shows them to a supervisor', async () => {
