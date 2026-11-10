@@ -21,7 +21,7 @@ class NotificationLog(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     sent_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now())
     subject: Mapped[str] = mapped_column(String(300))
-    status: Mapped[str] = mapped_column(String(30))  # sent, failed, skipped
+    status: Mapped[str] = mapped_column(String(30))  # sent, failed, skipped, test (a test send)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     categories_included: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON list
     item_count: Mapped[int] = mapped_column(Integer, default=0)

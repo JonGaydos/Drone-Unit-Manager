@@ -33,6 +33,12 @@ DEFAULT_CATEGORIES = [
 # Not RFC-complete; just rejects newlines/control chars and obvious non-emails.
 _CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f]")
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s.]+(?:\.[^@\s.]+)+\Z")
+# 24-hour HH:MM. A value the scheduler cannot read would silently never send.
+SEND_TIME_RE = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d\Z")
+
+# A test digest is logged with this status, not "sent", so it never counts as
+# the day's scheduled digest.
+TEST_SEND_STATUS = "test"
 
 # Test sends allowed per user in the window. The digest carries unit data and
 # the override address can be anywhere, so the test button must not become a
@@ -77,6 +83,18 @@ def _check_test_send_rate(user_id: int) -> None:
     _test_sends[user_id] = recent + [now]
 
 
+def _check_pref_values(data: NotificationPrefUpdate) -> None:
+    """Refuse a send time, send day or category the digest cannot use (400)."""
+    if data.send_time is not None and not SEND_TIME_RE.match(data.send_time):
+        raise HTTPException(400, "send_time must be a 24-hour time HH:MM, 00:00 to 23:59")
+    if data.send_day is not None and not 0 <= data.send_day <= 6:
+        raise HTTPException(400, "send_day must be 0 (Monday) to 6 (Sunday)")
+    if data.categories is not None:
+        unknown = [c for c in data.categories if c not in DEFAULT_CATEGORIES]
+        if unknown:
+            raise HTTPException(400, f"Unknown digest categories: {', '.join(map(str, unknown))}")
+
+
 def _get_or_create_pref(db: Session, user_id: int) -> NotificationPreference:
     """Get existing preferences or create defaults for a user."""
     pref = db.query(NotificationPreference).filter(
@@ -118,6 +136,7 @@ def update_preferences(
     user: CurrentUser,
 ):
     """Update the current user's email notification preferences."""
+    _check_pref_values(data)
     pref = _get_or_create_pref(db, user.id)
     if data.enabled is not None:
         pref.enabled = data.enabled
@@ -191,11 +210,11 @@ def send_test_digest(
                details=f"to={to_email}, sent={success}")
     db.commit()
     if success:
-        # Log the send
+        # Logged as a test so the scheduler still sends today's digest.
         log = NotificationLog(
             user_id=user.id,
             subject=subject,
-            status="sent",
+            status=TEST_SEND_STATUS,
             categories_included=json.dumps(list(digest.keys())),
             item_count=sum(len(v) if isinstance(v, list) else 0 for v in digest.values()),
         )

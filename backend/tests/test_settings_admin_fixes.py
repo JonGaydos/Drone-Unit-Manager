@@ -1,6 +1,8 @@
 """Regression tests for the Area 8 staging-test fixes: settings, users, audit,
 notifications and email (backlog F-* and G-* items)."""
 
+import pytest
+
 from app.models.setting import Setting
 
 BULK_URL = "/api/settings/bulk"
@@ -97,3 +99,73 @@ def test_audit_csv_takes_the_page_filters(client, db, admin_headers):
     lines = [line for line in resp.text.splitlines() if line.strip()]
     data = [line for line in lines[1:] if "Blake Pilot" in line or "Avery Admin" in line]
     assert len(data) == 1 and "Blake Pilot" in data[0]
+
+
+# --- G-2: test digests do not count as the day's digest ------------------------
+
+PREFS_URL = "/api/notifications/preferences"
+
+
+def _fake_digest(monkeypatch):
+    from app.services import email_digest
+    monkeypatch.setattr(email_digest, "build_digest", lambda db, user: {"expiring_certs": [{"id": 1}]})
+    monkeypatch.setattr(email_digest, "send_email", lambda *a, **k: True)
+
+
+def test_test_digest_is_logged_as_test_and_not_as_sent(client, db, pilot_user, pilot_headers, monkeypatch):
+    from app.models.notification_log import NotificationLog
+    pilot_user.email = "pilot@example.test"
+    db.commit()
+    _fake_digest(monkeypatch)
+    resp = client.post("/api/notifications/send-test", headers=pilot_headers)
+    assert resp.status_code == 200 and resp.json()["ok"], resp.text
+    db.expire_all()
+    rows = db.query(NotificationLog).filter(NotificationLog.user_id == pilot_user.id).all()
+    assert [r.status for r in rows] == ["test"]
+
+
+def test_test_digest_does_not_suppress_the_scheduled_one(client, db, pilot_user, pilot_headers, monkeypatch):
+    from datetime import datetime
+    from app.models.notification_preference import NotificationPreference
+    from app.services.scheduler import _is_pref_due_now
+    pilot_user.email = "pilot@example.test"
+    db.commit()
+    _fake_digest(monkeypatch)
+    assert client.post("/api/notifications/send-test", headers=pilot_headers).status_code == 200
+    db.expire_all()
+    pref = db.query(NotificationPreference).filter(NotificationPreference.user_id == pilot_user.id).one()
+    now = datetime.now()
+    pref.send_time = now.strftime("%H") + ":00"
+    db.commit()
+    assert _is_pref_due_now(pref, now, now.strftime("%H"), db)
+
+
+# --- G-3: preference validation -------------------------------------------------
+
+
+@pytest.mark.parametrize("body", [
+    {"send_time": "25:99"},
+    {"send_time": "7:00"},
+    {"send_time": "07:60"},
+    {"send_time": "noon"},
+    {"send_day": 9},
+    {"send_day": -1},
+    {"categories": ["bogus"]},
+    {"categories": ["expiring_certs", "bogus"]},
+])
+def test_preferences_refuse_invalid_values(client, db, pilot_headers, body):
+    before = client.get(PREFS_URL, headers=pilot_headers).json()
+    resp = client.put(PREFS_URL, headers=pilot_headers, json=body)
+    assert resp.status_code == 400, resp.text
+    assert client.get(PREFS_URL, headers=pilot_headers).json() == before
+
+
+def test_preferences_accept_valid_values(client, db, pilot_headers):
+    resp = client.put(PREFS_URL, headers=pilot_headers, json={
+        "frequency": "weekly", "send_time": "23:30", "send_day": 6,
+        "categories": ["expiring_certs", "overdue_maintenance"],
+    })
+    assert resp.status_code == 200, resp.text
+    got = client.get(PREFS_URL, headers=pilot_headers).json()
+    assert got["send_time"] == "23:30" and got["send_day"] == 6
+    assert got["categories"] == ["expiring_certs", "overdue_maintenance"]
