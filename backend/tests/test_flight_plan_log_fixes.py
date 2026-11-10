@@ -176,3 +176,28 @@ def test_training_stored_legacy_type_can_be_resent(client, db, admin_headers):
     r = client.patch(f"{TRAINING_URL}/{t.id}", headers=admin_headers,
                      json={"training_type": "Practice", "notes": "kept"})
     assert r.status_code == 200, r.text
+
+
+# --- B-2 / B-3: coordinate ranges and address length ---
+
+
+def test_flight_coordinates_are_range_checked(client, db, admin_headers):
+    for bad in ({"takeoff_lat": 999}, {"takeoff_lon": -500}, {"landing_lat": -200}, {"landing_lon": 720}):
+        r = client.post(FLIGHTS_URL, headers=admin_headers, json={"case_number": "C", **bad})
+        assert r.status_code == 422, (bad, r.text)
+    f = _flight(db)
+    for bad in ({"takeoff_lat": 90.5}, {"landing_lon": 181}):
+        assert client.patch(f"{FLIGHTS_URL}/{f.id}", headers=admin_headers, json=bad).status_code == 422
+    ok = client.post(FLIGHTS_URL, headers=admin_headers, json={
+        "takeoff_lat": -90, "takeoff_lon": 180, "landing_lat": 90, "landing_lon": -180})
+    assert ok.status_code == 200, ok.text
+
+
+def test_flight_addresses_have_a_max_length(client, db, admin_headers):
+    for field in ("takeoff_address", "landing_address"):
+        r = client.post(FLIGHTS_URL, headers=admin_headers, json={field: "A" * 501})
+        assert r.status_code == 422, field
+        assert client.post(FLIGHTS_URL, headers=admin_headers, json={field: "A" * 500}).status_code == 200
+    f = _flight(db)
+    assert client.patch(f"{FLIGHTS_URL}/{f.id}", headers=admin_headers,
+                        json={"landing_address": "B" * 2009}).status_code == 422
