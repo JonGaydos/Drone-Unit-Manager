@@ -413,15 +413,13 @@ export default function FlightPlansPage() {
                           className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent" title="Details">
                           {expandedId === plan.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                         </button>
-                        {canApprove && plan.status === 'pending' && (
+                        {/* No self-review: the server rejects approving or denying a plan you submitted. */}
+                        {canApprove && plan.status === 'pending' && plan.submitted_by_id !== user?.id && (
                           <>
-                            {/* No self-approval: the server rejects approving a plan you submitted. */}
-                            {plan.submitted_by_id !== user?.id && (
-                              <button onClick={() => handleApprove(plan.id)}
-                                className="p-1.5 text-muted-foreground hover:text-emerald-400 rounded-lg hover:bg-emerald-500/10" title="Approve">
-                                <Check className="w-4 h-4" />
-                              </button>
-                            )}
+                            <button onClick={() => handleApprove(plan.id)}
+                              className="p-1.5 text-muted-foreground hover:text-emerald-400 rounded-lg hover:bg-emerald-500/10" title="Approve">
+                              <Check className="w-4 h-4" />
+                            </button>
                             <button onClick={() => setDenyTarget(plan)}
                               className="p-1.5 text-muted-foreground hover:text-red-400 rounded-lg hover:bg-red-500/10" title="Deny">
                               <Ban className="w-4 h-4" />

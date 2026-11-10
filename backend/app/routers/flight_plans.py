@@ -340,13 +340,15 @@ def approve_flight_plan(plan_id: int, data: ApproveRequest, db: DBSession, user:
     return _enrich(plan, db)
 
 
-@router.post("/{plan_id}/deny", response_model=FlightPlanOut, responses=responses(400, 401, 404))
+@router.post("/{plan_id}/deny", response_model=FlightPlanOut, responses=responses(400, 401, 403, 404))
 def deny_flight_plan(plan_id: int, data: DenyRequest, db: DBSession, user: ApproveUser):
     plan = db.query(FlightPlan).filter(FlightPlan.id == plan_id).first()
     if not plan:
         raise HTTPException(status_code=404, detail=FLIGHT_PLAN_NOT_FOUND)
     if plan.status != "pending":
         raise HTTPException(status_code=400, detail="Only pending plans can be denied")
+    if plan.submitted_by_id == user.id:
+        raise HTTPException(status_code=403, detail="You cannot deny a flight plan you submitted")
     plan.status = "denied"
     plan.reviewed_by_id = user.id
     plan.review_date = datetime.now(timezone.utc)

@@ -85,4 +85,12 @@ describe('FlightPlansPage', () => {
     await screen.findByText('River Patrol')
     expect(approved).toBe(true)
   })
+
+  it('offers neither Approve nor Deny on a plan the reviewer submitted', async () => {
+    mockMount({ plans: () => HttpResponse.json([{ ...PLANS[0], submitted_by_id: 1 }]) })
+    renderWithProviders(<FlightPlansPage />, { role: 'admin' })
+    await screen.findByText('River Patrol')
+    expect(screen.queryByTitle('Approve')).not.toBeInTheDocument()
+    expect(screen.queryByTitle('Deny')).not.toBeInTheDocument()
+  })
 })

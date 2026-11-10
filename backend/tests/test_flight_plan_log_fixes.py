@@ -104,3 +104,38 @@ def test_flights_csv_has_date_case_number_and_notes(client, db, admin_headers):
     # The Skydio columns keep their order, with the additions after Purpose.
     header = resp.text.splitlines()[0].split(",")
     assert header[-4:] == ["Purpose", "Date", "Case Number", "Notes"]
+
+
+# --- B-10 / H-1: no self-review on deny ---
+
+PLANS_URL = "/api/flight-plans"
+
+
+def _plan(db, submitter, status="pending", **kwargs):
+    from app.models.flight_approval import FlightPlan
+    from app.models.pilot import Pilot
+    pilot = Pilot(first_name="Plan", last_name="Pilot", status="active")
+    db.add(pilot)
+    db.flush()
+    plan = FlightPlan(title="Survey", date_planned=datetime(2026, 12, 1, 10), pilot_id=pilot.id,
+                      submitted_by_id=submitter.id, status=status, **kwargs)
+    db.add(plan)
+    db.commit()
+    db.refresh(plan)
+    return plan
+
+
+def test_submitter_cannot_deny_own_plan(client, db, admin_user, admin_headers):
+    plan = _plan(db, admin_user)
+    r = client.post(f"{PLANS_URL}/{plan.id}/deny", headers=admin_headers, json={"denial_reason": "x"})
+    assert r.status_code == 403
+    assert "You cannot deny a flight plan you submitted" in r.text
+    db.refresh(plan)
+    assert plan.status == "pending"
+
+
+def test_reviewer_can_deny_someone_elses_plan(client, db, pilot_user, admin_headers):
+    plan = _plan(db, pilot_user)
+    r = client.post(f"{PLANS_URL}/{plan.id}/deny", headers=admin_headers, json={"denial_reason": "Weather"})
+    assert r.status_code == 200
+    assert r.json()["status"] == "denied"
