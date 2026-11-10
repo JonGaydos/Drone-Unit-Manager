@@ -54,6 +54,23 @@ const CSV_EXPORTS = [
   { type: 'flight-plans', label: 'Flight Plans', needs: 'flight_plans.view' },
 ]
 
+/** The preview's header line: the period the report states (annual reports
+ *  default to the current year), else the dates and filters it was generated
+ *  with, never the form as it is now. */
+function previewHeader(result, request) {
+  const req = request || {}
+  let period
+  if (result.summary?.period) period = String(result.summary.period)
+  else if (!filtersFor(req.report_type).dates) period = 'Current status'
+  else if (req.date_from && req.date_to) period = `${req.date_from} to ${req.date_to}`
+  else if (req.date_from) period = `From ${req.date_from}`
+  else if (req.date_to) period = `Through ${req.date_to}`
+  else period = 'All dates'
+  const pilots = req.pilot_ids?.length ? ` | ${req.pilot_ids.length} pilots` : ''
+  const vehicles = req.vehicle_ids?.length ? ` | ${req.vehicle_ids.length} vehicles` : ''
+  return `${period}${pilots}${vehicles}`
+}
+
 export default function ReportsPage() {
   const { can } = useAuth()
   const reportTypes = REPORT_TYPES.filter(type => type.needs.every(key => can(key)))
@@ -64,6 +81,9 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [reportResult, setReportResult] = useState(null)
+  // The request behind the preview, so its header keeps describing it after
+  // the form changes.
+  const [reportRequest, setReportRequest] = useState(null)
   const [error, setError] = useState(null)
 
 
@@ -224,6 +244,7 @@ export default function ReportsPage() {
       }
 
       const result = await api.post('/reports/generate', config, { timeout: 120000 })
+      setReportRequest(config)
       setReportResult(result)
     } catch (err) {
       setError(err.message)
@@ -543,14 +564,7 @@ export default function ReportsPage() {
                       {reportResult.title || REPORT_TYPES.find(r => r.value === reportType)?.label || 'Report'}
                     </h3>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {(() => {
-                        if (dateFrom && dateTo) return `${dateFrom} to ${dateTo}`
-                        if (dateFrom) return `From ${dateFrom}`
-                        if (dateTo) return `Through ${dateTo}`
-                        return 'All dates'
-                      })()}
-                      {selectedPilots.length > 0 ? ` | ${selectedPilots.length} pilots` : ''}
-                      {selectedVehicles.length > 0 ? ` | ${selectedVehicles.length} vehicles` : ''}
+                      {previewHeader(reportResult, reportRequest)}
                     </p>
                   </div>
 

@@ -167,6 +167,38 @@ describe('ReportsPage', () => {
     expect(captured.body.date_to).toBeUndefined()
   })
 
+  // E-12: the preview header read the live form, so changing the form after
+  // generating relabelled the old preview. It now describes the request that
+  // produced the preview, or the period the report itself states.
+  it('keeps describing the generated report after the form changes', async () => {
+    const { user } = await mountCapturingRequest()
+    const year = Number(new Date().getFullYear()) - 1
+    await user.click(screen.getByRole('button', { name: 'Last year' }))
+    await user.click(await screen.findByLabelText(/Jane Doe/i))
+    await user.click(screen.getByRole('button', { name: /Generate/ }))
+    const header = `${year}-01-01 to ${year}-12-31 | 1 pilots`
+    expect(await screen.findByText(header)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'All time' }))
+    await selectReportType(user, 'pilot_hours')
+    expect(screen.getByText(header)).toBeInTheDocument()
+    expect(screen.queryByText(/All dates/)).not.toBeInTheDocument()
+  })
+
+  it('shows the period an annual report states when no dates were chosen', async () => {
+    mockMount()
+    server.use(http.post('/api/reports/generate', () => HttpResponse.json({
+      title: 'Annual Unit Report - 2026', summary: { period: '2026', total_flights: 3 }, sections: [],
+    })))
+    const { user } = renderWithProviders(<ReportsPage />, { role: 'admin' })
+    await screen.findByText('Report Builder')
+    await selectReportType(user, 'annual_unit_report')
+    await user.click(screen.getByRole('button', { name: /Generate/ }))
+    expect(await screen.findByText('Annual Unit Report - 2026')).toBeInTheDocument()
+    expect(screen.queryByText('All dates')).not.toBeInTheDocument()
+    expect(screen.getByText('2026', { selector: 'p.text-xs' })).toBeInTheDocument()
+  })
+
   it('keeps the selection so switching report types and back restores it', async () => {
     const { user, captured } = await mountCapturingRequest()
 
