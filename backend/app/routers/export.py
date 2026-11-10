@@ -156,6 +156,9 @@ def _flight_csv_row(f, local_tz, with_email: bool = True):
         _csv_safe(_csv_eq(f.attachment_right)),
         _csv_safe(_csv_eq(f.carrier)),
         _csv_safe(f.purpose or ""),
+        f.date.isoformat() if f.date else "",
+        _csv_safe(f.case_number or ""),
+        _csv_safe(f.notes or ""),
     ]
 
 
@@ -169,7 +172,8 @@ def export_flights_csv(
     """Export flights as CSV in the Skydio flight-list column order (plus Purpose).
 
     Columns match the Skydio Cloud export so the file round-trips through the
-    Skydio importer, with Purpose appended at the end. Equipment slots use
+    Skydio importer, with Purpose, Date, Case Number and Notes appended at the
+    end (Date keeps the day of a flight entered without a takeoff time). Equipment slots use
     "N/A" when empty, matching the Skydio convention. Takeoff and Land are the
     stored UTC values; Local Takeoff Time is converted to the configured
     display timezone.
@@ -191,7 +195,7 @@ def export_flights_csv(
         "Takeoff Address", "Takeoff Latitude", "Takeoff Longitude",
         "Land", "Duration (seconds)", "Battery", "Sensor Package",
         "Attachment (TOP)", "Attachment (BOTTOM)", "Attachment (LEFT)",
-        "Attachment (RIGHT)", "Carrier(s)", "Purpose",
+        "Attachment (RIGHT)", "Carrier(s)", "Purpose", "Date", "Case Number", "Notes",
     ])
     for f in flights:
         writer.writerow(_flight_csv_row(f, local_tz, with_email))

@@ -86,3 +86,21 @@ def test_patch_unrelated_field_ignores_stored_inconsistency(client, db, admin_he
                 duration_seconds=99999)
     r = client.patch(f"{FLIGHTS_URL}/{f.id}", headers=admin_headers, json={"notes": "x"})
     assert r.status_code == 200, r.text
+
+
+# --- B-7: the flights CSV keeps the date of a flight with no takeoff time ---
+
+
+def test_flights_csv_has_date_case_number_and_notes(client, db, admin_headers):
+    import csv
+    import io
+    _flight(db, date=date(2026, 10, 5), case_number="CASE-77", notes="Manual entry")
+    resp = client.get("/api/export/flights/csv", headers=admin_headers)
+    assert resp.status_code == 200
+    rows = list(csv.DictReader(io.StringIO(resp.text)))
+    assert rows[0]["Date"] == "2026-10-05"
+    assert rows[0]["Case Number"] == "CASE-77"
+    assert rows[0]["Notes"] == "Manual entry"
+    # The Skydio columns keep their order, with the additions after Purpose.
+    header = resp.text.splitlines()[0].split(",")
+    assert header[-4:] == ["Purpose", "Date", "Case Number", "Notes"]
