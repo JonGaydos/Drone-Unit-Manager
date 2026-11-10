@@ -50,6 +50,23 @@ def _find_nearest_station(stations: list, lat: float, lon: float) -> tuple[dict 
     return nearest, min_dist
 
 
+CEILING_COVERS = {"BKN", "OVC", "OVX", "VV"}
+
+
+def _ceiling_ft(metar: dict):
+    """Lowest broken, overcast or vertical-visibility layer base, in feet AGL."""
+    bases = [c.get("base") for c in metar.get("clouds") or []
+             if isinstance(c, dict) and c.get("cover") in CEILING_COVERS and c.get("base") is not None]
+    if metar.get("vertVis") is not None:
+        bases.append(metar["vertVis"])
+    if not bases:
+        return None
+    try:
+        return min(int(b) for b in bases)
+    except (TypeError, ValueError):
+        return None
+
+
 def _fetch_metar_taf(lat: float, lon: float) -> dict:
     """Fetch nearest METAR station, current METAR, and TAF forecast."""
     result = {"metar": None, "taf": None, "station": None}
@@ -89,8 +106,8 @@ def _fetch_metar_taf(lat: float, lon: float) -> dict:
                     "wind_speed_kt": m.get("wspd"),
                     "wind_gust_kt": m.get("wgst"),
                     "visibility_miles": m.get("visib"),
-                    "ceiling_ft": m.get("ceil"),
-                    "flight_category": m.get("fltcat"),
+                    "ceiling_ft": _ceiling_ft(m),
+                    "flight_category": m.get("fltCat"),
                     "wx_string": m.get("wxString"),
                     "altimeter_inhg": m.get("altim"),
                     "observation_time": m.get("reportTime"),
@@ -280,6 +297,15 @@ def _compute_advisory(data, thresholds=None):
     lw = data.get("local_weather") or {}
     metar = data.get("metar") or {}
     t = thresholds or DEFAULT_THRESHOLDS
+
+    if not lw and not metar:
+        return {"status": "unknown", "reasons": ["No weather data available for this location"]}
+    if not metar:
+        status = "caution"
+        reasons.append("No METAR observation nearby: flight category, ceiling and visibility not checked")
+    if not lw:
+        status = "caution"
+        reasons.append("Local forecast unavailable: temperature and precipitation not checked")
 
     wind = lw.get("wind_speed_mph") or (metar.get("wind_speed_kt", 0) or 0) * 1.151
     gusts = lw.get("wind_gusts_mph") or (metar.get("wind_gust_kt", 0) or 0) * 1.151
