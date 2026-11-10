@@ -11,4 +11,6 @@ export const handlers = [
   }),
   http.get('/api/settings/idle_lock_minutes', () =>
     HttpResponse.json({ key: 'idle_lock_minutes', value: '30' })),
+  // The Audit Log user filter's choices.
+  http.get('/api/audit/users', () => HttpResponse.json([])),
 ]

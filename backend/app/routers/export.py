@@ -696,14 +696,16 @@ def export_audit_csv(
     user: ExportUser,
     _view: AuditView,
     date_from: date | None = None,
-    date_to: date | None = None):
+    date_to: date | None = None,
+    user_id: int | None = None,
+    entity_type: str | None = None,
+    action: str | None = None):
+    """The audit log as CSV, with the Audit Log page's filters."""
     from app.models.audit_log import AuditLog
+    from app.routers.audit import filtered_audit_logs
     local_tz = display_zone(db)
-    q = db.query(AuditLog)
-    if date_from:
-        q = q.filter(stamped_on_or_after(AuditLog.created_at, date_from, local_tz))
-    if date_to:
-        q = q.filter(stamped_on_or_before(AuditLog.created_at, date_to, local_tz))
+    q = filtered_audit_logs(db, entity_type=entity_type, user_id=user_id, action=action,
+                            date_from=date_from, date_to=date_to)
     q = q.order_by(AuditLog.created_at.desc(), AuditLog.id.desc()).execution_options(stream_results=True)
     return StreamingResponse(
         _audit_csv_stream(q, local_tz, hides_contacts(db, user)),

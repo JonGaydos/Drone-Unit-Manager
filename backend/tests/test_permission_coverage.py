@@ -380,6 +380,7 @@ EXPECTED_ROUTE_KEYS = {
     "DELETE /api/vehicle-registrations/{reg_id}": {REGISTRATIONS_MANAGE},
     # audit
     "GET /api/audit": {AUDIT_VIEW},
+    "GET /api/audit/users": {AUDIT_VIEW},
     # reports
     "POST /api/reports/generate": {REPORTS_GENERATE},
     "POST /api/reports/generate/pdf": {REPORTS_GENERATE},

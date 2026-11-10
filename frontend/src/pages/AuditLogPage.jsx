@@ -117,16 +117,30 @@ export default function AuditLogPage() {
   // Filters
   const [entityType, setEntityType] = useState('')
   const [action, setAction] = useState('')
+  const [userId, setUserId] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [showFilters, setShowFilters] = useState(false)
+  const [logUsers, setLogUsers] = useState([])
+  const hasFilters = Boolean(entityType || action || userId || dateFrom || dateTo)
+
+  // The filters as query parameters, shared by the list and the CSV export.
+  const filterParams = () => {
+    const params = new URLSearchParams()
+    if (entityType) params.set('entity_type', entityType)
+    if (action) params.set('action', action)
+    if (userId) params.set('user_id', userId)
+    if (dateFrom) params.set('date_from', dateFrom)
+    if (dateTo) params.set('date_to', dateTo)
+    return params
+  }
 
   useEffect(() => {
     if (!canView) return
     setLoading(true)
-    const params = new URLSearchParams()
+    const params = filterParams()
     params.set('page', page)
     params.set('per_page', perPage)
-    if (entityType) params.set('entity_type', entityType)
-    if (action) params.set('action', action)
 
     api.get(`/audit?${params.toString()}`)
       .then(data => {
@@ -135,7 +149,22 @@ export default function AuditLogPage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [canView, page, perPage, entityType, action])
+  }, [canView, page, perPage, entityType, action, userId, dateFrom, dateTo]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The user filter's choices: everyone who has an entry in the log.
+  useEffect(() => {
+    if (!canView || !showFilters) return
+    api.get('/audit/users').then(rows => { if (Array.isArray(rows)) setLogUsers(rows) }).catch(() => {})
+  }, [canView, showFilters])
+
+  const clearFilters = () => {
+    setEntityType(''); setAction(''); setUserId(''); setDateFrom(''); setDateTo(''); setPage(1)
+  }
+
+  const exportCsv = () => {
+    const query = filterParams().toString()
+    api.download(`/export/audit/csv${query ? `?${query}` : ''}`)
+  }
 
   if (!canView) {
     return (
@@ -161,7 +190,7 @@ export default function AuditLogPage() {
         <div className="flex items-center gap-2">
           {can('reports.export') && (
             <button
-              onClick={() => api.download('/export/audit/csv')}
+              onClick={exportCsv}
               className="flex items-center gap-2 px-3 py-2 bg-secondary border border-border rounded-lg text-sm text-foreground hover:bg-accent/30 transition-colors"
             >
               <Download className="w-4 h-4" /> Export CSV
@@ -173,7 +202,7 @@ export default function AuditLogPage() {
           >
             <Filter className="w-4 h-4" />
             Filters
-          {(entityType || action) && (
+          {hasFilters && (
             <span className="w-2 h-2 rounded-full bg-primary" />
           )}
         </button>
@@ -209,10 +238,43 @@ export default function AuditLogPage() {
               ))}
             </select>
           </div>
-          {(entityType || action) && (
+          <div>
+            <label htmlFor="audit-user" className="block text-xs font-medium text-muted-foreground mb-1">User</label>
+            <select id="audit-user"
+              value={userId}
+              onChange={e => { setUserId(e.target.value); setPage(1) }}
+              className="max-w-64 truncate px-3 py-1.5 bg-secondary border border-border rounded-lg text-sm text-foreground"
+            >
+              <option value="">All</option>
+              {logUsers.map(u => (
+                <option key={u.user_id} value={u.user_id}>
+                  {u.user_name || u.user_username}{u.user_username && u.user_name ? ` (${u.user_username})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="audit-date-from" className="block text-xs font-medium text-muted-foreground mb-1">From</label>
+            <input id="audit-date-from" type="date"
+              value={dateFrom}
+              max={dateTo || undefined}
+              onChange={e => { setDateFrom(e.target.value); setPage(1) }}
+              className="px-3 py-1.5 bg-secondary border border-border rounded-lg text-sm text-foreground"
+            />
+          </div>
+          <div>
+            <label htmlFor="audit-date-to" className="block text-xs font-medium text-muted-foreground mb-1">To</label>
+            <input id="audit-date-to" type="date"
+              value={dateTo}
+              min={dateFrom || undefined}
+              onChange={e => { setDateTo(e.target.value); setPage(1) }}
+              className="px-3 py-1.5 bg-secondary border border-border rounded-lg text-sm text-foreground"
+            />
+          </div>
+          {hasFilters && (
             <div className="flex items-end">
               <button
-                onClick={() => { setEntityType(''); setAction(''); setPage(1) }}
+                onClick={clearFilters}
                 className="px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
               >
                 Clear filters

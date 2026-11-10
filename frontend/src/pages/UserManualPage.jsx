@@ -551,7 +551,7 @@ Click "Save Sidebar Config" to apply.`
         title: 'Audit Log',
         body: `The Audit Log (admin only by default) shows a complete history of all actions taken in the system: who did what, when, and what changed. Use it for accountability and compliance auditing.
 
-Every change to unit data is recorded automatically, including changes made by imports, syncs and scheduled jobs. Each entry shows the person's display name and login name, and the full list of fields that changed with old and new values. Bulk changes and background jobs appear as one summary entry with counts and record IDs, and name the person who started the job. Contact details such as email and phone numbers are hidden. Entries that came from a restored backup are marked Imported. Export CSV downloads every matching entry, including the login name, full changes and an Imported column.`
+Every change to unit data is recorded automatically, including changes made by imports, syncs and scheduled jobs. Each entry shows the person's display name and login name, and the full list of fields that changed with old and new values. Bulk changes and background jobs appear as one summary entry with counts and record IDs, and name the person who started the job. Contact details such as email and phone numbers are hidden. Entries that came from a restored backup are marked Imported. Filters narrow the list by entity type, action, user and a From/To date range (days in the organization time zone). Export CSV downloads every entry matching the filters, including the login name, full changes and an Imported column.`
       },
     ]
   },

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { withPermissions } from '@/test/permissions'
@@ -265,6 +265,66 @@ describe('AuditLogPage', () => {
 
       expect(actions).toEqual(expect.arrayContaining(['read', 'dismiss', 'dismiss_all', 'sync_run', 'telemetry_sync', 'import']))
       expect(types).toEqual(expect.arrayContaining(['alert', 'api_token', 'operating_authority', 'document']))
+    })
+  })
+
+  // F-15: the page filtered only by entity type and action.
+  describe('user and date filters', () => {
+    const USERS = [
+      { user_id: 3, user_name: 'Casey Chief', user_username: 'casey' },
+      { user_id: 4, user_name: 'Drew Pilot', user_username: 'drew' },
+    ]
+
+    it('filters the list by user and date range', async () => {
+      const requests = []
+      server.use(
+        http.get('/api/audit', ({ request }) => {
+          requests.push(new URL(request.url).searchParams)
+          return HttpResponse.json({ total: 0, logs: [] })
+        }),
+        http.get('/api/audit/users', () => HttpResponse.json(USERS)),
+      )
+      const { user } = renderWithProviders(<AuditLogPage />, { role: 'admin' })
+      await user.click(await screen.findByRole('button', { name: /Filters/ }))
+      const userSelect = screen.getByLabelText('User')
+      await waitFor(() => expect(within(userSelect).getAllByRole('option')).toHaveLength(3))
+      await user.selectOptions(userSelect, '4')
+      await user.type(screen.getByLabelText('From'), '2026-03-01')
+      await user.type(screen.getByLabelText('To'), '2026-03-31')
+
+      await waitFor(() => {
+        const last = requests[requests.length - 1]
+        expect(last.get('user_id')).toBe('4')
+        expect(last.get('date_from')).toBe('2026-03-01')
+        expect(last.get('date_to')).toBe('2026-03-31')
+        expect(last.get('page')).toBe('1')
+      })
+    })
+
+    it('exports the CSV with the active filters', async () => {
+      let exported = null
+      server.use(
+        http.get('/api/audit', () => HttpResponse.json({ total: 0, logs: [] })),
+        http.get('/api/audit/users', () => HttpResponse.json(USERS)),
+        http.get('/api/export/audit/csv', ({ request }) => {
+          exported = new URL(request.url).searchParams
+          return new HttpResponse('Timestamp', { headers: { 'Content-Type': 'text/csv' } })
+        }),
+      )
+      const { user } = renderWithProviders(<AuditLogPage />, { role: 'admin' })
+      await user.click(await screen.findByRole('button', { name: /Filters/ }))
+      const userSelect = screen.getByLabelText('User')
+      await waitFor(() => expect(within(userSelect).getAllByRole('option')).toHaveLength(3))
+      await user.selectOptions(userSelect, '3')
+      await user.selectOptions(screen.getByLabelText('Action'), 'update')
+      await user.type(screen.getByLabelText('From'), '2026-03-01')
+      await user.click(screen.getByRole('button', { name: /Export CSV/ }))
+
+      await waitFor(() => expect(exported).not.toBeNull())
+      expect(exported.get('user_id')).toBe('3')
+      expect(exported.get('action')).toBe('update')
+      expect(exported.get('date_from')).toBe('2026-03-01')
+      expect(exported.get('page')).toBeNull()
     })
   })
 })
