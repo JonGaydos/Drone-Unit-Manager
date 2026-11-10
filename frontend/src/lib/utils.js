@@ -338,3 +338,14 @@ export function changedFields(initial, current) {
     Object.entries(current).filter(([key, value]) => String(value) !== String(initial[key])),
   )
 }
+
+/** Open an input's picker (a datalist or date control) on focus. Chrome throws
+ *  NotAllowedError when focus did not come from a user gesture (a scripted
+ *  focus), which is harmless, so it is ignored. */
+export function showPickerSafely(el) {
+  try {
+    el?.showPicker?.()
+  } catch {
+    // No user gesture: leave the picker closed.
+  }
+}

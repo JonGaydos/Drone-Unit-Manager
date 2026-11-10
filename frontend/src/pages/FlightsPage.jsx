@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
-import { changedFields, flightSavedMessage, formatDuration, normalizeDateValue, zonedInputToUtcIso } from '@/lib/utils'
+import { changedFields, flightSavedMessage, formatDuration, normalizeDateValue, showPickerSafely, zonedInputToUtcIso } from '@/lib/utils'
 import { ownsFlight } from '@/lib/ownership'
 import { sortByName, sortVehicles, sortPilotsActiveFirst, vehicleDisplayName, telemetryLabel } from '@/lib/formatters'
 import { Plus, Search, CheckCircle, ChevronUp, ChevronDown, Pencil, X, Check, Download, Loader2, Copy, Trash2 } from 'lucide-react'
@@ -152,7 +152,7 @@ function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachmen
             <div>
               <label htmlFor="battery" className="block text-sm font-medium text-foreground mb-1">Battery</label>
               <input id="battery" list="battery-list" value={form.battery_serial} onChange={e => setForm({...form, battery_serial: e.target.value})}
-                onFocus={e => { e.target.showPicker?.() }}
+                onFocus={e => showPickerSafely(e.target)}
                 placeholder="Select or type..."
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               <datalist id="battery-list">
@@ -162,7 +162,7 @@ function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachmen
             <div>
               <label htmlFor="sensor-package" className="block text-sm font-medium text-foreground mb-1">Sensor Package</label>
               <input id="sensor-package" list="sensor-list" value={form.sensor_package} onChange={e => setForm({...form, sensor_package: e.target.value})}
-                onFocus={e => { e.target.showPicker?.() }}
+                onFocus={e => showPickerSafely(e.target)}
                 placeholder="Select or type..."
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               <datalist id="sensor-list">
@@ -172,7 +172,7 @@ function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachmen
             <div>
               <label htmlFor="attachment-top" className="block text-sm font-medium text-foreground mb-1">Attachment (Top)</label>
               <input id="attachment-top" list="attach-list" value={form.attachment_top} onChange={e => setForm({...form, attachment_top: e.target.value})}
-                onFocus={e => { e.target.showPicker?.() }}
+                onFocus={e => showPickerSafely(e.target)}
                 placeholder="Select or type..."
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               <datalist id="attach-list">
@@ -182,21 +182,21 @@ function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachmen
             <div>
               <label htmlFor="attachment-bottom" className="block text-sm font-medium text-foreground mb-1">Attachment (Bottom)</label>
               <input id="attachment-bottom" list="attach-list" value={form.attachment_bottom} onChange={e => setForm({...form, attachment_bottom: e.target.value})}
-                onFocus={e => { e.target.showPicker?.() }}
+                onFocus={e => showPickerSafely(e.target)}
                 placeholder="Select or type..."
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
             <div>
               <label htmlFor="attachment-left" className="block text-sm font-medium text-foreground mb-1">Attachment (Left)</label>
               <input id="attachment-left" list="attach-list" value={form.attachment_left} onChange={e => setForm({...form, attachment_left: e.target.value})}
-                onFocus={e => { e.target.showPicker?.() }}
+                onFocus={e => showPickerSafely(e.target)}
                 placeholder="Select or type..."
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
             <div>
               <label htmlFor="attachment-right" className="block text-sm font-medium text-foreground mb-1">Attachment (Right)</label>
               <input id="attachment-right" list="attach-list" value={form.attachment_right} onChange={e => setForm({...form, attachment_right: e.target.value})}
-                onFocus={e => { e.target.showPicker?.() }}
+                onFocus={e => showPickerSafely(e.target)}
                 placeholder="Select or type..."
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>

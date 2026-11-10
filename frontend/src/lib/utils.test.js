@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { changedFields,
+  showPickerSafely,
   cn,
   inSequence,
   formatDuration,
@@ -324,5 +325,19 @@ describe('certDisplayStatus', () => {
     expect(certDisplayStatus({ status: 'not_issued', expiration_date: '2020-01-01' })).toBe('not_issued')
     expect(certDisplayStatus({ id: null, status: 'not_started', expiration_date: null })).toBe('not_started')
     expect(certDisplayStatus(undefined)).toBe('not_started')
+  })
+})
+
+describe('showPickerSafely', () => {
+  it('swallows the error showPicker throws without a user gesture', () => {
+    const el = { showPicker: () => { throw new DOMException('needs a gesture', 'NotAllowedError') } }
+    expect(() => showPickerSafely(el)).not.toThrow()
+  })
+
+  it('opens the picker when allowed and ignores inputs without one', () => {
+    const el = { showPicker: vi.fn() }
+    showPickerSafely(el)
+    expect(el.showPicker).toHaveBeenCalledOnce()
+    expect(() => showPickerSafely({})).not.toThrow()
   })
 })

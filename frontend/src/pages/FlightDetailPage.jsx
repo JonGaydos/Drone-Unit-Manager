@@ -4,7 +4,7 @@ import { api, getSection } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { ownsFlight } from '@/lib/ownership'
 import { useToast } from '@/contexts/ToastContext'
-import { formatDuration, normalizeDateValue, metersToFeet, mpsToMph, formatTime, utcIsoToZonedInput, zonedInputToUtcIso, changedFields, flightSavedMessage } from '@/lib/utils'
+import { formatDuration, normalizeDateValue, metersToFeet, mpsToMph, formatTime, utcIsoToZonedInput, zonedInputToUtcIso, changedFields, flightSavedMessage, showPickerSafely } from '@/lib/utils'
 import { sortByName, sortVehicles, sortPilotsActiveFirst, vehicleDisplayName, telemetryLabel } from '@/lib/formatters'
 import { ArrowLeft, MapPin, Save, RefreshCw, Loader2, Download } from 'lucide-react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
@@ -52,7 +52,7 @@ function PickerInput({ id, list, value, onChange }) {
   return (
     <input
       id={id} list={list} value={value} onChange={onChange}
-      onFocus={e => { e.target.showPicker?.() }}
+      onFocus={e => showPickerSafely(e.target)}
       placeholder="Select or type..." className={CONTROL}
     />
   )
