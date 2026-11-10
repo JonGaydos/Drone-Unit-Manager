@@ -1,11 +1,16 @@
 from datetime import date as DateType, datetime
-from pydantic import BaseModel, field_validator
+from typing import Annotated
+
+from pydantic import BaseModel, StringConstraints, field_validator, model_validator
 
 ALLOWED_CATEGORIES = ("event", "leave")
+END_BEFORE_START = "End date cannot be before the start date"
+
+EventTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
 
 
 class CalendarEventCreate(BaseModel):
-    title: str
+    title: EventTitle
     category: str = "event"
     start_date: DateType
     end_date: DateType | None = None
@@ -20,9 +25,15 @@ class CalendarEventCreate(BaseModel):
             raise ValueError("category must be 'event' or 'leave'")
         return v
 
+    @model_validator(mode="after")
+    def _dates(self):
+        if self.end_date and self.end_date < self.start_date:
+            raise ValueError(END_BEFORE_START)
+        return self
+
 
 class CalendarEventUpdate(BaseModel):
-    title: str | None = None
+    title: EventTitle | None = None
     category: str | None = None
     start_date: DateType | None = None
     end_date: DateType | None = None
@@ -35,6 +46,14 @@ class CalendarEventUpdate(BaseModel):
     def _check_category(cls, v):
         if v is not None and v not in ALLOWED_CATEGORIES:
             raise ValueError("category must be 'event' or 'leave'")
+        return v
+
+    @field_validator("title", "start_date", "category", "all_day")
+    @classmethod
+    def _not_null(cls, v):
+        # Optional only so a patch can leave them out; a sent null is refused.
+        if v is None:
+            raise ValueError("cannot be empty")
         return v
 
 

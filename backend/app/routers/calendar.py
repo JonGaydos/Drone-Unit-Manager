@@ -19,7 +19,7 @@ from app.models.maintenance_schedule import MaintenanceSchedule
 from app.models.certification import PilotCertification, CertificationType
 from app.models.pilot import Pilot
 from app.models.flight import Flight
-from app.schemas.calendar import CalendarEventCreate, CalendarEventUpdate, CalendarEventOut
+from app.schemas.calendar import CalendarEventCreate, CalendarEventUpdate, CalendarEventOut, END_BEFORE_START
 
 router = APIRouter(prefix="/api/calendar", tags=["calendar"])
 
@@ -60,10 +60,13 @@ def _maintenance_events(db, start, end) -> list[dict]:
 
 
 def _cert_events(db, start, end) -> list[dict]:
-    """Certifications expiring in the range."""
+    """Certifications expiring in the range: live records of active pilots,
+    the same set the compliance dashboard counts."""
     cert_rows = db.query(PilotCertification, CertificationType, Pilot).join(
         CertificationType, PilotCertification.certification_type_id == CertificationType.id).join(
         Pilot, PilotCertification.pilot_id == Pilot.id).filter(
+        Pilot.status == "active",
+        PilotCertification.status.notin_(["not_issued", "renewed"]),
         PilotCertification.expiration_date.isnot(None),
         PilotCertification.expiration_date >= start, PilotCertification.expiration_date <= end).all()
     return [{"id": f"cert-{pc.id}", "title": f"{pilot.first_name} {pilot.last_name} - {ct.name} expires",
@@ -121,7 +124,7 @@ def create_event(data: CalendarEventCreate, db: DBSession, user: CreateUser):
     return CalendarEventOut.model_validate(ev)
 
 
-@router.patch("/events/{event_id}", response_model=CalendarEventOut, responses=responses(401, 403, 404))
+@router.patch("/events/{event_id}", response_model=CalendarEventOut, responses=responses(401, 403, 404, 422))
 def update_event(event_id: int, data: CalendarEventUpdate, db: DBSession, user: EditUser):
     """Update a manual event. Needs calendar.edit, at Own for the creator's events."""
     from app.services.audit import log_action
@@ -129,7 +132,11 @@ def update_event(event_id: int, data: CalendarEventUpdate, db: DBSession, user: 
     if not ev:
         raise HTTPException(status_code=404, detail="Event not found")
     permissions_service.require_record_access(db, user, CALENDAR_EDIT, ev.created_by_id == user.id)
-    for key, value in data.model_dump(exclude_unset=True).items():
+    update_data = data.model_dump(exclude_unset=True)
+    end = update_data.get("end_date", ev.end_date)
+    if end and end < update_data.get("start_date", ev.start_date):
+        raise HTTPException(status_code=422, detail=END_BEFORE_START)
+    for key, value in update_data.items():
         setattr(ev, key, value)
     log_action(db, user.id, user.display_name, "update", "calendar_event", ev.id, ev.title)
     db.commit()

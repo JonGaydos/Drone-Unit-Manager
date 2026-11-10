@@ -180,3 +180,45 @@ def test_needs_attention_skips_renewed_and_not_issued_certs(client, db, admin_he
     r = client.get(f"/api/pilots/{pilot.id}/needs-attention", headers=admin_headers)
     assert r.status_code == 200
     assert r.json() == {"count": 0, "items": []}
+
+
+# --- C-F14: calendar events need a title and may not end before they start ---
+
+
+def test_calendar_event_end_before_start_or_blank_title_is_refused(client, db, admin_headers):
+    url = "/api/calendar/events"
+    r = client.post(url, headers=admin_headers, json={
+        "title": "Backwards", "start_date": "2026-11-25", "end_date": "2026-11-01"})
+    assert r.status_code == 422
+    r = client.post(url, headers=admin_headers, json={"title": "   ", "start_date": "2026-11-25"})
+    assert r.status_code == 422
+    ok = client.post(url, headers=admin_headers, json={
+        "title": " Course ", "start_date": "2026-11-25", "end_date": "2026-11-26"})
+    assert ok.status_code == 200
+    assert ok.json()["title"] == "Course"
+    eid = ok.json()["id"]
+    for body in ({"end_date": "2026-11-20"}, {"start_date": "2026-11-30"}, {"title": ""}, {"title": None},
+                 {"start_date": None}):
+        r = client.patch(f"{url}/{eid}", headers=admin_headers, json=body)
+        assert r.status_code == 422, body
+
+
+# --- C-F15: calendar cert expirations follow the compliance filters ---
+
+
+def test_calendar_cert_events_skip_renewed_not_issued_and_inactive_pilots(client, db, admin_headers):
+    active = _pilot(db, first="Active")
+    gone = _pilot(db, first="Gone", status="inactive")
+    ct = _cert_type(db)
+    other = _cert_type(db, "Night Ops")
+    day = TODAY + timedelta(days=10)
+    renewed = _cert(db, active.id, ct.id, status="renewed", expiry=day)
+    live = _cert(db, active.id, ct.id, status="complete", expiry=day)
+    not_issued = _cert(db, active.id, other.id, status="not_issued", expiry=day)
+    inactive = _cert(db, gone.id, ct.id, status="complete", expiry=day)
+    r = client.get("/api/calendar", headers=admin_headers,
+                   params={"start": TODAY.isoformat(), "end": (TODAY + timedelta(days=30)).isoformat()})
+    ids = {e["id"] for e in r.json()["events"] if e["category"] == "cert_expiration"}
+    assert f"cert-{live.id}" in ids
+    for pc in (renewed, not_issued, inactive):
+        assert f"cert-{pc.id}" not in ids

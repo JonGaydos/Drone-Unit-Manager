@@ -55,4 +55,25 @@ describe('CalendarPage', () => {
     await waitFor(() => expect(body).not.toBeNull())
     expect(body).toMatchObject({ title: 'Range Day', category: 'event', start_date: '2026-07-01' })
   })
+
+  it('refuses an end date before the start date or a blank title without saving', async () => {
+    let posted = false
+    server.use(http.post('/api/calendar/events', () => { posted = true; return HttpResponse.json({ id: 1 }) }))
+    const { user } = renderWithProviders(<CalendarPage />, { role: 'admin' })
+    await screen.findByRole('heading', { name: 'Calendar' })
+    await user.click(screen.getByRole('button', { name: 'Add event / leave' }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.change(within(dialog).getByLabelText('Title'), { target: { value: '   ' } })
+    fireEvent.change(within(dialog).getByLabelText('Start date'), { target: { value: '2026-11-25' } })
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Required: Title')).toBeInTheDocument()
+    fireEvent.change(within(dialog).getByLabelText('Title'), { target: { value: 'Backwards' } })
+    const end = within(dialog).getByLabelText('End date (optional)')
+    expect(end).toHaveAttribute('min', '2026-11-25')
+    fireEvent.change(end, { target: { value: '2026-11-01' } })
+    // The min attribute stops a browser submit; the handler checks as well.
+    fireEvent.submit(dialog.querySelector('form'))
+    expect(await screen.findByText('End date cannot be before the start date')).toBeInTheDocument()
+    expect(posted).toBe(false)
+  })
 })
