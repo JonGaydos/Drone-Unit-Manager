@@ -59,7 +59,7 @@ Default settings:
 
 Admin only, never delegable: user management, the permission grid, settings and integrations, backup and restore, API tokens, bulk imports, flight purposes, and permanent purge. Your own password, theme, profile and notification preferences stay available to every signed-in user.
 
-Always enforced, whatever the grid says: nobody approves a flight plan they submitted; a legal hold blocks edits, delete and purge; the last active admin cannot be demoted, deactivated or deleted; and a viewer can never hold a change permission. The grid greys out those cells, the server refuses to save them, and any stored value is ignored (including one from a restored backup).
+Always enforced, whatever the grid says: nobody approves or denies a flight plan they submitted; a legal hold blocks edits, delete and purge; the last active admin cannot be demoted, deactivated or deleted; and a viewer can never hold a change permission. The grid greys out those cells, the server refuses to save them, and any stored value is ignored (including one from a restored backup).
 
 Reviewed flights and currency: a flight logged by hand always starts as Needs Review. When a user without the review permission changes a reviewed flight, it returns to the review queue; saving unchanged values does not count as a change. Only reviewed flights count toward pilot currency, so a flight waiting for review does not count until a supervisor reviews it.`
       },
@@ -348,7 +348,7 @@ When nothing is outstanding, the card shows an "All clear" message. The count of
     content: [
       {
         title: 'Flight Plan Submission',
-        body: 'Pilots can submit flight plans for approval by a user with the approval permission (a supervisor by default). Nobody approves a plan they submitted. Include the mission objective, location, date/time, equipment, and weather conditions.'
+        body: 'Pilots can submit flight plans for approval by a user with the approval permission (a supervisor by default). Nobody approves or denies a plan they submitted. Include the mission objective, location, date/time, equipment, and weather conditions. Edit (pencil) changes a pending or denied plan; editing a denied or approved plan returns it to pending review. An admin can Reopen a denied or cancelled plan, which puts it back in the review queue.'
       },
       {
         title: 'Pre-Flight Checklists',
