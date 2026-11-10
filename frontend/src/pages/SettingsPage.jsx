@@ -5,6 +5,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Modal } from '@/components/ui/Modal'
 import RolePermissionsGrid from '@/components/settings/RolePermissionsGrid'
+import DigestPreferencesCard from '@/components/settings/DigestPreferencesCard'
 import { useConfirm } from '@/hooks/useConfirm'
 import { sortPilotsActiveFirst } from '@/lib/formatters'
 import { DEFAULT_ORG_LOCATION } from '@/lib/location'
@@ -1650,6 +1651,7 @@ export default function SettingsPage() {
       {activeTab === 'general' && (
       <div className="space-y-6 max-w-2xl">
       {renderProfile()}
+      <DigestPreferencesCard />
       {renderOrganization()}
       {renderCertLabels()}
       {renderWeatherThresholds()}

@@ -505,7 +505,7 @@ Format is auto-detected, or you can pick a specific format. Select multiple file
       },
       {
         title: 'Email Digest Notifications',
-        body: 'Once SMTP is configured, each user can set up email digest preferences in Settings > General. Choose daily or weekly frequency, preferred send time, and which categories to include: pending flight plan approvals, flights needing review, expiring certifications, expiring registrations, overdue maintenance, assigned missions, overdue equipment checkouts, and recent incidents.'
+        body: 'Once SMTP is configured, each user can set up email digest preferences in the Email Digest card on Settings > General. Turn digests on or off, choose daily or weekly (and the weekday), the hour to send at, and which categories to include: pending flight plan approvals, flights needing review, expiring certifications, expiring registrations, overdue maintenance, assigned missions, overdue equipment checkouts, and recent incidents. Roles allowed to redirect the digest can send it to another address. Preview shows what the next digest would hold, Send Test emails it now (a few times per 10 minutes), and the card lists recent sends. A test send does not stand in for the scheduled digest.'
       },
     ]
   },

@@ -648,4 +648,13 @@ describe('SettingsPage settings fixes', () => {
     expect(screen.queryByText('Organization')).toBeNull()
     expect(screen.queryByRole('button', { name: /Save Settings/ })).toBeNull()
   })
+
+  // G-1: the manual promised digest preferences in Settings > General.
+  it('shows every user the email digest card on the General tab', async () => {
+    mockMount()
+    server.use(http.get('/api/auth/me', () => HttpResponse.json(withPermissions({ id: 9, username: 'v', role: 'viewer' }))))
+    renderWithProviders(<SettingsPage />, { role: 'viewer' })
+    expect(await screen.findByRole('heading', { name: 'Email Digest' })).toBeInTheDocument()
+    expect(await screen.findByLabelText('Send me email digests')).toBeChecked()
+  })
 })
