@@ -1,9 +1,10 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterEach } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { withPermissions } from '@/test/permissions'
 import { renderWithProviders } from '@/test/render'
+import { setDisplayTimezone } from '@/lib/utils'
 import AuditLogPage from './AuditLogPage'
 
 // Mount endpoint (admin only): GET /audit?page=&per_page=&[entity_type]&[action].
@@ -325,6 +326,19 @@ describe('AuditLogPage', () => {
       expect(exported.get('action')).toBe('update')
       expect(exported.get('date_from')).toBe('2026-03-01')
       expect(exported.get('page')).toBeNull()
+    })
+  })
+
+  // F-20: timestamps followed the browser's zone, not the organization's.
+  describe('time zone', () => {
+    afterEach(() => setDisplayTimezone(null))
+
+    it('shows timestamps in the organization display time zone', async () => {
+      setDisplayTimezone('Asia/Tokyo')
+      server.use(http.get('/api/audit', () => HttpResponse.json(POPULATED)))
+      renderWithProviders(<AuditLogPage />, { role: 'admin' })
+      // 12:00 UTC is 21:00 in Tokyo (no daylight saving).
+      expect(await screen.findByText(/Jun 10, 2026.*09:00:00\sPM/)).toBeInTheDocument()
     })
   })
 })

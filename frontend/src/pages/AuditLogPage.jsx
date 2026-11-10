@@ -3,6 +3,7 @@ import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Filter, ScrollText, Download } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { getDisplayTimezone } from '@/lib/utils'
 
 // Every entity type and action the backend records, so any entry can be filtered.
 const ENTITY_TYPES = [
@@ -94,13 +95,21 @@ function entityLink(entityType, entityId) {
   }
 }
 
+const TIMESTAMP_FORMAT = {
+  month: 'short', day: 'numeric', year: 'numeric',
+  hour: '2-digit', minute: '2-digit', second: '2-digit',
+}
+
+// In the organization's display time zone, as the CSV and the flight pages
+// show times; the browser's zone if that zone name is not usable.
 function formatTimestamp(iso) {
   if (!iso) return '-'
   const d = new Date(iso)
-  return d.toLocaleString(undefined, {
-    month: 'short', day: 'numeric', year: 'numeric',
-    hour: '2-digit', minute: '2-digit', second: '2-digit',
-  })
+  try {
+    return d.toLocaleString(undefined, { ...TIMESTAMP_FORMAT, timeZone: getDisplayTimezone() })
+  } catch {
+    return d.toLocaleString(undefined, TIMESTAMP_FORMAT)
+  }
 }
 
 export default function AuditLogPage() {
