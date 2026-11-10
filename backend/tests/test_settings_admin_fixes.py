@@ -358,3 +358,14 @@ def test_reminders_to_all_report_no_unknown_or_inactive(client, db, admin_header
     monkeypatch.setattr(email_digest, "send_email", lambda *a, **k: True)
     body = client.post(REMINDERS_URL, headers=admin_headers, json={}).json()
     assert body["sent"] == 1 and body["skipped_inactive"] == 0 and body["not_found"] == 0
+
+
+# --- G-7: SMTP test emails are rate-limited like test digests ---------------------
+
+def test_smtp_test_is_rate_limited(client, db, admin_user, admin_headers, monkeypatch):
+    from app.services import email_digest
+    admin_user.email = "admin@example.test"
+    db.commit()
+    monkeypatch.setattr(email_digest, "send_email", lambda *a, **k: True)
+    codes = [client.post("/api/settings/smtp/test", headers=admin_headers).status_code for _ in range(4)]
+    assert codes == [200, 200, 200, 429]

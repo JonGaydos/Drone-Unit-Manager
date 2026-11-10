@@ -47,6 +47,8 @@ TEST_SEND_STATUS = "test"
 _TEST_SEND_LIMIT = 3
 _TEST_SEND_WINDOW = 600  # seconds
 _test_sends: dict[int, list[float]] = defaultdict(list)
+# SMTP test emails (Integrations) get the same limit, counted on their own.
+_smtp_test_sends: dict[int, list[float]] = defaultdict(list)
 
 
 class NotificationPrefUpdate(BaseModel):
@@ -71,17 +73,22 @@ class NotificationPrefOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-def _check_test_send_rate(user_id: int) -> None:
-    """Count a test send for ``user_id``, refusing it past the limit.
+def _check_test_send_rate(user_id: int, sends: dict[int, list[float]] = _test_sends) -> None:
+    """Count a test send for ``user_id`` in ``sends``, refusing it past the limit.
 
     Raises:
         HTTPException: 429 when the user has used up the window's sends.
     """
     now = time()
-    recent = [t for t in _test_sends[user_id] if now - t < _TEST_SEND_WINDOW]
+    recent = [t for t in sends[user_id] if now - t < _TEST_SEND_WINDOW]
     if len(recent) >= _TEST_SEND_LIMIT:
         raise HTTPException(429, "Too many test emails. Try again in a few minutes.")
-    _test_sends[user_id] = recent + [now]
+    sends[user_id] = recent + [now]
+
+
+def check_smtp_test_rate(user_id: int) -> None:
+    """The test-digest limit, applied to SMTP test emails (429 past it)."""
+    _check_test_send_rate(user_id, _smtp_test_sends)
 
 
 def _check_pref_values(data: NotificationPrefUpdate) -> None:

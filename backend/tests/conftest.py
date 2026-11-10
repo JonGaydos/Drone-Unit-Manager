@@ -237,6 +237,7 @@ def _reset_login_rate_limiter():
     auth._failed_by_user.clear()
     auth._last_sweep = 0.0
     notifications._test_sends.clear()
+    notifications._smtp_test_sends.clear()
 
 
 @pytest.fixture

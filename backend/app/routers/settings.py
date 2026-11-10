@@ -319,7 +319,7 @@ def set_settings_bulk(data: list[SettingValue], db: DBSession, admin: AdminUser)
     return {"ok": True}
 
 
-@router.post("/smtp/test", responses=responses(400, 401, 500))
+@router.post("/smtp/test", responses=responses(400, 401, 429, 500))
 def test_smtp(db: DBSession, admin: AdminUser):
     """Send a test email to verify SMTP configuration."""
     from app.services.email_digest import send_email
@@ -334,6 +334,8 @@ def test_smtp(db: DBSession, admin: AdminUser):
     if not admin_email:
         raise HTTPException(400, "No email address found. Add an email to your linked pilot profile or user account in Settings > Users.")
 
+    from app.routers.notifications import check_smtp_test_rate
+    check_smtp_test_rate(admin.id)
     success = send_email(
         admin_email,
         "Drone Unit Manager — SMTP Test",
