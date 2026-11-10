@@ -6,7 +6,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { ownsPilot } from '@/lib/ownership'
 import { formatHours, formatDuration } from '@/lib/utils'
 import { CERT_STATUS_COLORS } from '@/lib/constants'
-import { ArrowLeft, Clock, Calendar, ShieldCheck, Edit, Save, X, Camera, CheckCircle, XCircle, Target, GraduationCap, AlertTriangle, TrendingUp } from 'lucide-react'
+import { ArrowLeft, Clock, Calendar, ShieldCheck, Edit, Save, X, Camera, CheckCircle, XCircle, Target, GraduationCap, AlertTriangle } from 'lucide-react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 import {
   BarChart, Bar, PieChart, Pie, Cell,
@@ -325,19 +325,8 @@ export default function PilotDetailPage() {
       {/* Performance Analytics */}
       {performance && (
         <>
+          {/* Flight totals are the Stats row above; these are the other figures. */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center text-primary"><QuadcopterIcon className="w-5 h-5" /></div>
-              <div><p className="text-2xl font-bold text-foreground">{performance.total_flights}</p><p className="text-xs text-muted-foreground">Total Flights</p></div>
-            </div>
-            <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-500/15 flex items-center justify-center text-blue-400"><Clock className="w-5 h-5" /></div>
-              <div><p className="text-2xl font-bold text-foreground">{performance.total_flight_hours}h</p><p className="text-xs text-muted-foreground">Flight Hours</p></div>
-            </div>
-            <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center text-emerald-400"><TrendingUp className="w-5 h-5" /></div>
-              <div><p className="text-2xl font-bold text-foreground">{performance.avg_duration_min}m</p><p className="text-xs text-muted-foreground">Avg Duration</p></div>
-            </div>
             <FeatureGatedTiles performance={performance} />
           </div>
 

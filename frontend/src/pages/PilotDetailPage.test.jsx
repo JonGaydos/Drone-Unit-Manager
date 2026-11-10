@@ -182,6 +182,15 @@ describe('PilotDetailPage', () => {
       expect(screen.getByText('Incidents')).toBeInTheDocument()
     })
 
+    it('shows one set of flight total cards', async () => {
+      mockMount({ performance: () => HttpResponse.json(PERFORMANCE) })
+      render()
+      expect(await screen.findByText('Training Hours')).toBeInTheDocument()
+      for (const label of ['Total Flights', 'Flight Hours', 'Avg Duration']) {
+        expect(screen.getAllByText(label)).toHaveLength(1)
+      }
+    })
+
     it('shows a zero value rather than hiding the tile', async () => {
       mockMount({ performance: () => HttpResponse.json({ ...PERFORMANCE, training_hours: 0, incidents: 0 }) })
       render()
