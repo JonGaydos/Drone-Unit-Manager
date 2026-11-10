@@ -37,12 +37,20 @@ def _get_thresholds(db: Session):
     return DEFAULT_THRESHOLDS
 
 
+def _reports_metar(s: dict) -> bool:
+    """An airport station: it has an ICAO id and, when the list says, reports METAR."""
+    if not s.get("icaoId"):
+        return False
+    site_types = s.get("siteType")
+    return site_types is None or "METAR" in site_types
+
+
 def _find_nearest_station(stations: list, lat: float, lon: float) -> tuple[dict | None, float]:
     """Find the nearest METAR station by haversine distance."""
     nearest = None
     min_dist = float('inf')
     for s in stations:
-        if isinstance(s, dict) and s.get("lat") and s.get("lon"):
+        if isinstance(s, dict) and s.get("lat") and s.get("lon") and _reports_metar(s):
             d = _haversine(lat, lon, float(s["lat"]), float(s["lon"]))
             if d < min_dist:
                 min_dist = d
@@ -83,10 +91,10 @@ def _fetch_metar_taf(lat: float, lon: float) -> dict:
         if not nearest_station:
             return result
 
-        station_id = nearest_station.get("icaoId") or nearest_station.get("id", "")
+        station_id = nearest_station["icaoId"]
         result["station"] = {
             "id": station_id,
-            "name": nearest_station.get("name", ""),
+            "name": nearest_station.get("site") or nearest_station.get("name") or "",
             "distance_miles": round(min_dist, 1),
             "lat": nearest_station.get("lat"),
             "lon": nearest_station.get("lon"),
@@ -138,6 +146,8 @@ def _fetch_local_weather(lat: float, lon: float) -> tuple[dict | None, list | No
             "forecast_hours": 12,
             "temperature_unit": "fahrenheit",
             "wind_speed_unit": "mph",
+            # Hourly times in the location's own zone, not GMT.
+            "timezone": "auto",
         })
         if resp.status_code != 200:
             return None, None

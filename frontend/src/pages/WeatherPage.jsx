@@ -446,7 +446,7 @@ export default function WeatherPage() {
                   <MapPin className="w-5 h-5 text-primary shrink-0" />
                   <div>
                     <p className="text-sm font-medium text-foreground">
-                      Nearest METAR Station: {briefing.station.id} - {briefing.station.name}
+                      Nearest METAR Station: {briefing.station.id}{briefing.station.name ? ` - ${briefing.station.name}` : ''}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {briefing.station.distance_miles} miles away | {briefing.station.lat?.toFixed(4)}, {briefing.station.lon?.toFixed(4)}

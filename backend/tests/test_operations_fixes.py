@@ -288,3 +288,39 @@ def test_patch_refuses_blank_or_null_title_and_description(client, db, admin_hea
     for body in ({"title": "  "}, {"description": ""}, {"title": None}, {"description": None}):
         r = client.patch(f"{INCIDENTS_URL}/{inc.id}", headers=admin_headers, json=body)
         assert r.status_code == 422, (body, r.text)
+
+
+# --- D-13: the nearest station that reports METAR ---
+
+
+def test_briefing_skips_stations_without_an_icao_id_or_metar(client, admin_headers, mock_httpx):
+    seen = []
+    no_icao = {"icaoId": None, "id": "PCLF1", "site": "Buoy", "lat": 30.44, "lon": -87.23,
+               "siteType": []}
+    taf_only = {"icaoId": "KXXA", "site": "No obs", "lat": 30.441, "lon": -87.231, "siteType": ["TAF"]}
+    mock_httpx(_weather_handler([no_icao, taf_only, STATION_KPNS], _metar(), CALM_LOCAL, seen))
+    body = _briefing(client, admin_headers)
+    assert body["station"]["id"] == "KPNS"
+    metar_requests = [r for r in seen if "/metar" in str(r.url)]
+    assert metar_requests[0].url.params["ids"] == "KPNS"
+    assert body["metar"]["station"] == "KPNS"
+
+
+# --- D-14: station name from the upstream "site" key ---
+
+
+def test_briefing_station_name_comes_from_site(client, admin_headers, mock_httpx):
+    mock_httpx(_weather_handler([STATION_KPNS], _metar(), CALM_LOCAL))
+    assert _briefing(client, admin_headers)["station"]["name"] == "Pensacola Intl"
+
+
+# --- D-15: forecast hours in the location's own time zone ---
+
+
+def test_open_meteo_is_asked_for_local_time(client, admin_headers, mock_httpx):
+    seen = []
+    mock_httpx(_weather_handler([STATION_KPNS], _metar(), CALM_LOCAL, seen))
+    body = _briefing(client, admin_headers)
+    meteo = next(r for r in seen if "open-meteo" in str(r.url))
+    assert meteo.url.params["timezone"] == "auto"
+    assert body["forecast"][0]["time"] == "2026-11-08T22:00"

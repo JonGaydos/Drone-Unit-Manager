@@ -123,6 +123,24 @@ describe('WeatherPage', () => {
     expect(screen.getByLabelText('Coordinates or Address')).toHaveValue('Freeport, FL 32439')
   })
 
+  it('names the nearest station', async () => {
+    mockMount({ briefing: () => HttpResponse.json({ ...BRIEFING, station: { id: 'KPNS', name: 'Pensacola Intl', distance_miles: 8, lat: 30.47, lon: -87.19 } }) })
+    renderWithProviders(<WeatherPage />, { role: 'admin' })
+    expect(await screen.findByText('Nearest METAR Station: KPNS - Pensacola Intl')).toBeInTheDocument()
+  })
+
+  it('shows a station with no name without a trailing dash', async () => {
+    mockMount({ briefing: () => HttpResponse.json({ ...BRIEFING, station: { id: 'KPNS', name: '', distance_miles: 8, lat: 30.47, lon: -87.19 } }) })
+    renderWithProviders(<WeatherPage />, { role: 'admin' })
+    expect(await screen.findByText('Nearest METAR Station: KPNS')).toBeInTheDocument()
+  })
+
+  it('shows forecast hours as the location wall clock the API returns', async () => {
+    mockMount({ briefing: () => HttpResponse.json({ ...BRIEFING, forecast: [{ time: '2026-11-08T22:00', wind_mph: 5, temp_f: 58 }] }) })
+    renderWithProviders(<WeatherPage />, { role: 'admin' })
+    expect(await screen.findByText('10:00 PM')).toBeInTheDocument()
+  })
+
   it('uses edited latitude and longitude fields instead of geocoding the address text', async () => {
     let geocoded = false
     const requested = mockBriefingRecorder([
