@@ -169,3 +169,35 @@ def test_preferences_accept_valid_values(client, db, pilot_headers):
     got = client.get(PREFS_URL, headers=pilot_headers).json()
     assert got["send_time"] == "23:30" and got["send_day"] == 6
     assert got["categories"] == ["expiring_certs", "overdue_maintenance"]
+
+
+# --- F-05: weather thresholds ---------------------------------------------------
+
+@pytest.mark.parametrize("value", [
+    "not json {",
+    "[[[",
+    "[]",
+    '{"wind_sustained_go": 40, "wind_sustained_caution": 25}',
+    '{"wind_sustained_go": 40}',
+    '{"wind_gusts_go": 35}',
+    '{"visibility_go": -5}',
+    '{"visibility_go": 0.5}',
+    '{"ceiling_caution": 900}',
+    '{"temp_low_caution": 40}',
+    '{"precip_caution": -1}',
+    '{"wind_sustained_go": "fast"}',
+    '{"wind_sustained_go": true}',
+    '{"bogus_key": 1}',
+])
+def test_weather_thresholds_refuse_bad_values(client, db, admin_headers, value):
+    resp = client.put(BULK_URL, headers=admin_headers, json=[{"key": "weather_thresholds", "value": value}])
+    assert resp.status_code == 422, resp.text
+    assert _stored(db, "weather_thresholds") is None
+
+
+def test_weather_thresholds_accept_a_sound_set(client, db, admin_headers):
+    value = ('{"wind_sustained_go": 10, "wind_sustained_caution": 20, "visibility_go": 5, '
+             '"visibility_caution": 2, "temp_low_go": 10, "temp_low_caution": -10}')
+    resp = client.put(BULK_URL, headers=admin_headers, json=[{"key": "weather_thresholds", "value": value}])
+    assert resp.status_code == 200, resp.text
+    assert _stored(db, "weather_thresholds") == value

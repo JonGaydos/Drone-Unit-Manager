@@ -4,6 +4,8 @@ Supports key-value settings with an allowlist, secret masking for API tokens,
 organization logo upload, and bulk updates.
 """
 
+import json
+import math
 from pathlib import Path
 
 import anyio
@@ -97,11 +99,51 @@ def _check_idle_lock(key: str, value: str) -> None:
 BOOLEAN_KEYS = {"sidebar_show_groups"}
 
 
+# Each GO limit against its CAUTION limit: (go key, caution key, label, go must be
+# at most caution). Wind is worse when higher, the others when lower.
+_THRESHOLD_PAIRS = (
+    ("wind_sustained_go", "wind_sustained_caution", "Wind sustained", True),
+    ("wind_gusts_go", "wind_gusts_caution", "Wind gusts", True),
+    ("visibility_go", "visibility_caution", "Visibility", False),
+    ("ceiling_go", "ceiling_caution", "Ceiling", False),
+    ("temp_low_go", "temp_low_caution", "Temp low", False),
+)
+# Temperatures may be below zero; every other threshold may not.
+_SIGNED_THRESHOLDS = {"temp_low_go", "temp_low_caution", "temp_high_go"}
+
+
+def _check_weather_thresholds(value: str) -> None:
+    """Refuse weather thresholds that are not a JSON object of known numeric
+    limits, a negative distance, speed or amount, or a GO limit beyond its
+    CAUTION limit (checked over the defaults for keys left out)."""
+    from app.routers.weather import DEFAULT_THRESHOLDS
+    try:
+        custom = json.loads(value)
+    except (TypeError, ValueError):
+        raise HTTPException(422, "Weather thresholds must be a JSON object") from None
+    if not isinstance(custom, dict):
+        raise HTTPException(422, "Weather thresholds must be a JSON object")
+    for name, limit in custom.items():
+        if name not in DEFAULT_THRESHOLDS:
+            raise HTTPException(422, f"Unknown weather threshold '{name}'")
+        if isinstance(limit, bool) or not isinstance(limit, (int, float)) or not math.isfinite(limit):
+            raise HTTPException(422, f"Weather threshold '{name}' must be a number")
+        if limit < 0 and name not in _SIGNED_THRESHOLDS:
+            raise HTTPException(422, f"Weather threshold '{name}' must not be negative")
+    t = {**DEFAULT_THRESHOLDS, **custom}
+    for go, caution, label, go_is_lower in _THRESHOLD_PAIRS:
+        if (t[go] > t[caution]) if go_is_lower else (t[go] < t[caution]):
+            relation = "above" if go_is_lower else "below"
+            raise HTTPException(422, f"{label} GO ({t[go]}) must not be {relation} CAUTION ({t[caution]})")
+
+
 def _check_value(key: str, value: str) -> None:
     """Refuse a value the key cannot hold (422)."""
     _check_idle_lock(key, value)
     if key in BOOLEAN_KEYS and value not in ("true", "false"):
         raise HTTPException(422, f"{key} must be true or false")
+    if key == "weather_thresholds":
+        _check_weather_thresholds(value)
 
 
 def _redact_value(key: str, value: str | None) -> str:
