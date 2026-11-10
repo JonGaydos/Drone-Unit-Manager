@@ -131,6 +131,13 @@ function initialEditForm(f) {
     landing_time: f.landing_time ? utcIsoToZonedInput(f.landing_time) : '',
     duration_seconds: f.duration_seconds || '',
     takeoff_address: f.takeoff_address || '',
+    landing_address: f.landing_address || '',
+    takeoff_lat: f.takeoff_lat ?? '',
+    takeoff_lon: f.takeoff_lon ?? '',
+    landing_lat: f.landing_lat ?? '',
+    landing_lon: f.landing_lon ?? '',
+    distance_m: f.distance_m ?? '',
+    operating_cost: f.operating_cost ?? '',
     case_number: f.case_number || '',
     battery_serial: f.battery_serial || '',
     sensor_package: f.sensor_package || '',
@@ -145,6 +152,25 @@ function initialEditForm(f) {
   }
 }
 
+const NUMBER_FIELDS = ['takeoff_lat', 'takeoff_lon', 'landing_lat', 'landing_lon', 'distance_m', 'operating_cost']
+
+/** "lat, lon", or a dash when either is missing. */
+function coordinates(lat, lon) {
+  return lat == null || lon == null ? '—' : `${lat}, ${lon}`
+}
+
+/** Two number inputs in one cell, for a latitude and longitude pair. */
+function CoordinateInputs({ prefix, label, lat, lon, onLat, onLon }) {
+  return (
+    <span className="flex gap-1">
+      <input id={`${prefix}-lat`} aria-label={`${label} Latitude`} type="number" step="any" min="-90" max="90"
+        placeholder="Lat" value={lat} onChange={e => onLat(e.target.value)} className={CONTROL} />
+      <input id={`${prefix}-lon`} aria-label={`${label} Longitude`} type="number" step="any" min="-180" max="180"
+        placeholder="Lon" value={lon} onChange={e => onLon(e.target.value)} className={CONTROL} />
+    </span>
+  )
+}
+
 /** Turn the changed fields of the edit form into the PATCH payload: coerce numeric
  *  ids, drop empty strings to null, and convert the zoned time inputs back to UTC.
  *  Only changed fields go, because the form rounds times to the minute, and an edit
@@ -156,6 +182,7 @@ function buildFlightPayload(changes) {
   if (data.duration_seconds) data.duration_seconds = Number.parseInt(data.duration_seconds, 10)
   else delete data.duration_seconds
   Object.keys(data).forEach(k => { if (data[k] === '') data[k] = null })
+  for (const k of NUMBER_FIELDS) if (data[k] != null) data[k] = Number.parseFloat(data[k])
   if (data.takeoff_time) data.takeoff_time = zonedInputToUtcIso(data.takeoff_time)
   if (data.landing_time) data.landing_time = zonedInputToUtcIso(data.landing_time)
   return data
@@ -378,6 +405,11 @@ function FlightCoreFields({ editing, canReassign, flight, editForm, setEditForm,
         display={<p className="text-sm text-foreground">{flight.takeoff_address || '—'}</p>}
       />
 
+      <EditableField editing={editing} label="Landing" htmlFor="landing-address-location"
+        input={<input id="landing-address-location" type="text" maxLength={500} value={editForm.landing_address} onChange={e => set({ landing_address: e.target.value })} className={CONTROL} />}
+        display={<p className="text-sm text-foreground">{flight.landing_address || '—'}</p>}
+      />
+
       {/* Telemetry-derived, so read-only in both modes. */}
       <Field label="Max Altitude">
         <p className="text-sm text-foreground">{flight.max_altitude_m ? `${metersToFeet(flight.max_altitude_m)} ft` : '—'}</p>
@@ -421,6 +453,28 @@ function FlightCoreFields({ editing, canReassign, flight, editForm, setEditForm,
       <EditableField editing={editing} label="Carrier(s)" htmlFor="carriers"
         input={<input id="carriers" type="text" value={editForm.carrier} onChange={e => set({ carrier: e.target.value })} className={CONTROL} />}
         display={<p className="text-sm text-foreground">{flight.carrier || '—'}</p>}
+      />
+
+      <EditableField editing={editing} label="Takeoff Coordinates"
+        input={<CoordinateInputs prefix="takeoff-coord" label="Takeoff" lat={editForm.takeoff_lat} lon={editForm.takeoff_lon}
+          onLat={v => set({ takeoff_lat: v })} onLon={v => set({ takeoff_lon: v })} />}
+        display={<p className="text-sm text-foreground">{coordinates(flight.takeoff_lat, flight.takeoff_lon)}</p>}
+      />
+
+      <EditableField editing={editing} label="Landing Coordinates"
+        input={<CoordinateInputs prefix="landing-coord" label="Landing" lat={editForm.landing_lat} lon={editForm.landing_lon}
+          onLat={v => set({ landing_lat: v })} onLon={v => set({ landing_lon: v })} />}
+        display={<p className="text-sm text-foreground">{coordinates(flight.landing_lat, flight.landing_lon)}</p>}
+      />
+
+      <EditableField editing={editing} label="Distance" editLabel="Distance (m)" htmlFor="distance-m"
+        input={<input id="distance-m" type="number" step="any" min="0" value={editForm.distance_m} onChange={e => set({ distance_m: e.target.value })} className={CONTROL} />}
+        display={<p className="text-sm text-foreground">{flight.distance_m == null ? '—' : `${flight.distance_m} m`}</p>}
+      />
+
+      <EditableField editing={editing} label="Operating Cost" editLabel="Operating Cost ($)" htmlFor="operating-cost"
+        input={<input id="operating-cost" type="number" step="0.01" min="0" value={editForm.operating_cost} onChange={e => set({ operating_cost: e.target.value })} className={CONTROL} />}
+        display={<p className="text-sm text-foreground">{flight.operating_cost == null ? '—' : `$${Number(flight.operating_cost).toFixed(2)}`}</p>}
       />
     </>
   )
