@@ -731,5 +731,24 @@ describe('SettingsPage settings fixes', () => {
       await waitFor(() => expect(bodies).toHaveLength(2))
       expect(bodies[1].email).toBe('new@example.test')
     })
+
+    // F-12: a blank display name was saved and showed as nothing.
+    it('refuses a blank display name without saving', async () => {
+      let patched = false
+      mockMount()
+      server.use(
+        http.get('/api/permissions', () => HttpResponse.json({ registry: [], values: {} })),
+        http.patch('/api/auth/users/2', () => { patched = true; return HttpResponse.json({}) }),
+      )
+      const { user } = renderWithProviders(<SettingsPage />, { role: 'admin' })
+      const dialog = await openEdit(user, 'Jamie Pilot')
+      const name = within(dialog).getByLabelText('Display Name')
+      await user.clear(name)
+      await user.type(name, '   ')
+      await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+
+      expect(await screen.findByText('Required: Display Name')).toBeInTheDocument()
+      expect(patched).toBe(false)
+    })
   })
 })

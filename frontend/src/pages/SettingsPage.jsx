@@ -226,9 +226,11 @@ export default function SettingsPage() {
 
   const handleSaveEditUser = async () => {
     if (!editUser) return
+    const displayName = editUserForm.display_name.trim()
+    if (!displayName) { toast.error('Required: Display Name'); return }
     setSavingEditUser(true)
     try {
-      const payload = { display_name: editUserForm.display_name, role: editUserForm.role }
+      const payload = { display_name: displayName, role: editUserForm.role }
       payload.pilot_id = editUserForm.pilot_id ? Number.parseInt(editUserForm.pilot_id, 10) : 0
       // Sent only when edited: a user with no email takes the linked pilot's.
       const email = editUserForm.email.trim()
@@ -242,9 +244,11 @@ export default function SettingsPage() {
   }
 
   const handleSaveProfile = async () => {
+    const displayName = profile.display_name.trim()
+    if (isAdmin && !displayName) { toast.error('Required: Display Name'); return }
     setSavingProfile(true)
     try {
-      const payload = isAdmin ? { display_name: profile.display_name, email: profile.email } : { email: profile.email }
+      const payload = isAdmin ? { display_name: displayName, email: profile.email } : { email: profile.email }
       updateUser(await api.patch('/auth/me', payload))
       toast.success('Profile saved')
     } catch (err) { toast.error(err.message) }

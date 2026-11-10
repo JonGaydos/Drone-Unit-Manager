@@ -231,3 +231,24 @@ def test_theme_accepts_known_ids(client, db, pilot_headers, theme):
     resp = client.patch("/api/auth/me", headers=pilot_headers, json={"theme": theme})
     assert resp.status_code == 200, resp.text
     assert resp.json()["theme"] == theme
+
+
+# --- F-12: display names must not be blank -----------------------------------------
+
+@pytest.mark.parametrize("name", ["", "   "])
+def test_user_display_name_refuses_blank(client, db, admin_headers, pilot_user, name):
+    resp = client.patch(f"/api/auth/users/{pilot_user.id}", headers=admin_headers, json={"display_name": name})
+    assert resp.status_code == 422, resp.text
+    resp = client.patch("/api/auth/me", headers=admin_headers, json={"display_name": name})
+    assert resp.status_code == 422, resp.text
+    resp = client.post("/api/auth/users", headers=admin_headers, json={
+        "username": "newbie", "password": "NewbiePassw0rd!", "display_name": name, "role": "viewer"})
+    assert resp.status_code == 422, resp.text
+    db.refresh(pilot_user)
+    assert pilot_user.display_name == "Pilot"
+
+
+def test_user_display_name_is_trimmed(client, db, admin_headers, pilot_user):
+    resp = client.patch(f"/api/auth/users/{pilot_user.id}", headers=admin_headers, json={"display_name": "  Robin Vale  "})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["display_name"] == "Robin Vale"

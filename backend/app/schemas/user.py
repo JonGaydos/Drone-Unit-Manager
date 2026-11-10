@@ -17,6 +17,16 @@ def _validate_optional_email(value: Optional[str]) -> Optional[str]:
     return value
 
 
+def _validate_display_name(value: Optional[str]) -> Optional[str]:
+    """Trimmed; a blank name would show as nothing in lists and the audit log."""
+    if value is None:
+        return value
+    value = value.strip()
+    if not value:
+        raise ValueError("display name is required")
+    return value
+
+
 # The roles the permission checks recognize. Anything else would create an
 # account that silently matches no check.
 Role = Literal["admin", "supervisor", "pilot", "viewer"]
@@ -38,6 +48,7 @@ class UserCreate(BaseModel):
     email: Optional[str] = Field(default=None, max_length=255)
 
     _validate_email = field_validator("email")(_validate_optional_email)
+    _validate_name = field_validator("display_name")(_validate_display_name)
 
 
 class UserUpdate(BaseModel):
@@ -49,6 +60,7 @@ class UserUpdate(BaseModel):
     email: Optional[str] = Field(default=None, max_length=255)
 
     _validate_email = field_validator("email")(_validate_optional_email)
+    _validate_name = field_validator("display_name")(_validate_display_name)
 
 
 class ChangePasswordRequest(BaseModel):
