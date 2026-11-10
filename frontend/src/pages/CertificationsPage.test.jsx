@@ -234,4 +234,24 @@ describe('CertificationsPage', () => {
     expect(screen.getByRole('link', { name: 'Ada Lovelace' })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Grace Hopper' })).toBeNull()
   })
+
+  it('hides pilots with no certification records when Hide empty is ticked', async () => {
+    mockMount({
+      matrix: () => HttpResponse.json({ matrix: [
+        { pilot_id: 5, pilot_name: 'Ada Lovelace', certs: {
+          1: { id: 100, status: 'complete', expiration_date: '2099-01-01' },
+          2: { id: null, status: 'not_started', expiration_date: null },
+        } },
+        { pilot_id: 6, pilot_name: 'Grace Hopper', certs: {
+          1: { id: null, status: 'not_started', expiration_date: null },
+          2: { id: null, status: 'not_started', expiration_date: null },
+        } },
+      ] }),
+    })
+    const { user } = renderWithProviders(<CertificationsPage />, { role: 'admin' })
+    await screen.findByRole('link', { name: 'Grace Hopper' })
+    await user.click(screen.getByRole('checkbox', { name: /Hide empty/i }))
+    expect(screen.getByRole('link', { name: 'Ada Lovelace' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Grace Hopper' })).toBeNull()
+  })
 })

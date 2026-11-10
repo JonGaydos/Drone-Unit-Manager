@@ -404,12 +404,10 @@ export default function CertificationsPage() {
       })
     }
 
-    // Hide empty: hide pilots who have no certifications assigned at all
+    // Hide empty: hide pilots with no certification record at all. The matrix
+    // fills every type with a placeholder (id null), so look for a real record.
     if (hideEmpty) {
-      rows = rows.filter(row => {
-        const certs = row.certs || {}
-        return Object.keys(certs).length > 0
-      })
+      rows = rows.filter(row => Object.values(row.certs || {}).some(c => c?.id != null))
     }
 
     return rows
