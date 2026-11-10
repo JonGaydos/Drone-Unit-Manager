@@ -300,3 +300,17 @@ def test_renewing_a_renewed_cert_is_refused(client, db, admin_headers):
     assert r.status_code == 400
     assert "already renewed" in r.json()["detail"]
     assert db.query(PilotCertification).filter(PilotCertification.renewed_from_id == pc.id).count() == 1
+
+
+# --- C-F11: upcoming expirations leave out inactive pilots ---
+
+
+def test_upcoming_expirations_skip_inactive_pilots(client, db, admin_headers):
+    active = _pilot(db, first="Active")
+    gone = _pilot(db, first="Gone", status="inactive")
+    ct = _cert_type(db)
+    _cert(db, active.id, ct.id, expiry=TODAY + timedelta(days=10))
+    _cert(db, gone.id, ct.id, expiry=TODAY + timedelta(days=10))
+    r = client.get("/api/dashboard/upcoming-expirations", headers=admin_headers)
+    assert r.status_code == 200
+    assert [row["pilot_id"] for row in r.json()] == [active.id]

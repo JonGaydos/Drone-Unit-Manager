@@ -788,6 +788,7 @@ def upcoming_expirations(db: DBSession, user: CertificationsUser, days: int = 90
     ).join(Pilot, PilotCertification.pilot_id == Pilot.id
     ).join(CertificationType, PilotCertification.certification_type_id == CertificationType.id
     ).filter(
+        Pilot.status == "active",
         PilotCertification.expiration_date.isnot(None),
         PilotCertification.expiration_date <= cutoff,
         PilotCertification.status.in_(["active", "complete"]),
