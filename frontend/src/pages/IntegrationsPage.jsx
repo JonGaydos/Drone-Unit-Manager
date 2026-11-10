@@ -667,6 +667,9 @@ function FlightLogImport() {
       // Skydio export (CSV or Excel) -> full importer: fleet, pilots, accessories, flights
       const res = await api.upload('/export/excel/import', formData, {}, noTimeout)
       return { ...res, flight_id: null, points_imported: res.flights_imported ?? res.imported ?? 0, format_detected: 'skydio', error: res.errors?.length ? res.errors.join(', ') : null }
+    } else if (format === 'app_csv') {
+      // The Flights page's Export CSV, read back in (duplicates skipped)
+      return await api.upload('/export/flights/import', formData, {}, noTimeout)
     } else if (format === 'airdata_zip') {
       return await api.upload('/export/flights/import/log', formData, {}, noTimeout)
     } else {
@@ -753,7 +756,7 @@ function FlightLogImport() {
         </div>
         <div>
           <h3 className="text-sm font-semibold text-foreground">Flight Log Import</h3>
-          <p className="text-xs text-muted-foreground">A Skydio export (CSV or Excel) creates fleet, pilots, accessories, and flights. Also imports flight logs from DJI .txt, Litchi CSV, Airdata CSV/JSON/ZIP, or Parrot/ANAFI (GUTMA JSON). Manufacturer is auto-detected.</p>
+          <p className="text-xs text-muted-foreground">A Skydio export (CSV or Excel) creates fleet, pilots, accessories, and flights. Also imports flight logs from DJI .txt, Litchi CSV, Airdata CSV/JSON/ZIP, or Parrot/ANAFI (GUTMA JSON), and the Flights page's Export CSV. Manufacturer is auto-detected.</p>
         </div>
       </div>
 
@@ -783,6 +786,7 @@ function FlightLogImport() {
             <option value="airdata_json">Airdata JSON</option>
             <option value="airdata_zip">Airdata ZIP (bulk)</option>
             <option value="parrot">Parrot / ANAFI (GUTMA JSON)</option>
+            <option value="app_csv">Flights CSV (exported from this app)</option>
           </select>
         </div>
         <button

@@ -496,6 +496,7 @@ The card also has a **Disconnect** button. Disconnecting clears the stored Skydi
 • **Airdata JSON** — Single flight JSON exports from Airdata.com
 • **Airdata ZIP** — Bulk export of all flights from Airdata.com (ZIP of JSON files)
 • **Parrot / ANAFI** — GUTMA JSON flight logs
+• **Flights CSV (exported from this app)** — The Flights page's Export CSV, read back in (for example onto another install). Pick this format by hand; rows already in the app are skipped
 
 Format is auto-detected, or you can pick a specific format. Select multiple files at once using Ctrl+click or Shift+click. The app processes them sequentially with live progress tracking and automatic deduplication.`
       },

@@ -341,6 +341,25 @@ describe('IntegrationsPage', () => {
     })
   })
 
+  it("imports the app's own flights CSV through /export/flights/import", async () => {
+    let posted = false
+    mockMount()
+    server.use(
+      http.post('/api/export/flights/import', () => { posted = true; return HttpResponse.json({ imported: 3, errors: [] }) }),
+      http.post('/api/export/flights/import/log', () => HttpResponse.json({ error: 'wrong route' })),
+    )
+    const { user } = renderWithProviders(<IntegrationsPage />, { role: 'admin' })
+    await screen.findByText('Flight Log Import')
+
+    await user.selectOptions(screen.getByLabelText('Format'), 'Flights CSV (exported from this app)')
+    const input = document.querySelector('input[type="file"]')
+    await user.upload(input, new File(['Flight ID,Vehicle,Pilot,Takeoff\n'], 'flights_export.csv', { type: 'text/csv' }))
+    await user.click(screen.getByRole('button', { name: 'Import' }))
+
+    expect(await screen.findAllByText(/Imported 3 flights/)).not.toHaveLength(0)
+    expect(posted).toBe(true)
+  })
+
   // A full provider export is hundreds of megabytes and over a thousand
   // flights; the one measured took four minutes end to end. With the default
   // thirty-second timeout the browser aborts while the server is still
