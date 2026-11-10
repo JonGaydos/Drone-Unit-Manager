@@ -596,14 +596,56 @@ def refresh_flight_from_api(flight_id: int, db: DBSession, admin: AdminUser):
     }
 
 
-@router.post("", response_model=FlightOut, responses=responses(401))
+# A typed duration may differ from the times by this much: the edit forms round
+# times to the minute.
+DURATION_TOLERANCE_S = 60
+TIME_FIELDS = ("takeoff_time", "landing_time")
+
+
+def _fill_and_check_times(db, values: dict, sent: set, stored: Flight | None = None) -> None:
+    """Fill a missing date and duration from the times, then check the three agree.
+
+    ``values`` is what will be written; ``stored`` the flight it overlays (None on
+    create). The date follows a changed takeoff and the duration follows changed
+    times unless the caller sent them. Only rules touching a sent field are
+    checked, so an edit of something else still saves an imported flight whose
+    stored values disagree.
+    """
+    def current(name):
+        if name in values:
+            return values[name]
+        return getattr(stored, name) if stored is not None else None
+
+    takeoff, landing = current("takeoff_time"), current("landing_time")
+    times_sent = bool(sent & set(TIME_FIELDS))
+    if "takeoff_time" in sent and "date" not in sent and takeoff is not None:
+        values["date"] = local_flight_date(takeoff, display_zone(db))
+    if times_sent and "duration_seconds" not in sent and takeoff and landing and landing > takeoff:
+        values["duration_seconds"] = int((landing - takeoff).total_seconds())
+
+    if times_sent and takeoff and landing and landing <= takeoff:
+        raise HTTPException(422, "Landing time must be after takeoff time")
+    day = current("date")
+    if sent & {"date", "takeoff_time"} and day and takeoff:
+        expected = local_flight_date(takeoff, display_zone(db))
+        if day != expected:
+            raise HTTPException(422, f"Date must match the takeoff date ({expected})")
+    duration = current("duration_seconds")
+    if sent & {"duration_seconds", *TIME_FIELDS} and duration is not None and takeoff and landing:
+        if abs(duration - (landing - takeoff).total_seconds()) > DURATION_TOLERANCE_S:
+            raise HTTPException(422, "Duration must match the takeoff and landing times")
+
+
+@router.post("", response_model=FlightOut, responses=responses(401, 422))
 def create_flight(
     data: FlightCreate,
     db: DBSession,
     admin: Annotated[User, Depends(require_permission("flights.create"))],
 ):
     from app.services.audit import log_action
-    flight = Flight(**data.model_dump(), review_status=NEEDS_REVIEW, pilot_confirmed=True,
+    values = data.model_dump()
+    _fill_and_check_times(db, values, {k for k, v in values.items() if v is not None})
+    flight = Flight(**values, review_status=NEEDS_REVIEW, pilot_confirmed=True,
                     data_source="manual", created_by_id=admin.id)
     db.add(flight)
     db.flush()
@@ -658,7 +700,7 @@ def _returns_to_queue(db, user: User, flight: Flight, update_data: dict) -> bool
     return bool(_changed_fields(flight, update_data, content))
 
 
-@router.patch("/{flight_id}", response_model=FlightOut, responses=responses(401, 403, 404))
+@router.patch("/{flight_id}", response_model=FlightOut, responses=responses(401, 403, 404, 422))
 def update_flight(
     flight_id: int,
     data: FlightUpdate,
@@ -671,6 +713,7 @@ def update_flight(
         raise HTTPException(status_code=404, detail=FLIGHT_NOT_FOUND)
     update_data = data.model_dump(exclude_unset=True)
     _check_edit_allowed(db, admin, flight, update_data)
+    _fill_and_check_times(db, update_data, set(update_data), flight)
     if _returns_to_queue(db, admin, flight, update_data):
         update_data["review_status"] = NEEDS_REVIEW
     # Flights are records of what happened, so every changed field is audited.
