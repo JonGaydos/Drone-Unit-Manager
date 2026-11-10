@@ -80,6 +80,23 @@ describe('SettingsPage', () => {
     expect(await screen.findByText('Organization')).toBeInTheDocument()
   })
 
+  it('refuses a currency rule period outside 1-3650 days without saving', async () => {
+    mockMount()
+    let posted = false
+    server.use(http.post('/api/currency/rules', () => { posted = true; return HttpResponse.json({}) }))
+    const { user } = renderWithProviders(<SettingsPage />, { role: 'admin' })
+    await screen.findByText('Quarterly currency')
+    await user.click(screen.getByRole('button', { name: /New Rule/ }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Long' } })
+    const days = within(dialog).getByLabelText('Period (days)')
+    expect(days).toHaveAttribute('max', '3650')
+    fireEvent.change(days, { target: { value: '99999' } })
+    await user.click(within(dialog).getAllByRole('button').find(b => /Create|Save/.test(b.textContent)))
+    expect(await screen.findByText('Period must be 1 to 3650 days')).toBeInTheDocument()
+    expect(posted).toBe(false)
+  })
+
   it('loads settings into the organization field', async () => {
     mockMount()
     renderWithProviders(<SettingsPage />, { role: 'admin' })

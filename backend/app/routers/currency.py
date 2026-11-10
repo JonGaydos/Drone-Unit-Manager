@@ -3,7 +3,7 @@ from html import escape
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints, field_validator
 from sqlalchemy.orm import Session, joinedload
 
 from app.deps import DBSession
@@ -23,26 +23,37 @@ ManageUser = Annotated[User, Depends(require_permission("certifications.manage")
 # overflow the date arithmetic.
 MAX_PERIOD_DAYS = 3650
 PeriodDays = Annotated[int, Field(ge=1, le=MAX_PERIOD_DAYS)]
+RuleName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
+RequiredHours = Annotated[float, Field(ge=0)]
+RequiredFlights = Annotated[int, Field(ge=0)]
 
 
 class RuleCreate(BaseModel):
-    name: str
-    description: Optional[str] = None
-    vehicle_model: Optional[str] = None
-    required_hours: float
+    name: RuleName
+    description: Optional[str] = Field(None, max_length=500)
+    vehicle_model: Optional[str] = Field(None, max_length=200)
+    required_hours: RequiredHours
     period_days: PeriodDays
-    required_flights: Optional[int] = None
+    required_flights: Optional[RequiredFlights] = None
     is_active: bool = True
 
 
 class RuleUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    vehicle_model: Optional[str] = None
-    required_hours: Optional[float] = None
+    name: Optional[RuleName] = None
+    description: Optional[str] = Field(None, max_length=500)
+    vehicle_model: Optional[str] = Field(None, max_length=200)
+    required_hours: Optional[RequiredHours] = None
     period_days: Optional[PeriodDays] = None
-    required_flights: Optional[int] = None
+    required_flights: Optional[RequiredFlights] = None
     is_active: Optional[bool] = None
+
+    @field_validator("name", "required_hours", "period_days", "is_active")
+    @classmethod
+    def _not_null(cls, v):
+        # Optional only so a patch can leave them out; a sent null is refused.
+        if v is None:
+            raise ValueError("cannot be empty")
+        return v
 
 
 class RuleOut(BaseModel):

@@ -392,7 +392,7 @@ export default function SettingsPage() {
     const hrs = Number.parseFloat(ruleForm.required_hours)
     const days = Number.parseInt(ruleForm.period_days, 10)
     if (!hrs || hrs <= 0) { toast.error('Required hours must be > 0'); return }
-    if (!days || days <= 0) { toast.error('Period days must be > 0'); return }
+    if (!days || days <= 0 || days > 3650) { toast.error('Period must be 1 to 3650 days'); return }
     setSavingRule(true)
     try {
       const payload = {
@@ -1528,7 +1528,7 @@ export default function SettingsPage() {
                 <div>
                   <label htmlFor="rule-days" className="block text-sm font-medium text-foreground mb-1">Period (days)</label>
                   <input
-                    id="rule-days" type="number" min="1" value={ruleForm.period_days}
+                    id="rule-days" type="number" min="1" max="3650" value={ruleForm.period_days}
                     onChange={e => setRuleForm({ ...ruleForm, period_days: e.target.value })}
                     className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                   />

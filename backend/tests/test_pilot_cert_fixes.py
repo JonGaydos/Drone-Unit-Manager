@@ -314,3 +314,24 @@ def test_upcoming_expirations_skip_inactive_pilots(client, db, admin_headers):
     r = client.get("/api/dashboard/upcoming-expirations", headers=admin_headers)
     assert r.status_code == 200
     assert [row["pilot_id"] for row in r.json()] == [active.id]
+
+
+# --- C-F13: currency rule name, hours and flights ---
+
+
+def test_currency_rule_fields_are_checked(client, db, admin_headers):
+    url = "/api/currency/rules"
+    base = {"name": "Quarterly", "required_hours": 5, "period_days": 90}
+    for extra in ({"name": ""}, {"name": "  "}, {"required_hours": -1}, {"required_flights": -2},
+                  {"name": "N" * 301}):
+        r = client.post(url, headers=admin_headers, json={**base, **extra})
+        assert r.status_code == 422, extra
+    ok = client.post(url, headers=admin_headers, json={**base, "name": " Quarterly ", "required_flights": 0})
+    assert ok.status_code == 200
+    assert ok.json()["name"] == "Quarterly"
+    rid = ok.json()["id"]
+    for body in ({"name": ""}, {"name": None}, {"required_hours": -0.5}, {"required_hours": None},
+                 {"period_days": None}, {"required_flights": -1}, {"is_active": None}):
+        r = client.patch(f"{url}/{rid}", headers=admin_headers, json=body)
+        assert r.status_code == 422, body
+    assert client.patch(f"{url}/{rid}", headers=admin_headers, json={"required_flights": None}).status_code == 200
