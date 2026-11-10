@@ -198,7 +198,7 @@ export default function ApiTokensSection() {
         </button>
       </div>
       <p className="text-sm text-muted-foreground">
-        Long-lived tokens for external integrations such as Home Assistant. Tokens never expire until revoked,
+        Long-lived tokens for external integrations such as Home Assistant. Tokens last until revoked unless you set an expiry (30 days, 90 days or 1 year),
         act with your role at most, and can be limited to read-only access and specific areas.
         Settings, users, backups, and sync control are never accessible with a token.
       </p>
