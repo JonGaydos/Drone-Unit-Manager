@@ -359,3 +359,34 @@ def test_same_pilot_cannot_be_listed_twice(client, db, admin_headers):
         assert r.status_code == 409, (url, r.text)
         got = client.get(f"{url}/{created['id']}", headers=admin_headers).json()
         assert [p["pilot_id"] for p in got["pilots"]] == [pilot.id]
+
+
+# --- B-14: checklist template validation ---
+
+TEMPLATES_URL = "/api/checklists/templates"
+
+
+def test_checklist_template_create_validation(client, admin_headers):
+    item = {"label": "Props", "required": True}
+    for bad in ({"name": ""}, {"name": "  "}, {"name": "N" * 301},
+                {"items": [{"label": ""}]}, {"items": [{"label": "  "}]},
+                {"items": [item, {"label": "Props "}]}):
+        r = client.post(TEMPLATES_URL, headers=admin_headers, json={"name": "Preflight", "items": [item], **bad})
+        assert r.status_code == 422, (bad, r.text)
+    r = client.post(TEMPLATES_URL, headers=admin_headers, json={"name": " Preflight ", "items": [{"label": " Props "}]})
+    assert r.status_code == 200, r.text
+    assert r.json()["name"] == "Preflight"
+    assert r.json()["items"][0]["label"] == "Props"
+
+
+def test_checklist_template_patch_has_the_create_rules(client, admin_headers):
+    created = client.post(TEMPLATES_URL, headers=admin_headers,
+                          json={"name": "Preflight", "items": [{"label": "Props"}]}).json()
+    url = f"{TEMPLATES_URL}/{created['id']}"
+    assert client.patch(url, headers=admin_headers, json={"items": []}).status_code == 400
+    for bad in ({"items": None}, {"name": ""}, {"name": None},
+                {"items": [{"label": ""}]}, {"items": [{"label": "A"}, {"label": "A"}]}):
+        r = client.patch(url, headers=admin_headers, json=bad)
+        assert r.status_code == 422, (bad, r.text)
+    got = client.get(url, headers=admin_headers).json()
+    assert got["items"][0]["label"] == "Props"
