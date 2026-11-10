@@ -387,3 +387,21 @@ def test_list_refuses_per_page_below_one(client, admin_headers):
         assert client.get(INCIDENTS_URL, headers=admin_headers,
                           params={"per_page": value}).status_code == 422
     assert client.get(INCIDENTS_URL, headers=admin_headers, params={"per_page": 1}).status_code == 200
+
+
+# --- D-17: search treats % and _ literally ---
+
+
+def test_search_does_not_treat_like_wildcards_as_wildcards(client, db, admin_headers):
+    from app.models.pilot import Pilot
+    from app.models.vehicle import Vehicle
+    db.add_all([Pilot(first_name="Ana", last_name="Plain", status="active"),
+                Pilot(first_name="Under_score", last_name="Pilot", status="active"),
+                Vehicle(serial_number="SN-100", manufacturer="Acme", model="X1", status="active")])
+    db.commit()
+    for q in ("__", "%%"):
+        r = client.get("/api/search", headers=admin_headers, params={"q": q})
+        assert r.status_code == 200
+        assert r.json()["results"] == [], q
+    r = client.get("/api/search", headers=admin_headers, params={"q": "r_s"})
+    assert [x["title"] for x in r.json()["results"]] == ["Under_score Pilot"]
