@@ -120,15 +120,15 @@ export function Sidebar({ mobileOpen, onMobileClose }) {
     <aside
       className={cn(
         'fixed inset-y-0 left-0 bg-sidebar border-r border-border flex flex-col transition-all duration-300 z-50',
-        // Mobile: slide in/out
-        'max-md:w-60',
-        mobileOpen ? 'max-md:translate-x-0' : 'max-md:-translate-x-full',
-        // Desktop: collapse behavior
-        collapsed ? 'md:w-16' : 'md:w-60'
+        // Below lg (phones and tablets): an overlay that slides in/out
+        'max-lg:w-60',
+        mobileOpen ? 'max-lg:translate-x-0' : 'max-lg:-translate-x-full',
+        // lg and up: docked, with collapse behavior
+        collapsed ? 'lg:w-16' : 'lg:w-60'
       )}
     >
       {/* Logo */}
-      <div className="h-16 max-md:h-14 flex items-center px-4 border-b border-border">
+      <div className="h-16 max-lg:h-14 flex items-center px-4 border-b border-border">
         <QuadcopterIcon className="w-7 h-7 text-primary shrink-0" />
         {(!collapsed || mobileOpen) && (
           <span className="ml-3 font-semibold text-lg text-foreground whitespace-nowrap">
@@ -243,7 +243,7 @@ export function Sidebar({ mobileOpen, onMobileClose }) {
         <button
           onClick={toggleCollapsed}
           aria-label="Toggle sidebar"
-          className="hidden md:flex w-full items-center justify-center p-2 text-muted-foreground hover:text-foreground hover:bg-sidebar-accent rounded-lg transition-colors"
+          className="hidden lg:flex w-full items-center justify-center p-2 text-muted-foreground hover:text-foreground hover:bg-sidebar-accent rounded-lg transition-colors"
         >
           {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
         </button>

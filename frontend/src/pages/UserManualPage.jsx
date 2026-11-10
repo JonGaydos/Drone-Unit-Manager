@@ -71,7 +71,7 @@ You stay signed in for up to 12 hours. After 30 minutes with no activity in any 
       },
       {
         title: 'Navigating the App',
-        body: 'Use the sidebar on the left to navigate between sections. The sidebar can be collapsed using the arrow at the bottom. On mobile devices, tap the menu icon in the top-left corner to open the sidebar. Admins can reorder and hide sidebar items from Settings.'
+        body: 'Use the sidebar on the left to navigate between sections. The sidebar can be collapsed using the arrow at the bottom. On phones and tablets, tap the menu icon in the top-left corner to open the sidebar. Admins can reorder and hide sidebar items from Settings.'
       },
       {
         title: 'Themes',

@@ -533,7 +533,7 @@ Bulk flight actions follow the same settings as single ones. Selecting flights a
 
 ### 19.1 Navigation
 
-On mobile devices, the sidebar is replaced by a hamburger menu in the top-left corner. Tap the menu icon to open the sidebar as an overlay. The sidebar closes automatically when you navigate to a page.
+On phones and tablets (screens narrower than 1024 pixels), the sidebar is replaced by a hamburger menu in the top-left corner. Tap the menu icon to open the sidebar as an overlay. The sidebar closes automatically when you navigate to a page.
 
 ### 19.2 Responsive Tables
 
