@@ -246,10 +246,12 @@ def send_test_digest(
 def get_notification_log(
     db: DBSession,
     user: CurrentUser,
-    limit: int = 50):
-    """Get notification send history for the current user."""
+    limit: int = 50,
+    mine: bool = False):
+    """Get notification send history: an admin sees every user's unless
+    ``mine`` asks for their own only (the preferences card); others see their own."""
     q = db.query(NotificationLog)
-    if user.role != "admin":
+    if mine or user.role != "admin":
         q = q.filter(NotificationLog.user_id == user.id)
     logs = q.order_by(NotificationLog.sent_at.desc()).limit(limit).all()
     return [

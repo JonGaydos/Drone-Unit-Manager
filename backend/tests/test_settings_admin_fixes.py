@@ -461,3 +461,18 @@ def test_cors_origins_set_explicitly_are_allowed(monkeypatch):
     from app.config import Settings
     monkeypatch.setenv("CORS_ORIGINS", '["http://localhost:5173"]')
     assert Settings(_env_file=None).CORS_ORIGINS == ["http://localhost:5173"]
+
+
+# --- G-1 follow-up: the preferences card lists only the user's own sends ---------------
+
+def test_notification_log_mine_limits_an_admin_to_own_sends(client, db, admin_user, pilot_user, admin_headers):
+    from app.models.notification_log import NotificationLog
+    db.add_all([
+        NotificationLog(user_id=admin_user.id, subject="Admin digest", status="sent", item_count=1),
+        NotificationLog(user_id=pilot_user.id, subject="Pilot digest", status="sent", item_count=1),
+    ])
+    db.commit()
+    everyone = client.get("/api/notifications/log", headers=admin_headers).json()
+    assert {r["subject"] for r in everyone} == {"Admin digest", "Pilot digest"}
+    mine = client.get("/api/notifications/log?mine=true", headers=admin_headers).json()
+    assert [r["subject"] for r in mine] == ["Admin digest"]

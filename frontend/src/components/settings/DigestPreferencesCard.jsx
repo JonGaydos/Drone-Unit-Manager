@@ -46,7 +46,7 @@ export default function DigestPreferencesCard() {
   const [busy, setBusy] = useState('')
 
   const loadLog = useCallback(() => {
-    api.get('/notifications/log?limit=10')
+    api.get('/notifications/log?limit=10&mine=true')
       .then(rows => { if (Array.isArray(rows)) setLog(rows) })
       .catch(() => {})
   }, [])

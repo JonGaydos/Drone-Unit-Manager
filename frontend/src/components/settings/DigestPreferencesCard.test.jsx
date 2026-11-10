@@ -28,7 +28,11 @@ const LOG = [
 function mockMount({ prefs = PREFS, log = LOG } = {}) {
   server.use(
     http.get('/api/notifications/preferences', () => HttpResponse.json(prefs)),
-    http.get('/api/notifications/log', () => HttpResponse.json(log)),
+    http.get('/api/notifications/log', ({ request }) => {
+      // The card asks for the signed-in user's own sends, even for an admin.
+      if (new URL(request.url).searchParams.get('mine') !== 'true') return HttpResponse.json([])
+      return HttpResponse.json(log)
+    }),
   )
 }
 
