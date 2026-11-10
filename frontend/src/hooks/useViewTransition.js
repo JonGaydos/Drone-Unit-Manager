@@ -17,6 +17,12 @@ export function useViewTransition() {
     // immediately — the router has already swapped the DOM by the time this
     // effect runs, and we just want the browser's automatic before/after
     // snapshot cross-fade.
-    document.startViewTransition(() => Promise.resolve())
+    const transition = document.startViewTransition(() => Promise.resolve())
+    // A quick second navigation skips this transition, and its promises reject
+    // (AbortError, InvalidStateError). Nothing waits on them, so swallow the
+    // rejections rather than log them as uncaught errors.
+    for (const promise of [transition?.ready, transition?.finished, transition?.updateCallbackDone]) {
+      promise?.catch(() => {})
+    }
   }, [location.pathname])
 }
