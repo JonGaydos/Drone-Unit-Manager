@@ -116,4 +116,14 @@ describe('BatteryDetailPage', () => {
     expect(await screen.findByRole('heading', { name: 'Cell A' })).toBeInTheDocument()
     expect(screen.queryByText('Battery not found')).toBeNull()
   })
+
+  it('edits status from the shared battery list, keeping charging', async () => {
+    mockMount({ battery: () => HttpResponse.json({ ...BATTERY, status: 'charging' }) })
+    const { user } = render()
+    const heading = await screen.findByRole('heading', { name: 'Cell A' })
+    await user.click(heading.parentElement.querySelector('button'))
+    const select = screen.getByLabelText('Status')
+    expect(select).toHaveValue('charging')
+    expect([...select.options].map(o => o.value)).toEqual(['active', 'charging', 'maintenance', 'retired', 'damaged'])
+  })
 })

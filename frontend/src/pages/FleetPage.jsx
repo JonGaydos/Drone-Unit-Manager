@@ -9,6 +9,7 @@ import { useConfirm } from '@/hooks/useConfirm'
 import { Plus, Edit, Trash2, Search, Battery, Gamepad2, Warehouse, Cpu, Paperclip, Package, ChevronUp, ChevronDown, Download, Loader2, Merge } from 'lucide-react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 import { daysUntil } from '@/lib/utils'
+import { EQUIPMENT_STATUSES } from '@/lib/constants'
 
 // ─── Generic Equipment Modal ────────────────────────────────────────────────
 
@@ -64,7 +65,11 @@ function EquipmentModal({ title, record, fields, onSave, onClose, vehicleModels 
                     onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
                     className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
                   >
-                    {f.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    {/* A stored value outside the list (an older status) stays selectable. */}
+                    {(!form[f.key] || f.options.some(o => o.value === form[f.key])
+                      ? f.options
+                      : [{ value: form[f.key], label: form[f.key] }, ...f.options]
+                    ).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                 </div>
               )
@@ -260,9 +265,7 @@ const TAB_CONFIGS = {
       { key: 'model', label: 'Model', required: true },
       { key: 'nickname', label: 'Nickname' },
       ...LIFECYCLE_FIELDS,
-      { key: 'status', label: 'Status', type: 'select', options: [
-        { value: 'active', label: 'Active' }, { value: 'maintenance', label: 'Maintenance' }, { value: 'retired', label: 'Retired' }
-      ]},
+      { key: 'status', label: 'Status', type: 'select', options: EQUIPMENT_STATUSES.vehicle },
       { key: 'notes', label: 'Notes' },
     ],
   },
@@ -294,10 +297,7 @@ const TAB_CONFIGS = {
       { key: 'cycle_count', label: 'Cycle Count', type: 'number' },
       { key: 'health_pct', label: 'Health %', type: 'number' },
       ...LIFECYCLE_FIELDS,
-      { key: 'status', label: 'Status', type: 'select', options: [
-        { value: 'active', label: 'Active' }, { value: 'charging', label: 'Charging' },
-        { value: 'maintenance', label: 'Maintenance' }, { value: 'retired', label: 'Retired' }
-      ]},
+      { key: 'status', label: 'Status', type: 'select', options: EQUIPMENT_STATUSES.battery },
     ],
   },
   controllers: {
@@ -322,9 +322,7 @@ const TAB_CONFIGS = {
       { key: 'manufacturer', label: 'Manufacturer' },
       { key: 'model', label: 'Model' },
       ...LIFECYCLE_FIELDS,
-      { key: 'status', label: 'Status', type: 'select', options: [
-        { value: 'active', label: 'Active' }, { value: 'maintenance', label: 'Maintenance' }, { value: 'retired', label: 'Retired' }
-      ]},
+      { key: 'status', label: 'Status', type: 'select', options: EQUIPMENT_STATUSES.controller },
     ],
   },
   docks: {
@@ -351,9 +349,7 @@ const TAB_CONFIGS = {
       { key: 'lat', label: 'Latitude', type: 'number' },
       { key: 'lon', label: 'Longitude', type: 'number' },
       ...LIFECYCLE_FIELDS,
-      { key: 'status', label: 'Status', type: 'select', options: [
-        { value: 'online', label: 'Online' }, { value: 'offline', label: 'Offline' }, { value: 'maintenance', label: 'Maintenance' }
-      ]},
+      { key: 'status', label: 'Status', type: 'select', options: EQUIPMENT_STATUSES.dock },
     ],
   },
   sensors: {
@@ -380,9 +376,7 @@ const TAB_CONFIGS = {
       { key: 'manufacturer', label: 'Manufacturer' },
       { key: 'model', label: 'Model' },
       ...LIFECYCLE_FIELDS,
-      { key: 'status', label: 'Status', type: 'select', options: [
-        { value: 'active', label: 'Active' }, { value: 'maintenance', label: 'Maintenance' }, { value: 'retired', label: 'Retired' }
-      ]},
+      { key: 'status', label: 'Status', type: 'select', options: EQUIPMENT_STATUSES.sensor },
     ],
   },
   attachments: {
@@ -409,9 +403,7 @@ const TAB_CONFIGS = {
       { key: 'manufacturer', label: 'Manufacturer' },
       { key: 'model', label: 'Model' },
       ...LIFECYCLE_FIELDS,
-      { key: 'status', label: 'Status', type: 'select', options: [
-        { value: 'active', label: 'Active' }, { value: 'maintenance', label: 'Maintenance' }, { value: 'retired', label: 'Retired' }
-      ]},
+      { key: 'status', label: 'Status', type: 'select', options: EQUIPMENT_STATUSES.attachment },
     ],
   },
   other: {
@@ -433,10 +425,7 @@ const TAB_CONFIGS = {
       { key: 'category', label: 'Category' },
       { key: 'serial_number', label: 'Serial Number' },
       ...LIFECYCLE_FIELDS,
-      { key: 'status', label: 'Status', type: 'select', options: [
-        { value: 'active', label: 'Active' }, { value: 'maintenance', label: 'Maintenance' },
-        { value: 'retired', label: 'Retired' }, { value: 'damaged', label: 'Damaged' }
-      ]},
+      { key: 'status', label: 'Status', type: 'select', options: EQUIPMENT_STATUSES.other },
       { key: 'notes', label: 'Notes' },
     ],
   },

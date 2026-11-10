@@ -6,7 +6,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { useConfirm } from '@/hooks/useConfirm'
 import { addMonths, daysUntil, formatHours, formatDuration, normalizeDateValue } from '@/lib/utils'
-import { STATUS_COLORS } from '@/lib/constants'
+import { STATUS_COLORS, statusOptions } from '@/lib/constants'
 import { ArrowLeft, Clock, Calendar, Battery, Edit, Gamepad2, Cpu, Paperclip, Camera, ShieldCheck, Plus, Trash2, AlertTriangle, Cog, X, Save } from 'lucide-react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 import DocumentUpload from '@/components/DocumentUpload'
@@ -223,10 +223,7 @@ export default function VehicleDetailPage() {
                     <label htmlFor="status" className="block text-xs font-medium text-muted-foreground mb-1">Status</label>
                     <select id="status" value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})}
                       className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm">
-                      <option value="active">Active</option>
-                      <option value="inactive">Inactive</option>
-                      <option value="maintenance">Maintenance</option>
-                      <option value="retired">Retired</option>
+                      {statusOptions('vehicle', editForm.status).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                   </div>
                 </div>

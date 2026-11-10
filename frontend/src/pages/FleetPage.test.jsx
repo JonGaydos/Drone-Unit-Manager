@@ -374,4 +374,16 @@ describe('FleetPage', () => {
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByLabelText('Cycle Count')).toHaveValue(0)
   })
+
+  it('offers the shared dock statuses in the fleet modal', async () => {
+    mockVehicles()
+    server.use(http.get('/api/docks', () => HttpResponse.json([])))
+    const { user } = renderWithProviders(<FleetPage />, { role: 'admin' })
+    await screen.findByText('Falcon')
+    await user.click(screen.getByRole('button', { name: /Docks/ }))
+    await user.click(await screen.findByRole('button', { name: /Add Dock/ }))
+    const dialog = await screen.findByRole('dialog')
+    const options = [...within(dialog).getByLabelText('Status').options].map(o => o.value)
+    expect(options).toEqual(['active', 'online', 'offline', 'maintenance', 'retired', 'damaged'])
+  })
 })
