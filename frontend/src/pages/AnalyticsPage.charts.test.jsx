@@ -74,4 +74,31 @@ describe('AnalyticsPage charts', () => {
     const rows = vehicleChart()
     expect(rows.map(r => [r.vehicle_id, r.filtered])).toEqual([[2, 1], [3, 0.5]])
   })
+
+  // E-5: multi-word purposes wrapped onto several lines and overlapped. Each
+  // tick is one line, cut with an ellipsis when long, full text in a tooltip.
+  it('draws each purpose label on one line (E-5)', async () => {
+    mockMount({ purposes: [
+      { purpose: 'Other Agency Assist', count: 3 },
+      { purpose: 'A purpose name far too long for the axis', count: 1 },
+    ] })
+    renderWithProviders(<AnalyticsPage />, { role: 'admin' })
+    const axis = await screen.findByTestId('yaxis-purpose')
+    const texts = [...axis.querySelectorAll('text')]
+    expect(texts.map(t => t.querySelector('tspan'))).toEqual([null, null])
+    expect(texts[0].lastChild.textContent).toBe('Other Agency Assist')
+    expect(texts[1].lastChild.textContent).toMatch(/…$/)
+    expect(texts[1].querySelector('title').textContent).toBe('A purpose name far too long for the axis')
+  })
+
+  // E-6: Recharts hid every other vehicle label; interval 0 shows them all.
+  it('labels every vehicle bar (E-6)', async () => {
+    mockMount()
+    renderWithProviders(<AnalyticsPage />, { role: 'admin' })
+    const axis = await screen.findByTestId('yaxis-vehicle_name')
+    expect(axis.dataset.interval).toBe('0')
+    expect([...axis.querySelectorAll('text')].map(t => t.lastChild.textContent))
+      .toEqual(['Skydio X2E (Unit-u4vf)', 'Skydio X2E (Unit-9n84)'])
+  })
 })
+
