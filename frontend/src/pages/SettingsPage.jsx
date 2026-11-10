@@ -211,7 +211,7 @@ export default function SettingsPage() {
 
   // Edit user state
   const [editUser, setEditUser] = useState(null)
-  const [editUserForm, setEditUserForm] = useState({ display_name: '', role: '', pilot_id: '' })
+  const [editUserForm, setEditUserForm] = useState({ display_name: '', role: '', pilot_id: '', email: '' })
   const [savingEditUser, setSavingEditUser] = useState(false)
 
   const openEditUser = (u) => {
@@ -220,6 +220,7 @@ export default function SettingsPage() {
       display_name: u.display_name || '',
       role: u.role || 'viewer',
       pilot_id: u.pilot_id ? String(u.pilot_id) : '',
+      email: u.email || '',
     })
   }
 
@@ -229,6 +230,9 @@ export default function SettingsPage() {
     try {
       const payload = { display_name: editUserForm.display_name, role: editUserForm.role }
       payload.pilot_id = editUserForm.pilot_id ? Number.parseInt(editUserForm.pilot_id, 10) : 0
+      // Sent only when edited: a user with no email takes the linked pilot's.
+      const email = editUserForm.email.trim()
+      if (email !== (editUser.email || '')) payload.email = email
       const updated = await api.patch(`/auth/users/${editUser.id}`, payload)
       setUsers(users.map(x => x.id === editUser.id ? updated : x))
       setEditUser(null)
@@ -1583,6 +1587,11 @@ export default function SettingsPage() {
               <div>
                 <label htmlFor="display-name-1" className="block text-sm font-medium text-foreground mb-1">Display Name</label>
                 <input id="display-name-1" type="text" value={editUserForm.display_name} onChange={e => setEditUserForm({...editUserForm, display_name: e.target.value})}
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+              </div>
+              <div>
+                <label htmlFor="email-1" className="block text-sm font-medium text-foreground mb-1">Email</label>
+                <input id="email-1" type="email" value={editUserForm.email} onChange={e => setEditUserForm({...editUserForm, email: e.target.value})}
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
               </div>
               <div>

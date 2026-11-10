@@ -690,4 +690,46 @@ describe('SettingsPage settings fixes', () => {
     expect(await screen.findByText('API Documentation')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Open API Documentation/ })).toHaveAttribute('href', '/docs')
   })
+
+  describe('Edit User', () => {
+    const openEdit = async (user, name) => {
+      await user.click(await screen.findByRole('button', { name: 'Users' }))
+      const row = (await screen.findByText(name)).closest('tr')
+      await user.click(within(row).getByTitle('Edit user'))
+      return screen.findByRole('dialog')
+    }
+
+    // F-11: an admin could change another user's email only through the API.
+    it('edits the email and sends it only when it changed', async () => {
+      const bodies = []
+      mockMount({
+        users: () => HttpResponse.json([
+          { id: 1, username: 'admin', display_name: 'Admin User', role: 'admin', is_active: true },
+          { id: 2, username: 'jpilot', display_name: 'Jamie Pilot', role: 'pilot', is_active: true, email: 'old@example.test' },
+        ]),
+      })
+      server.use(
+        http.get('/api/permissions', () => HttpResponse.json({ registry: [], values: {} })),
+        http.patch('/api/auth/users/2', async ({ request }) => {
+          const body = await request.json()
+          bodies.push(body)
+          return HttpResponse.json({ id: 2, username: 'jpilot', display_name: 'Jamie Pilot', role: 'pilot', is_active: true, email: body.email ?? 'old@example.test' })
+        }),
+      )
+      const { user } = renderWithProviders(<SettingsPage />, { role: 'admin' })
+      let dialog = await openEdit(user, 'Jamie Pilot')
+      const email = within(dialog).getByLabelText('Email')
+      expect(email).toHaveValue('old@example.test')
+      await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+      await waitFor(() => expect(bodies).toHaveLength(1))
+      expect(bodies[0]).not.toHaveProperty('email')
+
+      dialog = await openEdit(user, 'Jamie Pilot')
+      await user.clear(within(dialog).getByLabelText('Email'))
+      await user.type(within(dialog).getByLabelText('Email'), 'new@example.test')
+      await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+      await waitFor(() => expect(bodies).toHaveLength(2))
+      expect(bodies[1].email).toBe('new@example.test')
+    })
+  })
 })
