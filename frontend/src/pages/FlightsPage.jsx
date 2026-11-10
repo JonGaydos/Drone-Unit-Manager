@@ -2,13 +2,26 @@ import { useState, useEffect, useRef } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
-import { changedFields, flightSavedMessage, formatDuration, normalizeDateValue } from '@/lib/utils'
+import { changedFields, flightSavedMessage, formatDuration, normalizeDateValue, zonedInputToUtcIso } from '@/lib/utils'
 import { ownsFlight } from '@/lib/ownership'
 import { sortByName, sortVehicles, sortPilotsActiveFirst, vehicleDisplayName, telemetryLabel } from '@/lib/formatters'
 import { Plus, Search, CheckCircle, ChevronUp, ChevronDown, Pencil, X, Check, Download, Loader2, Copy, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Modal } from '@/components/ui/Modal'
+
+const FLIGHT_NUMBER_FIELDS = ['takeoff_lat', 'takeoff_lon', 'landing_lat', 'landing_lon', 'distance_m', 'operating_cost']
+
+/** A labelled input in the Add Flight grid. */
+function ModalInput({ id, label, value, onChange, ...props }) {
+  return (
+    <div>
+      <label htmlFor={id} className="block text-sm font-medium text-foreground mb-1">{label}</label>
+      <input id={id} value={value} onChange={e => onChange(e.target.value)} {...props}
+        className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+    </div>
+  )
+}
 
 function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachments, onSave, onClose, initial }) {
   // When `initial` is provided (Duplicate), pre-fill the reusable fields and
@@ -20,6 +33,9 @@ function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachmen
     duration_seconds: '',
     purpose: initial?.purpose || '',
     takeoff_address: initial?.takeoff_address || '',
+    landing_address: '',
+    takeoff_lat: '', takeoff_lon: '', landing_lat: '', landing_lon: '',
+    distance_m: '', operating_cost: '',
     case_number: '',
     notes: '',
     battery_serial: initial?.battery_serial || '',
@@ -54,12 +70,17 @@ function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachmen
     if (data.duration_seconds) data.duration_seconds = Number.parseInt(data.duration_seconds, 10)
     else delete data.duration_seconds
     Object.keys(data).forEach(k => { if (data[k] === '') delete data[k] })
+    for (const k of FLIGHT_NUMBER_FIELDS) if (k in data) data[k] = Number.parseFloat(data[k])
+    // The time inputs are wall clock in the display zone; the API stores UTC.
+    // A missing date or duration is filled from the times by the API.
+    if (data.takeoff_time) data.takeoff_time = zonedInputToUtcIso(data.takeoff_time)
+    if (data.landing_time) data.landing_time = zonedInputToUtcIso(data.landing_time)
     setSaving(true)
     try { await onSave(data) } finally { setSaving(false) }
   }
 
   return (
-    <Modal open onClose={onClose} title="Add Flight">
+    <Modal open onClose={onClose} title="Add Flight" className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -108,10 +129,19 @@ function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachmen
               {sortByName(purposes, 'name').map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
             </select>
           </div>
-          <div>
-            <label htmlFor="takeoff-address" className="block text-sm font-medium text-foreground mb-1">Takeoff Address</label>
-            <input id="takeoff-address" type="text" value={form.takeoff_address} onChange={e => setForm({...form, takeoff_address: e.target.value})}
-              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+          <div className="grid grid-cols-2 gap-3">
+            <ModalInput id="takeoff-time" label="Takeoff Time" type="datetime-local" value={form.takeoff_time} onChange={v => setForm({...form, takeoff_time: v})} />
+            <ModalInput id="landing-time" label="Landing Time" type="datetime-local" value={form.landing_time} onChange={v => setForm({...form, landing_time: v})} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <ModalInput id="takeoff-address" label="Takeoff Address" type="text" maxLength={500} value={form.takeoff_address} onChange={v => setForm({...form, takeoff_address: v})} />
+            <ModalInput id="landing-address" label="Landing Address" type="text" maxLength={500} value={form.landing_address} onChange={v => setForm({...form, landing_address: v})} />
+            <ModalInput id="takeoff-lat" label="Takeoff Latitude" type="number" step="any" min="-90" max="90" value={form.takeoff_lat} onChange={v => setForm({...form, takeoff_lat: v})} />
+            <ModalInput id="takeoff-lon" label="Takeoff Longitude" type="number" step="any" min="-180" max="180" value={form.takeoff_lon} onChange={v => setForm({...form, takeoff_lon: v})} />
+            <ModalInput id="landing-lat" label="Landing Latitude" type="number" step="any" min="-90" max="90" value={form.landing_lat} onChange={v => setForm({...form, landing_lat: v})} />
+            <ModalInput id="landing-lon" label="Landing Longitude" type="number" step="any" min="-180" max="180" value={form.landing_lon} onChange={v => setForm({...form, landing_lon: v})} />
+            <ModalInput id="distance-m" label="Distance (m)" type="number" step="any" min="0" value={form.distance_m} onChange={v => setForm({...form, distance_m: v})} />
+            <ModalInput id="operating-cost" label="Operating Cost ($)" type="number" step="0.01" min="0" value={form.operating_cost} onChange={v => setForm({...form, operating_cost: v})} />
           </div>
           <div>
             <label htmlFor="case-number" className="block text-sm font-medium text-foreground mb-1">Case Number</label>
@@ -175,6 +205,11 @@ function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachmen
             <label htmlFor="carrier" className="block text-sm font-medium text-foreground mb-1">Carrier(s)</label>
             <input id="carrier" type="text" value={form.carrier} onChange={e => setForm({...form, carrier: e.target.value})}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+          </div>
+          <div>
+            <label htmlFor="flight-notes" className="block text-sm font-medium text-foreground mb-1">Notes</label>
+            <textarea id="flight-notes" value={form.notes} maxLength={5000} onChange={e => setForm({...form, notes: e.target.value})}
+              rows={2} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm resize-none" />
           </div>
           <div className="flex gap-2 pt-2">
             <button type="submit" disabled={saving} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2">{saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Add Flight'}</button>

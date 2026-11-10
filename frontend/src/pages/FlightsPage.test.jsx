@@ -5,6 +5,7 @@ import { server } from '@/test/server'
 import { withPermissions } from '@/test/permissions'
 import { fleetOptions, pilotOption, vehicleOption } from '@/test/options'
 import { renderWithProviders } from '@/test/render'
+import { zonedInputToUtcIso } from '@/lib/utils'
 import FlightsPage from './FlightsPage'
 
 // Mount endpoints (Promise.all in load()):
@@ -196,6 +197,37 @@ describe('FlightsPage', () => {
 
     await waitFor(() => expect(lastUrl.searchParams.get('date_from')).toBe('2026-05-01'))
     expect(lastUrl.searchParams.get('page')).toBe('1')
+  })
+
+  it('Add Flight sends times, notes, addresses, coordinates, distance and cost', async () => {
+    let body = null
+    mockMount()
+    server.use(http.post('/api/flights', async ({ request }) => { body = await request.json(); return HttpResponse.json({ id: 9 }) }))
+    const { user } = renderWithProviders(<FlightsPage />, { role: 'admin' })
+    await screen.findByRole('link', { name: 'Jane Doe' })
+    await user.click(screen.getByRole('button', { name: /Add Flight/ }))
+    const form = (await screen.findAllByRole('button', { name: 'Add Flight' })).at(-1).closest('form')
+    const f = (label) => within(form).getByLabelText(label)
+    await user.type(f('Takeoff Time'), '2026-05-01T10:00')
+    await user.type(f('Landing Time'), '2026-05-01T10:30')
+    await user.type(f('Landing Address'), 'North Field')
+    await user.type(f('Takeoff Latitude'), '44.5')
+    await user.type(f('Takeoff Longitude'), '-93.25')
+    await user.type(f('Landing Latitude'), '44.6')
+    await user.type(f('Landing Longitude'), '-93.2')
+    await user.type(f('Distance (m)'), '1200')
+    await user.type(f('Operating Cost ($)'), '35.5')
+    await user.type(f('Notes'), 'Hand entry')
+    await user.click(within(form).getByRole('button', { name: 'Add Flight' }))
+
+    await waitFor(() => expect(body).not.toBeNull())
+    expect(body).toEqual({
+      takeoff_time: zonedInputToUtcIso('2026-05-01T10:00'),
+      landing_time: zonedInputToUtcIso('2026-05-01T10:30'),
+      landing_address: 'North Field',
+      takeoff_lat: 44.5, takeoff_lon: -93.25, landing_lat: 44.6, landing_lon: -93.2,
+      distance_m: 1200, operating_cost: 35.5, notes: 'Hand entry',
+    })
   })
 
   it('hides bulk-selection checkboxes from a pilot but shows them to a supervisor', async () => {
