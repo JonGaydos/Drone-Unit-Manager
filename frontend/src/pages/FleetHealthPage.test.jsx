@@ -57,6 +57,18 @@ describe('FleetHealthPage', () => {
     expect(screen.queryByText('Battery Health')).toBeNull()
   })
 
+  it('shows a dash, not 0% or null%, when no battery has a health reading (A-F22)', async () => {
+    server.use(http.get(PRIMARY, () => HttpResponse.json({
+      summary: { total_vehicles: 0, total_batteries: 2, avg_battery_health: null, total_overdue_maintenance: 0, total_flight_hours: 0 },
+      vehicles: [], batteries: [],
+    })))
+    renderWithProviders(<FleetHealthPage />, { role: 'admin' })
+
+    const label = await screen.findByText('Avg Battery Health')
+    expect(label.previousSibling).toHaveTextContent(/^—$/)
+    expect(screen.getByText('Batteries in Service')).toBeInTheDocument()
+  })
+
   it('shows the failure fallback when the primary endpoint 500s', async () => {
     server.use(http.get(PRIMARY, () => HttpResponse.json({ detail: 'boom' }, { status: 500 })))
     renderWithProviders(<FleetHealthPage />, { role: 'admin' })

@@ -473,11 +473,12 @@ def pilot_performance(pilot_id: int, db: DBSession, user: FlightsUser):
 def fleet_health(db: DBSession, user: FleetUser):
     from app.models.battery import Battery
     from app.models.maintenance_schedule import MaintenanceSchedule
+    from app.services.equipment_lifecycle import DECOMMISSIONED_STATUSES
 
     today = date.today()
 
     vehicles = db.query(Vehicle).filter(Vehicle.status == "active").all()
-    batteries = db.query(Battery).all()
+    batteries = db.query(Battery).filter(Battery.status.notin_(DECOMMISSIONED_STATUSES)).all()
 
     # Pre-aggregate per-vehicle flight stats and overdue maintenance in two
     # grouped queries, instead of 4 queries per vehicle.
@@ -529,7 +530,9 @@ def fleet_health(db: DBSession, user: FleetUser):
         })
 
     # Overall stats
-    avg_battery_health = sum(b.health_pct or 0 for b in batteries) / len(batteries) if batteries else 0
+    # Only batteries with a reading: one never measured is unknown, not 0%.
+    readings = [b.health_pct for b in batteries if b.health_pct is not None]
+    avg_battery_health = round(sum(readings) / len(readings), 1) if readings else None
     total_overdue = sum(v["overdue_maintenance"] for v in vehicle_stats)
 
     # The unit total stays; the count against a named vehicle follows maintenance.view.
@@ -542,7 +545,7 @@ def fleet_health(db: DBSession, user: FleetUser):
         "summary": {
             "total_vehicles": len(vehicles),
             "total_batteries": len(batteries),
-            "avg_battery_health": round(avg_battery_health, 1),
+            "avg_battery_health": avg_battery_health,
             "total_overdue_maintenance": total_overdue,
             "total_flight_hours": round(sum(v["hours"] for v in vehicle_stats), 1),
         }
