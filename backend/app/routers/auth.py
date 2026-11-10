@@ -754,6 +754,13 @@ def update_user(user_id: int, data: UserUpdate, admin: Annotated[User, Depends(r
     target = db.query(User).filter(User.id == user_id).first()
     if not target:
         raise HTTPException(status_code=404, detail=USER_NOT_FOUND)
+    # The Users page does not offer it either: an admin demoting or disabling
+    # themselves locks themselves out mid-session.
+    if target.id == admin.id and (
+        (data.role is not None and data.role != target.role)
+        or (data.is_active is not None and data.is_active != target.is_active)
+    ):
+        raise HTTPException(status_code=400, detail="You cannot change your own role or active status")
     if _removes_last_admin(db, target, data):
         raise HTTPException(status_code=400, detail="Cannot demote or deactivate the last active administrator")
     # Field-level changes recorded as a dict so the audit log renders consistently.

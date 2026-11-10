@@ -424,3 +424,24 @@ def test_reminder_job_route_hides_other_jobs(client, db, admin_headers):
     other = jobs.start("sync", lambda: {"n": 1})
     assert client.get(f"/api/currency/jobs/{other}", headers=admin_headers).status_code == 404
     assert client.get("/api/currency/jobs/missing", headers=admin_headers).status_code == 404
+
+
+# --- F-01: an admin cannot change their own role or active flag -----------------------
+
+@pytest.mark.parametrize("body", [{"role": "viewer"}, {"is_active": False}])
+def test_admin_cannot_change_own_role_or_active_flag(client, db, admin_user, admin_headers, body):
+    from app.models.user import User
+    other = User(username="second", password_hash="x", display_name="Second Admin", role="admin", is_active=True)
+    db.add(other)
+    db.commit()
+    resp = client.patch(f"/api/auth/users/{admin_user.id}", headers=admin_headers, json=body)
+    assert resp.status_code == 400, resp.text
+    db.refresh(admin_user)
+    assert admin_user.role == "admin" and admin_user.is_active
+
+
+def test_admin_may_resend_own_unchanged_role(client, db, admin_user, admin_headers):
+    resp = client.patch(f"/api/auth/users/{admin_user.id}", headers=admin_headers,
+                        json={"display_name": "Chief", "role": "admin", "is_active": True})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["display_name"] == "Chief"
