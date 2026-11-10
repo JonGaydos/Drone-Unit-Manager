@@ -49,3 +49,20 @@ def test_stored_huge_period_rule_does_not_break_compliance(client, db, admin_hea
     # Both stored rules are evaluated within the allowed range, so the recent
     # two-hour flight keeps the pilot current on each.
     assert all(r["is_current"] for r in status["rules"])
+
+
+# --- C-F1: pilot names must not be blank ---
+
+
+def test_blank_pilot_names_are_refused(client, db, admin_headers):
+    for body in ({"first_name": "", "last_name": ""}, {"first_name": "  ", "last_name": "Smith"},
+                 {"first_name": "Ann", "last_name": " "}):
+        r = client.post("/api/pilots", headers=admin_headers, json=body)
+        assert r.status_code == 422, (body, r.text)
+    ok = client.post("/api/pilots", headers=admin_headers, json={"first_name": " Ann ", "last_name": "Lee"})
+    assert ok.status_code == 200
+    assert ok.json()["first_name"] == "Ann"
+    pid = ok.json()["id"]
+    for body in ({"first_name": ""}, {"last_name": "   "}, {"first_name": None}):
+        r = client.patch(f"/api/pilots/{pid}", headers=admin_headers, json=body)
+        assert r.status_code == 422, (body, r.text)

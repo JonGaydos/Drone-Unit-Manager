@@ -1,12 +1,15 @@
 from datetime import datetime
-from typing import Optional
+from typing import Annotated, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, StringConstraints, field_validator
+
+# First and last name are required: trimmed, never blank.
+PilotName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
 
 
 class PilotCreate(BaseModel):
-    first_name: str
-    last_name: str
+    first_name: PilotName
+    last_name: PilotName
     email: Optional[str] = None
     phone: Optional[str] = None
     phone_type: Optional[str] = None
@@ -19,8 +22,8 @@ class PilotCreate(BaseModel):
 
 
 class PilotUpdate(BaseModel):
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
+    first_name: Optional[PilotName] = None
+    last_name: Optional[PilotName] = None
     email: Optional[str] = None
     phone: Optional[str] = None
     phone_type: Optional[str] = None
@@ -31,6 +34,14 @@ class PilotUpdate(BaseModel):
     counts_toward_totals: Optional[bool] = None
     photo_url: Optional[str] = None
     notes: Optional[str] = None
+
+    @field_validator("first_name", "last_name")
+    @classmethod
+    def _not_null(cls, v):
+        # Optional only so a patch can leave them out; a sent null is refused.
+        if v is None:
+            raise ValueError("cannot be empty")
+        return v
 
 
 class PilotOut(BaseModel):

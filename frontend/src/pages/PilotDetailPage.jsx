@@ -122,6 +122,9 @@ export default function PilotDetailPage() {
   }
 
   const handleSave = async () => {
+    const missing = [['first_name', 'First Name'], ['last_name', 'Last Name']]
+      .filter(([key]) => !String(editForm[key] ?? '').trim()).map(([, label]) => label)
+    if (missing.length) { toast.error(`Required: ${missing.join(', ')}`); return }
     setSaving(true)
     try {
       const updated = await api.patch(`/pilots/${id}`, editForm)
@@ -177,13 +180,13 @@ export default function PilotDetailPage() {
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label htmlFor="first-name" className="block text-xs font-medium text-muted-foreground mb-1">First Name</label>
-                    <input id="first-name" type="text" value={editForm.first_name} onChange={e => setEditForm({...editForm, first_name: e.target.value})}
+                    <label htmlFor="first-name" className="block text-xs font-medium text-muted-foreground mb-1">First Name *</label>
+                    <input id="first-name" type="text" required value={editForm.first_name} onChange={e => setEditForm({...editForm, first_name: e.target.value})}
                       className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                   </div>
                   <div>
-                    <label htmlFor="last-name" className="block text-xs font-medium text-muted-foreground mb-1">Last Name</label>
-                    <input id="last-name" type="text" value={editForm.last_name} onChange={e => setEditForm({...editForm, last_name: e.target.value})}
+                    <label htmlFor="last-name" className="block text-xs font-medium text-muted-foreground mb-1">Last Name *</label>
+                    <input id="last-name" type="text" required value={editForm.last_name} onChange={e => setEditForm({...editForm, last_name: e.target.value})}
                       className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                   </div>
                 </div>

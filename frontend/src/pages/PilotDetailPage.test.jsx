@@ -152,6 +152,21 @@ describe('PilotDetailPage', () => {
     }
   })
 
+  it('refuses to save a blank first or last name', async () => {
+    let patched = false
+    mockMount()
+    server.use(http.patch('/api/pilots/:id', () => { patched = true; return HttpResponse.json(PILOT) }))
+    const { user } = render()
+    await screen.findByRole('heading', { name: 'Ada Lovelace' })
+    await user.click(screen.getByRole('button', { name: 'Edit profile' }))
+    expect(screen.getByLabelText('First Name *')).toBeRequired()
+    await user.clear(screen.getByLabelText('First Name *'))
+    await user.type(screen.getByLabelText('First Name *'), '   ')
+    await user.click(screen.getByRole('button', { name: /^Save/ }))
+    expect(await screen.findByText('Required: First Name')).toBeInTheDocument()
+    expect(patched).toBe(false)
+  })
+
   describe('performance tiles', () => {
     const PERFORMANCE = {
       total_flights: 4, total_flight_hours: 2, avg_duration_min: 30, vehicles_flown: 1,
