@@ -102,6 +102,12 @@ export default function SettingsPage() {
   const [newUser, setNewUser] = useState({ username: '', password: '', display_name: '', role: 'pilot', pilot_id: '' })
   const [addingUser, setAddingUser] = useState(false)
 
+  // The API docs exist only when the server sets EXPOSE_API_DOCS.
+  const [apiDocs, setApiDocs] = useState(false)
+  useEffect(() => {
+    api.get('/health').then(h => setApiDocs(h?.api_docs === true)).catch(() => {})
+  }, [])
+
   // Logo state
   const [logoUrl, setLogoUrl] = useState(null)
   const [uploadingLogo, setUploadingLogo] = useState(false)
@@ -1324,7 +1330,7 @@ export default function SettingsPage() {
       </div>
   )
 
-  const renderApiDocs = () => (
+  const renderApiDocs = () => apiDocs && (
       <div className="bg-card border border-border rounded-xl p-6">
         <h3 className="text-lg font-semibold text-foreground mb-2">API Documentation</h3>
         <p className="text-sm text-muted-foreground mb-3">Browse the interactive API documentation powered by Swagger UI.</p>

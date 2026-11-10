@@ -335,7 +335,9 @@ def health_check():
         db.execute(text("SELECT 1"))
         tdb.execute(text("SELECT 1"))
         return {"status": "ok", "app": APP_TITLE, "version": APP_VERSION, "database": "connected",
-                "telemetry_database": "connected", "warnings": _safe_health_warnings(db)}
+                "telemetry_database": "connected", "warnings": _safe_health_warnings(db),
+                # Whether /docs is served, so Settings links to it only when it exists.
+                "api_docs": _docs_on}
     except Exception:
         logger.exception("Health check failed")
         return JSONResponse(

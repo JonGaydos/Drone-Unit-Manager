@@ -673,4 +673,21 @@ describe('SettingsPage settings fixes', () => {
     expect(await screen.findByText('Required: Organization Name')).toBeInTheDocument()
     expect(saved).toBe(false)
   })
+
+  // F-08: the API Documentation card linked to /docs, which production does not serve.
+  it('hides the API Documentation card when the server does not serve the docs', async () => {
+    mockMount()
+    renderWithProviders(<SettingsPage />, { role: 'admin' })
+    await screen.findByText('Quarterly currency')
+    await new Promise(resolve => setTimeout(resolve, 50))
+    expect(screen.queryByText('API Documentation')).toBeNull()
+  })
+
+  it('shows the API Documentation card when the server serves the docs', async () => {
+    mockMount()
+    server.use(http.get('/api/health', () => HttpResponse.json({ status: 'ok', api_docs: true })))
+    renderWithProviders(<SettingsPage />, { role: 'admin' })
+    expect(await screen.findByText('API Documentation')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Open API Documentation/ })).toHaveAttribute('href', '/docs')
+  })
 })
