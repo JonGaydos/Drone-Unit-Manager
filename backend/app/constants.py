@@ -88,6 +88,12 @@ SECRET_KEYS = {
 INCIDENT_SEVERITIES = ("minor", "moderate", "major", "critical")
 INCIDENT_STATUSES = ("open", "investigating", "resolved", "closed")
 INCIDENT_REPORT_TYPES = ("incident", "success")
+# The Incidents page's category lists: incident reports, then success reports.
+INCIDENT_CATEGORIES = (
+    "crash", "near_miss", "equipment_failure", "injury", "airspace_violation", "other",
+    "missing_person_found", "suspect_located", "evidence_collected", "community_event",
+    "training_success", "other_success",
+)
 MISSION_STATUSES = ("planned", "in_progress", "completed", "cancelled")
 # The Training Log page's lists (TRAINING_TYPES and OUTCOME_OPTIONS in TrainingLogPage.jsx).
 TRAINING_TYPES = ("Initial", "Recurrent", "Proficiency", "Special")

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { screen, within } from '@testing-library/react'
+import { screen, within, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { withPermissions } from '@/test/permissions'
@@ -84,6 +84,32 @@ describe('IncidentPage', () => {
     expect(createBody.description).toBe('Hit a branch')
     expect(createBody.severity).toBe('major')
     expect(createBody.report_type).toBe('incident')
+  })
+
+  it('refuses a whitespace title or description and trims what it sends', async () => {
+    let createBody = null
+    mockMount()
+    server.use(http.post('/api/incidents', async ({ request }) => {
+      createBody = await request.json()
+      return HttpResponse.json({ id: 99, ...createBody })
+    }))
+    const { user } = renderWithProviders(<IncidentPage />, { role: 'admin' })
+    await screen.findByText('Hard Landing')
+    await user.click(screen.getByRole('button', { name: /New Report/ }))
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Success' }))
+    await user.type(within(dialog).getByLabelText('Title *'), '   ')
+    await user.type(within(dialog).getByLabelText('Description *'), '   ')
+    await user.click(within(dialog).getByRole('button', { name: 'Report Success' }))
+    expect(await screen.findByText('Required: Title, Description')).toBeInTheDocument()
+    expect(createBody).toBeNull()
+
+    await user.type(within(dialog).getByLabelText('Title *'), 'Found him  ')
+    await user.type(within(dialog).getByLabelText('Description *'), 'Located by thermal')
+    await user.click(within(dialog).getByRole('button', { name: 'Report Success' }))
+    await waitFor(() => expect(createBody).not.toBeNull())
+    expect(createBody.title).toBe('Found him')
+    expect(createBody.description).toBe('Located by thermal')
   })
 
   it('hides the New Report button from a viewer', async () => {

@@ -214,3 +214,77 @@ def test_restore_of_an_old_backup_with_geofences_succeeds(client, db, telemetry_
     assert r.status_code == 200, r.text
     db.expire_all()
     assert db.query(Pilot).filter_by(last_name="Restore").count() == 1
+
+
+# --- Incidents ---
+
+INCIDENTS_URL = "/api/incidents"
+
+
+def _incident_body(**overrides):
+    body = {"date": "2026-11-07", "title": "Hard landing", "severity": "minor",
+            "category": "other", "description": "Landed hard on the pad"}
+    body.update(overrides)
+    return body
+
+
+def _make_incident(db, **kwargs):
+    from datetime import date
+    from app.models.incident import Incident
+    values = {"date": date(2026, 11, 1), "title": "Old", "severity": "minor",
+              "category": "other", "description": "d"}
+    values.update(kwargs)
+    inc = Incident(**values)
+    db.add(inc)
+    db.commit()
+    db.refresh(inc)
+    return inc
+
+
+# D-1: category must be one of the page's lists
+
+
+def test_create_refuses_unknown_category(client, admin_headers):
+    r = client.post(INCIDENTS_URL, headers=admin_headers, json=_incident_body(category="banana"))
+    assert r.status_code == 422
+    assert "category must be one of" in r.text
+
+
+def test_create_accepts_incident_and_success_categories(client, admin_headers):
+    assert client.post(INCIDENTS_URL, headers=admin_headers,
+                       json=_incident_body(category="near_miss")).status_code == 200
+    assert client.post(INCIDENTS_URL, headers=admin_headers,
+                       json=_incident_body(category="suspect_located", report_type="success")).status_code == 200
+
+
+def test_patch_refuses_unknown_category_but_keeps_a_stored_one(client, db, admin_headers):
+    inc = _make_incident(db, category="legacy_value")
+    r = client.patch(f"{INCIDENTS_URL}/{inc.id}", headers=admin_headers, json={"category": "zzz"})
+    assert r.status_code == 422
+    r = client.patch(f"{INCIDENTS_URL}/{inc.id}", headers=admin_headers,
+                     json={"category": "legacy_value", "title": "Renamed"})
+    assert r.status_code == 200, r.text
+
+
+# D-2: title and description are required, after trimming
+
+
+def test_create_refuses_blank_title_and_description(client, admin_headers):
+    for field in ("title", "description"):
+        for blank in ("", "   "):
+            r = client.post(INCIDENTS_URL, headers=admin_headers, json=_incident_body(**{field: blank}))
+            assert r.status_code == 422, (field, blank, r.text)
+            assert field in r.text
+
+
+def test_create_trims_title(client, admin_headers):
+    r = client.post(INCIDENTS_URL, headers=admin_headers, json=_incident_body(title="  Prop strike  "))
+    assert r.status_code == 200, r.text
+    assert r.json()["title"] == "Prop strike"
+
+
+def test_patch_refuses_blank_or_null_title_and_description(client, db, admin_headers):
+    inc = _make_incident(db)
+    for body in ({"title": "  "}, {"description": ""}, {"title": None}, {"description": None}):
+        r = client.patch(f"{INCIDENTS_URL}/{inc.id}", headers=admin_headers, json=body)
+        assert r.status_code == 422, (body, r.text)
