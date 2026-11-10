@@ -347,6 +347,7 @@ def monthly_flights(db: DBSession, user: FlightsUser):
 @router.get("/analytics/vehicle-hours", response_model=list[VehicleHours], responses=responses(401))
 def vehicle_hours(db: DBSession, user: FleetUser):
     rows = db.query(
+        Vehicle.id,
         Vehicle.manufacturer,
         Vehicle.model,
         Vehicle.nickname,
@@ -356,6 +357,7 @@ def vehicle_hours(db: DBSession, user: FleetUser):
     ).all()
     return [
         VehicleHours(
+            vehicle_id=r.id,
             vehicle_name=f"{r.manufacturer} {r.model}" + (f" ({r.nickname})" if r.nickname else ""),
             hours=r.total_seconds / 3600,
         )

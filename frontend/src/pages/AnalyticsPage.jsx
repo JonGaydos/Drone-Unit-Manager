@@ -267,10 +267,11 @@ export default function AnalyticsPage() {
   const filteredVehicleHours = useMemo(() => {
     if (!hasActiveFilter) return null
     const groups = {}
+    // Keyed by vehicle id: the chart's label is built differently from a
+    // flight's vehicle_name, so names never matched.
     filteredFlights.forEach(f => {
-      const name = f.vehicle_name || f.drone_name || 'Unknown'
       const hrs = (f.duration_seconds || f.duration || 0) / 3600
-      groups[name] = (groups[name] || 0) + hrs
+      groups[f.vehicle_id] = (groups[f.vehicle_id] || 0) + hrs
     })
     return groups
   }, [filteredFlights, hasActiveFilter])
@@ -323,7 +324,7 @@ export default function AnalyticsPage() {
     return vehicleHours.map(d => ({
       ...d,
       total: d.hours,
-      filtered: filteredVehicleHours ? (filteredVehicleHours[d.vehicle_name] || 0) : d.hours,
+      filtered: filteredVehicleHours ? (filteredVehicleHours[d.vehicle_id] || 0) : d.hours,
     }))
   }, [vehicleHours, filteredVehicleHours])
 

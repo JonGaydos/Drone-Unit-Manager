@@ -76,3 +76,15 @@ def test_fleet_health_overdue_total_counts_every_equipment_schedule(client, db, 
     data = _fleet_health(client, admin_headers)
     assert data["vehicles"][0]["overdue_maintenance"] == 1
     assert data["summary"]["total_overdue_maintenance"] == 3
+
+
+# --- E-4: vehicle hours carry the vehicle id the cross-filter keys on ---
+
+
+def test_vehicle_hours_returns_the_vehicle_id(client, db, admin_headers):
+    from app.models.flight import Flight
+    vehicle = _add(db, Vehicle(serial_number="V-1", manufacturer="Make", model="One", nickname="Hawk", status="active"))
+    _add(db, Flight(vehicle_id=vehicle.id, date=TODAY, duration_seconds=7200))
+    r = client.get("/api/dashboard/analytics/vehicle-hours", headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert r.json() == [{"vehicle_id": vehicle.id, "vehicle_name": "Make One (Hawk)", "hours": 2.0}]

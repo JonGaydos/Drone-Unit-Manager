@@ -45,6 +45,7 @@ class MonthlyFlights(BaseModel):
 
 
 class VehicleHours(BaseModel):
+    vehicle_id: int
     vehicle_name: str
     hours: float
 
