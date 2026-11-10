@@ -228,6 +228,18 @@ def _build_pdf_summary_table(summary: dict, styles, primary_light, avail_width) 
     return [table, Spacer(1, 16)]
 
 
+# Longest text a PDF table cell or chart label shows. A row taller than the
+# page cannot be laid out at all (reportlab LayoutError), so a 10,000-character
+# name or note is cut rather than failing the whole report.
+PDF_CELL_MAX_CHARS = 500
+CHART_LABEL_MAX_CHARS = 30
+
+
+def _clip(value, limit: int) -> str:
+    text = str(value)
+    return text if len(text) <= limit else text[:limit - 3] + "..."
+
+
 def _build_pdf_data_table(rows: list, columns: list, header_bg, alt_row, white, cell_style, header_cell_style, avail_width) -> list:
     """Build PDF data table elements."""
     from reportlab.lib.colors import HexColor
@@ -238,7 +250,7 @@ def _build_pdf_data_table(rows: list, columns: list, header_bg, alt_row, white, 
 
     for row in rows[:200]:
         vals = list(row.values())
-        table_row = [Paragraph(_esc(v) if v is not None else "-", cell_style) for v in vals]
+        table_row = [Paragraph(_esc(_clip(v, PDF_CELL_MAX_CHARS)) if v is not None else "-", cell_style) for v in vals]
         table_data.append(table_row)
 
     col_w = avail_width / max(len(columns), 1)
@@ -505,11 +517,9 @@ def _chart_bar_by_key(ax, rows, key, value_key, title, ylabel, colors, plt):
     return True
 
 
-def _chart_barh(ax, rows, label_key, value_key, title, xlabel, colors, plt, truncate=None):
+def _chart_barh(ax, rows, label_key, value_key, title, xlabel, colors, plt, truncate=CHART_LABEL_MAX_CHARS):
     """Draw a horizontal bar chart from rows."""
-    labels = [r.get(label_key, "?") for r in rows][:10]
-    if truncate:
-        labels = [l[:truncate] for l in labels]
+    labels = [_clip(r.get(label_key, "?"), truncate) for r in rows][:10]
     values = [r.get(value_key, 0) for r in rows][:10]
     ax.barh(labels, values, color=colors[:len(labels)], edgecolor="white", linewidth=0.5)
     ax.set_xlabel(xlabel, fontsize=9)
@@ -521,7 +531,7 @@ def _chart_barh(ax, rows, label_key, value_key, title, xlabel, colors, plt, trun
 def _chart_grouped_bars(ax, rows, label_key, hr_keys, title, limit=10):
     """Draw a grouped bar chart with flight/mission/training hours."""
     import numpy as np
-    labels = [str(r.get(label_key, "?")) for r in rows][:limit]
+    labels = [_clip(r.get(label_key, "?"), CHART_LABEL_MAX_CHARS) for r in rows][:limit]
     groups = [[r.get(k, 0) for r in rows][:limit] for k in hr_keys]
     x = np.arange(len(labels))
     width = 0.25

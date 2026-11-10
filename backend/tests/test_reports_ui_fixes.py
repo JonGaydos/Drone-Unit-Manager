@@ -88,3 +88,50 @@ def test_vehicle_hours_returns_the_vehicle_id(client, db, admin_headers):
     r = client.get("/api/dashboard/analytics/vehicle-hours", headers=admin_headers)
     assert r.status_code == 200, r.text
     assert r.json() == [{"vehicle_id": vehicle.id, "vehicle_name": "Make One (Hawk)", "hours": 2.0}]
+
+
+# --- E-7: PDFs with a very long pilot name ---
+
+REPORT_PDF_URL = "/api/reports/generate/pdf"
+
+
+def _long_name_pilot_with_flight(db):
+    from app.models.flight import Flight
+    from app.models.pilot import Pilot
+    pilot = _add(db, Pilot(first_name="Long", last_name="N" * 10000, status="active"))
+    _add(db, Flight(pilot_id=pilot.id, date=TODAY, duration_seconds=3600))
+    return pilot
+
+
+def test_pilot_hours_pdf_renders_with_a_very_long_pilot_name(client, db, admin_headers):
+    _long_name_pilot_with_flight(db)
+    r = client.post(REPORT_PDF_URL, headers=admin_headers, json={"report_type": "pilot_hours"})
+    assert r.status_code == 200, r.text[:300]
+    assert r.content.startswith(b"%PDF")
+
+
+def test_pilot_activity_pdf_renders_with_a_very_long_pilot_name(client, db, admin_headers):
+    _long_name_pilot_with_flight(db)
+    r = client.post(REPORT_PDF_URL, headers=admin_headers, json={"report_type": "pilot_activity_summary"})
+    assert r.status_code == 200, r.text[:300]
+    assert r.content.startswith(b"%PDF")
+
+
+def test_per_pilot_review_pdf_renders_with_a_very_long_pilot_name(client, db, admin_headers):
+    pilot = _long_name_pilot_with_flight(db)
+    r = client.post(REPORT_PDF_URL, headers=admin_headers, json={
+        "report_type": "per_pilot_annual_review", "pilot_ids": [pilot.id]})
+    assert r.status_code == 200, r.text[:300]
+
+
+def test_pdf_chart_clips_a_very_long_pilot_label():
+    from PIL import Image
+    from app.routers.reports import _generate_chart
+    for report_type, row in [
+        ("pilot_hours", {"pilot": "N" * 10000, "hours": 1.0}),
+        ("pilot_activity_summary", {"pilot": "N" * 10000, "flight_hours": 1.0, "mission_hours": 0, "training_hours": 0}),
+    ]:
+        buf = _generate_chart(report_type, {"rows": [row]})
+        assert buf is not None, report_type
+        with Image.open(buf) as img:
+            assert img.size[0] < 2000, (report_type, img.size)
