@@ -171,13 +171,10 @@ describe('SettingsPage', () => {
     expect(org).toEqual({ key: 'org_name', value: 'New Org Name' })
   })
 
-  // Defense-in-depth: handleSave() -> gatherInputs() seeds from `{ ...settings }`,
-  // which includes secrets returned by GET /settings as the redaction marker
-  // ("********"). The General tab renders no input for skydio_api_token /
-  // smtp_password to override them, so gatherInputs() must DROP any key whose
-  // current value is the marker before the bulk PUT. The marker must never be
-  // echoed back to the server, while real edited non-secret values still ride
-  // along.
+  // Defense-in-depth: GET /settings returns secrets as the redaction marker
+  // ("********"). handleSave() sends only the General fields that changed, so
+  // the marker must never be echoed back to the server, while real edited
+  // non-secret values still ride along.
   it('General-tab save drops redacted secret markers from the bulk payload (never echoes "********")', async () => {
     let body = null
     mockMount()
@@ -605,5 +602,50 @@ describe('SettingsPage role permissions', () => {
 
       await waitFor(() => expect(email).toHaveValue('changed@example.org'))
     })
+  })
+})
+
+describe('SettingsPage settings fixes', () => {
+  // F-03: Save Settings sent every key loaded at page open, so a change saved
+  // meanwhile by another card or admin (sidebar, SMTP, sync) was reverted.
+  it('Save Settings sends only the General fields that changed', async () => {
+    let body = null
+    mockMount({
+      settings: () => HttpResponse.json([
+        { key: 'org_name', value: 'Sample Unit' },
+        { key: 'display_timezone', value: 'America/Chicago' },
+        { key: 'idle_lock_minutes', value: '60' },
+        { key: 'sidebar_config', value: '[]' },
+        { key: 'smtp_host', value: 'mail.example.test' },
+        { key: 'sync_interval', value: '30' },
+        { key: 'telemetry_sync_interval', value: '60' },
+      ]),
+    })
+    server.use(http.put('/api/settings/bulk', async ({ request }) => {
+      body = await request.json()
+      return HttpResponse.json({ ok: true })
+    }))
+    const { user } = renderWithProviders(<SettingsPage />, { role: 'admin' })
+    await screen.findByText('Quarterly currency')
+    const select = await screen.findByLabelText('Time Zone')
+    await waitFor(() => expect(select).toHaveValue('America/Chicago'))
+    await user.selectOptions(select, 'America/Denver')
+    await user.click(screen.getByRole('button', { name: 'Save Settings' }))
+
+    await waitFor(() => expect(body).not.toBeNull())
+    expect(body).toEqual([{ key: 'display_timezone', value: 'America/Denver' }])
+  })
+
+  // F-04: the API Tokens tab rendered the whole General tab under the tokens.
+  it('shows only token management on the API Tokens tab', async () => {
+    mockMount()
+    server.use(http.get('/api/api-tokens', () => HttpResponse.json([])))
+    const { user } = renderWithProviders(<SettingsPage />, { role: 'admin' })
+    await screen.findByText('Quarterly currency')
+    await user.click(screen.getByRole('button', { name: 'API Tokens' }))
+
+    await waitFor(() => expect(screen.queryByText('Quarterly currency')).toBeNull())
+    expect(screen.queryByText('Organization')).toBeNull()
+    expect(screen.queryByRole('button', { name: /Save Settings/ })).toBeNull()
   })
 })

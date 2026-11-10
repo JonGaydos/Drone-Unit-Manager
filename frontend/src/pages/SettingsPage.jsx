@@ -516,12 +516,12 @@ export default function SettingsPage() {
   const handleSave = async () => {
     setSaving(true)
     try {
-      const current = gatherInputs()
-      setSettings(current)
-      const items = Object.entries(current).map(([key, value]) => ({ key, value }))
-      await api.put('/settings/bulk', items)
+      const changed = changedInputs()
+      const items = Object.entries(changed).map(([key, value]) => ({ key, value }))
+      if (items.length) await api.put('/settings/bulk', items)
+      setSettings(prev => ({ ...prev, ...changed }))
       setHasUnsavedChanges(false)
-      toast.success('Settings saved!')
+      toast.success(items.length ? 'Settings saved!' : 'No changes to save')
     } catch (err) {
       toast.error(err.message)
     } finally {
@@ -532,24 +532,18 @@ export default function SettingsPage() {
   // Use refs for settings inputs to avoid re-renders on keystroke/paste
   const inputRefs = React.useRef({})
 
-  const PASSWORD_KEYS = new Set(['skydio_api_token'])
-  const REDACTED_MARKER = '********'
-
-  const gatherInputs = () => {
-    const gathered = { ...settings }
+  // Only the fields on this card whose value differs from what was loaded.
+  // Sending every loaded key reverted changes saved since by other cards,
+  // other tabs or other admins (sidebar, SMTP, sync intervals).
+  const changedInputs = () => {
+    const changed = {}
     for (const [key, ref] of Object.entries(inputRefs.current)) {
       if (!ref) continue
-      // Skip password fields where user didn't type anything new
-      if (PASSWORD_KEYS.has(key) && ref.value === '') continue
-      gathered[key] = ref.value
+      // A password field left empty keeps the stored secret.
+      if (ref.type === 'password' && ref.value === '') continue
+      if (ref.value !== (settings[key] ?? '')) changed[key] = ref.value
     }
-    // Never echo the redaction marker back to the server: drop any key whose
-    // current value is still the marker (e.g. a secret GET /settings redacted
-    // and the General tab renders no input to override).
-    for (const key of Object.keys(gathered)) {
-      if (gathered[key] === REDACTED_MARKER) delete gathered[key]
-    }
-    return gathered
+    return changed
   }
 
   const field = (label, key, type = 'text', description = '') => {
@@ -1653,7 +1647,7 @@ export default function SettingsPage() {
       {renderUsersTab()}
 
       {/* General Tab */}
-      {activeTab !== 'integrations' && activeTab !== 'users' && (
+      {activeTab === 'general' && (
       <div className="space-y-6 max-w-2xl">
       {renderProfile()}
       {renderOrganization()}
