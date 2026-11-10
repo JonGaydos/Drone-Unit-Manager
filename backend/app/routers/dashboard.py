@@ -799,21 +799,23 @@ def _calc_compliance_score(pilots, exp_certs, vehicles, exp_regs, overdue, incid
 
 @router.get("/upcoming-expirations", responses=responses(401))
 def upcoming_expirations(db: DBSession, user: CertificationsUser, days: int = 90):
-    cutoff = date.today() + timedelta(days=days)
+    """Certifications of active pilots expiring from today through `days` ahead.
+    Ones already expired are not upcoming (the compliance dashboard counts them)."""
+    today = date.today()
+    cutoff = today + timedelta(days=days)
     rows = db.query(
         PilotCertification, Pilot, CertificationType,
     ).join(Pilot, PilotCertification.pilot_id == Pilot.id
     ).join(CertificationType, PilotCertification.certification_type_id == CertificationType.id
     ).filter(
         Pilot.status == "active",
-        PilotCertification.expiration_date.isnot(None),
-        PilotCertification.expiration_date <= cutoff,
+        PilotCertification.expiration_date.between(today, cutoff),
         PilotCertification.status.in_(["active", "complete"]),
     ).order_by(PilotCertification.expiration_date).all()
 
     result = []
     for pc, pilot, ct in rows:
-        days_remaining = (pc.expiration_date - date.today()).days
+        days_remaining = (pc.expiration_date - today).days
         result.append({
             "pilot_name": f"{pilot.first_name} {pilot.last_name}",
             "pilot_id": pilot.id,

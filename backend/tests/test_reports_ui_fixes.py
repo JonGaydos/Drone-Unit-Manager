@@ -135,3 +135,22 @@ def test_pdf_chart_clips_a_very_long_pilot_label():
         assert buf is not None, report_type
         with Image.open(buf) as img:
             assert img.size[0] < 2000, (report_type, img.size)
+
+
+# --- E-3: upcoming expirations start today ---
+
+
+def test_upcoming_expirations_leave_out_certs_that_already_expired(client, db, admin_headers):
+    from app.models.certification import CertificationType, PilotCertification
+    from app.models.pilot import Pilot
+    pilot = _add(db, Pilot(first_name="Robin", last_name="Vale", status="active"))
+    ct = _add(db, CertificationType(name="Part 107", category="faa"))
+    soon = _add(db, PilotCertification(pilot_id=pilot.id, certification_type_id=ct.id, status="active",
+                                       expiration_date=TODAY + timedelta(days=10)))
+    _add(db, PilotCertification(pilot_id=pilot.id, certification_type_id=ct.id, status="active",
+                                expiration_date=date(2019, 1, 1)))
+    today = _add(db, PilotCertification(pilot_id=pilot.id, certification_type_id=ct.id, status="active",
+                                        expiration_date=TODAY))
+    r = client.get("/api/dashboard/upcoming-expirations", headers=admin_headers)
+    assert r.status_code == 200
+    assert [row["expiration_date"] for row in r.json()] == [str(today.expiration_date), str(soon.expiration_date)]
