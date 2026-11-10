@@ -7,11 +7,16 @@ import { ownsPilot } from '@/lib/ownership'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Modal } from '@/components/ui/Modal'
 import { useConfirm } from '@/hooks/useConfirm'
-import { addMonths, normalizeDateValue, todayLocal } from '@/lib/utils'
+import { addMonths, certDisplayStatus, normalizeDateValue, todayLocal } from '@/lib/utils'
 import { CERT_STATUS_COLORS } from '@/lib/constants'
 import { sortByName, sortPilotsActiveFirst } from '@/lib/formatters'
 import { Plus, Edit, Trash2, ShieldCheck, Search, Filter, Download, ChevronLeft, ChevronRight, Loader2, Eye, EyeOff } from 'lucide-react'
 import DocumentUpload from '@/components/DocumentUpload'
+
+// Matrix cells show the derived state: an expiry inside the window reads
+// "expiring soon" in amber, a passed one "expired" in red.
+const CELL_COLORS = { ...CERT_STATUS_COLORS, expiring: 'bg-warning-bg text-warning' }
+const CELL_LABELS = { expiring: 'expiring soon' }
 
 function CertTypeModal({ certType, onSave, onClose }) {
   const [form, setForm] = useState(certType || {
@@ -395,7 +400,7 @@ export default function CertificationsPage() {
     if (statusFilter !== 'all') {
       rows = rows.filter(row => {
         const certs = row.certs || {}
-        return Object.values(certs).some(c => c?.status === statusFilter)
+        return Object.values(certs).some(c => certDisplayStatus(c) === statusFilter)
       })
     }
 
@@ -592,8 +597,8 @@ export default function CertificationsPage() {
                 className="px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm"
               >
                 <option value="all">All Statuses</option>
-                {Object.keys(CERT_STATUS_COLORS).map(s => (
-                  <option key={s} value={s}>{s.replaceAll('_', ' ')}</option>
+                {Object.keys(CELL_COLORS).map(s => (
+                  <option key={s} value={s}>{CELL_LABELS[s] || s.replaceAll('_', ' ')}</option>
                 ))}
               </select>
 
@@ -691,7 +696,7 @@ export default function CertificationsPage() {
                     </td>
                     {filteredCertTypes.map(ct => {
                       const cert = row.certs?.[ct.id]
-                      const status = cert?.status || 'not_started'
+                      const status = certDisplayStatus(cert)
                       const opensModal = canManage || (Boolean(cert) && canSeeFiles)
                       return (
                         <td key={ct.id} className={`relative px-3 py-2 text-center ${opensModal ? 'cursor-pointer hover:bg-accent/40 transition-colors' : ''}`}
@@ -709,8 +714,9 @@ export default function CertificationsPage() {
                               aria-label="Select certification for bulk renewal"
                             />
                           )}
-                          <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${CERT_STATUS_COLORS[status] || CERT_STATUS_COLORS.not_started}`}>
-                            {certStatusLabels[status] || status.replaceAll('_', ' ')}
+                          <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${CELL_COLORS[status] || CELL_COLORS.not_started}`}
+                            title={cert && status !== cert.status ? `Status: ${(certStatusLabels[cert.status] || cert.status).replaceAll('_', ' ')}` : undefined}>
+                            {certStatusLabels[status] || CELL_LABELS[status] || status.replaceAll('_', ' ')}
                           </span>
                           {cert?.expiration_date && (
                             <div className="text-xs text-muted-foreground mt-0.5">{cert.expiration_date}</div>

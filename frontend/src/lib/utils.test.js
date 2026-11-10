@@ -19,6 +19,7 @@ import { changedFields,
   localDateOf,
   addDays,
   addMonths,
+  certDisplayStatus,
 } from '@/lib/utils'
 
 describe('cn', () => {
@@ -305,5 +306,23 @@ describe('changedFields', () => {
   it('keeps only changed fields and compares as text', () => {
     expect(changedFields({ a: 5, b: 'x', c: true }, { a: '5', b: 'y', c: true })).toEqual({ b: 'y' })
     expect(changedFields({ a: '' }, { a: '' })).toEqual({})
+  })
+})
+
+describe('certDisplayStatus', () => {
+  it('shows a passed expiry as expired and one inside 90 days as expiring', () => {
+    const today = todayLocal()
+    expect(certDisplayStatus({ status: 'complete', expiration_date: '2020-01-01' })).toBe('expired')
+    expect(certDisplayStatus({ status: 'complete', expiration_date: addDays(today, 0) })).toBe('expiring')
+    expect(certDisplayStatus({ status: 'active', expiration_date: addDays(today, 90) })).toBe('expiring')
+    expect(certDisplayStatus({ status: 'active', expiration_date: addDays(today, 91) })).toBe('active')
+    expect(certDisplayStatus({ status: 'pending', expiration_date: null })).toBe('pending')
+  })
+
+  it('keeps the stored status of renewed and never-issued records, and not_started for a blank cell', () => {
+    expect(certDisplayStatus({ status: 'renewed', expiration_date: '2020-01-01' })).toBe('renewed')
+    expect(certDisplayStatus({ status: 'not_issued', expiration_date: '2020-01-01' })).toBe('not_issued')
+    expect(certDisplayStatus({ id: null, status: 'not_started', expiration_date: null })).toBe('not_started')
+    expect(certDisplayStatus(undefined)).toBe('not_started')
   })
 })

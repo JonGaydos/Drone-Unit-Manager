@@ -181,6 +181,27 @@ export function daysUntil(iso) {
   return dayNumber(ymd) - dayNumber(todayLocal())
 }
 
+/** Days ahead within which a certification counts as expiring (the compliance dashboard's window). */
+export const CERT_EXPIRING_DAYS = 90
+
+/**
+ * A certification's state as the matrix shows it: 'expired' once its
+ * expiration date has passed, 'expiring' within CERT_EXPIRING_DAYS, otherwise
+ * its stored status. Renewed and never-issued records keep their status, as
+ * the compliance dashboard leaves them out.
+ * @param {{status?: string, expiration_date?: string|null}} [cert]
+ * @returns {string}
+ */
+export function certDisplayStatus(cert) {
+  const status = cert?.status || 'not_started'
+  if (!cert?.expiration_date || status === 'renewed' || status === 'not_issued') return status
+  const days = daysUntil(cert.expiration_date)
+  if (days == null) return status
+  if (days < 0) return 'expired'
+  if (days <= CERT_EXPIRING_DAYS) return 'expiring'
+  return status
+}
+
 /**
  * Format an ISO datetime string to a localized date and time (e.g. "Mar 26, 2026, 3:45 PM").
  * Expects a `Z`-suffixed (UTC) ISO string for flight times; a naive (offset-less)
