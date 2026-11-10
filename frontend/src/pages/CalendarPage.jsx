@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { useConfirm } from '@/hooks/useConfirm'
+import { addDays } from '@/lib/utils'
 
 const COLORS = {
   training_day: '#0ea5e9', mission: '#8b5cf6', maintenance_due: '#f59e0b',
@@ -58,7 +59,9 @@ export default function CalendarPage() {
   for (const e of events) {
     if (!enabled[e.category]) continue
     fcEvents.push({
-      id: e.id, title: e.title, start: e.start, end: e.end || undefined, allDay: e.all_day,
+      // FullCalendar treats an all-day end as exclusive; the API's is the last day.
+      id: e.id, title: e.title, start: e.start,
+      end: e.end ? (e.all_day ? addDays(e.end, 1) : e.end) : undefined, allDay: e.all_day,
       color: COLORS[e.category] || '#64748b',
       extendedProps: { category: e.category, link: e.link, editable: e.editable, raw: e },
     })
