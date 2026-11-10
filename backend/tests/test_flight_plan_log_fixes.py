@@ -222,3 +222,76 @@ def test_flights_pagination_is_bounded(client, db, admin_headers):
         assert r.status_code == 422, (query, r.text)
     r = client.get(f"{FLIGHTS_URL}?page=1&per_page=1000", headers=admin_headers)
     assert r.status_code == 200
+
+
+# --- B-8: flight plan field validation ---
+
+
+def _plan_body(db, **overrides):
+    from app.models.pilot import Pilot
+    pilot = Pilot(first_name="Body", last_name="Pilot", status="active")
+    db.add(pilot)
+    db.commit()
+    body = {"title": "Survey", "date_planned": "2026-12-01T10:00", "pilot_id": pilot.id}
+    body.update(overrides)
+    return body
+
+
+def test_plan_create_validates_fields(client, db, admin_headers):
+    for bad in ({"title": ""}, {"title": "   "}, {"title": "T" * 301},
+                {"estimated_duration_min": -30}, {"lat": 500}, {"lon": 900},
+                {"location": "L" * 501}, {"purpose": "P" * 201}, {"case_number": "C" * 101}):
+        r = client.post(PLANS_URL, headers=admin_headers, json=_plan_body(db, **bad))
+        assert r.status_code == 422, (bad, r.text)
+    r = client.post(PLANS_URL, headers=admin_headers, json=_plan_body(db, title="  Survey  ", lat=45.5, lon=-93.2))
+    assert r.status_code == 200, r.text
+    assert r.json()["title"] == "Survey"
+
+
+def test_plan_patch_validates_fields(client, db, pilot_user, admin_headers):
+    plan = _plan(db, pilot_user)
+    for bad in ({"title": ""}, {"title": None}, {"date_planned": None}, {"pilot_id": None},
+                {"estimated_duration_min": -1}, {"lat": -91}, {"lon": 181}, {"title": "T" * 301}):
+        r = client.patch(f"{PLANS_URL}/{plan.id}", headers=admin_headers, json=bad)
+        assert r.status_code == 422, (bad, r.text)
+
+
+# --- B-9: deny and reopen edge cases ---
+
+
+def test_deny_needs_a_reason(client, db, pilot_user, admin_headers):
+    plan = _plan(db, pilot_user)
+    for reason in ("", "   "):
+        r = client.post(f"{PLANS_URL}/{plan.id}/deny", headers=admin_headers, json={"denial_reason": reason})
+        assert r.status_code == 422, r.text
+    db.refresh(plan)
+    assert plan.status == "pending"
+
+
+def test_unknown_plan_status_is_422(client, db, pilot_user, admin_headers):
+    plan = _plan(db, pilot_user)
+    r = client.patch(f"{PLANS_URL}/{plan.id}", headers=admin_headers, json={"status": "bogus"})
+    assert r.status_code == 422
+    assert "status must be one of" in r.text
+
+
+def test_reopen_clears_the_denial(client, db, pilot_user, admin_user, admin_headers):
+    plan = _plan(db, pilot_user, status="denied", denial_reason="Wind", review_notes="Too gusty",
+                 reviewed_by_id=admin_user.id, review_date=datetime(2026, 11, 1, 12))
+    r = client.patch(f"{PLANS_URL}/{plan.id}", headers=admin_headers, json={"status": "pending"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "pending"
+    assert body["denial_reason"] is None
+    assert body["review_notes"] is None
+    assert body["reviewed_by_id"] is None
+    assert body["review_date"] is None
+
+
+def test_editing_a_denied_plan_clears_the_denial(client, db, pilot_user, pilot_headers, admin_user):
+    plan = _plan(db, pilot_user, status="denied", denial_reason="Wind",
+                 reviewed_by_id=admin_user.id, review_date=datetime(2026, 11, 1, 12))
+    r = client.patch(f"{PLANS_URL}/{plan.id}", headers=pilot_headers, json={"location": "South field"})
+    assert r.status_code == 200
+    assert r.json()["status"] == "pending"
+    assert r.json()["denial_reason"] is None

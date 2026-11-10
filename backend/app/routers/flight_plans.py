@@ -2,7 +2,7 @@ from datetime import date, datetime, timezone
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, StringConstraints, field_validator
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -26,42 +26,60 @@ CreateUser = Annotated[User, Depends(require_permission("flight_plans.create"))]
 EditUser = Annotated[User, Depends(require_permission(PLANS_EDIT))]
 ApproveUser = Annotated[User, Depends(require_permission("flight_plans.approve"))]
 
+PLAN_STATUSES = ("pending", "approved", "denied", "cancelled", "completed")
+
+# Text limits follow the flight_plans columns.
+PlanTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
+Location = Annotated[str, StringConstraints(max_length=500)]
+Purpose = Annotated[str, StringConstraints(max_length=200)]
+CaseNumber = Annotated[str, StringConstraints(max_length=100)]
+Latitude = Annotated[float, Field(ge=-90, le=90)]
+Longitude = Annotated[float, Field(ge=-180, le=180)]
+DurationMin = Annotated[int, Field(ge=0)]
 
 
 class FlightPlanCreate(BaseModel):
-    title: str
+    title: PlanTitle
     date_planned: str  # ISO datetime string
     pilot_id: int
     vehicle_id: Optional[int] = None
-    location: Optional[str] = None
-    lat: Optional[float] = None
-    lon: Optional[float] = None
-    purpose: Optional[str] = None
-    case_number: Optional[str] = None
+    location: Optional[Location] = None
+    lat: Optional[Latitude] = None
+    lon: Optional[Longitude] = None
+    purpose: Optional[Purpose] = None
+    case_number: Optional[CaseNumber] = None
     description: Optional[str] = None
     max_altitude_planned: Optional[float] = None
-    estimated_duration_min: Optional[int] = None
+    estimated_duration_min: Optional[DurationMin] = None
     checklist_completed: bool = False
     notes: Optional[str] = None
 
 
 class FlightPlanUpdate(BaseModel):
-    title: Optional[str] = None
+    title: Optional[PlanTitle] = None
     date_planned: Optional[str] = None
     pilot_id: Optional[int] = None
     vehicle_id: Optional[int] = None
-    location: Optional[str] = None
-    lat: Optional[float] = None
-    lon: Optional[float] = None
-    purpose: Optional[str] = None
-    case_number: Optional[str] = None
+    location: Optional[Location] = None
+    lat: Optional[Latitude] = None
+    lon: Optional[Longitude] = None
+    purpose: Optional[Purpose] = None
+    case_number: Optional[CaseNumber] = None
     description: Optional[str] = None
     max_altitude_planned: Optional[float] = None
-    estimated_duration_min: Optional[int] = None
+    estimated_duration_min: Optional[DurationMin] = None
     checklist_completed: Optional[bool] = None
     linked_flight_id: Optional[int] = None
     notes: Optional[str] = None
     status: Optional[str] = None
+
+    @field_validator("title", "date_planned", "pilot_id", "checklist_completed")
+    @classmethod
+    def _not_null(cls, v):
+        # Optional only so a patch can leave them out; a sent null is refused.
+        if v is None:
+            raise ValueError("cannot be empty")
+        return v
 
 
 class ApproveRequest(BaseModel):
@@ -69,7 +87,7 @@ class ApproveRequest(BaseModel):
 
 
 class DenyRequest(BaseModel):
-    denial_reason: str
+    denial_reason: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
     review_notes: Optional[str] = None
 
 
@@ -247,6 +265,15 @@ def _changes_reviewed_content(plan: FlightPlan, update_data: dict) -> bool:
     return False
 
 
+def _clear_review(plan: FlightPlan) -> None:
+    """Back to pending: the earlier decision, and its reason, no longer apply."""
+    plan.status = "pending"
+    plan.reviewed_by_id = None
+    plan.review_date = None
+    plan.review_notes = None
+    plan.denial_reason = None
+
+
 def _apply_status_change(plan: FlightPlan, update_data: dict, user) -> None:
     """Handle ``status`` on a plan edit. Approval only ever happens through the
     /approve endpoint, which needs flight_plans.approve, so the one status an edit may set is
@@ -254,9 +281,11 @@ def _apply_status_change(plan: FlightPlan, update_data: dict, user) -> None:
     requested = update_data.pop("status", None)
     if requested is None:
         return
+    if requested not in PLAN_STATUSES:
+        raise HTTPException(status_code=422, detail=f"status must be one of: {', '.join(PLAN_STATUSES)}")
     if user.role != "admin" or requested != "pending":
         raise HTTPException(status_code=403, detail="Only an admin can reopen a plan, and only as pending")
-    plan.status = "pending"
+    _clear_review(plan)
 
 
 @router.post("", response_model=FlightPlanOut, responses=responses(401, 422))
@@ -289,7 +318,7 @@ def create_flight_plan(data: FlightPlanCreate, db: DBSession, user: CreateUser):
     return _enrich(plan, db)
 
 
-@router.patch("/{plan_id}", response_model=FlightPlanOut, responses=responses(400, 401, 403, 404))
+@router.patch("/{plan_id}", response_model=FlightPlanOut, responses=responses(400, 401, 403, 404, 422))
 def update_flight_plan(plan_id: int, data: FlightPlanUpdate, db: DBSession, user: EditUser):
     plan = db.query(FlightPlan).filter(FlightPlan.id == plan_id).first()
     if not plan:
@@ -309,9 +338,7 @@ def update_flight_plan(plan_id: int, data: FlightPlanUpdate, db: DBSession, user
     for key, value in update_data.items():
         setattr(plan, key, value)
     if reopen:
-        plan.status = "pending"
-        plan.reviewed_by_id = None
-        plan.review_date = None
+        _clear_review(plan)
     suffix = "; returned to pending review" if reopen else ""
     log_action(db, user.id, user.display_name, "update", "flight_plan", plan.id, plan.title,
                details=f"Updated flight plan fields: {', '.join(update_data.keys()) or 'status'}{suffix}")
@@ -340,7 +367,7 @@ def approve_flight_plan(plan_id: int, data: ApproveRequest, db: DBSession, user:
     return _enrich(plan, db)
 
 
-@router.post("/{plan_id}/deny", response_model=FlightPlanOut, responses=responses(400, 401, 403, 404))
+@router.post("/{plan_id}/deny", response_model=FlightPlanOut, responses=responses(400, 401, 403, 404, 422))
 def deny_flight_plan(plan_id: int, data: DenyRequest, db: DBSession, user: ApproveUser):
     plan = db.query(FlightPlan).filter(FlightPlan.id == plan_id).first()
     if not plan:

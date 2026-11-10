@@ -204,7 +204,7 @@ function DenyModal({ plan, onDeny, onClose }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!reason) return
+    if (!reason.trim()) return
     setSaving(true)
     try { await onDeny(plan.id, { denial_reason: reason, review_notes: notes || undefined }) } finally { setSaving(false) }
   }
