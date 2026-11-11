@@ -3,7 +3,7 @@ from html import escape
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, StringConstraints, field_validator
 from sqlalchemy.orm import Session, joinedload
 
 from app.deps import DBSession
@@ -19,26 +19,41 @@ router = APIRouter(prefix="/api/currency", tags=["currency"])
 ViewUser = Annotated[User, Depends(require_permission("certifications.view"))]
 ManageUser = Annotated[User, Depends(require_permission("certifications.manage"))]
 
+# A rule's look-back window: at least one day, at most ten years. Larger values
+# overflow the date arithmetic.
+MAX_PERIOD_DAYS = 3650
+PeriodDays = Annotated[int, Field(ge=1, le=MAX_PERIOD_DAYS)]
+RuleName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
+RequiredHours = Annotated[float, Field(ge=0)]
+RequiredFlights = Annotated[int, Field(ge=0)]
 
 
 class RuleCreate(BaseModel):
-    name: str
-    description: Optional[str] = None
-    vehicle_model: Optional[str] = None
-    required_hours: float
-    period_days: int
-    required_flights: Optional[int] = None
+    name: RuleName
+    description: Optional[str] = Field(None, max_length=500)
+    vehicle_model: Optional[str] = Field(None, max_length=200)
+    required_hours: RequiredHours
+    period_days: PeriodDays
+    required_flights: Optional[RequiredFlights] = None
     is_active: bool = True
 
 
 class RuleUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    vehicle_model: Optional[str] = None
-    required_hours: Optional[float] = None
-    period_days: Optional[int] = None
-    required_flights: Optional[int] = None
+    name: Optional[RuleName] = None
+    description: Optional[str] = Field(None, max_length=500)
+    vehicle_model: Optional[str] = Field(None, max_length=200)
+    required_hours: Optional[RequiredHours] = None
+    period_days: Optional[PeriodDays] = None
+    required_flights: Optional[RequiredFlights] = None
     is_active: Optional[bool] = None
+
+    @field_validator("name", "required_hours", "period_days", "is_active")
+    @classmethod
+    def _not_null(cls, v):
+        # Optional only so a patch can leave them out; a sent null is refused.
+        if v is None:
+            raise ValueError("cannot be empty")
+        return v
 
 
 class RuleOut(BaseModel):
@@ -90,6 +105,13 @@ def delete_rule(rule_id: int, db: DBSession, user: ManageUser):
     return {"ok": True}
 
 
+def _period(rule) -> timedelta:
+    """The rule's window, kept inside the allowed range so a row stored before
+    validation (huge, zero or negative period_days) cannot crash or invert the
+    date arithmetic."""
+    return timedelta(days=min(max(rule.period_days or 1, 1), MAX_PERIOD_DAYS))
+
+
 def _currency_expiry(flights_in_period, rule):
     """The date currency lapses: walk newest -> oldest accumulating hours and
     flights, find the flight that first meets ALL minimums, and age it out by the
@@ -103,13 +125,13 @@ def _currency_expiry(flights_in_period, rule):
         hours_ok = cum_hours >= rule.required_hours
         flights_ok = rule.required_flights is None or cum_flights >= rule.required_flights
         if hours_ok and flights_ok and f.date:
-            return str(f.date + timedelta(days=rule.period_days))
+            return str(f.date + _period(rule))
     return None
 
 
 def _evaluate_rule(rule: CurrencyRule, flights: list[Flight], today):
     """Evaluate one currency rule against an already-loaded flight list."""
-    cutoff = today - timedelta(days=rule.period_days)
+    cutoff = today - _period(rule)
     model = rule.vehicle_model.lower() if rule.vehicle_model else None
     # In-period flights, matching the prior SQL filter: date >= cutoff, and for
     # model-specific rules an inner join on a matching vehicle model (flights
@@ -166,7 +188,7 @@ def flights_by_pilot(db: Session, pilot_ids: list[int], rules: list[CurrencyRule
     """
     if not pilot_ids or not rules:
         return {}
-    since = date.today() - timedelta(days=max(rule.period_days for rule in rules))
+    since = date.today() - max(_period(rule) for rule in rules)
     grouped: dict[int, list[Flight]] = {}
     for f in db.query(Flight).options(joinedload(Flight.vehicle)).filter(
         Flight.pilot_id.in_(pilot_ids), Flight.date >= since, counted_flights_filter(),
@@ -206,7 +228,7 @@ def get_all_currency_status(db: DBSession, user: ViewUser):
 
 class ReminderRequest(BaseModel):
     pilot_ids: Optional[list[int]] = None  # If None, all lapsed pilots
-    custom_message: Optional[str] = None   # Optional intro text from supervisor
+    custom_message: Optional[str] = Field(None, max_length=2000)  # Optional intro text from supervisor
 
 
 def _reminder_html(pilot, lapsed_rules, org_name: str, intro: str) -> str:
@@ -266,6 +288,62 @@ def _send_one_reminder(pilot, rules, flights, org_name: str, intro: str, db) -> 
     return "failed", None
 
 
+def _check_reminders_ready(db) -> None:
+    """Refuse up front when no reminder could go out: SMTP off (503) or no
+    active currency rule (400)."""
+    from app.models.setting import Setting
+    smtp_enabled_row = db.query(Setting).filter(Setting.key == "smtp_enabled").first()
+    if not smtp_enabled_row or smtp_enabled_row.value != "true":
+        raise HTTPException(503, "SMTP is not enabled. Configure it in Settings → Integrations.")
+    if not db.query(CurrencyRule).filter(CurrencyRule.is_active.is_(True)).first():
+        raise HTTPException(400, "No active currency rules — nothing to remind about.")
+
+
+def _send_reminders(db, data: ReminderRequest, actor_id: int, actor_name: str, report=None) -> dict:
+    """Send the reminders and audit them; returns the counts. ``report``, when
+    given, is called with {"done", "total"} after each pilot."""
+    from app.constants import APP_TITLE
+    from app.models.setting import Setting
+    from app.services.audit import log_action
+
+    rules = db.query(CurrencyRule).filter(CurrencyRule.is_active.is_(True)).all()
+    counts = {"sent": 0, "skipped_no_email": 0, "skipped_current": 0, "failed": 0,
+              "skipped_inactive": 0, "not_found": 0}
+    if data.pilot_ids:
+        named = db.query(Pilot).filter(Pilot.id.in_(data.pilot_ids)).all()
+        pilots = [p for p in named if p.status == "active"]
+        # Named ids that get no reminder say why, rather than vanishing.
+        counts["skipped_inactive"] = len(named) - len(pilots)
+        counts["not_found"] = len(set(data.pilot_ids) - {p.id for p in named})
+    else:
+        pilots = db.query(Pilot).filter(Pilot.status == "active").all()
+
+    org_name_row = db.query(Setting).filter(Setting.key == "org_name").first()
+    org_name = org_name_row.value if org_name_row else APP_TITLE
+
+    recipients_logged: list[str] = []
+    intro = (data.custom_message or "").strip()
+
+    flights = flights_by_pilot(db, [p.id for p in pilots], rules)
+    if report:
+        report({"done": 0, "total": len(pilots)})
+    for done, pilot in enumerate(pilots, start=1):
+        status, recipient = _send_one_reminder(pilot, rules, flights.get(pilot.id, []), org_name, intro, db)
+        counts[status] += 1
+        if recipient:
+            recipients_logged.append(recipient)
+        if report:
+            report({"done": done, "total": len(pilots)})
+
+    log_action(db, actor_id, actor_name, "send_reminders", "currency",
+               details=f"sent={counts['sent']}, skipped_no_email={counts['skipped_no_email']}, "
+                       f"skipped_current={counts['skipped_current']}, failed={counts['failed']}, "
+                       f"skipped_inactive={counts['skipped_inactive']}, not_found={counts['not_found']}; "
+                       f"recipients={'; '.join(recipients_logged) if recipients_logged else 'none'}")
+    db.commit()
+    return counts
+
+
 @router.post("/send-reminders", responses=responses(401, 503))
 def send_currency_reminders(
     data: ReminderRequest,
@@ -277,46 +355,48 @@ def send_currency_reminders(
     is notified. Uses the configured SMTP server.
 
     Returns counts of emails sent vs. skipped (no email on file / SMTP off /
-    already current)."""
-    from app.constants import APP_TITLE
-    from app.models.setting import Setting
-    from app.services.audit import log_action
+    already current). A large unit can take minutes: the page uses
+    /send-reminders/start instead."""
+    _check_reminders_ready(db)
+    return _send_reminders(db, data, admin.id, admin.display_name)
 
-    # SMTP must be configured + enabled
-    smtp_enabled_row = db.query(Setting).filter(Setting.key == "smtp_enabled").first()
-    if not smtp_enabled_row or smtp_enabled_row.value != "true":
-        raise HTTPException(503, "SMTP is not enabled. Configure it in Settings → Integrations.")
 
-    rules = db.query(CurrencyRule).filter(CurrencyRule.is_active.is_(True)).all()
-    if not rules:
-        raise HTTPException(400, "No active currency rules — nothing to remind about.")
+# Kind of the background job, so the jobs route serves only reminder jobs.
+REMINDER_JOB = "reminders"
 
-    if data.pilot_ids:
-        pilots = db.query(Pilot).filter(Pilot.id.in_(data.pilot_ids), Pilot.status == "active").all()
-    else:
-        pilots = db.query(Pilot).filter(Pilot.status == "active").all()
 
-    org_name_row = db.query(Setting).filter(Setting.key == "org_name").first()
-    org_name = org_name_row.value if org_name_row else APP_TITLE
+@router.post("/send-reminders/start", responses=responses(401, 503))
+def start_currency_reminders(data: ReminderRequest, db: DBSession, admin: ManageUser):
+    """Start the reminders as a background job and return its id at once; poll
+    /jobs/{id} for progress and the counts. Sending one email after another
+    outlasts the browser's and Cloudflare's request limits on a large unit."""
+    from app import database
+    from app.services import jobs
+    from app.services.audit_capture import actor_fields, set_actor
+    _check_reminders_ready(db)
+    # Plain values, not the ORM user: the job outlives this request's session.
+    actor_id, actor_name, actor = admin.id, admin.display_name, actor_fields(admin)
 
-    counts = {"sent": 0, "skipped_no_email": 0, "skipped_current": 0, "failed": 0}
-    recipients_logged: list[str] = []
-    intro = (data.custom_message or "").strip()
+    def run(report):
+        job_db = database.SessionLocal()
+        set_actor(job_db, actor)
+        try:
+            return _send_reminders(job_db, data, actor_id, actor_name, report)
+        finally:
+            job_db.close()
 
-    flights = flights_by_pilot(db, [p.id for p in pilots], rules)
-    for pilot in pilots:
-        status, recipient = _send_one_reminder(pilot, rules, flights.get(pilot.id, []), org_name, intro, db)
-        counts[status] += 1
-        if recipient:
-            recipients_logged.append(recipient)
+    return {"job_id": jobs.start(REMINDER_JOB, run, with_progress=True)}
 
-    log_action(db, admin.id, admin.display_name, "send_reminders", "currency",
-               details=f"sent={counts['sent']}, skipped_no_email={counts['skipped_no_email']}, "
-                       f"skipped_current={counts['skipped_current']}, failed={counts['failed']}; "
-                       f"recipients={'; '.join(recipients_logged) if recipients_logged else 'none'}")
-    db.commit()
 
-    return counts
+@router.get("/jobs/{job_id}", responses=responses(401, 404))
+def get_reminder_job(job_id: str, user: ManageUser):
+    """A reminder job's status: running (with progress), done (with the
+    counts) or failed."""
+    from app.services import jobs
+    job = jobs.get(job_id)
+    if not job or job["kind"] != REMINDER_JOB:
+        raise HTTPException(404, "Job not found")
+    return job
 
 
 @router.get("/status/{pilot_id}", responses=responses(401, 404))

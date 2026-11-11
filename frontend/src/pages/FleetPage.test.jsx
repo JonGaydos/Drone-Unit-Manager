@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { screen, within } from '@testing-library/react'
+import { screen, within, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { withPermissions } from '@/test/permissions'
@@ -277,5 +277,138 @@ describe('FleetPage', () => {
     const onDocks = groupOf(statusSelect())
     expect(within(onDocks).getByRole('button', { name: /Export CSV/ })).toBeInTheDocument()
     expect(within(onDocks).getByRole('button', { name: /Add Dock/ })).toBeInTheDocument()
+  })
+
+  it('opens each tab sorted by its first column, ascending, with the arrow shown', async () => {
+    mockVehicles([
+      { id: 2, nickname: 'Hawk', manufacturer: 'Skydio', model: 'X10', serial_number: 'SN-002', status: 'active' },
+      { id: 3, nickname: null, manufacturer: 'DJI', model: 'Air', serial_number: 'Bravo-SN', status: 'active' },
+      { id: 1, nickname: 'Falcon', manufacturer: 'DJI', model: 'Mavic 3', serial_number: 'SN-001', status: 'active' },
+    ])
+    server.use(http.get('/api/batteries', () => HttpResponse.json([
+      { id: 6, nickname: 'Zulu', serial_number: 'B-2', status: 'active' },
+      { id: 5, nickname: 'Alpha', serial_number: 'B-1', status: 'active' },
+    ])))
+    const { user } = renderWithProviders(<FleetPage />, { role: 'admin' })
+    await screen.findByRole('link', { name: 'Falcon' })
+    const names = () => screen.getAllByRole('row').slice(1).map(r => within(r).getAllByRole('cell')[0].textContent)
+    expect(names()).toEqual(['Bravo-SN', 'Falcon', 'Hawk'])
+    expect(screen.getByRole('columnheader', { name: /Vehicle/ }).querySelector('svg')).not.toBeNull()
+
+    await user.click(screen.getByRole('button', { name: /Batteries/ }))
+    await screen.findByRole('link', { name: 'Alpha' })
+    expect(names()).toEqual(['Alpha', 'Zulu'])
+    expect(screen.getByRole('columnheader', { name: /Battery/ }).querySelector('svg')).not.toBeNull()
+  })
+
+  it('searches and sorts the FAA Reg column on the number it shows', async () => {
+    mockVehicles([
+      { id: 1, nickname: 'Falcon', manufacturer: 'DJI', model: 'Mavic 3', serial_number: 'SN-001', faa_registration: 'AAA-OLD', status: 'active' },
+      { id: 2, nickname: 'Hawk', manufacturer: 'Skydio', model: 'X10', serial_number: 'SN-002', faa_registration: 'ZZZ-OLD', status: 'active' },
+    ])
+    server.use(http.get(CURRENT_REGS, () => HttpResponse.json([
+      { id: 9, vehicle_id: 1, registration_number: 'FA-ZULU', is_current: true },
+      { id: 8, vehicle_id: 2, registration_number: 'FA-ALPHA', is_current: true },
+    ])))
+    const { user } = renderWithProviders(<FleetPage />, { role: 'admin' })
+    await screen.findByText('FA-ZULU')
+
+    await user.click(screen.getByRole('columnheader', { name: /FAA Reg/ }))
+    const regs = screen.getAllByRole('row').slice(1).map(r => within(r).getAllByRole('cell')[4].textContent)
+    expect(regs).toEqual(['FA-ALPHA', 'FA-ZULU'])
+
+    await user.type(screen.getByPlaceholderText('Search vehicles...'), 'FA-ZULU')
+    expect(screen.getByRole('link', { name: 'Falcon' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Hawk' })).toBeNull()
+  })
+
+  it('marks the required Add Vehicle fields and names the blank ones', async () => {
+    mockVehicles()
+    let posted = false
+    server.use(http.post(VEHICLES, () => { posted = true; return HttpResponse.json({}) }))
+    const { user } = renderWithProviders(<FleetPage />, { role: 'admin' })
+    await screen.findByRole('link', { name: 'Falcon' })
+    await user.click(screen.getByRole('button', { name: /Add Vehicle/ }))
+    const dialog = await screen.findByRole('dialog')
+    for (const label of ['Serial Number', 'Manufacturer', 'Model']) {
+      expect(within(dialog).getByLabelText(`${label} *`)).toBeRequired()
+    }
+    expect(within(dialog).getByLabelText('Nickname')).not.toBeRequired()
+    for (const label of ['Serial Number', 'Manufacturer', 'Model']) {
+      await user.type(within(dialog).getByLabelText(`${label} *`), '  ')
+    }
+    await user.click(within(dialog).getByRole('button', { name: 'Add Vehicle' }))
+    expect(await screen.findByText('Required: Serial Number, Manufacturer, Model')).toBeInTheDocument()
+    expect(posted).toBe(false)
+  })
+
+  it('offers Retire, not Delete, for a vehicle and says what it does', async () => {
+    mockVehicles()
+    let deleted = null
+    server.use(http.delete('/api/vehicles/:id', ({ params }) => { deleted = params.id; return HttpResponse.json({ ok: true }) }))
+    const { user } = renderWithProviders(<FleetPage />, { role: 'admin' })
+    await screen.findByRole('link', { name: 'Falcon' })
+    expect(screen.queryAllByRole('button', { name: 'Delete' })).toHaveLength(0)
+    await user.click(screen.getAllByRole('button', { name: 'Retire' })[0])
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('Retire Vehicle')).toBeInTheDocument()
+    expect(within(dialog).queryByText(/cannot be undone/)).toBeNull()
+    await user.click(within(dialog).getByRole('button', { name: 'Retire' }))
+    await waitFor(() => expect(deleted).toBe('1'))
+  })
+
+  it('shows a zero as 0 in the table and the edit form, and a dash only when empty', async () => {
+    mockVehicles()
+    server.use(http.get('/api/batteries', () => HttpResponse.json([
+      { id: 5, nickname: 'Cell A', serial_number: 'B-1', model: null, cycle_count: 0, health_pct: 0, status: 'active' },
+    ])))
+    const { user } = renderWithProviders(<FleetPage />, { role: 'admin' })
+    await screen.findByText('Falcon')
+    await user.click(screen.getByRole('button', { name: /Batteries/ }))
+    const row = (await screen.findByRole('link', { name: 'Cell A' })).closest('tr')
+    const cells = within(row).getAllByRole('cell').map(c => c.textContent)
+    expect(cells[5]).toBe('0')
+    expect(cells[6]).toBe('0%')
+    expect(cells[3]).toBe('—')
+    await user.click(within(row).getByRole('button', { name: 'Edit' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByLabelText('Cycle Count')).toHaveValue(0)
+  })
+
+  it('sends null for a field cleared in the edit modal and leaves empty untouched fields out', async () => {
+    let body = null
+    mockVehicles([{ id: 1, nickname: 'Falcon', manufacturer: 'DJI', model: 'Mavic 3', serial_number: 'SN-001',
+      status: 'active', notes: 'Old note', acquired_date: '2025-01-02' }])
+    server.use(http.patch('/api/vehicles/1', async ({ request }) => {
+      body = await request.json()
+      return HttpResponse.json({ id: 1 })
+    }))
+    const { user } = renderWithProviders(<FleetPage />, { role: 'admin' })
+    const row = (await screen.findByRole('link', { name: 'Falcon' })).closest('tr')
+    await user.click(within(row).getByRole('button', { name: 'Edit' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.clear(within(dialog).getByLabelText('Notes'))
+    await user.clear(within(dialog).getByLabelText('Nickname'))
+    await user.clear(within(dialog).getByLabelText('Acquired Date'))
+    await user.click(within(dialog).getByRole('button', { name: 'Update' }))
+
+    await waitFor(() => expect(body).not.toBeNull())
+    expect(body.notes).toBeNull()
+    expect(body.nickname).toBeNull()
+    expect(body.acquired_date).toBeNull()
+    expect(body).not.toHaveProperty('decommissioned_date')
+    expect(body.serial_number).toBe('SN-001')
+  })
+
+  it('offers the shared dock statuses in the fleet modal', async () => {
+    mockVehicles()
+    server.use(http.get('/api/docks', () => HttpResponse.json([])))
+    const { user } = renderWithProviders(<FleetPage />, { role: 'admin' })
+    await screen.findByText('Falcon')
+    await user.click(screen.getByRole('button', { name: /Docks/ }))
+    await user.click(await screen.findByRole('button', { name: /Add Dock/ }))
+    const dialog = await screen.findByRole('dialog')
+    const options = [...within(dialog).getByLabelText('Status').options].map(o => o.value)
+    expect(options).toEqual(['active', 'online', 'offline', 'maintenance', 'retired', 'damaged'])
   })
 })

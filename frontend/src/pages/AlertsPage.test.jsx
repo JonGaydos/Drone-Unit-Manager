@@ -5,9 +5,9 @@ import { server } from '@/test/server'
 import { renderWithProviders } from '@/test/render'
 import AlertsPage from './AlertsPage'
 
-// Mount endpoints (Promise.all in load(), both .catch -> swallowed):
+// Mount endpoints (Promise.all in load(); a failure shows a toast):
 //   GET /alerts            (array; severity passed as ?severity= query string)
-//   GET /alerts/count      ({ count } or number)
+//   GET /alerts/count      ({ total, unread })
 // Interactions: PATCH /alerts/:id/read, POST /alerts/dismiss-all.
 const ALERTS = [
   { id: 1, title: 'Cert expiring', message: 'Part 107 expires soon', severity: 'warning', is_read: false, created_at: '2026-06-01' },
@@ -17,7 +17,7 @@ const ALERTS = [
 function mockMount(overrides = {}) {
   const base = {
     alerts: () => HttpResponse.json(ALERTS),
-    count: () => HttpResponse.json({ count: 2 }),
+    count: () => HttpResponse.json({ total: 5, unread: 1 }),
     ...overrides,
   }
   server.use(
@@ -38,20 +38,20 @@ describe('AlertsPage', () => {
     renderWithProviders(<AlertsPage />, { role: 'admin' })
     expect(await screen.findByText('Cert expiring')).toBeInTheDocument()
     expect(screen.getByText('Battery low')).toBeInTheDocument()
-    expect(screen.getByText('2 total alerts')).toBeInTheDocument()
+    expect(screen.getByText('5 total alerts')).toBeInTheDocument()
   })
 
   it('shows the empty state when there are no alerts', async () => {
-    mockMount({ alerts: () => HttpResponse.json([]), count: () => HttpResponse.json({ count: 0 }) })
+    mockMount({ alerts: () => HttpResponse.json([]), count: () => HttpResponse.json({ total: 0, unread: 0 }) })
     renderWithProviders(<AlertsPage />, { role: 'admin' })
     expect(await screen.findByText('No alerts found')).toBeInTheDocument()
   })
 
-  it('falls back to the empty UI when /alerts 500s', async () => {
-    // load() .catch swallows the error; alerts stays [] so empty UI renders.
+  it('falls back to the empty UI and says why when /alerts 500s', async () => {
     mockMount({ alerts: () => HttpResponse.json({ detail: 'boom' }, { status: 500 }) })
     renderWithProviders(<AlertsPage />, { role: 'admin' })
     expect(await screen.findByText('No alerts found')).toBeInTheDocument()
+    expect(await screen.findByText(/Could not load alerts/)).toBeInTheDocument()
   })
 
   it('refetches with the severity query when the filter changes', async () => {
@@ -62,7 +62,7 @@ describe('AlertsPage', () => {
         const filtered = lastSeverity ? ALERTS.filter(a => a.severity === lastSeverity) : ALERTS
         return HttpResponse.json(filtered)
       }),
-      http.get('/api/alerts/count', () => HttpResponse.json({ count: 2 })),
+      http.get('/api/alerts/count', () => HttpResponse.json({ total: 2, unread: 0 })),
     )
     const { user } = renderWithProviders(<AlertsPage />, { role: 'admin' })
     await screen.findByText('Cert expiring')

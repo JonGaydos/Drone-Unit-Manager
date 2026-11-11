@@ -5,6 +5,8 @@ import {
   OUTCOME_COLORS,
   MISSION_STATUS_COLORS,
   FREQUENCY_COLORS,
+  EQUIPMENT_STATUSES,
+  statusOptions,
 } from '@/lib/constants'
 
 function isNonEmptyStringMap(obj) {
@@ -45,5 +47,24 @@ describe('color constant maps', () => {
     isNonEmptyStringMap(FREQUENCY_COLORS)
     expect(FREQUENCY_COLORS).toHaveProperty('monthly')
     expect(FREQUENCY_COLORS).toHaveProperty('yearly')
+  })
+
+})
+
+describe('EQUIPMENT_STATUSES', () => {
+  // Mirrors EQUIPMENT_STATUSES in backend/app/services/equipment_lifecycle.py.
+  const values = (type) => EQUIPMENT_STATUSES[type].map(o => o.value)
+  it('gives each fleet type the statuses the API accepts', () => {
+    expect(values('vehicle')).toEqual(['active', 'maintenance', 'retired', 'damaged'])
+    expect(values('battery')).toEqual(['active', 'charging', 'maintenance', 'retired', 'damaged'])
+    expect(values('dock')).toEqual(['active', 'online', 'offline', 'maintenance', 'retired', 'damaged'])
+    for (const type of ['controller', 'sensor', 'attachment', 'other']) {
+      expect(values(type)).toEqual(['active', 'maintenance', 'retired', 'damaged'])
+    }
+  })
+
+  it('keeps a stored status outside the list selectable', () => {
+    expect(statusOptions('vehicle', 'inactive').map(o => o.value)).toEqual(['inactive', 'active', 'maintenance', 'retired', 'damaged'])
+    expect(statusOptions('vehicle', 'active')).toEqual(EQUIPMENT_STATUSES.vehicle)
   })
 })

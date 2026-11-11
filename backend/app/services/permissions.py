@@ -144,7 +144,7 @@ _DEFAULT_GRID = (
         ("reports.generate", "Generate reports", YES, YES, NO),
         ("reports.export", "Export CSV", YES, YES, YES),
     )),
-    ("Operating authority, geofences", (
+    ("Operating authority", (
         ("authority.view", VIEW, YES, YES, YES),
         ("authority.manage", MANAGE, YES, NO, LOCKED),
     )),

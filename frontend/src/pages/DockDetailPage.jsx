@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { api, getSection } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
-import { STATUS_COLORS } from '@/lib/constants'
+import { STATUS_COLORS, statusOptions } from '@/lib/constants'
 import { ArrowLeft, Warehouse, Edit, MapPin } from 'lucide-react'
 import { MapContainer, TileLayer, Marker } from 'react-leaflet'
 import L from 'leaflet'
@@ -71,16 +71,9 @@ export default function DockDetailPage() {
     setSaving(true)
     try {
       const payload = { ...editForm }
-      if (payload.lat === '') {
-        delete payload.lat
-      } else {
-        payload.lat = Number.parseFloat(payload.lat)
-      }
-      if (payload.lon === '') {
-        delete payload.lon
-      } else {
-        payload.lon = Number.parseFloat(payload.lon)
-      }
+      // An emptied coordinate is sent as null, which clears it.
+      payload.lat = payload.lat === '' ? null : Number.parseFloat(payload.lat)
+      payload.lon = payload.lon === '' ? null : Number.parseFloat(payload.lon)
       const updated = await api.patch(`/docks/${id}`, payload)
       setDock(updated)
       setEditing(false)
@@ -142,10 +135,7 @@ export default function DockDetailPage() {
                     <label htmlFor="edit-status" className="block text-xs font-medium text-muted-foreground mb-1">Status</label>
                     <select id="edit-status" value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})}
                       className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm">
-                      <option value="active">Active</option>
-                      <option value="inactive">Inactive</option>
-                      <option value="maintenance">Maintenance</option>
-                      <option value="retired">Retired</option>
+                      {statusOptions('dock', editForm.status).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                   </div>
                 </div>

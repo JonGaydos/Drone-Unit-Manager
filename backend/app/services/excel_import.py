@@ -78,49 +78,57 @@ def _parse_status(val) -> str:
 
 def _find_or_create_pilot(db: Session, identifier: str) -> tuple[Optional[Pilot], bool]:
     """Find or create a pilot from a 'First Last' name or an email address.
+    Returns (pilot, was_created)."""
+    pilot = _find_pilot(db, identifier)
+    if pilot or not identifier or not identifier.strip():
+        return pilot, False
+    return _create_pilot(db, identifier), True
+
+
+def _split_name(value: str) -> tuple[str, str]:
+    parts = value.split(" ", 1)
+    return parts[0], parts[1] if len(parts) > 1 else ""
+
+
+def _find_pilot(db: Session, identifier: str) -> Optional[Pilot]:
+    """The pilot named by a 'First Last' name or an email address, or None.
 
     Skydio exports the pilot as an email, so when the value looks like an email
-    we match (and store) by email; otherwise we fall back to name matching.
-    Returns (pilot, was_created).
+    we match by email (case-insensitive); otherwise by name.
     """
     if not identifier or identifier.strip() == "":
-        return None, False
+        return None
     value = identifier.strip()
     if "@" in value:
-        return _find_or_create_pilot_by_email(db, value)
-    parts = value.split(" ", 1)
-    first = parts[0]
-    last = parts[1] if len(parts) > 1 else ""
-    pilot = db.query(Pilot).filter(Pilot.first_name == first, Pilot.last_name == last).first()
-    if not pilot:
-        pilot = Pilot(first_name=first, last_name=last, status="active")
-        db.add(pilot)
-        db.flush()
-        return pilot, True
-    return pilot, False
+        return db.query(Pilot).filter(Pilot.email.ilike(value)).first()
+    first, last = _split_name(value)
+    return db.query(Pilot).filter(Pilot.first_name == first, Pilot.last_name == last).first()
 
 
-def _find_or_create_pilot_by_email(db: Session, email: str) -> tuple[Optional[Pilot], bool]:
-    """Match a pilot by email (case-insensitive); create one if absent.
+def _create_pilot(db: Session, identifier: str) -> Pilot:
+    """Create an active pilot from a 'First Last' name or an email address.
 
-    The Skydio CSV carries no human name, so a new pilot is created with a
+    The Skydio CSV carries no human name, so a pilot made from an email gets a
     placeholder name derived from the email local part for the user to edit.
     """
-    pilot = db.query(Pilot).filter(Pilot.email.ilike(email)).first()
-    if pilot:
-        return pilot, False
-    local = email.split("@", 1)[0]
-    if "." in local or "_" in local:
-        bits = local.replace("_", ".").split(".", 1)
-        first = bits[0].capitalize()
-        last = bits[1].capitalize() if len(bits) > 1 else ""
+    value = identifier.strip()
+    email = None
+    if "@" in value:
+        email = value
+        local = value.split("@", 1)[0]
+        if "." in local or "_" in local:
+            bits = local.replace("_", ".").split(".", 1)
+            first = bits[0].capitalize()
+            last = bits[1].capitalize() if len(bits) > 1 else ""
+        else:
+            first = local
+            last = ""
     else:
-        first = local
-        last = ""
+        first, last = _split_name(value)
     pilot = Pilot(first_name=first, last_name=last, email=email, status="active")
     db.add(pilot)
     db.flush()
-    return pilot, True
+    return pilot
 
 
 def _vehicle_by_serial_or_nickname(db: Session, name: str) -> Optional[Vehicle]:
@@ -365,10 +373,19 @@ def _process_skydio_row(row: dict, db: Session, result: dict,
         return False, False
     flight_id = str(flight_id).upper().replace("-", "")
 
-    pilot, pilot_new = _find_or_create_pilot(db, row.get("Pilot") or "")
+    pilot_name = str(row.get("Pilot") or "").strip()
+    pilot = _find_pilot(db, pilot_name)
     vehicle, vehicle_new = _find_or_create_vehicle(db, row.get("Vehicle") or "")
 
-    flight = _build_flight_from_row(row, flight_id, pilot, vehicle, db, source)
+    # A pilot not on file is created only when the row's flight is imported.
+    # Such a pilot has no flights, so only the Flight ID can make it a duplicate.
+    pilot_new = False
+    if pilot is None and pilot_name and _flight_by_flight_id(db, flight_id) is None:
+        pilot, pilot_new = _create_pilot(db, pilot_name), True
+
+    flight = None
+    if pilot is not None or not pilot_name:
+        flight = _build_flight_from_row(row, flight_id, pilot, vehicle, db, source)
     if flight is None:
         result["flights_skipped"] += 1
         result["batteries_filled"] += _fill_empty_battery(db, row, flight_id)

@@ -20,7 +20,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Iterator, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Form
+from fastapi import APIRouter, Depends, HTTPException, Query, Form, Request
 from fastapi.responses import FileResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from PIL import Image as PILImage
@@ -138,20 +138,23 @@ def _authenticate_image_request(
     sig: str | None,
     exp: int | None,
     db: Session,
+    request: Request,
     viewer: int | None = None,
 ) -> int | None:
-    """Allow either (a) a valid Bearer JWT (for API clients) or (b) a fresh
-    signed URL for this photo_id+action. Raises 401 on failure.
+    """Allow either (a) a valid Bearer token, a login JWT or an API token (for
+    API clients), or (b) a fresh signed URL for this photo_id+action. Raises 401
+    on failure.
 
     Returns the id of the user the request is for: the bearer's, or the one the
     signed URL was issued to (None for a URL issued without one). A signature
     needs no permission check, since one is only issued to a user holding
-    files.view; a login token is checked for files.view here."""
+    files.view; a bearer is checked for files.view here, and an API token for
+    its scopes too."""
     if _verify_photo_sig(photo_id, action, sig, exp, viewer):
         return viewer
     if credentials:
-        from app.routers.auth import user_from_login_token
-        user = user_from_login_token(credentials.credentials, db)  # 401 if invalid or revoked
+        from app.routers.auth import get_current_user
+        user = get_current_user(credentials, db, request)  # 401 if invalid or revoked, 403 out of scope
         if not permissions_service.can(db, user, FILES_VIEW):
             raise HTTPException(403, "You do not have permission to do this")
         return user.id
@@ -493,6 +496,7 @@ def _record_full_view(db, viewer_id: int | None, photo) -> None:
 def view_photo(
     photo_id: int,
     db: DBSession,
+    request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_security)] = None,
     sig: Annotated[str | None, Query()] = None,
     exp: Annotated[int | None, Query()] = None,
@@ -500,10 +504,10 @@ def view_photo(
 ):
     """Serve the full-resolution photo file.
 
-    Accepts EITHER a Bearer JWT (for API clients) OR a signed URL with
+    Accepts EITHER a Bearer login JWT or API token (for API clients) OR a signed URL with
     sig+exp query params (for <img src='...'> tags from the SPA). Every view
     of the full image is audited; thumbnails are not."""
-    viewer_id = _authenticate_image_request(photo_id, "view", credentials, sig, exp, db, u)
+    viewer_id = _authenticate_image_request(photo_id, "view", credentials, sig, exp, db, request, u)
     photo = _live_photo(db, photo_id)
     resolved = _resolve_photo_path(photo)
     if not resolved:
@@ -591,6 +595,7 @@ def _build_and_keep(db, photo_id: int, source: Path, failure_key: tuple[int, int
 def view_thumbnail(
     photo_id: int,
     db: DBSession,
+    request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_security)] = None,
     sig: Annotated[str | None, Query()] = None,
     exp: Annotated[int | None, Query()] = None,
@@ -599,7 +604,7 @@ def view_thumbnail(
 
     A missing thumbnail is built and kept. The full image is never served
     here: if no thumbnail can be built, a placeholder is."""
-    _authenticate_image_request(photo_id, "thumbnail", credentials, sig, exp, db)
+    _authenticate_image_request(photo_id, "thumbnail", credentials, sig, exp, db, request)
     photo = _live_photo(db, photo_id)
     stored = _stored_thumbnail(photo)
     if stored:
@@ -621,7 +626,19 @@ def get_signed_urls(photo_id: int, db: DBSession, user: ViewUser):
     return _photo_urls(photo_id, user.id)
 
 
-@router.patch("/{photo_id}", responses=responses(404))
+async def _sent_form_fields(request: Request) -> frozenset[str]:
+    """Names of the form fields a request sent, empty ones included. FastAPI
+    reads an empty form value as missing, so this tells "" (clear) from a
+    field left out (keep)."""
+    return frozenset((await request.form()).keys())
+
+
+# Only the names of a text form the route already declares: no file, so the
+# route keeps the default body limit and is not an upload path.
+_sent_form_fields.reads_form = False
+
+
+@router.patch("/{photo_id}", responses=responses(400, 404, 409))
 def update_photo(
 
     photo_id: int,
@@ -629,6 +646,8 @@ def update_photo(
     db: DBSession,
 
     user: EditUser,
+
+    sent: Annotated[frozenset[str], Depends(_sent_form_fields)],
 
     title: Annotated[Optional[str], Form()] = None,
 
@@ -642,34 +661,34 @@ def update_photo(
 
     Args:
         photo_id: The photo record ID.
-        title: New title (or None to keep existing).
-        description: New description (or None to keep existing).
-        date_taken: New date-taken ISO string (or None to keep existing).
-        pilot_ids: Comma-separated pilot IDs (replaces all existing associations).
+        title: New title. Left out keeps it; sent empty clears it.
+        description: New description, the same way.
+        date_taken: New date-taken ISO string, the same way.
+        pilot_ids: Comma-separated pilot IDs (replaces all existing associations;
+            sent empty removes them all, left out keeps them).
 
     Returns:
         Success message dict.
     """
     photo = _live_photo(db, photo_id)
     permissions_service.require_record_access(db, user, FILES_EDIT, permissions_service.owns_photo(user, photo))
+    evidence.check_editable(photo)
 
-    updates = {k: v for k, v in (("title", title), ("description", description)) if v is not None}
-    if date_taken is not None:
-        try:
-            updates["date_taken"] = datetime.fromisoformat(date_taken.replace("Z", UTC_OFFSET).replace(UTC_OFFSET, ""))
-        except (ValueError, AttributeError):
-            raise HTTPException(400, "Invalid date format. Use ISO 8601 (e.g., 2026-04-02).")
+    updates = {k: v or None for k, v in (("title", title), ("description", description)) if k in sent}
+    if "date_taken" in sent:
+        updates["date_taken"] = _parse_date_taken(date_taken)
     changes = compute_changes(photo, updates, list(updates))
     for key, value in updates.items():
         setattr(photo, key, value)
 
-    if pilot_ids is not None:
+    pilots_sent = "pilot_ids" in sent
+    if pilots_sent:
         changes.update(_replace_photo_pilots(db, photo_id, pilot_ids))
 
-    if changes or pilot_ids is not None:
+    if changes or pilots_sent:
         log_action(db, user.id, user.display_name, "update", "photo", photo.id, photo.original_filename,
                    changes=changes or None,
-                   details=f"Pilots set to [{pilot_ids}]" if pilot_ids is not None else None)
+                   details=f"Pilots set to [{pilot_ids or ''}]" if pilots_sent else None)
     db.commit()
     return {"message": "Photo updated"}
 
@@ -690,7 +709,10 @@ def link_photo_flight(photo_id: int, flight_id: int, db: DBSession, user: Custod
 
 @router.delete("/{photo_id}/flight/{flight_id}", responses=responses(401, 404))
 def unlink_photo_flight(photo_id: int, flight_id: int, db: DBSession, user: CustodyUser):
-    """Unlink a photo from a flight."""
+    """Unlink a photo from a flight. 404 when either does not exist."""
+    _live_photo(db, photo_id)
+    if not db.query(Flight).filter(Flight.id == flight_id).first():
+        raise HTTPException(404, FLIGHT_NOT_FOUND)
     link = delete_links(db.query(PhotoFlight).filter(PhotoFlight.photo_id == photo_id, PhotoFlight.flight_id == flight_id))
     if link:
         log_action(db, user.id, user.display_name, "unlink", "photo", photo_id, changes=link,
@@ -715,7 +737,10 @@ def link_photo_incident(photo_id: int, incident_id: int, db: DBSession, user: Cu
 
 @router.delete("/{photo_id}/incident/{incident_id}", responses=responses(401, 404))
 def unlink_photo_incident(photo_id: int, incident_id: int, db: DBSession, user: CustodyUser):
-    """Unlink a photo from an incident."""
+    """Unlink a photo from an incident. 404 when either does not exist."""
+    _live_photo(db, photo_id)
+    if not db.query(Incident).filter(Incident.id == incident_id).first():
+        raise HTTPException(404, INCIDENT_NOT_FOUND)
     link = delete_links(db.query(PhotoIncident).filter(PhotoIncident.photo_id == photo_id, PhotoIncident.incident_id == incident_id))
     if link:
         log_action(db, user.id, user.display_name, "unlink", "photo", photo_id, changes=link,

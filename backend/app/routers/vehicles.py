@@ -25,6 +25,23 @@ LocationUser = Annotated[User, Depends(require_permission("fleet.location"))]
 FlightsViewUser = Annotated[User, Depends(require_permission("flights.view"))]
 
 
+def _vehicle_out(db, user, vehicles) -> list[VehicleOut]:
+    """VehicleOut rows with flight totals from the counted flights. The totals
+    are flight figures, so they follow flights.view like the stats route."""
+    from app.services.flight_scope import vehicle_flight_totals
+    from app.services.permissions import can
+    totals = vehicle_flight_totals(db, [v.id for v in vehicles]) if can(db, user, "flights.view") else None
+    out = []
+    for v in vehicles:
+        row = VehicleOut.model_validate(v)
+        if totals is None:
+            row.total_flights = row.total_flight_hours = None
+        else:
+            row.total_flights, row.total_flight_hours = totals.get(v.id, (0, 0.0))
+        out.append(row)
+    return out
+
+
 @router.get("", response_model=list[VehicleOut])
 def list_vehicles(
     db: DBSession,
@@ -45,7 +62,7 @@ def list_vehicles(
         q = q.filter(Vehicle.status == status)
     if manufacturer:
         q = q.filter(Vehicle.manufacturer == manufacturer)
-    return [VehicleOut.model_validate(v) for v in q.order_by(Vehicle.nickname, Vehicle.serial_number).all()]
+    return _vehicle_out(db, user, q.order_by(Vehicle.nickname, Vehicle.serial_number).all())
 
 
 def _latest_vehicle_checkouts(db, vids):
@@ -66,11 +83,36 @@ def _latest_vehicle_checkouts(db, vids):
     return active
 
 
-def _resolve_vehicle_location(v, co, names):
+def _last_vehicle_checkins(db, vids):
+    """Map each vehicle id to the time it was last checked in."""
+    from sqlalchemy import func
+    from app.models.equipment_checkout import EquipmentCheckout
+    if not vids:
+        return {}
+    rows = db.query(EquipmentCheckout.entity_id, func.max(EquipmentCheckout.checked_in_at)).filter(
+        EquipmentCheckout.entity_type == "vehicle",
+        EquipmentCheckout.entity_id.in_(vids),
+        EquipmentCheckout.checked_in_at.isnot(None),
+    ).group_by(EquipmentCheckout.entity_id).all()
+    return dict(rows)
+
+
+def _aware(t):
+    """Treat a naive time as UTC, so it compares with the aware manual-set time."""
+    from datetime import timezone
+    return t.replace(tzinfo=timezone.utc) if t is not None and t.tzinfo is None else t
+
+
+def _resolve_vehicle_location(v, co, names, last_checkin=None):
     """Resolve a vehicle's location text/source from the more recent of a manual
-    set or an open checkout. Returns (location_text, source)."""
+    set or an open checkout. With neither open nor newer than the last check-in,
+    the vehicle is "Returned": the place set before it went out is stale.
+    Returns (location_text, source)."""
     co_time = co.checked_out_at if co else None
     man_time = v.location_set_at
+    last_checkin = _aware(last_checkin)
+    if co is None and last_checkin is not None and (man_time is None or last_checkin > man_time):
+        return "Returned", "checkin"
     manual_newer = man_time is not None and (co_time is None or man_time >= co_time)
     if manual_newer:
         if v.manual_location_pilot_id:
@@ -90,6 +132,7 @@ def vehicle_locations(db: DBSession, user: ViewUser):
     from app.models.pilot import Pilot
     vehicles = db.query(Vehicle).filter(Vehicle.status != "retired").all()
     active = _latest_vehicle_checkouts(db, [v.id for v in vehicles])
+    checkins = _last_vehicle_checkins(db, [v.id for v in vehicles])
     pilot_ids = {c.checked_out_by_id for c in active.values()}
     pilot_ids |= {v.manual_location_pilot_id for v in vehicles if v.manual_location_pilot_id}
     names = {}
@@ -98,7 +141,7 @@ def vehicle_locations(db: DBSession, user: ViewUser):
     result = []
     for v in vehicles:
         label = v.nickname or f"{v.manufacturer} {v.model}"
-        location_text, source = _resolve_vehicle_location(v, active.get(v.id), names)
+        location_text, source = _resolve_vehicle_location(v, active.get(v.id), names, checkins.get(v.id))
         result.append({"vehicle_id": v.id, "label": label, "location_text": location_text, "source": source})
     return result
 
@@ -109,7 +152,7 @@ def get_vehicle(vehicle_id: int, db: DBSession, user: ViewUser):
     vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
     if not vehicle:
         raise HTTPException(status_code=404, detail=VEHICLE_NOT_FOUND)
-    return VehicleOut.model_validate(vehicle)
+    return _vehicle_out(db, user, [vehicle])[0]
 
 
 @router.post("/{target_id}/merge", responses=responses(400, 401, 404))
@@ -186,6 +229,10 @@ def merge_vehicles(target_id: int, merge_from_id: int, db: DBSession, admin: Man
     src_name = f"{source.manufacturer} {source.model}" + (f" ({source.nickname})" if source.nickname else "")
     tgt_name = f"{target.manufacturer} {target.model}" + (f" ({target.nickname})" if target.nickname else "")
     db.delete(source)
+    # Both vehicles may have brought a current registration; keep the latest.
+    from app.routers.vehicle_registrations import keep_one_current
+    db.flush()
+    keep_one_current(db, target_id)
     log_action(db, admin.id, admin.display_name, "merge", "vehicle", target.id, tgt_name, details=f"{src_name} -> {tgt_name}")
     db.commit()
     db.refresh(target)
@@ -194,9 +241,13 @@ def merge_vehicles(target_id: int, merge_from_id: int, db: DBSession, admin: Man
 
 @router.get("/{vehicle_id}/stats", responses=responses(401, 404))
 def get_vehicle_stats(vehicle_id: int, db: DBSession, user: ViewUser, _flights: FlightsViewUser):
-    """Get aggregated flight statistics for a vehicle (total flights, hours, last flight date)."""
+    """Get aggregated flight statistics for a vehicle (total flights, hours, last flight date).
+
+    Counts only flights that count toward the unit's totals, like fleet health.
+    """
     from sqlalchemy import func
     from app.models.flight import Flight
+    from app.services.flight_scope import counted_flight_clause
 
     vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
     if not vehicle:
@@ -205,7 +256,7 @@ def get_vehicle_stats(vehicle_id: int, db: DBSession, user: ViewUser, _flights: 
         func.count(Flight.id).label("total_flights"),
         func.coalesce(func.sum(Flight.duration_seconds), 0).label("total_seconds"),
         func.max(Flight.date).label("last_flight"),
-    ).filter(Flight.vehicle_id == vehicle_id).first()
+    ).filter(counted_flight_clause(), Flight.vehicle_id == vehicle_id).first()
     return {
         "total_flights": stats.total_flights,
         "total_flight_hours": stats.total_seconds / 3600,
@@ -230,7 +281,7 @@ def create_vehicle(data: VehicleCreate, db: DBSession, admin: ManageUser):
     return VehicleOut.model_validate(vehicle)
 
 
-@router.patch("/{vehicle_id}", response_model=VehicleOut, responses=responses(401, 404))
+@router.patch("/{vehicle_id}", response_model=VehicleOut, responses=responses(400, 401, 404))
 def update_vehicle(vehicle_id: int, data: VehicleUpdate, db: DBSession, admin: ManageUser):
     """Update a vehicle's details with audit-logged change tracking. Needs the fleet.manage permission."""
     from app.services.audit import log_action, compute_changes
@@ -239,6 +290,11 @@ def update_vehicle(vehicle_id: int, data: VehicleUpdate, db: DBSession, admin: M
         raise HTTPException(status_code=404, detail=VEHICLE_NOT_FOUND)
     from app.services.equipment_lifecycle import set_fields_with_lifecycle
     update_data = data.model_dump(exclude_unset=True)
+    new_serial = update_data.get("serial_number")
+    if new_serial and new_serial != vehicle.serial_number and db.query(Vehicle).filter(
+        Vehicle.serial_number == new_serial, Vehicle.id != vehicle_id
+    ).first():
+        raise HTTPException(status_code=400, detail="Vehicle with this serial number already exists")
     changes = compute_changes(vehicle, update_data, ["nickname", "status", "manufacturer", "model", "serial_number"])
     set_fields_with_lifecycle(vehicle, update_data)
     if changes:
@@ -311,17 +367,19 @@ async def upload_vehicle_photo(vehicle_id: int, upload: AdminForm, db: DBSession
     if ext not in ALLOWED_IMAGE_EXTENSIONS:
         raise HTTPException(400, FILE_TYPE_NOT_ALLOWED.format(ext))
     upload_dir = Path(settings.UPLOAD_DIR) / "photos" / "vehicles" / str(vehicle_id)
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    for old in upload_dir.glob("profile.*"):
-        old.unlink()
-    filepath = upload_dir / f"profile{ext}"
     content = await file.read()
     if len(content) > settings.MAX_UPLOAD_SIZE:
         raise HTTPException(413, FILE_TOO_LARGE.format(settings.MAX_UPLOAD_SIZE // (1024 * 1024)))
     from app.services.file_validation import is_image
     if not is_image(content[:512]):
         raise HTTPException(400, "File content is not a recognized image")
+    # Only a valid upload replaces the photo: write it, then drop the old one.
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    filepath = upload_dir / f"profile{ext}"
     await anyio.Path(filepath).write_bytes(content)
+    for old in upload_dir.glob("profile.*"):
+        if old.name != filepath.name:
+            old.unlink()
     vehicle.photo_url = f"/api/vehicles/{vehicle_id}/photo/view"
     db.commit()
     return {"ok": True, "photo_url": vehicle.photo_url}
@@ -339,8 +397,10 @@ def view_vehicle_photo(vehicle_id: int, db: DBSession, _user: ViewUser):
     upload_root = Path(settings.UPLOAD_DIR).resolve()
     if not str(resolved_dir).startswith(str(upload_root)):
         raise HTTPException(403, ACCESS_DENIED)
-    for ext in [".jpg", ".jpeg", ".png", ".webp"]:
+    # Every type the upload accepts, served as the type its extension names.
+    from app.services.file_validation import mime_for_filename
+    for ext in sorted(ALLOWED_IMAGE_EXTENSIONS):
         p = photo_dir / f"profile{ext}"
         if p.exists():
-            return FileResponse(p)
+            return FileResponse(p, media_type=mime_for_filename(p.name))
     raise HTTPException(404, "No photo found")

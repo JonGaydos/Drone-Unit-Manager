@@ -17,9 +17,26 @@ def _validate_optional_email(value: Optional[str]) -> Optional[str]:
     return value
 
 
+def _validate_display_name(value: Optional[str]) -> Optional[str]:
+    """Trimmed; a blank name would show as nothing in lists and the audit log."""
+    if value is None:
+        return value
+    value = value.strip()
+    if not value:
+        raise ValueError("display name is required")
+    return value
+
+
 # The roles the permission checks recognize. Anything else would create an
 # account that silently matches no check.
 Role = Literal["admin", "supervisor", "pilot", "viewer"]
+
+# The theme ids the app offers (frontend ThemeContext THEMES).
+Theme = Literal[
+    "dark", "light", "glass", "grafana", "blue", "high-contrast", "midnight-slate",
+    "ranger-green", "navy-brass", "arctic", "carbon-amber", "night-vision", "sandstone",
+    "field-sage",
+]
 
 
 class UserCreate(BaseModel):
@@ -31,17 +48,19 @@ class UserCreate(BaseModel):
     email: Optional[str] = Field(default=None, max_length=255)
 
     _validate_email = field_validator("email")(_validate_optional_email)
+    _validate_name = field_validator("display_name")(_validate_display_name)
 
 
 class UserUpdate(BaseModel):
     display_name: Optional[str] = Field(default=None, max_length=255)
     role: Optional[Role] = None
     is_active: Optional[bool] = None
-    theme: Optional[str] = None
+    theme: Optional[Theme] = None
     pilot_id: Optional[int] = None
     email: Optional[str] = Field(default=None, max_length=255)
 
     _validate_email = field_validator("email")(_validate_optional_email)
+    _validate_name = field_validator("display_name")(_validate_display_name)
 
 
 class ChangePasswordRequest(BaseModel):

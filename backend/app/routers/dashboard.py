@@ -4,6 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, extract
+from sqlalchemy.orm import joinedload
 
 from app.deps import DBSession, CurrentUser
 from app.responses import responses
@@ -346,6 +347,7 @@ def monthly_flights(db: DBSession, user: FlightsUser):
 @router.get("/analytics/vehicle-hours", response_model=list[VehicleHours], responses=responses(401))
 def vehicle_hours(db: DBSession, user: FleetUser):
     rows = db.query(
+        Vehicle.id,
         Vehicle.manufacturer,
         Vehicle.model,
         Vehicle.nickname,
@@ -355,6 +357,7 @@ def vehicle_hours(db: DBSession, user: FleetUser):
     ).all()
     return [
         VehicleHours(
+            vehicle_id=r.id,
             vehicle_name=f"{r.manufacturer} {r.model}" + (f" ({r.nickname})" if r.nickname else ""),
             hours=r.total_seconds / 3600,
         )
@@ -472,11 +475,14 @@ def pilot_performance(pilot_id: int, db: DBSession, user: FlightsUser):
 def fleet_health(db: DBSession, user: FleetUser):
     from app.models.battery import Battery
     from app.models.maintenance_schedule import MaintenanceSchedule
+    from app.services.equipment_lifecycle import DECOMMISSIONED_STATUSES
 
     today = date.today()
 
-    vehicles = db.query(Vehicle).filter(Vehicle.status == "active").all()
-    batteries = db.query(Battery).all()
+    # In service = not retired or damaged: a vehicle grounded for maintenance
+    # still belongs to the fleet, as on the Fleet page.
+    vehicles = db.query(Vehicle).filter(Vehicle.status.notin_(DECOMMISSIONED_STATUSES)).all()
+    batteries = db.query(Battery).filter(Battery.status.notin_(DECOMMISSIONED_STATUSES)).all()
 
     # Pre-aggregate per-vehicle flight stats and overdue maintenance in two
     # grouped queries, instead of 4 queries per vehicle.
@@ -528,8 +534,15 @@ def fleet_health(db: DBSession, user: FleetUser):
         })
 
     # Overall stats
-    avg_battery_health = sum(b.health_pct or 0 for b in batteries) / len(batteries) if batteries else 0
-    total_overdue = sum(v["overdue_maintenance"] for v in vehicle_stats)
+    # Only batteries with a reading: one never measured is unknown, not 0%.
+    readings = [b.health_pct for b in batteries if b.health_pct is not None]
+    avg_battery_health = round(sum(readings) / len(readings), 1) if readings else None
+    # Every overdue schedule, not only vehicle ones: an overdue battery or dock
+    # task is fleet maintenance too (the compliance dashboard counts the same).
+    total_overdue = db.query(func.count(MaintenanceSchedule.id)).filter(
+        MaintenanceSchedule.is_active.is_(True),
+        MaintenanceSchedule.next_due < today,
+    ).scalar()
 
     # The unit total stays; the count against a named vehicle follows maintenance.view.
     if not can(db, user, "maintenance.view"):
@@ -541,7 +554,7 @@ def fleet_health(db: DBSession, user: FleetUser):
         "summary": {
             "total_vehicles": len(vehicles),
             "total_batteries": len(batteries),
-            "avg_battery_health": round(avg_battery_health, 1),
+            "avg_battery_health": avg_battery_health,
             "total_overdue_maintenance": total_overdue,
             "total_flight_hours": round(sum(v["hours"] for v in vehicle_stats), 1),
         }
@@ -642,7 +655,9 @@ def compliance_dashboard(db: DBSession, user: CurrentUser):
     ).scalar()
 
     # Count certs expiring within 90 days (exclude renewed and inactive pilots)
-    expiring_soon = db.query(PilotCertification).filter(
+    expiring_soon = db.query(PilotCertification).options(
+        joinedload(PilotCertification.pilot), joinedload(PilotCertification.certification_type),
+    ).filter(
         PilotCertification.expiration_date.between(today, soon),
         PilotCertification.status.notin_(["not_issued", "renewed"]),
         PilotCertification.pilot_id.in_(active_pilot_ids),
@@ -731,7 +746,9 @@ def _certification_brief(c, today) -> dict:
     """Compact expiring-certification payload for the compliance dashboard."""
     return {
         "pilot_id": c.pilot_id,
+        "pilot_name": c.pilot.full_name if c.pilot else None,
         "cert_type_id": c.certification_type_id,
+        "cert_type_name": c.certification_type.name if c.certification_type else None,
         "expiration_date": c.expiration_date.isoformat() if c.expiration_date else None,
         "days_remaining": (c.expiration_date - today).days if c.expiration_date else None,
     }
@@ -782,20 +799,23 @@ def _calc_compliance_score(pilots, exp_certs, vehicles, exp_regs, overdue, incid
 
 @router.get("/upcoming-expirations", responses=responses(401))
 def upcoming_expirations(db: DBSession, user: CertificationsUser, days: int = 90):
-    cutoff = date.today() + timedelta(days=days)
+    """Certifications of active pilots expiring from today through `days` ahead.
+    Ones already expired are not upcoming (the compliance dashboard counts them)."""
+    today = date.today()
+    cutoff = today + timedelta(days=days)
     rows = db.query(
         PilotCertification, Pilot, CertificationType,
     ).join(Pilot, PilotCertification.pilot_id == Pilot.id
     ).join(CertificationType, PilotCertification.certification_type_id == CertificationType.id
     ).filter(
-        PilotCertification.expiration_date.isnot(None),
-        PilotCertification.expiration_date <= cutoff,
+        Pilot.status == "active",
+        PilotCertification.expiration_date.between(today, cutoff),
         PilotCertification.status.in_(["active", "complete"]),
     ).order_by(PilotCertification.expiration_date).all()
 
     result = []
     for pc, pilot, ct in rows:
-        days_remaining = (pc.expiration_date - date.today()).days
+        days_remaining = (pc.expiration_date - today).days
         result.append({
             "pilot_name": f"{pilot.first_name} {pilot.last_name}",
             "pilot_id": pilot.id,

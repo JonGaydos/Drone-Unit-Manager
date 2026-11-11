@@ -44,7 +44,7 @@ from app.routers import (
     equipment, reports, export, mission_logs, training_logs, maintenance_schedules,
     photos, folders, audit, incidents, flight_plans,
     weather, currency, equipment_checkouts, checklists,
-    components, geofences, adsb, notifications, calendar, geocode,
+    components, adsb, notifications, calendar, geocode,
 )
 from app.routers import vehicle_registrations, backup, search
 from app.routers import operating_authorities
@@ -125,8 +125,10 @@ async def lifespan(app: FastAPI):
     from app.routers.backup import init_install_token
     init_install_token()
     start_scheduler()
-    yield
-    stop_scheduler()
+    try:
+        yield
+    finally:
+        stop_scheduler()
 
 
 # The interactive API docs hand an unauthenticated visitor the entire API
@@ -198,14 +200,16 @@ async def add_request_id(request: Request, call_next):
 
 @app.exception_handler(IntegrityError)
 async def integrity_conflict(request: Request, exc: IntegrityError):
-    """A write the database refused, most often deleting a record that other
-    records still point at. That is a conflict for the caller to resolve, not
-    a server fault, so it is a 409 with a plain message instead of a 500."""
+    """A write the database refused. A missing required value or a reference
+    to a record that does not exist is the caller's input, a 422 naming the
+    field; anything else (most often deleting a record that other records
+    still point at, or a duplicate) is a 409 conflict. Never a 500."""
+    from starlette.concurrency import run_in_threadpool
+    from app import database
+    from app.services.integrity_errors import integrity_reply
     logger.warning("Integrity error on %s %s: %s", request.method, request.url.path, exc.orig)
-    return JSONResponse(
-        {"detail": "This change conflicts with other records: it is still in use elsewhere, or duplicates an existing entry."},
-        status_code=409,
-    )
+    status, detail = await run_in_threadpool(integrity_reply, database.engine, database.Base.metadata, exc)
+    return JSONResponse({"detail": detail}, status_code=status)
 
 
 @app.exception_handler(PermissionError)
@@ -254,7 +258,6 @@ app.include_router(currency.router)
 app.include_router(equipment_checkouts.router)
 app.include_router(checklists.router)
 app.include_router(components.router)
-app.include_router(geofences.router)
 app.include_router(adsb.router)
 app.include_router(geocode.router)
 app.include_router(notifications.router)
@@ -336,7 +339,9 @@ def health_check():
         db.execute(text("SELECT 1"))
         tdb.execute(text("SELECT 1"))
         return {"status": "ok", "app": APP_TITLE, "version": APP_VERSION, "database": "connected",
-                "telemetry_database": "connected", "warnings": _safe_health_warnings(db)}
+                "telemetry_database": "connected", "warnings": _safe_health_warnings(db),
+                # Whether /docs is served, so Settings links to it only when it exists.
+                "api_docs": _docs_on}
     except Exception:
         logger.exception("Health check failed")
         return JSONResponse(
@@ -370,6 +375,9 @@ def serve_spa(full_path: str):
     Returns:
         The matching static file or index.html.
     """
+    # An API path no route matched is a client error, not a page to render.
+    if full_path == "api" or full_path.startswith("api/"):
+        raise HTTPException(404)
     if not _static_dir or not os.path.isdir(_static_dir):
         raise HTTPException(404)
     file_path = os.path.join(_static_dir, full_path)

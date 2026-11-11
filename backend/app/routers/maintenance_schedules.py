@@ -3,7 +3,7 @@ from datetime import date
 from typing import Annotated, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, StringConstraints
 
 from app.constants import SCHEDULE_NOT_FOUND
 from app.deps import DBSession
@@ -21,6 +21,7 @@ from app.models.user import User
 from app.models.vehicle import Vehicle
 from app.responses import responses
 from app.services.audit import compute_changes, log_action
+from app.services.maintenance_due import dismiss_schedule_alerts
 
 router = APIRouter(prefix="/api/maintenance/schedules", tags=["maintenance-schedules"])
 
@@ -43,17 +44,25 @@ ENTITY_MODELS = {
 }
 
 
-def _validate_entity(db, entity_type: str, entity_id: int | None) -> None:
-    """Reject unknown entity_type (400) and a missing entity_id row (404).
+# As for maintenance records, "other" predates its table and may name no item.
+OPTIONAL_ENTITY_ID = {"other"}
 
-    "organization" has no table and is skipped. The existence check also only
-    runs when an entity_id is supplied (the field is optional for schedules)."""
+
+def _validate_entity(db, entity_type: str, entity_id: int | None) -> None:
+    """Reject unknown entity_type (400), a missing entity_id for a table-backed
+    type (400) and an entity_id naming no row (404).
+
+    "organization" has no table and takes no entity_id; "other" may leave it
+    out. Completing a schedule logs a record against its item, so the other
+    types need one."""
     if entity_type not in ENTITY_MODELS:
         raise HTTPException(
             status_code=400,
             detail=f"Invalid entity_type '{entity_type}'. Allowed: {', '.join(sorted(ENTITY_MODELS))}",
         )
     model = ENTITY_MODELS[entity_type]
+    if model is not None and entity_id is None and entity_type not in OPTIONAL_ENTITY_ID:
+        raise HTTPException(status_code=400, detail=f"entity_id is required for entity_type '{entity_type}'")
     if model is not None and entity_id is not None:
         if not db.query(model).filter(model.id == entity_id).first():
             raise HTTPException(status_code=404, detail=f"{entity_type} #{entity_id} not found")
@@ -63,8 +72,11 @@ def _validate_entity(db, entity_type: str, entity_id: int | None) -> None:
 Frequency = Literal["monthly", "quarterly", "yearly", "two_years", "three_years", "one_time"]
 
 
+ScheduleName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
+
+
 class ScheduleCreate(BaseModel):
-    name: str
+    name: ScheduleName
     entity_type: str
     entity_id: Optional[int] = None
     frequency: Frequency
@@ -73,7 +85,7 @@ class ScheduleCreate(BaseModel):
     next_due: Optional[date] = None  # required for one_time; optional override otherwise
 
 class ScheduleUpdate(BaseModel):
-    name: Optional[str] = None
+    name: Optional[ScheduleName] = None
     entity_type: Optional[str] = None
     entity_id: Optional[int] = None
     frequency: Optional[Frequency] = None
@@ -247,7 +259,7 @@ def delete_schedule(
     return {"ok": True}
 
 
-@router.post("/{schedule_id}/complete", responses=responses(404))
+@router.post("/{schedule_id}/complete", responses=responses(400, 404))
 def complete_schedule(
     schedule_id: int,
     db: DBSession,
@@ -256,6 +268,9 @@ def complete_schedule(
     schedule = db.query(MaintenanceSchedule).filter(MaintenanceSchedule.id == schedule_id).first()
     if not schedule:
         raise HTTPException(404, SCHEDULE_NOT_FOUND)
+    if not schedule.is_active:
+        # A done one-time task, or the schedule of retired equipment.
+        raise HTTPException(400, "This task is already completed or no longer active")
 
     today = date.today()
     schedule.last_completed = today
@@ -265,6 +280,7 @@ def complete_schedule(
         schedule.is_active = False
     else:
         schedule.next_due = _calc_next_due(schedule.frequency, today)
+    dismiss_schedule_alerts(db, schedule)
 
     # Auto-create a maintenance record. One-time tasks get no next_due_date so
     # the record doesn't linger in the Upcoming list.

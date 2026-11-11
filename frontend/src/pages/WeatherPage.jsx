@@ -39,6 +39,9 @@ export default function WeatherPage() {
   const toast = useToast()
   const [coords, setCoords] = useState({ lat: '', lon: '' })
   const [addressInput, setAddressInput] = useState('')
+  // True once the coordinate fields or the map set the point after the address
+  // was last typed; Check Weather then uses the coordinates, not the address.
+  const [coordsChosen, setCoordsChosen] = useState(false)
   const [briefing, setBriefing] = useState(null)
   const [loading, setLoading] = useState(false)
   const [showMetar, setShowMetar] = useState(false)
@@ -101,6 +104,7 @@ export default function WeatherPage() {
         const lon = pos.coords.longitude.toFixed(6)
         setCoords({ lat, lon })
         setAddressInput('Current Location')
+        setCoordsChosen(true)
         void fetchBriefing(lat, lon)
       },
       (err) => toast.error('Location access denied: ' + err.message),
@@ -110,6 +114,10 @@ export default function WeatherPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (coordsChosen && coords.lat && coords.lon) {
+      void fetchBriefing(coords.lat, coords.lon)
+      return
+    }
     // Try to parse the input as coordinates first.
     const parts = addressInput.trim().split(/[,\s]+/)
     if (parts.length >= 2) {
@@ -179,7 +187,7 @@ export default function WeatherPage() {
                 <input id="coordinates-or-address"
                   type="text"
                   value={addressInput}
-                  onChange={e => setAddressInput(e.target.value)}
+                  onChange={e => { setAddressInput(e.target.value); setCoordsChosen(false) }}
                   placeholder="Address, or 40.7128, -74.0060"
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 />
@@ -190,6 +198,7 @@ export default function WeatherPage() {
                 lon={coords.lon ? Number.parseFloat(coords.lon) : null}
                 onSelect={async (newLat, newLon) => {
                   setCoords({ lat: newLat.toFixed(6), lon: newLon.toFixed(6) })
+                  setCoordsChosen(true)
                   // Fill the address field from the clicked point (best effort).
                   try {
                     const r = await api.get(`/geocode/reverse?lat=${newLat}&lon=${newLon}`)
@@ -204,7 +213,7 @@ export default function WeatherPage() {
                   <label htmlFor="latitude" className="block text-xs font-medium text-muted-foreground mb-1">Latitude</label>
                   <input id="latitude"
                     type="number" step="any" value={coords.lat}
-                    onChange={e => setCoords({ ...coords, lat: e.target.value })}
+                    onChange={e => { setCoords({ ...coords, lat: e.target.value }); setAddressInput(''); setCoordsChosen(true) }}
                     placeholder="40.7128"
                     className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                   />
@@ -213,7 +222,7 @@ export default function WeatherPage() {
                   <label htmlFor="longitude" className="block text-xs font-medium text-muted-foreground mb-1">Longitude</label>
                   <input id="longitude"
                     type="number" step="any" value={coords.lon}
-                    onChange={e => setCoords({ ...coords, lon: e.target.value })}
+                    onChange={e => { setCoords({ ...coords, lon: e.target.value }); setAddressInput(''); setCoordsChosen(true) }}
                     placeholder="-74.0060"
                     className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                   />
@@ -254,6 +263,7 @@ export default function WeatherPage() {
                   onClick={() => {
                     setCoords({ lat: loc.lat.toString(), lon: loc.lon.toString() })
                     setAddressInput(loc.label || '')
+                    setCoordsChosen(true)
                     void fetchBriefing(loc.lat, loc.lon)
                   }}
                   className="w-full text-left px-3 py-2 bg-secondary/50 hover:bg-secondary rounded-lg text-sm text-foreground transition-colors flex items-center gap-2"
@@ -436,7 +446,7 @@ export default function WeatherPage() {
                   <MapPin className="w-5 h-5 text-primary shrink-0" />
                   <div>
                     <p className="text-sm font-medium text-foreground">
-                      Nearest METAR Station: {briefing.station.id} - {briefing.station.name}
+                      Nearest METAR Station: {briefing.station.id}{briefing.station.name ? ` - ${briefing.station.name}` : ''}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {briefing.station.distance_miles} miles away | {briefing.station.lat?.toFixed(4)}, {briefing.station.lon?.toFixed(4)}

@@ -60,4 +60,24 @@ describe('useViewTransition', () => {
     })
     expect(startViewTransition).toHaveBeenCalledTimes(2)
   })
+
+  // C-F23, D-16, E-15: a navigation during a running transition skips it, and
+  // its promises reject (AbortError, InvalidStateError). Nobody awaited them,
+  // so each rejection was logged as uncaught.
+  it('handles the rejections of a skipped transition', async () => {
+    const unhandled = []
+    const onUnhandled = (reason) => unhandled.push(reason)
+    globalThis.process.on('unhandledRejection', onUnhandled)
+    const skipped = () => Promise.reject(new DOMException('Transition was skipped', 'AbortError'))
+    document.startViewTransition = vi.fn(() => ({
+      ready: skipped(), finished: skipped(), updateCallbackDone: skipped(),
+    }))
+    try {
+      renderHook(() => useViewTransition(), { wrapper })
+      await new Promise(resolve => setTimeout(resolve, 10))
+    } finally {
+      globalThis.process.off('unhandledRejection', onUnhandled)
+    }
+    expect(unhandled).toEqual([])
+  })
 })

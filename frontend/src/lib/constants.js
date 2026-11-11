@@ -34,6 +34,42 @@ export const STATUS_COLORS = {
   _default: 'bg-zinc-500/15 text-zinc-400',
 }
 
+const STATUS_LABELS = {
+  active: 'Active', charging: 'Charging', online: 'Online', offline: 'Offline',
+  maintenance: 'Maintenance', retired: 'Retired', damaged: 'Damaged',
+}
+const toOptions = (values) => values.map(value => ({ value, label: STATUS_LABELS[value] }))
+const IN_SERVICE = ['active', 'maintenance']
+const OUT_OF_SERVICE = ['retired', 'damaged']
+
+/**
+ * The statuses each fleet type takes, as select options. Mirrors
+ * EQUIPMENT_STATUSES in backend/app/services/equipment_lifecycle.py; the Fleet
+ * modal and every detail-page editor offer these.
+ * @type {Record<string, {value: string, label: string}[]>}
+ */
+export const EQUIPMENT_STATUSES = {
+  vehicle: toOptions([...IN_SERVICE, ...OUT_OF_SERVICE]),
+  battery: toOptions(['active', 'charging', 'maintenance', ...OUT_OF_SERVICE]),
+  controller: toOptions([...IN_SERVICE, ...OUT_OF_SERVICE]),
+  dock: toOptions(['active', 'online', 'offline', 'maintenance', ...OUT_OF_SERVICE]),
+  sensor: toOptions([...IN_SERVICE, ...OUT_OF_SERVICE]),
+  attachment: toOptions([...IN_SERVICE, ...OUT_OF_SERVICE]),
+  other: toOptions([...IN_SERVICE, ...OUT_OF_SERVICE]),
+}
+
+/**
+ * A type's status options, with a stored status outside the list (an older
+ * value such as "inactive") kept first so the editor shows what is saved.
+ * @param {string} type - Key of EQUIPMENT_STATUSES.
+ * @param {string} [current] - The record's stored status.
+ */
+export function statusOptions(type, current) {
+  const options = EQUIPMENT_STATUSES[type]
+  if (!current || options.some(o => o.value === current)) return options
+  return [{ value: current, label: current }, ...options]
+}
+
 /** @type {Record<string, string>} Color map for certification lifecycle statuses. */
 export const CERT_STATUS_COLORS = {
   not_issued: 'bg-zinc-500/15 text-zinc-400',

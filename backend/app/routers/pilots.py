@@ -127,7 +127,11 @@ def get_pilot_needs_attention(pilot_id: int, db: DBSession, user: ViewUser, _cer
     ).join(
         CertificationType,
         PilotCertification.certification_type_id == CertificationType.id,
-    ).filter(PilotCertification.pilot_id == pilot_id).all()
+    ).filter(
+        PilotCertification.pilot_id == pilot_id,
+        # Archived (renewed) and never-issued records, as on the compliance dashboard.
+        PilotCertification.status.notin_(["not_issued", "renewed"]),
+    ).all()
     today = date.today()
     for expiration_date, name in certs:
         if expiration_date is None:
@@ -149,10 +153,23 @@ def get_pilot_needs_attention(pilot_id: int, db: DBSession, user: ViewUser, _cer
     return {"count": len(items), "items": items}
 
 
-@router.post("", response_model=PilotOut, responses=responses(401))
+def _check_badge_free(db, badge: str | None, pilot_id: int | None = None) -> None:
+    """Refuse a badge number another pilot already has (trimmed, any case)."""
+    if not badge or not badge.strip():
+        return
+    q = db.query(Pilot).filter(func.lower(func.trim(Pilot.badge_number)) == badge.strip().lower())
+    if pilot_id is not None:
+        q = q.filter(Pilot.id != pilot_id)
+    holder = q.first()
+    if holder:
+        raise HTTPException(status_code=400, detail=f"Badge number {badge.strip()} is already used by {holder.full_name}")
+
+
+@router.post("", response_model=PilotOut, responses=responses(400, 401))
 def create_pilot(data: PilotCreate, db: DBSession, admin: ManageUser):
     """Create a new pilot record. Needs the pilots.manage permission."""
     from app.services.audit import log_action
+    _check_badge_free(db, data.badge_number)
     pilot = Pilot(**data.model_dump())
     db.add(pilot)
     db.flush()
@@ -168,7 +185,7 @@ def create_pilot(data: PilotCreate, db: DBSession, admin: ManageUser):
 SUPERVISOR_ONLY_PILOT_FIELDS = ("status", "counts_toward_totals", "photo_url")
 
 
-@router.patch("/{pilot_id}", response_model=PilotOut, responses=responses(401, 403, 404))
+@router.patch("/{pilot_id}", response_model=PilotOut, responses=responses(400, 401, 403, 404))
 def update_pilot(pilot_id: int, data: PilotUpdate, db: DBSession, user: EditUser):
     """Update a pilot's profile.
 
@@ -191,6 +208,8 @@ def update_pilot(pilot_id: int, data: PilotUpdate, db: DBSession, user: EditUser
         f in update_data and update_data[f] != getattr(pilot, f) for f in SUPERVISOR_ONLY_PILOT_FIELDS
     ):
         raise HTTPException(status_code=403, detail="Status, unit totals and photo URL need the pilots.manage permission")
+    if "badge_number" in update_data:
+        _check_badge_free(db, update_data["badge_number"], pilot_id)
     changes = compute_changes(pilot, update_data, list(update_data.keys()))
     for key, value in update_data.items():
         setattr(pilot, key, value)
@@ -356,17 +375,19 @@ async def upload_pilot_photo(pilot_id: int, upload: AdminForm, db: DBSession):
     if ext not in ALLOWED_IMAGE_EXTENSIONS:
         raise HTTPException(400, FILE_TYPE_NOT_ALLOWED.format(ext))
     upload_dir = Path(settings.UPLOAD_DIR) / "photos" / "pilots" / str(pilot_id)
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    for old in upload_dir.glob("profile.*"):
-        old.unlink()
-    filepath = upload_dir / f"profile{ext}"
     content = await file.read()
     if len(content) > settings.MAX_UPLOAD_SIZE:
         raise HTTPException(413, FILE_TOO_LARGE.format(settings.MAX_UPLOAD_SIZE // (1024 * 1024)))
     from app.services.file_validation import is_image
     if not is_image(content[:512]):
         raise HTTPException(400, "File content is not a recognized image")
+    # Only a valid upload replaces the photo: write it, then drop the old one.
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    filepath = upload_dir / f"profile{ext}"
     await anyio.Path(filepath).write_bytes(content)
+    for old in upload_dir.glob("profile.*"):
+        if old.name != filepath.name:
+            old.unlink()
     pilot.photo_url = f"/api/pilots/{pilot_id}/photo/view"
     db.commit()
     return {"ok": True, "photo_url": pilot.photo_url}
@@ -384,8 +405,10 @@ def view_pilot_photo(pilot_id: int, db: DBSession, _user: ViewUser):
     upload_root = Path(settings.UPLOAD_DIR).resolve()
     if not str(resolved_dir).startswith(str(upload_root)):
         raise HTTPException(403, ACCESS_DENIED)
-    for ext in [".jpg", ".jpeg", ".png", ".webp"]:
+    # Every type the upload accepts, served as the type its extension names.
+    from app.services.file_validation import mime_for_filename
+    for ext in sorted(ALLOWED_IMAGE_EXTENSIONS):
         p = photo_dir / f"profile{ext}"
         if p.exists():
-            return FileResponse(p)
+            return FileResponse(p, media_type=mime_for_filename(p.name))
     raise HTTPException(404, "No photo found")

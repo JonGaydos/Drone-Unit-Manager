@@ -61,6 +61,21 @@ const tooltipStyle = {
   itemStyle: { color: 'var(--fg)' },
 }
 
+/** A category-axis tick drawn on one line: Recharts wraps a long label to the
+ *  axis width, and wrapped labels overlapped. Longer labels end in an ellipsis
+ *  with the full text as a tooltip. */
+function oneLineTick(maxChars) {
+  return function OneLineTick({ x, y, payload }) {
+    const label = String(payload?.value ?? '')
+    const shown = label.length > maxChars ? `${label.slice(0, maxChars - 1)}…` : label
+    return (
+      <text x={x} y={y} dy={4} textAnchor="end" fill="var(--muted-fg)" fontSize={11}>
+        <title>{label}</title>{shown}
+      </text>
+    )
+  }
+}
+
 function ChartCard({ title, children }) {
   return (
     <div className="bg-card border border-border rounded-xl p-5">
@@ -267,10 +282,11 @@ export default function AnalyticsPage() {
   const filteredVehicleHours = useMemo(() => {
     if (!hasActiveFilter) return null
     const groups = {}
+    // Keyed by vehicle id: the chart's label is built differently from a
+    // flight's vehicle_name, so names never matched.
     filteredFlights.forEach(f => {
-      const name = f.vehicle_name || f.drone_name || 'Unknown'
       const hrs = (f.duration_seconds || f.duration || 0) / 3600
-      groups[name] = (groups[name] || 0) + hrs
+      groups[f.vehicle_id] = (groups[f.vehicle_id] || 0) + hrs
     })
     return groups
   }, [filteredFlights, hasActiveFilter])
@@ -323,7 +339,7 @@ export default function AnalyticsPage() {
     return vehicleHours.map(d => ({
       ...d,
       total: d.hours,
-      filtered: filteredVehicleHours ? (filteredVehicleHours[d.vehicle_name] || 0) : d.hours,
+      filtered: filteredVehicleHours ? (filteredVehicleHours[d.vehicle_id] || 0) : d.hours,
     }))
   }, [vehicleHours, filteredVehicleHours])
 
@@ -407,7 +423,7 @@ export default function AnalyticsPage() {
             <BarChart data={purposeData} layout="vertical" margin={{ left: 80 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
               <XAxis type="number" stroke="var(--muted-fg)" fontSize={12} />
-              <YAxis type="category" dataKey="purpose" stroke="var(--muted-fg)" fontSize={11} width={80} interval={0} />
+              <YAxis type="category" dataKey="purpose" stroke="var(--muted-fg)" fontSize={11} width={80} interval={0} tick={oneLineTick(24)} />
               <Tooltip
                 {...tooltipStyle}
                 formatter={(val, name) => [val, name === 'total' ? 'Total' : 'Filtered']}
@@ -594,7 +610,7 @@ export default function AnalyticsPage() {
             <BarChart data={vehicleData} layout="vertical" margin={{ left: 100 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
               <XAxis type="number" stroke="var(--muted-fg)" fontSize={12} />
-              <YAxis type="category" dataKey="vehicle_name" stroke="var(--muted-fg)" fontSize={11} width={100} />
+              <YAxis type="category" dataKey="vehicle_name" stroke="var(--muted-fg)" fontSize={11} width={100} interval={0} tick={oneLineTick(30)} />
               <Tooltip
                 {...tooltipStyle}
                 formatter={(val, name) => [

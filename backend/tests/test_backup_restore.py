@@ -156,6 +156,71 @@ def test_backup_import_round_trip(client, db, telemetry_db, tmp_path, monkeypatc
     assert token_file.read_text().strip() == token   # unchanged, not a new token
 
 
+def test_restore_round_trips_logins_api_tokens_and_secrets(
+        client, db, telemetry_db, admin_user, tmp_path, monkeypatch):
+    """A backup restores everything: password hashes, API tokens and secret
+    settings come back, so the restored install has working logins and tokens
+    and needs no install-token reclaim."""
+    from app.models.api_token import ApiToken
+    from app.models.user import User
+    from app.services.api_tokens import generate_token, hash_token
+    from tests.conftest import ADMIN_PASSWORD
+
+    (tmp_path / "uploads").mkdir()
+    monkeypatch.setattr(app_settings, "UPLOAD_DIR", tmp_path / "uploads")
+    monkeypatch.setattr(app_settings, "DATA_DIR", tmp_path)
+
+    raw = generate_token()
+    expires = datetime(2030, 1, 1, 12, 0)
+    db.add(ApiToken(name="integration", token_hash=hash_token(raw), token_prefix=raw[:12],
+                    user_id=admin_user.id, read_only=True, scopes='["flights"]',
+                    expires_at=expires, last_used_at=datetime(2026, 1, 2, 3, 4)))
+    db.add(ApiToken(name="old", token_hash=hash_token("dum_revoked"), token_prefix="dum_revoked",
+                    user_id=admin_user.id, revoked_at=datetime(2026, 2, 1)))
+    db.add_all([Setting(key="smtp_password", value="smtp-secret"),
+                Setting(key="skydio_api_token", value="skydio-secret"),
+                Setting(key="skydio_token_id", value="skydio-id")])
+    db.commit()
+    admin_hash = admin_user.password_hash
+
+    archive = build_backup_archive(db, include_telemetry=False)[0].read()
+    _clear_all(db, telemetry_db)
+
+    token = "logins-install-token"
+    with open(_install_token_path(), "w") as f:
+        f.write(token)
+    resp = client.post(IMPORT_URL, headers={"X-Install-Token": token},
+                       files={"file": ("backup.zip", archive, "application/zip")})
+    assert resp.status_code == 200, resp.text
+
+    db.expire_all()
+    assert db.query(User).filter_by(username="admin").one().password_hash == admin_hash
+    restored = {t.name: t for t in db.query(ApiToken).all()}
+    assert restored["integration"].token_hash == hash_token(raw)
+    assert restored["integration"].scopes == '["flights"]'
+    assert restored["integration"].read_only is True
+    assert restored["integration"].expires_at.replace(tzinfo=None) == expires
+    assert restored["integration"].last_used_at is not None
+    assert restored["integration"].user_id == admin_user.id
+    assert restored["old"].revoked_at is not None
+    secrets_ = {s.key: s.value for s in db.query(Setting).all()}
+    assert secrets_["smtp_password"] == "smtp-secret"
+    assert secrets_["skydio_api_token"] == "skydio-secret"
+    assert secrets_["skydio_token_id"] == "skydio-id"
+
+    # A usable login exists again, so no recovery and no install token.
+    assert client.get("/api/auth/setup-required").json() == {"setup_required": False, "recovery": False}
+    assert not (tmp_path / "install_token.txt").exists()
+
+    login = client.post("/api/auth/login", json={"username": "admin", "password": ADMIN_PASSWORD})
+    assert login.status_code == 200, login.text
+    assert client.get("/api/auth/me", headers={"Authorization": f"Bearer {login.json()['token']}"}).status_code == 200
+
+    # The restored API token authenticates; the revoked one still does not.
+    assert client.get("/api/flights", headers={"Authorization": f"Bearer {raw}"}).status_code == 200
+    assert client.get("/api/flights", headers={"Authorization": "Bearer dum_revoked"}).status_code == 401
+
+
 def test_backup_import_rejects_a_non_zip(client, db, tmp_path, monkeypatch):
     monkeypatch.setattr(app_settings, "DATA_DIR", tmp_path)
     # No users -> install-token path; write a matching token.
@@ -206,7 +271,7 @@ def test_backup_import_replaces_existing_rows(client, db, admin_user, admin_head
     db.add(Setting(key="added_later", value="x"))
     db.commit()
 
-    resp = client.post(IMPORT_URL, headers=admin_headers,
+    resp = client.post(IMPORT_URL, headers=admin_headers, data={"confirm_restore": "REPLACE ALL DATA"},
                        files={"file": ("b.zip", archive, "application/zip")})
     assert resp.status_code == 200, resp.text
 
@@ -253,3 +318,77 @@ def test_backup_import_surfaces_telemetry_failure(client, db, telemetry_db, tmp_
                        files={"file": ("b.zip", buf.getvalue(), "application/zip")})
     assert resp.status_code == 500
     assert "telemetry" in resp.text.lower()
+
+
+# --- uploads folder matches the archive ----------------------------------------
+
+def _uploads_zip(entries: dict) -> zipfile.ZipFile:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        for name, data in entries.items():
+            zf.writestr(name, data)
+    buf.seek(0)
+    return zipfile.ZipFile(buf)
+
+
+def test_restore_uploads_removes_files_not_in_the_backup(tmp_path, monkeypatch):
+    """A restore onto an existing data folder must not keep uploads added after
+    the backup: the folder ends up matching the archive. Nothing outside the
+    upload folder is touched."""
+    from app.routers.backup import _restore_uploads
+    monkeypatch.setattr(app_settings, "DATA_DIR", tmp_path)
+    upload_dir = tmp_path / "uploads"
+    (upload_dir / "documents").mkdir(parents=True)
+    (upload_dir / "photos").mkdir()
+    (upload_dir / "documents" / "kept.txt").write_text("old copy")
+    (upload_dir / "documents" / "added-later.txt").write_text("orphan")
+    (upload_dir / "photos" / "added-later.jpg").write_bytes(b"jpg")
+    (tmp_path / "outside.txt").write_text("not an upload")
+
+    zf = _uploads_zip({"manifest.json": "{}", "uploads/documents/kept.txt": "backup copy",
+                       "uploads/org/logo.png": "png"})
+    assert _restore_uploads(zf, str(upload_dir)) == 2
+
+    assert (upload_dir / "documents" / "kept.txt").read_text() == "backup copy"
+    assert (upload_dir / "org" / "logo.png").read_text() == "png"
+    assert not (upload_dir / "documents" / "added-later.txt").exists()
+    assert not (upload_dir / "photos" / "added-later.jpg").exists()
+    assert (tmp_path / "outside.txt").read_text() == "not an upload"
+
+
+def test_restore_uploads_keeps_a_file_whose_backup_entry_was_refused(tmp_path, monkeypatch):
+    """An entry refused for size is still in the backup, so the copy on disk stays."""
+    from app.routers import backup as backup_router
+    monkeypatch.setattr(app_settings, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(backup_router, "MAX_UPLOAD_ENTRY_BYTES", 3)
+    upload_dir = tmp_path / "uploads"
+    upload_dir.mkdir()
+    (upload_dir / "big.bin").write_text("on disk")
+
+    zf = _uploads_zip({"uploads/big.bin": "too large"})
+    assert backup_router._restore_uploads(zf, str(upload_dir)) == 0
+    assert (upload_dir / "big.bin").read_text() == "on disk"
+
+
+def test_restore_uploads_never_cleans_a_folder_that_holds_the_data_dir(tmp_path, monkeypatch):
+    """If the upload folder were configured as the data folder, a cleanup would
+    delete the databases. It is skipped instead."""
+    from app.routers.backup import _restore_uploads
+    monkeypatch.setattr(app_settings, "DATA_DIR", tmp_path)
+    (tmp_path / "drone_unit_manager.db").write_bytes(b"db")
+
+    zf = _uploads_zip({"uploads/a.txt": "a"})
+    assert _restore_uploads(zf, str(tmp_path)) == 1
+    assert (tmp_path / "drone_unit_manager.db").exists()
+
+
+def test_restore_uploads_refuses_entries_that_escape_the_folder(tmp_path, monkeypatch):
+    from app.routers.backup import _restore_uploads
+    monkeypatch.setattr(app_settings, "DATA_DIR", tmp_path)
+    upload_dir = tmp_path / "uploads"
+    upload_dir.mkdir()
+
+    zf = _uploads_zip({"uploads/../escaped.txt": "x", "uploads/ok.txt": "ok"})
+    assert _restore_uploads(zf, str(upload_dir)) == 1
+    assert not (tmp_path / "escaped.txt").exists()
+    assert (upload_dir / "ok.txt").read_text() == "ok"

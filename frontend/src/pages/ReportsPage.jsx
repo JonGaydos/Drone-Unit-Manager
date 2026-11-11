@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { api } from '@/api/client'
 import { addDays, normalizeDateValue, todayLocal } from '@/lib/utils'
@@ -11,19 +12,20 @@ import { FileBarChart, Upload, Loader2, Download, FileText, FileDown } from 'luc
  * worse than not offering it: the report looks filtered and is not.
  */
 const REPORT_FILTERS = {
-  flight_summary: { pilots: true, vehicles: true },
-  pilot_hours: { pilots: true, vehicles: true },
-  equipment_utilization: { pilots: true, vehicles: true },
-  pilot_certifications: { pilots: true, vehicles: false },
-  battery_status: { pilots: false, vehicles: false },
-  maintenance_history: { pilots: false, vehicles: false },
-  pilot_activity_summary: { pilots: true, vehicles: true },
-  annual_unit_report: { pilots: false, vehicles: false },
-  per_pilot_annual_review: { pilots: true, vehicles: false },
+  flight_summary: { pilots: true, vehicles: true, dates: true },
+  pilot_hours: { pilots: true, vehicles: true, dates: true },
+  equipment_utilization: { pilots: true, vehicles: true, dates: true },
+  // Current-state reports (DATELESS_REPORTS in the backend): no date range.
+  pilot_certifications: { pilots: true, vehicles: false, dates: false },
+  battery_status: { pilots: false, vehicles: false, dates: false },
+  maintenance_history: { pilots: false, vehicles: false, dates: true },
+  pilot_activity_summary: { pilots: true, vehicles: true, dates: true },
+  annual_unit_report: { pilots: false, vehicles: false, dates: true },
+  per_pilot_annual_review: { pilots: true, vehicles: false, dates: true },
 }
 
-/** Unknown types keep both pickers rather than silently hiding controls. */
-const filtersFor = (type) => REPORT_FILTERS[type] || { pilots: true, vehicles: true }
+/** Unknown types keep every control rather than silently hiding one. */
+const filtersFor = (type) => REPORT_FILTERS[type] || { pilots: true, vehicles: true, dates: true }
 
 const FLIGHTS = 'flights.view'
 const LOGS = 'logs.view'
@@ -53,6 +55,37 @@ const CSV_EXPORTS = [
   { type: 'flight-plans', label: 'Flight Plans', needs: 'flight_plans.view' },
 ]
 
+/** A row's displayed cells: underscore keys (the API's "_links") are not columns. */
+const rowCells = (row) => Object.entries(row).filter(([key]) => !key.startsWith('_'))
+
+/** Where a preview cell links, from the ids the API sends in row._links. */
+const CELL_LINKS = { pilot: '/pilots', vehicle: '/fleet/vehicles' }
+
+function cellContent(row, colKey, val) {
+  const text = val == null ? '—' : String(val)
+  const id = row._links?.[colKey]
+  return id != null && CELL_LINKS[colKey]
+    ? <Link to={`${CELL_LINKS[colKey]}/${id}`} className="text-primary hover:underline">{text}</Link>
+    : text
+}
+
+/** The preview's header line: the period the report states (annual reports
+ *  default to the current year), else the dates and filters it was generated
+ *  with, never the form as it is now. */
+function previewHeader(result, request) {
+  const req = request || {}
+  let period
+  if (result.summary?.period) period = String(result.summary.period)
+  else if (!filtersFor(req.report_type).dates) period = 'Current status'
+  else if (req.date_from && req.date_to) period = `${req.date_from} to ${req.date_to}`
+  else if (req.date_from) period = `From ${req.date_from}`
+  else if (req.date_to) period = `Through ${req.date_to}`
+  else period = 'All dates'
+  const pilots = req.pilot_ids?.length ? ` | ${req.pilot_ids.length} pilots` : ''
+  const vehicles = req.vehicle_ids?.length ? ` | ${req.vehicle_ids.length} vehicles` : ''
+  return `${period}${pilots}${vehicles}`
+}
+
 export default function ReportsPage() {
   const { can } = useAuth()
   const reportTypes = REPORT_TYPES.filter(type => type.needs.every(key => can(key)))
@@ -63,6 +96,9 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [reportResult, setReportResult] = useState(null)
+  // The request behind the preview, so its header keeps describing it after
+  // the form changes.
+  const [reportRequest, setReportRequest] = useState(null)
   const [error, setError] = useState(null)
 
 
@@ -150,6 +186,8 @@ export default function ReportsPage() {
   // filter the generator ignores would also make the preview header claim a
   // narrowing that never happened.
   const filterPayload = () => ({
+    date_from: activeFilters.dates && dateFrom ? dateFrom : undefined,
+    date_to: activeFilters.dates && dateTo ? dateTo : undefined,
     pilot_ids: activeFilters.pilots && selectedPilots.length > 0 ? selectedPilots : undefined,
     vehicle_ids: activeFilters.vehicles && selectedVehicles.length > 0 ? selectedVehicles : undefined,
     include_non_unit: includeNonUnit || undefined,
@@ -185,8 +223,6 @@ export default function ReportsPage() {
     try {
       const config = {
         report_type: reportType,
-        date_from: dateFrom || undefined,
-        date_to: dateTo || undefined,
         ...filterPayload(),
       }
 
@@ -223,6 +259,7 @@ export default function ReportsPage() {
       }
 
       const result = await api.post('/reports/generate', config, { timeout: 120000 })
+      setReportRequest(config)
       setReportResult(result)
     } catch (err) {
       setError(err.message)
@@ -237,8 +274,6 @@ export default function ReportsPage() {
     try {
       const config = {
         report_type: reportType,
-        date_from: dateFrom || undefined,
-        date_to: dateTo || undefined,
         ...filterPayload(),
       }
       await api.downloadPost('/reports/generate/pdf', config, { timeout: 120000 })
@@ -311,8 +346,9 @@ export default function ReportsPage() {
                     </select>
                   </div>
 
-                  {/* Date Range */}
+                  {/* Date Range — hidden for current-state reports it would not filter */}
                   <div>
+                    {activeFilters.dates && (<>
                     <label htmlFor="date-range" className="block text-sm font-medium text-foreground mb-1">Date Range</label>
                     <div className="flex flex-wrap gap-1 mb-2">
                       <button type="button" onClick={() => applyDatePreset('last30')} className="px-2 py-0.5 text-xs bg-secondary hover:bg-accent border border-border rounded-full text-foreground">Last 30d</button>
@@ -337,6 +373,7 @@ export default function ReportsPage() {
                         className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                       />
                     </div>
+                    </>)}
 
                     {/* Vendor and guest operators are excluded by default: their
                         sorties are real, but they are not the unit's own activity. */}
@@ -542,14 +579,7 @@ export default function ReportsPage() {
                       {reportResult.title || REPORT_TYPES.find(r => r.value === reportType)?.label || 'Report'}
                     </h3>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {(() => {
-                        if (dateFrom && dateTo) return `${dateFrom} to ${dateTo}`
-                        if (dateFrom) return `From ${dateFrom}`
-                        if (dateTo) return `Through ${dateTo}`
-                        return 'All dates'
-                      })()}
-                      {selectedPilots.length > 0 ? ` | ${selectedPilots.length} pilots` : ''}
-                      {selectedVehicles.length > 0 ? ` | ${selectedVehicles.length} vehicles` : ''}
+                      {previewHeader(reportResult, reportRequest)}
                     </p>
                   </div>
 
@@ -596,9 +626,9 @@ export default function ReportsPage() {
                                 </thead>
                                 <tbody>
                                   {sec.rows.map((row, ri) => (
-                                    <tr key={`r-${ri}-${Object.values(row).join('|')}`} className="border-b border-border/50 hover:bg-accent/30">
-                                      {Object.entries(row).map(([colKey, val]) => (
-                                        <td key={colKey} className="px-3 py-1.5 text-foreground text-xs">{val == null ? '—' : String(val)}</td>
+                                    <tr key={`r-${ri}-${rowCells(row).map(([, v]) => v).join('|')}`} className="border-b border-border/50 hover:bg-accent/30">
+                                      {rowCells(row).map(([colKey, val]) => (
+                                        <td key={colKey} className="px-3 py-1.5 text-foreground text-xs">{cellContent(row, colKey, val)}</td>
                                       ))}
                                     </tr>
                                   ))}
@@ -620,7 +650,7 @@ export default function ReportsPage() {
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="border-b border-border bg-muted/30">
-                            {(reportResult.columns || Object.keys(reportResult.rows[0])).map((col) => (
+                            {(reportResult.columns || rowCells(reportResult.rows[0]).map(([key]) => key)).map((col) => (
                               <th key={col} className="text-left px-4 py-2 font-medium text-muted-foreground text-xs capitalize">
                                 {typeof col === 'string' ? col.replaceAll('_', ' ') : col}
                               </th>
@@ -629,9 +659,9 @@ export default function ReportsPage() {
                         </thead>
                         <tbody>
                           {reportResult.rows.map((row) => (
-                            <tr key={Object.values(row).join('|')} className="border-b border-border/50 hover:bg-accent/30">
-                              {Object.entries(row).map(([colKey, val]) => (
-                                <td key={colKey} className="px-4 py-2 text-foreground text-xs">{val == null ? '—' : String(val)}</td>
+                            <tr key={rowCells(row).map(([, v]) => v).join('|')} className="border-b border-border/50 hover:bg-accent/30">
+                              {rowCells(row).map(([colKey, val]) => (
+                                <td key={colKey} className="px-4 py-2 text-foreground text-xs">{cellContent(row, colKey, val)}</td>
                               ))}
                             </tr>
                           ))}

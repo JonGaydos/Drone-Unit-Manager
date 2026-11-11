@@ -8,9 +8,28 @@ import {
   ClipboardCheck, Loader2, ChevronRight, RefreshCw, Download, Send, Users, Mail, Stamp,
 } from 'lucide-react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
-import { useConfirm } from '@/hooks/useConfirm'
+import { Modal } from '@/components/ui/Modal'
 import { daysUntil } from '@/lib/utils'
+
+// How often a running reminder job is checked on.
+const REMINDER_POLL_MS = 1000
+
+/**
+ * Start the currency reminders as a server job and wait for it, passing each
+ * progress report ({done, total}) to onProgress. Sending one email after
+ * another took longer than a request may on a large unit.
+ * @returns {Promise<Object>} The job's counts.
+ */
+async function runReminderJob(body, onProgress) {
+  const { job_id: jobId } = await api.post('/currency/send-reminders/start', body)
+  for (;;) {
+    const job = await api.get(`/currency/jobs/${jobId}`)
+    if (job.status === 'done') return job.result
+    if (job.status === 'failed') throw new Error(job.error || 'Sending reminders failed')
+    if (job.progress) onProgress(job.progress)
+    await new Promise(resolve => setTimeout(resolve, REMINDER_POLL_MS))
+  }
+}
 
 function getScoreTheme(score) {
   if (score > 80) return { color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30' }
@@ -81,7 +100,7 @@ const COUNT_ATTENTION_ALERTS = [
 function expiringCertItem(c) {
   return {
     type: 'Expiring Certification',
-    detail: `Pilot #${c.pilot_id} - ${c.days_remaining} days remaining`,
+    detail: `${c.pilot_name || `Pilot #${c.pilot_id}`} - ${c.cert_type_name || 'Certification'} - ${c.days_remaining} days remaining`,
     severity: c.days_remaining <= 30 ? 'high' : 'medium',
     link: '/certifications',
   }
@@ -147,7 +166,7 @@ function buildAttentionItems(data) {
   return items
 }
 
-function CurrencyStatusSection({ data, onSendReminders, sending, canSendReminders }) {
+function CurrencyStatusSection({ data, onSendReminders, sending, progress, canSendReminders }) {
   const [filter, setFilter] = useState('lapsed-and-soon')  // 'all' | 'lapsed' | 'lapsed-and-soon'
   const [expanded, setExpanded] = useState(false)
   const navigate = useNavigate()
@@ -226,7 +245,7 @@ function CurrencyStatusSection({ data, onSendReminders, sending, canSendReminder
               title={data.pilots_lapsed === 0 ? 'No lapsed pilots to remind' : 'Email a reminder to every lapsed pilot with an email on file'}
             >
               {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-              Send Reminders
+              {sending && progress ? `Sending ${progress.done} of ${progress.total}` : 'Send Reminders'}
             </button>
           )}
         </div>
@@ -319,9 +338,11 @@ export default function CompliancePage() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
+  const [reminderProgress, setReminderProgress] = useState(null)
   const toast = useToast()
   const navigate = useNavigate()
-  const [confirmProps, requestConfirm] = useConfirm()
+  // The reminder confirm dialog is open while this holds its intro message.
+  const [reminderIntro, setReminderIntro] = useState(null)
 
   const load = async () => {
     setLoading(true)
@@ -337,27 +358,28 @@ export default function CompliancePage() {
 
   useEffect(() => { void load() }, [])
 
-  const handleSendReminders = async () => {
+  const handleSendReminders = () => {
     if (!data || data.pilots_lapsed === 0) return
-    requestConfirm({
-      title: 'Send currency reminders',
-      message: `Send currency reminder emails to ${data.pilots_lapsed} lapsed pilot${data.pilots_lapsed === 1 ? '' : 's'}? Pilots without an email on file will be skipped.`,
-      confirmLabel: 'Send',
-      confirmVariant: 'primary',
-      onConfirm: async () => {
-        setSending(true)
-        try {
-          const res = await api.post('/currency/send-reminders', {}, { timeout: 120000 })
-          const bits = [`${res.sent} sent`]
-          if (res.skipped_no_email) bits.push(`${res.skipped_no_email} skipped (no email)`)
-          if (res.skipped_current) bits.push(`${res.skipped_current} already current`)
-          if (res.failed) bits.push(`${res.failed} failed`)
-          toast.success(`Reminders: ${bits.join(', ')}`)
-        } catch (err) {
-          toast.error(err.message)
-        } finally { setSending(false) }
-      },
-    })
+    setReminderIntro('')
+  }
+
+  const sendReminders = async () => {
+    const intro = reminderIntro.trim()
+    setReminderIntro(null)
+    setSending(true)
+    try {
+      const res = await runReminderJob(intro ? { custom_message: intro } : {}, setReminderProgress)
+      const bits = [`${res.sent} sent`]
+      if (res.skipped_no_email) bits.push(`${res.skipped_no_email} skipped (no email)`)
+      if (res.skipped_current) bits.push(`${res.skipped_current} already current`)
+      if (res.failed) bits.push(`${res.failed} failed`)
+      toast.success(`Reminders: ${bits.join(', ')}`)
+    } catch (err) {
+      toast.error(err.message)
+    } finally {
+      setSending(false)
+      setReminderProgress(null)
+    }
   }
 
   if (loading) {
@@ -538,6 +560,7 @@ export default function CompliancePage() {
         data={data}
         sending={sending}
         onSendReminders={handleSendReminders}
+        progress={reminderProgress}
         canSendReminders={can('certifications.manage')}
       />
 
@@ -566,8 +589,8 @@ export default function CompliancePage() {
                 </span>
                 <span className="flex-1 text-sm text-foreground">
                   {item.type}
-                  {item.count ? <span className="text-muted-foreground ml-1">({item.count})</span> : null}
-                  {item.detail ? <span className="text-muted-foreground ml-2 text-xs">{item.detail}</span> : null}
+                  {item.count ? <>{' '}<span className="text-muted-foreground">({item.count})</span></> : null}
+                  {item.detail ? <>{' '}<span className="text-muted-foreground ml-1 text-xs">{item.detail}</span></> : null}
                 </span>
                 <ChevronRight className="w-4 h-4 text-muted-foreground" />
               </button>
@@ -577,17 +600,38 @@ export default function CompliancePage() {
       </div>
 
       {/* Generate Report Button */}
-      <div className="flex justify-end">
-        <button
-          onClick={() => navigate('/reports')}
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium"
-        >
-          <FileText className="w-4 h-4" />
-          Generate Compliance Report
-        </button>
-      </div>
+      {can('reports.generate') && (
+        <div className="flex justify-end">
+          <button
+            onClick={() => navigate('/reports')}
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-sm font-medium"
+          >
+            <FileText className="w-4 h-4" />
+            Generate Compliance Report
+          </button>
+        </div>
+      )}
 
-      <ConfirmDialog {...confirmProps} />
+      <Modal open={reminderIntro !== null} onClose={() => setReminderIntro(null)} title="Send currency reminders">
+        <p className="text-sm text-muted-foreground mb-4">
+          {`Send currency reminder emails to ${data.pilots_lapsed} lapsed pilot${data.pilots_lapsed === 1 ? '' : 's'}? Pilots without an email on file will be skipped.`}
+        </p>
+        <label htmlFor="reminder-intro" className="block text-sm font-medium text-foreground mb-1">Message to pilots (optional)</label>
+        <textarea id="reminder-intro" rows={3} maxLength={2000} value={reminderIntro ?? ''}
+          onChange={e => setReminderIntro(e.target.value)}
+          placeholder="Shown at the top of each reminder"
+          className="w-full mb-6 px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+        <div className="flex gap-2 justify-end">
+          <button onClick={() => setReminderIntro(null)}
+            className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90">
+            Cancel
+          </button>
+          <button onClick={sendReminders}
+            className="px-4 py-2 rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:opacity-90">
+            Send
+          </button>
+        </div>
+      </Modal>
     </div>
   )
 }

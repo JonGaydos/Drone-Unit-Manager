@@ -4,7 +4,7 @@ import { api, getSection } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { formatDuration } from '@/lib/utils'
-import { STATUS_COLORS } from '@/lib/constants'
+import { STATUS_COLORS, statusOptions } from '@/lib/constants'
 import { ArrowLeft, Paperclip, Clock, Edit, Users } from 'lucide-react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 import DocumentUpload from '@/components/DocumentUpload'
@@ -123,10 +123,7 @@ export default function AttachmentDetailPage() {
                     <label htmlFor="edit-status" className="block text-xs font-medium text-muted-foreground mb-1">Status</label>
                     <select id="edit-status" value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})}
                       className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm">
-                      <option value="active">Active</option>
-                      <option value="inactive">Inactive</option>
-                      <option value="maintenance">Maintenance</option>
-                      <option value="retired">Retired</option>
+                      {statusOptions('attachment', editForm.status).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                   </div>
                 </div>
@@ -213,7 +210,7 @@ export default function AttachmentDetailPage() {
                   </td>
                   <td className="px-4 py-2 text-foreground hidden md:table-cell">{f.purpose || '--'}</td>
                   <td className="px-4 py-2 text-foreground">{formatDuration(f.duration_seconds)}</td>
-                  <td className="px-4 py-2 text-foreground hidden lg:table-cell">{f.position || '--'}</td>
+                  <td className="px-4 py-2 text-foreground hidden lg:table-cell">{f.positions?.length ? f.positions.join(', ') : '--'}</td>
                 </tr>
               ))}
               {flights.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">No flights recorded for this attachment</td></tr>}

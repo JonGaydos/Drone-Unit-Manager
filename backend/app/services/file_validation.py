@@ -87,6 +87,24 @@ def sniff_type(head: bytes) -> str | None:
     return None
 
 
+# The signature a file must carry when its extension names a type shown inline
+# (PDFs and images). Other types are not sniffed.
+_SIGNATURE_BY_EXT = {
+    ".jpg": "jpeg", ".jpeg": "jpeg", ".png": "png", ".gif": "gif", ".webp": "webp",
+    ".bmp": "bmp", ".tiff": "tiff", ".tif": "tiff",
+}
+
+
+def matches_extension(head: bytes, ext: str) -> bool:
+    """False when ``ext`` names a PDF or image type the leading bytes are not.
+    A PDF may start with a little junk before its header, as readers allow."""
+    ext = ext.lower()
+    if ext == ".pdf":
+        return b"%PDF-" in head[:1024]
+    expected = _SIGNATURE_BY_EXT.get(ext)
+    return expected is None or sniff_type(head) == expected
+
+
 def is_image(head: bytes) -> bool:
     """True if the leading bytes are a recognized raster image signature."""
     return sniff_type(head) in IMAGE_TYPES

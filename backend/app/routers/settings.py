@@ -4,6 +4,8 @@ Supports key-value settings with an allowlist, secret masking for API tokens,
 organization logo upload, and bulk updates.
 """
 
+import json
+import math
 from pathlib import Path
 
 import anyio
@@ -35,6 +37,7 @@ ALLOWED_SETTING_KEYS = {
     "org_default_lat", "org_default_lon", "org_location_name",
     "backup_enabled", "backup_retention", "backup_hour",
     "idle_lock_minutes",
+    "sidebar_show_groups",
 }
 
 # Minutes of no input before a browser locks. One value for every role.
@@ -92,6 +95,59 @@ def _check_idle_lock(key: str, value: str) -> None:
         raise HTTPException(422, "Idle lock must be 30, 60, 120, 240, 360, 480 or 720 minutes")
 
 
+# Settings stored as the text "true" or "false".
+BOOLEAN_KEYS = {"sidebar_show_groups"}
+
+
+# Each GO limit against its CAUTION limit: (go key, caution key, label, go must be
+# at most caution). Wind is worse when higher, the others when lower.
+_THRESHOLD_PAIRS = (
+    ("wind_sustained_go", "wind_sustained_caution", "Wind sustained", True),
+    ("wind_gusts_go", "wind_gusts_caution", "Wind gusts", True),
+    ("visibility_go", "visibility_caution", "Visibility", False),
+    ("ceiling_go", "ceiling_caution", "Ceiling", False),
+    ("temp_low_go", "temp_low_caution", "Temp low", False),
+)
+# Temperatures may be below zero; every other threshold may not.
+_SIGNED_THRESHOLDS = {"temp_low_go", "temp_low_caution", "temp_high_go"}
+
+
+def _check_weather_thresholds(value: str) -> None:
+    """Refuse weather thresholds that are not a JSON object of known numeric
+    limits, a negative distance, speed or amount, or a GO limit beyond its
+    CAUTION limit (checked over the defaults for keys left out)."""
+    from app.routers.weather import DEFAULT_THRESHOLDS
+    try:
+        custom = json.loads(value)
+    except (TypeError, ValueError):
+        raise HTTPException(422, "Weather thresholds must be a JSON object") from None
+    if not isinstance(custom, dict):
+        raise HTTPException(422, "Weather thresholds must be a JSON object")
+    for name, limit in custom.items():
+        if name not in DEFAULT_THRESHOLDS:
+            raise HTTPException(422, f"Unknown weather threshold '{name}'")
+        if isinstance(limit, bool) or not isinstance(limit, (int, float)) or not math.isfinite(limit):
+            raise HTTPException(422, f"Weather threshold '{name}' must be a number")
+        if limit < 0 and name not in _SIGNED_THRESHOLDS:
+            raise HTTPException(422, f"Weather threshold '{name}' must not be negative")
+    t = {**DEFAULT_THRESHOLDS, **custom}
+    for go, caution, label, go_is_lower in _THRESHOLD_PAIRS:
+        if (t[go] > t[caution]) if go_is_lower else (t[go] < t[caution]):
+            relation = "above" if go_is_lower else "below"
+            raise HTTPException(422, f"{label} GO ({t[go]}) must not be {relation} CAUTION ({t[caution]})")
+
+
+def _check_value(key: str, value: str) -> None:
+    """Refuse a value the key cannot hold (422)."""
+    _check_idle_lock(key, value)
+    if key in BOOLEAN_KEYS and value not in ("true", "false"):
+        raise HTTPException(422, f"{key} must be true or false")
+    if key == "weather_thresholds":
+        _check_weather_thresholds(value)
+    if key == "org_name" and not value.strip():
+        raise HTTPException(422, "Organization name is required")
+
+
 def _redact_value(key: str, value: str | None) -> str:
     """Replace secret values with a presence marker so the UI can show
     'configured' / 'not set' without exposing entropy. Earlier code returned
@@ -133,7 +189,7 @@ def set_setting(data: SettingValue, db: DBSession, admin: AdminUser):
     """Create or update a single setting. Admin only. Key must be in ALLOWED_SETTING_KEYS."""
     if data.key not in ALLOWED_SETTING_KEYS:
         raise HTTPException(400, f"Setting key '{data.key}' is not allowed")
-    _check_idle_lock(data.key, data.value)
+    _check_value(data.key, data.value)
     data.value = _trimmed(data.key, data.value)
     from app.services.audit import log_action
     setting = db.query(Setting).filter(Setting.key == data.key).first()
@@ -149,6 +205,9 @@ def set_setting(data: SettingValue, db: DBSession, admin: AdminUser):
 
 
 ALLOWED_LOGO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
+# The stored logo's extension comes from what the file holds, not its name, so
+# it is always served as the type it is.
+LOGO_EXT_BY_TYPE = {"png": ".png", "jpeg": ".jpg", "webp": ".webp"}
 
 
 @router.post("/logo", responses=responses(400, 401, 413))
@@ -158,19 +217,21 @@ async def upload_logo(upload: AdminForm, db: DBSession):
     user = upload.user
     upload_dir = Path(app_settings.UPLOAD_DIR) / "org"
     upload_dir.mkdir(parents=True, exist_ok=True)
-    ext = Path(file.filename).suffix.lower() or ".png"
-    if ext not in ALLOWED_LOGO_EXTENSIONS:
+    ext = Path(file.filename).suffix.lower()
+    if ext and ext not in ALLOWED_LOGO_EXTENSIONS:
         raise HTTPException(400, f"File type '{ext}' not allowed for logo.")
     content = await file.read()
     if len(content) > app_settings.MAX_UPLOAD_SIZE:
         raise HTTPException(413, f"File too large. Maximum size is {app_settings.MAX_UPLOAD_SIZE // (1024 * 1024)}MB")
-    from app.services.file_validation import is_image
-    if not is_image(content[:512]):
-        raise HTTPException(400, "File content is not a recognized image")
-    for old in upload_dir.glob("logo.*"):
-        old.unlink()
+    from app.services.file_validation import sniff_type
+    ext = LOGO_EXT_BY_TYPE.get(sniff_type(content[:512]))
+    if ext is None:
+        raise HTTPException(400, "Logo must be a PNG, JPEG or WebP image")
     filepath = upload_dir / f"logo{ext}"
     await anyio.Path(filepath).write_bytes(content)
+    for old in upload_dir.glob("logo.*"):
+        if old.name != filepath.name:
+            old.unlink()
     setting = db.query(Setting).filter(Setting.key == "org_logo").first()
     if setting:
         setting.value = LOGO_VIEW_PATH
@@ -187,10 +248,11 @@ async def upload_logo(upload: AdminForm, db: DBSession):
 def view_logo():
     """Serve the organization logo image file."""
     logo_dir = Path(app_settings.UPLOAD_DIR) / "org"
+    from app.services.file_validation import mime_for_filename
     for ext in [".png", ".jpg", ".jpeg", ".webp"]:
         p = logo_dir / f"logo{ext}"
         if p.exists():
-            return FileResponse(p)
+            return FileResponse(p, media_type=mime_for_filename(p.name))
     raise HTTPException(404, "No logo found")
 
 
@@ -237,7 +299,7 @@ def set_settings_bulk(data: list[SettingValue], db: DBSession, admin: AdminUser)
     values to avoid overwriting real secrets with redacted strings.
     """
     for item in data:
-        _check_idle_lock(item.key, item.value)
+        _check_value(item.key, item.value)
     changed = _upsert_settings(db, data)
     if changed:
         # Key names only: several of these hold credentials.
@@ -257,7 +319,7 @@ def set_settings_bulk(data: list[SettingValue], db: DBSession, admin: AdminUser)
     return {"ok": True}
 
 
-@router.post("/smtp/test", responses=responses(400, 401, 500))
+@router.post("/smtp/test", responses=responses(400, 401, 429, 500))
 def test_smtp(db: DBSession, admin: AdminUser):
     """Send a test email to verify SMTP configuration."""
     from app.services.email_digest import send_email
@@ -272,6 +334,8 @@ def test_smtp(db: DBSession, admin: AdminUser):
     if not admin_email:
         raise HTTPException(400, "No email address found. Add an email to your linked pilot profile or user account in Settings > Users.")
 
+    from app.routers.notifications import check_smtp_test_rate
+    check_smtp_test_rate(admin.id)
     success = send_email(
         admin_email,
         "Drone Unit Manager — SMTP Test",

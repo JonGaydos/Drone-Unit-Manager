@@ -2,13 +2,26 @@ import { useState, useEffect, useRef } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
-import { changedFields, flightSavedMessage, formatDuration, normalizeDateValue } from '@/lib/utils'
+import { changedFields, flightSavedMessage, formatDuration, normalizeDateValue, showPickerSafely, zonedInputToUtcIso } from '@/lib/utils'
 import { ownsFlight } from '@/lib/ownership'
 import { sortByName, sortVehicles, sortPilotsActiveFirst, vehicleDisplayName, telemetryLabel } from '@/lib/formatters'
 import { Plus, Search, CheckCircle, ChevronUp, ChevronDown, Pencil, X, Check, Download, Loader2, Copy, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Modal } from '@/components/ui/Modal'
+
+const FLIGHT_NUMBER_FIELDS = ['takeoff_lat', 'takeoff_lon', 'landing_lat', 'landing_lon', 'distance_m', 'operating_cost']
+
+/** A labelled input in the Add Flight grid. */
+function ModalInput({ id, label, value, onChange, ...props }) {
+  return (
+    <div>
+      <label htmlFor={id} className="block text-sm font-medium text-foreground mb-1">{label}</label>
+      <input id={id} value={value} onChange={e => onChange(e.target.value)} {...props}
+        className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+    </div>
+  )
+}
 
 function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachments, onSave, onClose, initial }) {
   // When `initial` is provided (Duplicate), pre-fill the reusable fields and
@@ -20,6 +33,9 @@ function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachmen
     duration_seconds: '',
     purpose: initial?.purpose || '',
     takeoff_address: initial?.takeoff_address || '',
+    landing_address: '',
+    takeoff_lat: '', takeoff_lon: '', landing_lat: '', landing_lon: '',
+    distance_m: '', operating_cost: '',
     case_number: '',
     notes: '',
     battery_serial: initial?.battery_serial || '',
@@ -54,12 +70,17 @@ function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachmen
     if (data.duration_seconds) data.duration_seconds = Number.parseInt(data.duration_seconds, 10)
     else delete data.duration_seconds
     Object.keys(data).forEach(k => { if (data[k] === '') delete data[k] })
+    for (const k of FLIGHT_NUMBER_FIELDS) if (k in data) data[k] = Number.parseFloat(data[k])
+    // The time inputs are wall clock in the display zone; the API stores UTC.
+    // A missing date or duration is filled from the times by the API.
+    if (data.takeoff_time) data.takeoff_time = zonedInputToUtcIso(data.takeoff_time)
+    if (data.landing_time) data.landing_time = zonedInputToUtcIso(data.landing_time)
     setSaving(true)
     try { await onSave(data) } finally { setSaving(false) }
   }
 
   return (
-    <Modal open onClose={onClose} title="Add Flight">
+    <Modal open onClose={onClose} title="Add Flight" className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -96,7 +117,7 @@ function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachmen
             </div>
             <div>
               <label htmlFor="duration-seconds" className="block text-sm font-medium text-foreground mb-1">Duration (seconds)</label>
-              <input id="duration-seconds" type="number" value={form.duration_seconds} onChange={e => setForm({...form, duration_seconds: e.target.value})}
+              <input id="duration-seconds" type="number" min="0" value={form.duration_seconds} onChange={e => setForm({...form, duration_seconds: e.target.value})}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
           </div>
@@ -108,10 +129,19 @@ function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachmen
               {sortByName(purposes, 'name').map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
             </select>
           </div>
-          <div>
-            <label htmlFor="takeoff-address" className="block text-sm font-medium text-foreground mb-1">Takeoff Address</label>
-            <input id="takeoff-address" type="text" value={form.takeoff_address} onChange={e => setForm({...form, takeoff_address: e.target.value})}
-              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+          <div className="grid grid-cols-2 gap-3">
+            <ModalInput id="takeoff-time" label="Takeoff Time" type="datetime-local" value={form.takeoff_time} onChange={v => setForm({...form, takeoff_time: v})} />
+            <ModalInput id="landing-time" label="Landing Time" type="datetime-local" value={form.landing_time} onChange={v => setForm({...form, landing_time: v})} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <ModalInput id="takeoff-address" label="Takeoff Address" type="text" maxLength={500} value={form.takeoff_address} onChange={v => setForm({...form, takeoff_address: v})} />
+            <ModalInput id="landing-address" label="Landing Address" type="text" maxLength={500} value={form.landing_address} onChange={v => setForm({...form, landing_address: v})} />
+            <ModalInput id="takeoff-lat" label="Takeoff Latitude" type="number" step="any" min="-90" max="90" value={form.takeoff_lat} onChange={v => setForm({...form, takeoff_lat: v})} />
+            <ModalInput id="takeoff-lon" label="Takeoff Longitude" type="number" step="any" min="-180" max="180" value={form.takeoff_lon} onChange={v => setForm({...form, takeoff_lon: v})} />
+            <ModalInput id="landing-lat" label="Landing Latitude" type="number" step="any" min="-90" max="90" value={form.landing_lat} onChange={v => setForm({...form, landing_lat: v})} />
+            <ModalInput id="landing-lon" label="Landing Longitude" type="number" step="any" min="-180" max="180" value={form.landing_lon} onChange={v => setForm({...form, landing_lon: v})} />
+            <ModalInput id="distance-m" label="Distance (m)" type="number" step="any" min="0" value={form.distance_m} onChange={v => setForm({...form, distance_m: v})} />
+            <ModalInput id="operating-cost" label="Operating Cost ($)" type="number" step="0.01" min="0" value={form.operating_cost} onChange={v => setForm({...form, operating_cost: v})} />
           </div>
           <div>
             <label htmlFor="case-number" className="block text-sm font-medium text-foreground mb-1">Case Number</label>
@@ -122,7 +152,7 @@ function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachmen
             <div>
               <label htmlFor="battery" className="block text-sm font-medium text-foreground mb-1">Battery</label>
               <input id="battery" list="battery-list" value={form.battery_serial} onChange={e => setForm({...form, battery_serial: e.target.value})}
-                onFocus={e => { e.target.showPicker?.() }}
+                onFocus={e => showPickerSafely(e.target)}
                 placeholder="Select or type..."
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               <datalist id="battery-list">
@@ -132,7 +162,7 @@ function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachmen
             <div>
               <label htmlFor="sensor-package" className="block text-sm font-medium text-foreground mb-1">Sensor Package</label>
               <input id="sensor-package" list="sensor-list" value={form.sensor_package} onChange={e => setForm({...form, sensor_package: e.target.value})}
-                onFocus={e => { e.target.showPicker?.() }}
+                onFocus={e => showPickerSafely(e.target)}
                 placeholder="Select or type..."
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               <datalist id="sensor-list">
@@ -142,7 +172,7 @@ function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachmen
             <div>
               <label htmlFor="attachment-top" className="block text-sm font-medium text-foreground mb-1">Attachment (Top)</label>
               <input id="attachment-top" list="attach-list" value={form.attachment_top} onChange={e => setForm({...form, attachment_top: e.target.value})}
-                onFocus={e => { e.target.showPicker?.() }}
+                onFocus={e => showPickerSafely(e.target)}
                 placeholder="Select or type..."
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
               <datalist id="attach-list">
@@ -152,21 +182,21 @@ function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachmen
             <div>
               <label htmlFor="attachment-bottom" className="block text-sm font-medium text-foreground mb-1">Attachment (Bottom)</label>
               <input id="attachment-bottom" list="attach-list" value={form.attachment_bottom} onChange={e => setForm({...form, attachment_bottom: e.target.value})}
-                onFocus={e => { e.target.showPicker?.() }}
+                onFocus={e => showPickerSafely(e.target)}
                 placeholder="Select or type..."
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
             <div>
               <label htmlFor="attachment-left" className="block text-sm font-medium text-foreground mb-1">Attachment (Left)</label>
               <input id="attachment-left" list="attach-list" value={form.attachment_left} onChange={e => setForm({...form, attachment_left: e.target.value})}
-                onFocus={e => { e.target.showPicker?.() }}
+                onFocus={e => showPickerSafely(e.target)}
                 placeholder="Select or type..."
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
             <div>
               <label htmlFor="attachment-right" className="block text-sm font-medium text-foreground mb-1">Attachment (Right)</label>
               <input id="attachment-right" list="attach-list" value={form.attachment_right} onChange={e => setForm({...form, attachment_right: e.target.value})}
-                onFocus={e => { e.target.showPicker?.() }}
+                onFocus={e => showPickerSafely(e.target)}
                 placeholder="Select or type..."
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
@@ -175,6 +205,11 @@ function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachmen
             <label htmlFor="carrier" className="block text-sm font-medium text-foreground mb-1">Carrier(s)</label>
             <input id="carrier" type="text" value={form.carrier} onChange={e => setForm({...form, carrier: e.target.value})}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+          </div>
+          <div>
+            <label htmlFor="flight-notes" className="block text-sm font-medium text-foreground mb-1">Notes</label>
+            <textarea id="flight-notes" value={form.notes} maxLength={5000} onChange={e => setForm({...form, notes: e.target.value})}
+              rows={2} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm resize-none" />
           </div>
           <div className="flex gap-2 pt-2">
             <button type="submit" disabled={saving} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2">{saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Add Flight'}</button>
@@ -193,9 +228,9 @@ function SortIndicator({ column, sortKey, sortDir }) {
     : <ChevronDown className="w-3 h-3 inline ml-1" />
 }
 
-// Build the /flights request path from the active filters. Only set params that
-// are present so the backend sees a clean query string.
-function buildFlightsPath({ filterDateFrom, filterDateTo, filterPilotId, filterVehicleId, filterPurpose, statusFilter, query, sortKey, sortDir, page }) {
+// The active filters as query params. Only set params that are present so the
+// backend sees a clean query string. The list and the CSV export share them.
+function filterParams({ filterDateFrom, filterDateTo, filterPilotId, filterVehicleId, filterPurpose, statusFilter, query }) {
   const qp = new URLSearchParams()
   if (filterDateFrom) qp.set('date_from', filterDateFrom)
   if (filterDateTo) qp.set('date_to', filterDateTo)
@@ -203,9 +238,14 @@ function buildFlightsPath({ filterDateFrom, filterDateTo, filterPilotId, filterV
   if (filterVehicleId) qp.set('vehicle_id', filterVehicleId)
   if (filterPurpose) qp.set('purpose', filterPurpose)
   if (statusFilter && statusFilter !== 'all') qp.set('review_status', statusFilter)
-  // Search and sort run on the server, so they cover every flight, not just
-  // the page in view.
+  // Search runs on the server, so it covers every flight, not just the page in view.
   if (query) qp.set('search', query)
+  return qp
+}
+
+// Build the /flights request path from the active filters, sort and page.
+function buildFlightsPath({ sortKey, sortDir, page, ...filters }) {
+  const qp = filterParams(filters)
   qp.set('sort', sortKey)
   qp.set('order', sortDir)
   qp.set('page', page)
@@ -227,10 +267,11 @@ function rowEditForm(flight, canReview) {
 }
 
 /** The PATCH body for an inline edit. A duration cannot be cleared, so an emptied
- *  field drops out rather than being sent. */
+ *  field drops out rather than being sent; an emptied date is sent as null. */
 function rowEditPayload(changed) {
   const data = { ...changed }
   if ('pilot_id' in data) data.pilot_id = data.pilot_id ? Number.parseInt(data.pilot_id, 10) : null
+  if (data.date === '') data.date = null
   if (data.duration_seconds) data.duration_seconds = Number.parseInt(data.duration_seconds, 10)
   else delete data.duration_seconds
   return data
@@ -391,7 +432,11 @@ export default function FlightsPage() {
 
   const handleExport = async () => {
     try {
-      await api.download('/export/flights/csv')
+      // The file holds the flights the filters select, on every page.
+      const qs = filterParams({
+        filterDateFrom, filterDateTo, filterPilotId, filterVehicleId, filterPurpose, statusFilter, query,
+      }).toString()
+      await api.download(qs ? `/export/flights/csv?${qs}` : '/export/flights/csv')
     } catch (err) { toast.error(err.message) }
   }
 
@@ -490,7 +535,8 @@ export default function FlightsPage() {
     } catch (err) { toast.error(err.message) }
   }
 
-  const selectCls = "px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+  // Capped and clipped: a native select is as wide as its longest option (E-14).
+  const selectCls = "max-w-64 truncate px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
   const inputCls = "px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
 
   return (
@@ -514,31 +560,31 @@ export default function FlightsPage() {
       <div className="flex flex-wrap items-end gap-3">
         <div>
           <label htmlFor="date-from" className="block text-xs text-muted-foreground mb-1">Date From</label>
-          <input id="date-from" type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)}
-            onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) { e.target.value = n; setFilterDateFrom(n) } }} className={inputCls} />
+          <input id="date-from" type="date" value={filterDateFrom} onChange={e => { setFilterDateFrom(e.target.value); setPage(1) }}
+            onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) { e.target.value = n; setFilterDateFrom(n); setPage(1) } }} className={inputCls} />
         </div>
         <div>
           <label htmlFor="date-to" className="block text-xs text-muted-foreground mb-1">Date To</label>
-          <input id="date-to" type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)}
-            onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) { e.target.value = n; setFilterDateTo(n) } }} className={inputCls} />
+          <input id="date-to" type="date" value={filterDateTo} onChange={e => { setFilterDateTo(e.target.value); setPage(1) }}
+            onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) { e.target.value = n; setFilterDateTo(n); setPage(1) } }} className={inputCls} />
         </div>
         <div>
           <label htmlFor="pilot-1" className="block text-xs text-muted-foreground mb-1">Pilot</label>
-          <select id="pilot-1" value={filterPilotId} onChange={e => setFilterPilotId(e.target.value)} className={selectCls}>
+          <select id="pilot-1" value={filterPilotId} onChange={e => { setFilterPilotId(e.target.value); setPage(1) }} className={selectCls}>
             <option value="">All Pilots</option>
             {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
           </select>
         </div>
         <div>
           <label htmlFor="vehicle-1" className="block text-xs text-muted-foreground mb-1">Vehicle</label>
-          <select id="vehicle-1" value={filterVehicleId} onChange={e => setFilterVehicleId(e.target.value)} className={selectCls}>
+          <select id="vehicle-1" value={filterVehicleId} onChange={e => { setFilterVehicleId(e.target.value); setPage(1) }} className={selectCls}>
             <option value="">All Vehicles</option>
             {sortVehicles(vehicles).map(v => <option key={v.id} value={v.id}>{vehicleDisplayName(v)}</option>)}
           </select>
         </div>
         <div>
           <label htmlFor="purpose-1" className="block text-xs text-muted-foreground mb-1">Purpose</label>
-          <select id="purpose-1" value={filterPurpose} onChange={e => setFilterPurpose(e.target.value)} className={selectCls}>
+          <select id="purpose-1" value={filterPurpose} onChange={e => { setFilterPurpose(e.target.value); setPage(1) }} className={selectCls}>
             <option value="">All Purposes</option>
             <option value="__none__">No Purpose</option>
             {sortByName(purposes, 'name').map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
@@ -581,13 +627,13 @@ export default function FlightsPage() {
           <span className="text-sm font-medium text-foreground">{selectedIds.size} selected</span>
           {canBulkEdit && <select disabled={bulkBusy} value="" aria-label="Reassign pilot for selected flights"
             onChange={e => { if (e.target.value) confirmBulkPilot(Number.parseInt(e.target.value, 10)) }}
-            className="px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm">
+            className="max-w-64 truncate px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm">
             <option value="">Reassign pilot…</option>
             {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
           </select>}
           {canBulkEdit && <select disabled={bulkBusy} value="" aria-label="Set purpose for selected flights"
             onChange={e => { if (e.target.value) confirmBulkPurpose(e.target.value) }}
-            className="px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm">
+            className="max-w-64 truncate px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm">
             <option value="">Set purpose…</option>
             {sortByName(purposes, 'name').map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
           </select>}
@@ -805,7 +851,7 @@ function FlightEditRow({ f, editForm, setEditForm, pilots, purposes, onSave, onC
         </select>
       </td>
       <td className="px-4 py-2 text-right">
-        <input type="number" value={editForm.duration_seconds} onChange={e => setEditForm({...editForm, duration_seconds: e.target.value})}
+        <input type="number" min="0" value={editForm.duration_seconds} onChange={e => setEditForm({...editForm, duration_seconds: e.target.value})}
           className="w-20 px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm text-right" placeholder="sec" />
       </td>
       <td className="px-4 py-2 hidden lg:table-cell text-foreground">{f.takeoff_address || '—'}</td>

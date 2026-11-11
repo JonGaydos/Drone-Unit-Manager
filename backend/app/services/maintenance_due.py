@@ -29,3 +29,22 @@ def superseded_record_ids(db) -> set[int]:
         latest[key] = max(latest.get(key, rank), rank)
     current = {rank[1] for rank in latest.values()}
     return {row.id for row in rows} - current
+
+
+def schedule_alert_title(schedule) -> str:
+    """Title of the overdue alert raised for a maintenance schedule."""
+    return f"Maintenance Due: {schedule.name}"
+
+
+def dismiss_schedule_alerts(db, schedule) -> None:
+    """Dismiss the open overdue alerts of a schedule that is no longer overdue,
+    so they stop showing and the next overdue spell raises a fresh alert."""
+    from app.models.alert import Alert
+    for alert in db.query(Alert).filter(
+        Alert.type == "maintenance_due",
+        Alert.title == schedule_alert_title(schedule),
+        Alert.entity_type == schedule.entity_type,
+        Alert.entity_id == schedule.entity_id,
+        Alert.is_dismissed.is_(False),
+    ).all():
+        alert.is_dismissed = True

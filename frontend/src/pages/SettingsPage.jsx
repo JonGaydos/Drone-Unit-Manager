@@ -5,6 +5,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Modal } from '@/components/ui/Modal'
 import RolePermissionsGrid from '@/components/settings/RolePermissionsGrid'
+import DigestPreferencesCard from '@/components/settings/DigestPreferencesCard'
 import { useConfirm } from '@/hooks/useConfirm'
 import { sortPilotsActiveFirst } from '@/lib/formatters'
 import { DEFAULT_ORG_LOCATION } from '@/lib/location'
@@ -52,6 +53,14 @@ function buildSidebarItems(rawConfig) {
   }).sort((a, b) => a.order - b.order)
 }
 
+/** Why the server would refuse a new password (auth.py _validate_password), or null. */
+function passwordProblem(password) {
+  if (password.length < 12) return 'Password must be at least 12 characters'
+  if (!/[A-Z]/.test(password)) return 'Password must contain at least one uppercase letter'
+  if (!/\d/.test(password)) return 'Password must contain at least one number'
+  return null
+}
+
 /** A pilot login with no linked pilot record owns no profile and only the flights
  *  it logged, so Own settings do little for it until an admin links it. */
 function NoLinkedPilotBadge({ user }) {
@@ -67,8 +76,12 @@ function NoLinkedPilotBadge({ user }) {
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('general')
   const [settings, setSettings] = useState({})
+  // The General fields stay disabled until the stored values arrive, so
+  // nothing typed early is wiped when the loaded value replaces it.
+  const [settingsLoaded, setSettingsLoaded] = useState(false)
   const [saving, setSaving] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [exportedBytes, setExportedBytes] = useState(0)
   const [includeTelemetry, setIncludeTelemetry] = useState(false)
 
   // Automated backup state
@@ -99,6 +112,12 @@ export default function SettingsPage() {
   const [showAddUser, setShowAddUser] = useState(false)
   const [newUser, setNewUser] = useState({ username: '', password: '', display_name: '', role: 'pilot', pilot_id: '' })
   const [addingUser, setAddingUser] = useState(false)
+
+  // The API docs exist only when the server sets EXPOSE_API_DOCS.
+  const [apiDocs, setApiDocs] = useState(false)
+  useEffect(() => {
+    api.get('/health').then(h => setApiDocs(h?.api_docs === true)).catch(() => {})
+  }, [])
 
   // Logo state
   const [logoUrl, setLogoUrl] = useState(null)
@@ -203,7 +222,7 @@ export default function SettingsPage() {
 
   // Edit user state
   const [editUser, setEditUser] = useState(null)
-  const [editUserForm, setEditUserForm] = useState({ display_name: '', role: '', pilot_id: '' })
+  const [editUserForm, setEditUserForm] = useState({ display_name: '', role: '', pilot_id: '', email: '' })
   const [savingEditUser, setSavingEditUser] = useState(false)
 
   const openEditUser = (u) => {
@@ -212,15 +231,21 @@ export default function SettingsPage() {
       display_name: u.display_name || '',
       role: u.role || 'viewer',
       pilot_id: u.pilot_id ? String(u.pilot_id) : '',
+      email: u.email || '',
     })
   }
 
   const handleSaveEditUser = async () => {
     if (!editUser) return
+    const displayName = editUserForm.display_name.trim()
+    if (!displayName) { toast.error('Required: Display Name'); return }
     setSavingEditUser(true)
     try {
-      const payload = { display_name: editUserForm.display_name, role: editUserForm.role }
+      const payload = { display_name: displayName, role: editUserForm.role }
       payload.pilot_id = editUserForm.pilot_id ? Number.parseInt(editUserForm.pilot_id, 10) : 0
+      // Sent only when edited: a user with no email takes the linked pilot's.
+      const email = editUserForm.email.trim()
+      if (email !== (editUser.email || '')) payload.email = email
       const updated = await api.patch(`/auth/users/${editUser.id}`, payload)
       setUsers(users.map(x => x.id === editUser.id ? updated : x))
       setEditUser(null)
@@ -230,9 +255,11 @@ export default function SettingsPage() {
   }
 
   const handleSaveProfile = async () => {
+    const displayName = profile.display_name.trim()
+    if (isAdmin && !displayName) { toast.error('Required: Display Name'); return }
     setSavingProfile(true)
     try {
-      const payload = isAdmin ? { display_name: profile.display_name, email: profile.email } : { email: profile.email }
+      const payload = isAdmin ? { display_name: displayName, email: profile.email } : { email: profile.email }
       updateUser(await api.patch('/auth/me', payload))
       toast.success('Profile saved')
     } catch (err) { toast.error(err.message) }
@@ -347,6 +374,7 @@ export default function SettingsPage() {
       const map = {}
       data.forEach(s => { map[s.key] = s.value })
       setSettings(map)
+      setSettingsLoaded(true)
       if (map.org_logo) setLogoUrl(map.org_logo + '?t=' + Date.now())
       setSidebarItems(buildSidebarItems(map.sidebar_config))
       // Sidebar group headers default to shown unless explicitly disabled.
@@ -391,7 +419,7 @@ export default function SettingsPage() {
     const hrs = Number.parseFloat(ruleForm.required_hours)
     const days = Number.parseInt(ruleForm.period_days, 10)
     if (!hrs || hrs <= 0) { toast.error('Required hours must be > 0'); return }
-    if (!days || days <= 0) { toast.error('Period days must be > 0'); return }
+    if (!days || days <= 0 || days > 3650) { toast.error('Period must be 1 to 3650 days'); return }
     setSavingRule(true)
     try {
       const payload = {
@@ -482,7 +510,8 @@ export default function SettingsPage() {
   }
 
   const handleResetPassword = async (userId) => {
-    if (resetPw.length < 6) { toast.warning('Password must be at least 6 characters'); return }
+    const problem = passwordProblem(resetPw)
+    if (problem) { toast.warning(problem); return }
     try {
       await api.post(`/auth/users/${userId}/reset-password`, { new_password: resetPw })
       setResetUserId(null)
@@ -513,14 +542,18 @@ export default function SettingsPage() {
   }
 
   const handleSave = async () => {
+    const changed = changedInputs()
+    if ('org_name' in changed) {
+      changed.org_name = changed.org_name.trim()
+      if (!changed.org_name) { toast.error('Required: Organization Name'); return }
+    }
     setSaving(true)
     try {
-      const current = gatherInputs()
-      setSettings(current)
-      const items = Object.entries(current).map(([key, value]) => ({ key, value }))
-      await api.put('/settings/bulk', items)
+      const items = Object.entries(changed).map(([key, value]) => ({ key, value }))
+      if (items.length) await api.put('/settings/bulk', items)
+      setSettings(prev => ({ ...prev, ...changed }))
       setHasUnsavedChanges(false)
-      toast.success('Settings saved!')
+      toast.success(items.length ? 'Settings saved!' : 'No changes to save')
     } catch (err) {
       toast.error(err.message)
     } finally {
@@ -531,24 +564,29 @@ export default function SettingsPage() {
   // Use refs for settings inputs to avoid re-renders on keystroke/paste
   const inputRefs = React.useRef({})
 
-  const PASSWORD_KEYS = new Set(['skydio_api_token'])
-  const REDACTED_MARKER = '********'
-
-  const gatherInputs = () => {
-    const gathered = { ...settings }
+  // Only the fields on this card whose value differs from what was loaded.
+  // Sending every loaded key reverted changes saved since by other cards,
+  // other tabs or other admins (sidebar, SMTP, sync intervals).
+  const changedInputs = () => {
+    const changed = {}
     for (const [key, ref] of Object.entries(inputRefs.current)) {
       if (!ref) continue
-      // Skip password fields where user didn't type anything new
-      if (PASSWORD_KEYS.has(key) && ref.value === '') continue
-      gathered[key] = ref.value
+      // A password field left empty keeps the stored secret.
+      if (ref.type === 'password' && ref.value === '') continue
+      if (ref.value !== shownValue(key)) changed[key] = ref.value
     }
-    // Never echo the redaction marker back to the server: drop any key whose
-    // current value is still the marker (e.g. a secret GET /settings redacted
-    // and the General tab renders no input to override).
-    for (const key of Object.keys(gathered)) {
-      if (gathered[key] === REDACTED_MARKER) delete gathered[key]
+    return changed
+  }
+
+  // What a field showed when the settings loaded. The two selects show a
+  // default when nothing (or nothing valid) is stored; an untouched default is
+  // not a change.
+  const shownValue = (key) => {
+    if (key === 'display_timezone') return settings.display_timezone || 'America/Chicago'
+    if (key === 'idle_lock_minutes') {
+      return IDLE_LOCK_MINUTES.map(String).includes(settings.idle_lock_minutes) ? settings.idle_lock_minutes : '30'
     }
-    return gathered
+    return settings[key] ?? ''
   }
 
   const field = (label, key, type = 'text', description = '') => {
@@ -567,7 +605,7 @@ export default function SettingsPage() {
           defaultValue={isPassword ? '' : (settings[key] || '')}
           placeholder={hasMaskedValue ? 'Token saved (enter new to replace)' : ''}
           className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          disabled={!isAdmin}
+          disabled={!isAdmin || !settingsLoaded}
           onInput={() => setHasUnsavedChanges(true)}
         />
       </div>
@@ -604,7 +642,7 @@ export default function SettingsPage() {
                 </div>
                 <div>
                   <label htmlFor="confirm-new-password" className="block text-sm font-medium text-foreground mb-1">Confirm New Password</label>
-                  <input id="confirm-new-password" type="password" value={pwForm.confirm_password} onChange={e => setPwForm({...pwForm, confirm_password: e.target.value})} required minLength={6}
+                  <input id="confirm-new-password" type="password" value={pwForm.confirm_password} onChange={e => setPwForm({...pwForm, confirm_password: e.target.value})} required minLength={12}
                     className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                 </div>
                 <button type="submit" disabled={changingPw}
@@ -653,7 +691,7 @@ export default function SettingsPage() {
                   </div>
                   <div>
                     <label htmlFor="password" className="block text-sm font-medium text-foreground mb-1">Password</label>
-                    <input id="password" type="password" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} required minLength={6}
+                    <input id="password" type="password" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} required minLength={12}
                       className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                     <p className="text-xs text-muted-foreground mt-2">Username and password are case-sensitive.</p>
                   </div>
@@ -1035,7 +1073,7 @@ export default function SettingsPage() {
         <div className="bg-card border border-border rounded-xl p-6">
           <h3 className="text-lg font-semibold text-foreground mb-1">Backup & Restore</h3>
           <p className="text-sm text-muted-foreground mb-4">
-            Download a complete backup of your database, settings, and uploaded files as a ZIP archive. To restore, use the Setup page on a fresh install.
+            Download a complete backup of your database, settings, and uploaded files as a ZIP archive. The backup includes password hashes, API tokens, and the SMTP password and Skydio token, unencrypted, so store it securely. To restore, use the Setup page on a fresh install, or the backup API on this install (it asks for a typed confirmation).
           </p>
           <label className="flex items-center gap-2 mb-4 cursor-pointer">
             <input type="checkbox" checked={includeTelemetry} onChange={e => setIncludeTelemetry(e.target.checked)} className="rounded border-border" />
@@ -1045,12 +1083,14 @@ export default function SettingsPage() {
           <button
             onClick={async () => {
               setExporting(true)
+              setExportedBytes(0)
               try {
-                // No timeout: build_backup_archive assembles the entire zip,
-                // every table plus every uploaded file, before the first byte
-                // is sent, so the 30s default aborted any sizeable backup.
+                // No timeout: a full backup with telemetry runs for minutes,
+                // so the 30s default aborted any sizeable backup. The archive
+                // streams while it is built, so show how much has arrived.
                 // The restore path in SetupPage does the same for the same reason.
-                await api.download(`/backup/export?include_telemetry=${includeTelemetry}`, { timeout: 0 })
+                await api.download(`/backup/export?include_telemetry=${includeTelemetry}`,
+                  { timeout: 0, onProgress: setExportedBytes })
                 toast.success('Backup exported successfully')
               } catch (err) { toast.error(err.message) }
               finally { setExporting(false) }
@@ -1059,7 +1099,7 @@ export default function SettingsPage() {
             className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50"
           >
             {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-            {exporting ? 'Exporting...' : 'Export Backup'}
+            {exporting ? `Exporting... ${(exportedBytes / (1024 * 1024)).toFixed(1)} MB` : 'Export Backup'}
           </button>
         </div>
     )
@@ -1260,7 +1300,7 @@ export default function SettingsPage() {
               key={`display_timezone-${settings.display_timezone === undefined ? 'loading' : 'loaded'}`}
               defaultValue={settings.display_timezone || 'America/Chicago'}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              disabled={!isAdmin}
+              disabled={!isAdmin || !settingsLoaded}
               onInput={() => setHasUnsavedChanges(true)}
             >
               {TIMEZONES.map(tz => <option key={tz} value={tz}>{tz}</option>)}
@@ -1278,7 +1318,7 @@ export default function SettingsPage() {
               key={`idle_lock_minutes-${settings.idle_lock_minutes === undefined ? 'loading' : 'loaded'}`}
               defaultValue={IDLE_LOCK_MINUTES.map(String).includes(settings.idle_lock_minutes) ? settings.idle_lock_minutes : '30'}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              disabled={!isAdmin}
+              disabled={!isAdmin || !settingsLoaded}
               onInput={() => setHasUnsavedChanges(true)}
             >
               {IDLE_LOCK_MINUTES.map(m => <option key={m} value={String(m)}>{idleLockLabel(m)}</option>)}
@@ -1322,7 +1362,7 @@ export default function SettingsPage() {
       </div>
   )
 
-  const renderApiDocs = () => (
+  const renderApiDocs = () => apiDocs && (
       <div className="bg-card border border-border rounded-xl p-6">
         <h3 className="text-lg font-semibold text-foreground mb-2">API Documentation</h3>
         <p className="text-sm text-muted-foreground mb-3">Browse the interactive API documentation powered by Swagger UI.</p>
@@ -1525,7 +1565,7 @@ export default function SettingsPage() {
                 <div>
                   <label htmlFor="rule-days" className="block text-sm font-medium text-foreground mb-1">Period (days)</label>
                   <input
-                    id="rule-days" type="number" min="1" value={ruleForm.period_days}
+                    id="rule-days" type="number" min="1" max="3650" value={ruleForm.period_days}
                     onChange={e => setRuleForm({ ...ruleForm, period_days: e.target.value })}
                     className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                   />
@@ -1575,6 +1615,11 @@ export default function SettingsPage() {
               <div>
                 <label htmlFor="display-name-1" className="block text-sm font-medium text-foreground mb-1">Display Name</label>
                 <input id="display-name-1" type="text" value={editUserForm.display_name} onChange={e => setEditUserForm({...editUserForm, display_name: e.target.value})}
+                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+              </div>
+              <div>
+                <label htmlFor="email-1" className="block text-sm font-medium text-foreground mb-1">Email</label>
+                <input id="email-1" type="email" value={editUserForm.email} onChange={e => setEditUserForm({...editUserForm, email: e.target.value})}
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
               </div>
               <div>
@@ -1650,9 +1695,10 @@ export default function SettingsPage() {
       {renderUsersTab()}
 
       {/* General Tab */}
-      {activeTab !== 'integrations' && activeTab !== 'users' && (
+      {activeTab === 'general' && (
       <div className="space-y-6 max-w-2xl">
       {renderProfile()}
+      <DigestPreferencesCard />
       {renderOrganization()}
       {renderCertLabels()}
       {renderWeatherThresholds()}

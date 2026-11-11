@@ -2,7 +2,7 @@ from datetime import date
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func
 
 from app.constants import BATTERY_NOT_FOUND, CONTROLLER_NOT_FOUND, SENSOR_NOT_FOUND, ATTACHMENT_NOT_FOUND, DOCK_NOT_FOUND
@@ -20,6 +20,7 @@ from app.responses import responses
 from app.services.audit_capture import update_recorded
 from app.services.equipment_lifecycle import end_schedules
 from app.services.equipment_lifecycle import set_fields_with_lifecycle as _set_fields_with_lifecycle
+from app.services.flight_scope import counted_flight_clause
 
 router = APIRouter(prefix="/api", tags=["equipment"])
 
@@ -141,6 +142,11 @@ def delete_battery(bid: int, db: DBSession, admin: ManageUser):
     if not b:
         raise HTTPException(404, BATTERY_NOT_FOUND)
     end_schedules(db, b)
+    # Health readings belong to the battery and go with it.
+    from app.models.battery_reading import BatteryReading
+    for reading in db.query(BatteryReading).filter(BatteryReading.battery_id == bid).all():
+        db.delete(reading)
+    db.flush()
     db.delete(b)
     db.commit()
     return {"ok": True}
@@ -158,8 +164,8 @@ def get_battery_stats(bid: int, db: DBSession, user: ViewUser, _flights: Flights
     battery = db.query(Battery).filter(Battery.id == bid).first()
     if not battery:
         raise HTTPException(404, BATTERY_NOT_FOUND)
-    flight_count = db.query(func.count(Flight.id)).filter(Flight.battery_serial == battery.serial_number).scalar()
-    total_seconds = db.query(func.coalesce(func.sum(Flight.duration_seconds), 0)).filter(Flight.battery_serial == battery.serial_number).scalar()
+    flight_count = db.query(func.count(Flight.id)).filter(counted_flight_clause(), Flight.battery_serial == battery.serial_number).scalar()
+    total_seconds = db.query(func.coalesce(func.sum(Flight.duration_seconds), 0)).filter(counted_flight_clause(), Flight.battery_serial == battery.serial_number).scalar()
     return {"total_flights": flight_count, "total_hours": round(total_seconds / 3600, 2)}
 
 
@@ -178,8 +184,10 @@ def get_battery_flights(bid: int, db: DBSession, user: ViewUser, _flights: Fligh
             "date": str(f.date) if f.date else None,
             "pilot_name": f"{f.pilot.first_name} {f.pilot.last_name}" if f.pilot else None,
             "pilot_id": f.pilot_id,
+            "vehicle_id": f.vehicle_id,
             "vehicle_name": f.vehicle.nickname or f"{f.vehicle.manufacturer} {f.vehicle.model}" if f.vehicle else None,
             "duration_seconds": f.duration_seconds,
+            "takeoff_address": f.takeoff_address,
             "purpose": f.purpose,
             "max_altitude_m": f.max_altitude_m,
         }
@@ -279,10 +287,19 @@ class BatteryReadingCreate(BaseModel):
     """Schema for manually recording a battery health reading."""
     health_pct: Optional[float] = Field(None, ge=0, le=100)
     cycle_count: Optional[int] = Field(None, ge=0)
-    voltage: Optional[float] = None
-    capacity_mah: Optional[float] = None
-    temperature_c: Optional[float] = None
-    notes: Optional[str] = None
+    voltage: Optional[float] = Field(None, ge=0)
+    capacity_mah: Optional[float] = Field(None, ge=0)
+    temperature_c: Optional[float] = Field(None, ge=-50, le=100)
+    notes: Optional[str] = Field(None, max_length=500)
+
+    @model_validator(mode="after")
+    def _has_a_value(self):
+        if all(getattr(self, f) is None for f in READING_VALUES):
+            raise ValueError(f"Give at least one of: {', '.join(READING_VALUES)}")
+        return self
+
+
+READING_VALUES = ("health_pct", "cycle_count", "voltage", "capacity_mah", "temperature_c")
 
 
 @router.get("/batteries/{bid}/health-history", responses=responses(401, 404))
@@ -311,13 +328,16 @@ def get_battery_health_history(bid: int, db: DBSession, user: ViewUser):
     ]
 
 
-@router.post("/batteries/{bid}/readings", responses=responses(401, 404))
+@router.post("/batteries/{bid}/readings", responses=responses(401, 404, 422))
 def add_battery_reading(bid: int, data: BatteryReadingCreate, db: DBSession, admin: ManageUser):
     """Manually record a battery health reading."""
     from app.models.battery_reading import BatteryReading
     b = db.query(Battery).filter(Battery.id == bid).first()
     if not b:
         raise HTTPException(404, BATTERY_NOT_FOUND)
+    if data.cycle_count is not None and b.cycle_count and data.cycle_count < b.cycle_count:
+        # Cycle counts only grow; a lower one is a typo or the wrong battery.
+        raise HTTPException(422, f"Cycle count cannot be lower than the battery's current count ({b.cycle_count})")
     reading = BatteryReading(
         battery_id=bid,
         health_pct=data.health_pct,
@@ -416,19 +436,20 @@ def get_controller(cid: int, db: DBSession, user: ViewUser):
 
 @router.get("/controllers/{cid}/stats", responses=responses(401, 404))
 def get_controller_stats(cid: int, db: DBSession, user: ViewUser):
-    """Get basic stats for a controller."""
+    """Get basic stats for a controller. Flights do not record the controller
+    flown with, so there are no flight figures to give."""
     ctrl = db.query(Controller).filter(Controller.id == cid).first()
     if not ctrl:
         raise HTTPException(404, CONTROLLER_NOT_FOUND)
-    return {"total_flights": 0, "total_hours": 0, "assigned_pilot": ctrl.assigned_pilot_id}
+    return {"assigned_pilot": ctrl.assigned_pilot_id}
 
 
 class DockCreate(BaseModel):
     serial_number: str
     name: Optional[str] = None
     location_name: Optional[str] = None
-    lat: Optional[float] = None
-    lon: Optional[float] = None
+    lat: Optional[float] = Field(None, ge=-90, le=90)
+    lon: Optional[float] = Field(None, ge=-180, le=180)
     status: str = "active"
     acquired_date: Optional[date] = None
     decommissioned_date: Optional[date] = None
@@ -438,8 +459,8 @@ class DockUpdate(BaseModel):
     serial_number: Optional[str] = None
     name: Optional[str] = None
     location_name: Optional[str] = None
-    lat: Optional[float] = None
-    lon: Optional[float] = None
+    lat: Optional[float] = Field(None, ge=-90, le=90)
+    lon: Optional[float] = Field(None, ge=-180, le=180)
     status: Optional[str] = None
     acquired_date: Optional[date] = None
     decommissioned_date: Optional[date] = None
@@ -593,9 +614,10 @@ def get_sensor_stats(sid: int, db: DBSession, user: ViewUser, _flights: FlightsV
     sensor = db.query(SensorPackage).filter(SensorPackage.id == sid).first()
     if not sensor:
         raise HTTPException(404, SENSOR_NOT_FOUND)
-    flight_count = db.query(func.count(Flight.id)).filter(Flight.sensor_package == sensor.serial_number).scalar()
-    total_seconds = db.query(func.coalesce(func.sum(Flight.duration_seconds), 0)).filter(Flight.sensor_package == sensor.serial_number).scalar()
-    return {"total_flights": flight_count, "total_hours": round(total_seconds / 3600, 2)}
+    flight_count = db.query(func.count(Flight.id)).filter(counted_flight_clause(), Flight.sensor_package == sensor.serial_number).scalar()
+    total_seconds = db.query(func.coalesce(func.sum(Flight.duration_seconds), 0)).filter(counted_flight_clause(), Flight.sensor_package == sensor.serial_number).scalar()
+    unique_pilots = db.query(func.count(func.distinct(Flight.pilot_id))).filter(counted_flight_clause(), Flight.sensor_package == sensor.serial_number).scalar()
+    return {"total_flights": flight_count, "total_hours": round(total_seconds / 3600, 2), "unique_pilots": unique_pilots}
 
 
 @router.get("/sensors/{sid}/flights", responses=responses(401, 404))
@@ -613,8 +635,10 @@ def get_sensor_flights(sid: int, db: DBSession, user: ViewUser, _flights: Flight
             "date": str(f.date) if f.date else None,
             "pilot_name": f"{f.pilot.first_name} {f.pilot.last_name}" if f.pilot else None,
             "pilot_id": f.pilot_id,
+            "vehicle_id": f.vehicle_id,
             "vehicle_name": f.vehicle.nickname or f"{f.vehicle.manufacturer} {f.vehicle.model}" if f.vehicle else None,
             "duration_seconds": f.duration_seconds,
+            "takeoff_address": f.takeoff_address,
             "purpose": f.purpose,
             "max_altitude_m": f.max_altitude_m,
         }
@@ -730,9 +754,10 @@ def get_attachment_stats(aid: int, db: DBSession, user: ViewUser, _flights: Flig
         Flight.attachment_left == sn,
         Flight.attachment_right == sn,
     )
-    flight_count = db.query(func.count(Flight.id)).filter(attachment_filter).scalar()
-    total_seconds = db.query(func.coalesce(func.sum(Flight.duration_seconds), 0)).filter(attachment_filter).scalar()
-    return {"total_flights": flight_count, "total_hours": round(total_seconds / 3600, 2)}
+    flight_count = db.query(func.count(Flight.id)).filter(counted_flight_clause(), attachment_filter).scalar()
+    total_seconds = db.query(func.coalesce(func.sum(Flight.duration_seconds), 0)).filter(counted_flight_clause(), attachment_filter).scalar()
+    unique_pilots = db.query(func.count(func.distinct(Flight.pilot_id))).filter(counted_flight_clause(), attachment_filter).scalar()
+    return {"total_flights": flight_count, "total_hours": round(total_seconds / 3600, 2), "unique_pilots": unique_pilots}
 
 
 def _attachment_flight_item(f, sn) -> dict:
@@ -752,8 +777,10 @@ def _attachment_flight_item(f, sn) -> dict:
         "date": str(f.date) if f.date else None,
         "pilot_name": f"{f.pilot.first_name} {f.pilot.last_name}" if f.pilot else None,
         "pilot_id": f.pilot_id,
+        "vehicle_id": f.vehicle_id,
         "vehicle_name": f.vehicle.nickname or f"{f.vehicle.manufacturer} {f.vehicle.model}" if f.vehicle else None,
         "duration_seconds": f.duration_seconds,
+        "takeoff_address": f.takeoff_address,
         "purpose": f.purpose,
         "max_altitude_m": f.max_altitude_m,
         "positions": positions,

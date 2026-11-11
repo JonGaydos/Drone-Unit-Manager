@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { useConfirm } from '@/hooks/useConfirm'
+import { addDays } from '@/lib/utils'
 
 const COLORS = {
   training_day: '#0ea5e9', mission: '#8b5cf6', maintenance_due: '#f59e0b',
@@ -58,7 +59,9 @@ export default function CalendarPage() {
   for (const e of events) {
     if (!enabled[e.category]) continue
     fcEvents.push({
-      id: e.id, title: e.title, start: e.start, end: e.end || undefined, allDay: e.all_day,
+      // FullCalendar treats an all-day end as exclusive; the API's is the last day.
+      id: e.id, title: e.title, start: e.start,
+      end: e.end ? (e.all_day ? addDays(e.end, 1) : e.end) : undefined, allDay: e.all_day,
       color: COLORS[e.category] || '#64748b',
       extendedProps: { category: e.category, link: e.link, editable: e.editable, raw: e },
     })
@@ -94,7 +97,11 @@ export default function CalendarPage() {
 
   const handleSave = async (e) => {
     e.preventDefault()
-    const body = { title: form.title, category: form.category, start_date: form.start_date,
+    if (!form.title.trim()) { toast.error('Required: Title'); return }
+    if (form.end_date && form.start_date && form.end_date < form.start_date) {
+      toast.error('End date cannot be before the start date'); return
+    }
+    const body = { title: form.title.trim(), category: form.category, start_date: form.start_date,
                    end_date: form.end_date || null, notes: form.notes || null }
     try {
       if (editId) await api.patch(`/calendar/events/${editId}`, body)
@@ -164,7 +171,7 @@ export default function CalendarPage() {
             </select>
           </div>
           <Input label="Start date" type="date" value={form.start_date} onChange={e => setForm({ ...form, start_date: e.target.value })} required />
-          <Input label="End date (optional)" type="date" value={form.end_date} onChange={e => setForm({ ...form, end_date: e.target.value })} />
+          <Input label="End date (optional)" type="date" value={form.end_date} min={form.start_date || undefined} onChange={e => setForm({ ...form, end_date: e.target.value })} />
           <Input label="Notes (optional)" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
           <div className="flex justify-between gap-2 pt-2">
             {editId && canEditCurrent

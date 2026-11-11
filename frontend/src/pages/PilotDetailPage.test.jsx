@@ -152,6 +152,21 @@ describe('PilotDetailPage', () => {
     }
   })
 
+  it('refuses to save a blank first or last name', async () => {
+    let patched = false
+    mockMount()
+    server.use(http.patch('/api/pilots/:id', () => { patched = true; return HttpResponse.json(PILOT) }))
+    const { user } = render()
+    await screen.findByRole('heading', { name: 'Ada Lovelace' })
+    await user.click(screen.getByRole('button', { name: 'Edit profile' }))
+    expect(screen.getByLabelText('First Name *')).toBeRequired()
+    await user.clear(screen.getByLabelText('First Name *'))
+    await user.type(screen.getByLabelText('First Name *'), '   ')
+    await user.click(screen.getByRole('button', { name: /^Save/ }))
+    expect(await screen.findByText('Required: First Name')).toBeInTheDocument()
+    expect(patched).toBe(false)
+  })
+
   describe('performance tiles', () => {
     const PERFORMANCE = {
       total_flights: 4, total_flight_hours: 2, avg_duration_min: 30, vehicles_flown: 1,
@@ -165,6 +180,15 @@ describe('PilotDetailPage', () => {
       expect(screen.getByText('5h')).toBeInTheDocument()
       expect(screen.getByText('Mission Hours')).toBeInTheDocument()
       expect(screen.getByText('Incidents')).toBeInTheDocument()
+    })
+
+    it('shows one set of flight total cards', async () => {
+      mockMount({ performance: () => HttpResponse.json(PERFORMANCE) })
+      render()
+      expect(await screen.findByText('Training Hours')).toBeInTheDocument()
+      for (const label of ['Total Flights', 'Flight Hours', 'Avg Duration']) {
+        expect(screen.getAllByText(label)).toHaveLength(1)
+      }
     })
 
     it('shows a zero value rather than hiding the tile', async () => {
@@ -193,5 +217,18 @@ describe('PilotDetailPage', () => {
     render()
     expect(await screen.findByRole('heading', { name: 'Ada Lovelace' })).toBeInTheDocument()
     expect(screen.queryByText('Pilot not found')).toBeNull()
+  })
+
+  it('loads the profile photo with the session token and shows it from a blob URL', async () => {
+    let auth = null
+    mockMount({ pilot: () => HttpResponse.json({ ...PILOT, photo_url: '/api/pilots/7/photo/view' }) })
+    server.use(http.get('/api/pilots/7/photo/view', ({ request }) => {
+      auth = request.headers.get('Authorization')
+      return new HttpResponse(new Uint8Array([0x89, 0x50, 0x4e, 0x47]), { headers: { 'Content-Type': 'image/png' } })
+    }))
+    render()
+    const img = await screen.findByRole('img', { name: 'Ada Lovelace' })
+    expect(img.getAttribute('src')).toMatch(/^blob:/)
+    expect(auth).toBe('Bearer test-token')
   })
 })

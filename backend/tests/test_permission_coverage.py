@@ -75,7 +75,7 @@ PUBLIC_ROUTES = frozenset({
     "GET /api/settings/logo/view",
     "GET /api/health",
     "GET /{full_path:path}",
-    # _authenticate_image_request: a signed URL, or a login holding files.view.
+    # _authenticate_image_request: a signed URL, or a login or API token holding files.view.
     # Pinned by test_photo_serving_needs_a_login_or_signature, the signed URL tests
     # in test_photos, and test_permissions_files.test_view_off_blocks_serving_by_login_token.
     "GET /api/photos/{photo_id}/view",
@@ -315,6 +315,8 @@ EXPECTED_ROUTE_KEYS = {
     "PATCH /api/currency/rules/{rule_id}": {CERTIFICATIONS_MANAGE},
     "DELETE /api/currency/rules/{rule_id}": {CERTIFICATIONS_MANAGE},
     "POST /api/currency/send-reminders": {CERTIFICATIONS_MANAGE},
+    "POST /api/currency/send-reminders/start": {CERTIFICATIONS_MANAGE},
+    "GET /api/currency/jobs/{job_id}": {CERTIFICATIONS_MANAGE},
     # checklists
     "GET /api/checklists/templates": {CHECKLISTS_VIEW},
     "GET /api/checklists/templates/{template_id}": {CHECKLISTS_VIEW},
@@ -373,13 +375,6 @@ EXPECTED_ROUTE_KEYS = {
     "POST /api/operating-authorities": {AUTHORITY_MANAGE},
     "PATCH /api/operating-authorities/{authority_id}": {AUTHORITY_MANAGE},
     "DELETE /api/operating-authorities/{authority_id}": {AUTHORITY_MANAGE},
-    # geofences
-    "GET /api/geofences": {AUTHORITY_VIEW},
-    "GET /api/geofences/check": {AUTHORITY_VIEW},
-    "GET /api/geofences/{geofence_id}": {AUTHORITY_VIEW},
-    "POST /api/geofences": {AUTHORITY_MANAGE},
-    "PATCH /api/geofences/{geofence_id}": {AUTHORITY_MANAGE},
-    "DELETE /api/geofences/{geofence_id}": {AUTHORITY_MANAGE},
     # vehicle_registrations
     "GET /api/vehicles/{vehicle_id}/registrations": {REGISTRATIONS_VIEW},
     "GET /api/vehicle-registrations/current": {REGISTRATIONS_VIEW},
@@ -387,6 +382,7 @@ EXPECTED_ROUTE_KEYS = {
     "DELETE /api/vehicle-registrations/{reg_id}": {REGISTRATIONS_MANAGE},
     # audit
     "GET /api/audit": {AUDIT_VIEW},
+    "GET /api/audit/users": {AUDIT_VIEW},
     # reports
     "POST /api/reports/generate": {REPORTS_GENERATE},
     "POST /api/reports/generate/pdf": {REPORTS_GENERATE},

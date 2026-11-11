@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { renderWithProviders } from '@/test/render'
@@ -190,6 +190,31 @@ describe('IntegrationsPage', () => {
     expect(started).toBe('?full=false')
   })
 
+  it('disables the sync buttons when no token is stored', async () => {
+    mockMount({ settings: () => HttpResponse.json([]) })
+    const { user } = renderWithProviders(<IntegrationsPage />, { role: 'admin' })
+    await user.click(await screen.findByText('Skydio'))
+    expect(await screen.findByRole('button', { name: /Sync Now/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Full Sync/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Sync Telemetry/ })).toBeDisabled()
+  })
+
+  it('disables the sync buttons after Disconnect', async () => {
+    mockMount()
+    server.use(http.post('/api/sync/disconnect', () => HttpResponse.json({ ok: true })))
+    const { user } = renderWithProviders(<IntegrationsPage />, { role: 'admin' })
+    await user.click(await screen.findByText('Skydio'))
+    expect(await screen.findByRole('button', { name: /Sync Now/ })).toBeEnabled()
+
+    await user.click(screen.getByRole('button', { name: /Disconnect/ }))
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Disconnect' }))
+
+    expect(await screen.findByText('Skydio disconnected')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Sync Now/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Sync Telemetry/ })).toBeDisabled()
+  })
+
   it('shows the reason when the sync job fails', async () => {
     mockMount()
     server.use(
@@ -314,6 +339,25 @@ describe('IntegrationsPage', () => {
       expect(await screen.findAllByText(/Imported 1 flight/)).not.toHaveLength(0)
       expect(screen.queryByText(/Not in the fleet/)).not.toBeInTheDocument()
     })
+  })
+
+  it("imports the app's own flights CSV through /export/flights/import", async () => {
+    let posted = false
+    mockMount()
+    server.use(
+      http.post('/api/export/flights/import', () => { posted = true; return HttpResponse.json({ imported: 3, errors: [] }) }),
+      http.post('/api/export/flights/import/log', () => HttpResponse.json({ error: 'wrong route' })),
+    )
+    const { user } = renderWithProviders(<IntegrationsPage />, { role: 'admin' })
+    await screen.findByText('Flight Log Import')
+
+    await user.selectOptions(screen.getByLabelText('Format'), 'Flights CSV (exported from this app)')
+    const input = document.querySelector('input[type="file"]')
+    await user.upload(input, new File(['Flight ID,Vehicle,Pilot,Takeoff\n'], 'flights_export.csv', { type: 'text/csv' }))
+    await user.click(screen.getByRole('button', { name: 'Import' }))
+
+    expect(await screen.findAllByText(/Imported 3 flights/)).not.toHaveLength(0)
+    expect(posted).toBe(true)
   })
 
   // A full provider export is hundreds of megabytes and over a thousand

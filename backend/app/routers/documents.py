@@ -17,16 +17,28 @@ from pydantic import BaseModel
 from app.config import settings
 from app.constants import DOCUMENT_NOT_FOUND, ACCESS_DENIED
 from app.deps import AdminUser, DBSession, UploadForm, require_form_user
+from app.models.attachment import Attachment
+from app.models.battery import Battery
 from app.models.certification import PilotCertification
+from app.models.controller import Controller
+from app.models.dock import Dock
 from app.models.document import Document
+from app.models.maintenance import MaintenanceRecord
+from app.models.maintenance_schedule import MaintenanceSchedule
+from app.models.operating_authority import OperatingAuthority
+from app.models.other_equipment import OtherEquipment
+from app.models.pilot import Pilot
+from app.models.sensor import SensorPackage
+from app.models.vehicle import Vehicle
 from app.models.user import User
-from app.schemas.document import DocumentOut
+from app.schemas.document import DocumentOut, NameText
 from app.responses import responses
 from app.routers.auth import require_permission
 from app.services import evidence
 from app.services import permissions as permissions_service
 from app.services.audit import compute_changes, log_action
 from app.services.file_validation import is_inline_safe, mime_for_filename, user_file_headers
+from app.routers.folders import _live_folder
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
@@ -53,6 +65,15 @@ ALLOWED_ENTITY_TYPES = {
     "maintenance", "maintenance_schedule",
     "operating_authority",
     "general",
+}
+
+# The record each entity_type's entity_id names ("general" has none).
+ENTITY_MODELS = {
+    "pilot": Pilot, "vehicle": Vehicle, "certification": PilotCertification,
+    "battery": Battery, "controller": Controller, "dock": Dock, "sensor": SensorPackage,
+    "attachment": Attachment, "other": OtherEquipment,
+    "maintenance": MaintenanceRecord, "maintenance_schedule": MaintenanceSchedule,
+    "operating_authority": OperatingAuthority,
 }
 
 
@@ -103,9 +124,18 @@ def _validate_document_request(entity_type: str, entity_id, ext: str) -> None:
         raise HTTPException(400, f"entity_type must be one of {sorted(ALLOWED_ENTITY_TYPES)}")
     if entity_type != "general" and entity_id is None:
         raise HTTPException(400, f"entity_id is required for entity_type '{entity_type}'")
+    if entity_type == "general" and entity_id is not None:
+        raise HTTPException(400, "entity_id is not used for entity_type 'general'")
     # An extension is required: the served content type is derived from it.
     if ext not in ALLOWED_DOCUMENT_EXTENSIONS:
         raise HTTPException(400, f"File type '{ext or '(none)'}' not allowed.")
+
+
+def _check_entity_exists(db, entity_type: str, entity_id) -> None:
+    """Raises 404 when entity_id names no record of entity_type."""
+    model = ENTITY_MODELS.get(entity_type)
+    if model is not None and db.get(model, entity_id) is None:
+        raise HTTPException(404, f"No {entity_type.replace('_', ' ')} with id {entity_id}")
 
 
 def _check_own_record(db, user, entity_type: str, entity_id) -> None:
@@ -128,13 +158,13 @@ class DocumentUploadFields(BaseModel):
 
     entity_type: str  # see ALLOWED_ENTITY_TYPES; "general" has no parent entity
     document_type: str  # classification label, e.g. "insurance", "manual"
-    title: str
+    title: NameText
     entity_id: int | None = None  # required unless entity_type is "general"
     notes: str | None = None
     folder_id: int | None = None
 
 
-@router.post("/upload", response_model=DocumentOut, responses=responses(400, 403, 413))
+@router.post("/upload", response_model=DocumentOut, responses=responses(400, 403, 404, 413))
 async def upload_document(db: DBSession, upload: UploadPermissionForm):
     """Upload a document, optionally attached to a parent entity.
 
@@ -153,11 +183,15 @@ async def upload_document(db: DBSession, upload: UploadPermissionForm):
     entity_type, entity_id = fields.entity_type, fields.entity_id
     # Strip any directory components from the client-supplied filename. A
     # filename like "../../etc/passwd" would otherwise let the upload land
-    # outside upload_dir via path concatenation.
-    safe_filename = Path(file.filename or "upload").name or "upload"
+    # outside upload_dir via path concatenation. Both slash types count: a
+    # Windows path keeps its backslashes on a Linux server otherwise.
+    safe_filename = Path((file.filename or "upload").replace("\\", "/")).name or "upload"
     ext = Path(safe_filename).suffix.lower()
     _validate_document_request(entity_type, entity_id, ext)
+    _check_entity_exists(db, entity_type, entity_id)
     _check_own_record(db, admin, entity_type, entity_id)
+    if fields.folder_id is not None:
+        _live_folder(db, fields.folder_id)
 
     # Path build + realpath containment stays inline: the resolved.relative_to
     # check is the taint sanitizer for the write below, and moving it into a
@@ -183,9 +217,11 @@ async def upload_document(db: DBSession, upload: UploadPermissionForm):
     contents = await file.read()
     if len(contents) > settings.MAX_UPLOAD_SIZE:
         raise HTTPException(413, f"File too large. Maximum size is {settings.MAX_UPLOAD_SIZE // (1024*1024)}MB")
-    from app.services.file_validation import is_executable
+    from app.services.file_validation import is_executable, matches_extension
     if is_executable(contents[:512]):
         raise HTTPException(400, "Executable file uploads are not allowed")
+    if not matches_extension(contents[:1024], ext):
+        raise HTTPException(400, f"File content does not match its '{ext}' extension")
     dest.write_bytes(contents)
 
     # Map entity_type to the appropriate foreign key column
@@ -289,13 +325,13 @@ def view_document(
 
 class DocumentUpdate(BaseModel):
     """Schema for partial document metadata updates."""
-    title: str | None = None
+    title: NameText | None = None
     document_type: str | None = None
     notes: str | None = None
     folder_id: int | None = None
 
 
-@router.patch("/{doc_id}", response_model=DocumentOut, responses=responses(404))
+@router.patch("/{doc_id}", response_model=DocumentOut, responses=responses(404, 409))
 def update_document(
     doc_id: int,
     data: DocumentUpdate,
@@ -314,6 +350,11 @@ def update_document(
     doc = _live_document(db, doc_id)
     permissions_service.require_record_access(db, user, FILES_EDIT, permissions_service.owns_document(db, user, doc))
     update_fields = data.model_dump(exclude_unset=True)
+    # A held document can still be refiled; what it says stays frozen.
+    if set(update_fields) - {"folder_id"}:
+        evidence.check_editable(doc)
+    if update_fields.get("folder_id") is not None:
+        _live_folder(db, update_fields["folder_id"])
     changes = compute_changes(doc, update_fields, list(update_fields))
     for key, value in update_fields.items():
         setattr(doc, key, value)

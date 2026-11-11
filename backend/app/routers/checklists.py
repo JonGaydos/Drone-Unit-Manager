@@ -2,7 +2,7 @@ from datetime import datetime, date
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, StringConstraints, field_validator
 from sqlalchemy.orm import Session
 
 from app.constants import TEMPLATE_NOT_FOUND
@@ -24,24 +24,48 @@ ManageUser = Annotated[User, Depends(require_permission("checklists.manage"))]
 
 
 
+TemplateName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
+ItemLabel = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
+VehicleModel = Annotated[str, StringConstraints(max_length=200)]
+
+
 class ChecklistItemIn(BaseModel):
-    label: str
+    label: ItemLabel
     required: bool = True
 
 
+def _unique_labels(items):
+    """Responses are matched to items by label, so two items cannot share one."""
+    if items is not None and len({i.label for i in items}) != len(items):
+        raise ValueError("each item label must be unique")
+    return items
+
+
 class ChecklistTemplateCreate(BaseModel):
-    name: str
+    name: TemplateName
     description: Optional[str] = None
-    vehicle_model: Optional[str] = None
+    vehicle_model: Optional[VehicleModel] = None
     items: list[ChecklistItemIn]
+
+    _labels = field_validator("items")(_unique_labels)
 
 
 class ChecklistTemplateUpdate(BaseModel):
-    name: Optional[str] = None
+    name: Optional[TemplateName] = None
     description: Optional[str] = None
-    vehicle_model: Optional[str] = None
+    vehicle_model: Optional[VehicleModel] = None
     items: Optional[list[ChecklistItemIn]] = None
     is_active: Optional[bool] = None
+
+    _labels = field_validator("items")(_unique_labels)
+
+    @field_validator("name", "items", "is_active")
+    @classmethod
+    def _not_null(cls, v):
+        # Optional only so a patch can leave them out; a sent null is refused.
+        if v is None:
+            raise ValueError("cannot be empty")
+        return v
 
 
 class ChecklistResponseIn(BaseModel):
@@ -84,7 +108,7 @@ def get_template(
     return _template_out(t)
 
 
-@router.post("/templates", responses=responses(400))
+@router.post("/templates", responses=responses(400, 422))
 def create_template(
     data: ChecklistTemplateCreate,
     db: DBSession,
@@ -104,7 +128,7 @@ def create_template(
     return _template_out(template)
 
 
-@router.patch("/templates/{template_id}", responses=responses(404))
+@router.patch("/templates/{template_id}", responses=responses(400, 404, 422))
 def update_template(
     template_id: int,
     data: ChecklistTemplateUpdate,
@@ -115,8 +139,10 @@ def update_template(
     if not t:
         raise HTTPException(status_code=404, detail=TEMPLATE_NOT_FOUND)
     updates = data.model_dump(exclude_unset=True)
-    if "items" in updates and updates["items"] is not None:
-        updates["items"] = [item if isinstance(item, dict) else item.model_dump() for item in data.items]
+    if "items" in updates:
+        if not data.items:
+            raise HTTPException(status_code=400, detail="At least one checklist item is required")
+        updates["items"] = [item.model_dump() for item in data.items]
     for key, val in updates.items():
         setattr(t, key, val)
     db.commit()

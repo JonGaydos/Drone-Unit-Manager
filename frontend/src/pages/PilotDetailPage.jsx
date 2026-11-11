@@ -6,13 +6,14 @@ import { useToast } from '@/contexts/ToastContext'
 import { ownsPilot } from '@/lib/ownership'
 import { formatHours, formatDuration } from '@/lib/utils'
 import { CERT_STATUS_COLORS } from '@/lib/constants'
-import { ArrowLeft, Clock, Calendar, ShieldCheck, Edit, Save, X, Camera, CheckCircle, XCircle, Target, GraduationCap, AlertTriangle, TrendingUp } from 'lucide-react'
+import { ArrowLeft, Clock, Calendar, ShieldCheck, Edit, Save, X, Camera, CheckCircle, XCircle, Target, GraduationCap, AlertTriangle } from 'lucide-react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 import {
   BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
 import DocumentUpload from '@/components/DocumentUpload'
+import { useAuthedImage } from '@/hooks/useAuthedImage'
 
 /** Performance tiles whose values come from other features. The server leaves a
  *  value null when the user's view of that feature is off, so its tile is hidden. */
@@ -62,6 +63,7 @@ export default function PilotDetailPage() {
   }, [canSeeFiles])
 
   const [pilot, setPilot] = useState(null)
+  const photoSrc = useAuthedImage(pilot?.photo_url)
   const [stats, setStats] = useState(null)
   const [flights, setFlights] = useState([])
   const [certifications, setCertifications] = useState([])
@@ -120,6 +122,9 @@ export default function PilotDetailPage() {
   }
 
   const handleSave = async () => {
+    const missing = [['first_name', 'First Name'], ['last_name', 'Last Name']]
+      .filter(([key]) => !String(editForm[key] ?? '').trim()).map(([, label]) => label)
+    if (missing.length) { toast.error(`Required: ${missing.join(', ')}`); return }
     setSaving(true)
     try {
       const updated = await api.patch(`/pilots/${id}`, editForm)
@@ -145,8 +150,8 @@ export default function PilotDetailPage() {
       <div className="bg-card border border-border rounded-xl p-6">
         <div className="flex items-start gap-4">
           <div className="relative shrink-0">
-            {pilot.photo_url ? (
-              <img src={pilot.photo_url} alt={pilot.full_name}
+            {photoSrc ? (
+              <img src={photoSrc} alt={pilot.full_name}
                 className="w-16 h-16 rounded-2xl object-cover" />
             ) : (
               <div className="w-16 h-16 rounded-2xl bg-primary/15 flex items-center justify-center text-primary text-xl font-bold">
@@ -175,13 +180,13 @@ export default function PilotDetailPage() {
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label htmlFor="first-name" className="block text-xs font-medium text-muted-foreground mb-1">First Name</label>
-                    <input id="first-name" type="text" value={editForm.first_name} onChange={e => setEditForm({...editForm, first_name: e.target.value})}
+                    <label htmlFor="first-name" className="block text-xs font-medium text-muted-foreground mb-1">First Name *</label>
+                    <input id="first-name" type="text" required value={editForm.first_name} onChange={e => setEditForm({...editForm, first_name: e.target.value})}
                       className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                   </div>
                   <div>
-                    <label htmlFor="last-name" className="block text-xs font-medium text-muted-foreground mb-1">Last Name</label>
-                    <input id="last-name" type="text" value={editForm.last_name} onChange={e => setEditForm({...editForm, last_name: e.target.value})}
+                    <label htmlFor="last-name" className="block text-xs font-medium text-muted-foreground mb-1">Last Name *</label>
+                    <input id="last-name" type="text" required value={editForm.last_name} onChange={e => setEditForm({...editForm, last_name: e.target.value})}
                       className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
                   </div>
                 </div>
@@ -320,19 +325,8 @@ export default function PilotDetailPage() {
       {/* Performance Analytics */}
       {performance && (
         <>
+          {/* Flight totals are the Stats row above; these are the other figures. */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center text-primary"><QuadcopterIcon className="w-5 h-5" /></div>
-              <div><p className="text-2xl font-bold text-foreground">{performance.total_flights}</p><p className="text-xs text-muted-foreground">Total Flights</p></div>
-            </div>
-            <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-500/15 flex items-center justify-center text-blue-400"><Clock className="w-5 h-5" /></div>
-              <div><p className="text-2xl font-bold text-foreground">{performance.total_flight_hours}h</p><p className="text-xs text-muted-foreground">Flight Hours</p></div>
-            </div>
-            <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center text-emerald-400"><TrendingUp className="w-5 h-5" /></div>
-              <div><p className="text-2xl font-bold text-foreground">{performance.avg_duration_min}m</p><p className="text-xs text-muted-foreground">Avg Duration</p></div>
-            </div>
             <FeatureGatedTiles performance={performance} />
           </div>
 

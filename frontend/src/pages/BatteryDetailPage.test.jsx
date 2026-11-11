@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { withPermissions } from '@/test/permissions'
@@ -115,5 +115,36 @@ describe('BatteryDetailPage', () => {
     render()
     expect(await screen.findByRole('heading', { name: 'Cell A' })).toBeInTheDocument()
     expect(screen.queryByText('Battery not found')).toBeNull()
+  })
+
+  it('edits status from the shared battery list, keeping charging', async () => {
+    mockMount({ battery: () => HttpResponse.json({ ...BATTERY, status: 'charging' }) })
+    const { user } = render()
+    const heading = await screen.findByRole('heading', { name: 'Cell A' })
+    await user.click(heading.parentElement.querySelector('button'))
+    const select = screen.getByLabelText('Status')
+    expect(select).toHaveValue('charging')
+    expect([...select.options].map(o => o.value)).toEqual(['active', 'charging', 'maintenance', 'retired', 'damaged'])
+  })
+
+  it('sends null for a cleared health or date so the value is removed', async () => {
+    let body = null
+    mockMount({ battery: () => HttpResponse.json({ ...BATTERY, acquired_date: '2025-01-02', decommissioned_date: null }) })
+    server.use(http.patch('/api/batteries/4', async ({ request }) => {
+      body = await request.json()
+      return HttpResponse.json({ ...BATTERY, health_pct: null, acquired_date: null })
+    }))
+    const { user } = render()
+    const heading = await screen.findByRole('heading', { name: 'Cell A' })
+    await user.click(heading.parentElement.querySelector('button'))
+    await user.clear(screen.getByLabelText('Health %'))
+    await user.clear(screen.getByLabelText('Acquired Date'))
+    await user.click(screen.getByRole('button', { name: /Save/ }))
+
+    await waitFor(() => expect(body).not.toBeNull())
+    expect(body.health_pct).toBeNull()
+    expect(body.acquired_date).toBeNull()
+    expect(body.decommissioned_date).toBeNull()
+    expect(body.cycle_count).toBe(33)
   })
 })

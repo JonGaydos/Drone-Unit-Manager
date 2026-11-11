@@ -34,20 +34,17 @@ describe('FlightPathMap', () => {
 })
 
 describe('LocationPickerMap', () => {
-  it('renders with a selected location and geofences', () => {
+  it('renders with a selected location', () => {
     renderMap(
       <LocationPickerMap
         lat={30.32} lon={-86.14}
-        geofences={[
-          { id: 1, zone_type: 'no_fly', geometry_type: 'circle', center_lat: 30.3, center_lon: -86.1, radius_m: 200, name: 'NFZ' },
-        ]}
         onSelect={() => {}}
       />,
     )
     expect(screen.getAllByTestId('leaflet-stub').length).toBeGreaterThan(0)
   })
 
-  it('renders gracefully with no coords and no geofences', () => {
+  it('renders gracefully with no coords', () => {
     renderMap(<LocationPickerMap />)
     expect(screen.getByTestId('leaflet-stub')).toBeInTheDocument()
   })

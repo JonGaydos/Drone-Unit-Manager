@@ -99,6 +99,8 @@ describe('MediaPage', () => {
     const held = (await screen.findByText('Tower inspection')).closest('.group')
     const free = screen.getByText('Crash site').closest('.group')
     expect(within(held).queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    expect(within(held).queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(within(free).getByRole('button', { name: 'Edit' })).toBeInTheDocument()
     expect(within(free).getByRole('button', { name: 'Delete' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Recently deleted/ })).toBeInTheDocument()
 
@@ -113,5 +115,26 @@ describe('MediaPage', () => {
     await screen.findByText('Tower inspection')
     expect(screen.queryByRole('button', { name: /legal hold/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Recently deleted/ })).not.toBeInTheDocument()
+  })
+
+  it('sends cleared fields and an empty pilot list when every pilot is untagged', async () => {
+    let sent = null
+    mockMount({ photos: () => HttpResponse.json([{ ...PHOTOS[0], description: 'North face', pilot_ids: [1] }]) })
+    server.use(http.patch('/api/photos/1', async ({ request }) => {
+      sent = Object.fromEntries(await request.formData())
+      return HttpResponse.json({ message: 'Photo updated' })
+    }))
+    const { user } = renderWithProviders(<MediaPage />, { role: 'admin' })
+
+    const card = (await screen.findByText('Tower inspection')).closest('.group')
+    await user.click(within(card).getByRole('button', { name: 'Edit' }))
+    await user.clear(await screen.findByLabelText('Description'))
+    await user.clear(screen.getByLabelText('Date Taken'))
+    await user.click(screen.getByRole('button', { name: 'Jane Doe' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await vi.waitFor(() => expect(sent).toEqual({
+      title: 'Tower inspection', description: '', date_taken: '', pilot_ids: '',
+    }))
   })
 })

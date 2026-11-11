@@ -2,7 +2,7 @@ from datetime import date, datetime
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, StringConstraints, field_validator
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -14,11 +14,13 @@ from app.models.pilot import Pilot
 from app.models.vehicle import Vehicle
 from app.models.user import User
 from app.constants import (
-    INCIDENT_NOT_FOUND, INCIDENT_REPORT_TYPES, INCIDENT_SEVERITIES, INCIDENT_STATUSES,
+    INCIDENT_CATEGORIES, INCIDENT_NOT_FOUND, INCIDENT_REPORT_TYPES, INCIDENT_SEVERITIES,
+    INCIDENT_STATUSES,
 )
 from app.services.choices import require_choices
 from app.services.audit import log_action
 from app.services.audit_capture import delete_links
+from app.services.local_time import display_zone
 from app.responses import responses
 
 router = APIRouter(prefix="/api/incidents", tags=["incidents"])
@@ -31,29 +33,35 @@ DeleteUser = Annotated[User, Depends(require_permission("incidents.delete"))]
 # Resolution fields. Changing them needs incidents.resolve on top of edit access.
 INCIDENT_CHOICES = {
     "severity": INCIDENT_SEVERITIES,
+    "category": INCIDENT_CATEGORIES,
     "status": INCIDENT_STATUSES,
     "report_type": INCIDENT_REPORT_TYPES,
 }
 RESOLVE_FIELDS = ("status", "resolution", "resolution_date", "corrective_actions")
 
+IncidentTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
+IncidentText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+Latitude = Annotated[float, Field(ge=-90, le=90)]
+Longitude = Annotated[float, Field(ge=-180, le=180)]
+Cost = Annotated[float, Field(ge=0)]
 
 
 class IncidentCreate(BaseModel):
     date: str
-    title: str
+    title: IncidentTitle
     severity: str
     category: str
     status: Optional[str] = None  # checked only; a new incident always starts open
-    description: str
+    description: IncidentText
     location: Optional[str] = None
-    lat: Optional[float] = None
-    lon: Optional[float] = None
+    lat: Optional[Latitude] = None
+    lon: Optional[Longitude] = None
     flight_id: Optional[int] = None
     pilot_id: Optional[int] = None
     vehicle_id: Optional[int] = None
     equipment_grounded: bool = False
     damage_description: Optional[str] = None
-    estimated_cost: Optional[float] = None
+    estimated_cost: Optional[Cost] = None
     notes: Optional[str] = None
     report_type: str = "incident"
     impact_level: Optional[str] = None
@@ -62,13 +70,13 @@ class IncidentCreate(BaseModel):
 
 class IncidentUpdate(BaseModel):
     date: Optional[str] = None
-    title: Optional[str] = None
+    title: Optional[IncidentTitle] = None
     severity: Optional[str] = None
     category: Optional[str] = None
-    description: Optional[str] = None
+    description: Optional[IncidentText] = None
     location: Optional[str] = None
-    lat: Optional[float] = None
-    lon: Optional[float] = None
+    lat: Optional[Latitude] = None
+    lon: Optional[Longitude] = None
     flight_id: Optional[int] = None
     pilot_id: Optional[int] = None
     vehicle_id: Optional[int] = None
@@ -78,11 +86,19 @@ class IncidentUpdate(BaseModel):
     equipment_grounded: Optional[bool] = None
     damage_description: Optional[str] = None
     corrective_actions: Optional[str] = None
-    estimated_cost: Optional[float] = None
+    estimated_cost: Optional[Cost] = None
     notes: Optional[str] = None
     report_type: Optional[str] = None
     impact_level: Optional[str] = None
     outcome_description: Optional[str] = None
+
+    @field_validator("date", "title", "severity", "category", "description", "status", "report_type")
+    @classmethod
+    def _not_null(cls, v):
+        # Optional only so a patch can leave them out; a sent null is refused.
+        if v is None:
+            raise ValueError("cannot be empty")
+        return v
 
 
 class IncidentOut(BaseModel):
@@ -145,6 +161,14 @@ def _enrich(incident: Incident, db: Session, pilot_cache=None, vehicle_cache=Non
         if u:
             out.reported_by_name = u.display_name
     return out
+
+
+def _check_dates(db: Session, incident_date: date, resolution_date: date | None) -> None:
+    """Refuse an incident dated after today (display zone) or resolved before it happened."""
+    if incident_date > datetime.now(display_zone(db)).date():
+        raise HTTPException(status_code=422, detail="Incident date cannot be in the future")
+    if resolution_date is not None and resolution_date < incident_date:
+        raise HTTPException(status_code=422, detail="Resolution date cannot be before the incident date")
 
 
 def _ground_vehicle_if_needed(incident: Incident, db: Session, user, was_grounded: bool = False) -> None:
@@ -219,7 +243,7 @@ def list_incidents(
 
     page: Annotated[int, Query(ge=1)] = 1,
 
-    per_page: Annotated[int, Query(le=200)] = 50,
+    per_page: Annotated[int, Query(ge=1, le=200)] = 50,
 ):
     q = db.query(Incident)
     if status:
@@ -270,6 +294,7 @@ def create_incident(data: IncidentCreate, db: DBSession, user: CreateUser):
         parsed_date = date.fromisoformat(data.date)
     except ValueError:
         raise HTTPException(status_code=422, detail=f"Invalid date format: {data.date}")
+    _check_dates(db, parsed_date, None)
     incident = Incident(
         date=parsed_date,
         title=data.title,
@@ -332,6 +357,9 @@ def update_incident(incident_id: int, data: IncidentUpdate, db: DBSession, user:
             raise HTTPException(status_code=422, detail=f"Invalid resolution_date format: {update_data['resolution_date']}")
     require_choices(update_data, incident, INCIDENT_CHOICES)
     _check_resolve_allowed(db, user, incident, update_data)
+    if "date" in update_data or update_data.get("resolution_date") is not None:
+        _check_dates(db, update_data.get("date", incident.date),
+                     update_data.get("resolution_date", incident.resolution_date))
     for key, value in update_data.items():
         setattr(incident, key, value)
     log_action(db, user.id, user.display_name, "update", "incident", incident.id, incident.title,

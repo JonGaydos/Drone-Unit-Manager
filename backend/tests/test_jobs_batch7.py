@@ -71,7 +71,7 @@ def test_sync_job_runs_and_releases_the_lock(client, admin_headers, skydio):
     _wait_for(client, admin_headers, second.json()["job_id"])
 
 
-def test_sync_job_start_is_refused_while_a_sync_runs(client, admin_headers):
+def test_sync_job_start_is_refused_while_a_sync_runs(client, admin_headers, skydio):
     with sync_guard():
         assert client.post("/api/sync/now/start", headers=admin_headers).status_code == 409
         assert client.post("/api/sync/telemetry/start", headers=admin_headers).status_code == 409

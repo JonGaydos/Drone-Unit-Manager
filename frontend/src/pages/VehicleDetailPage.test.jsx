@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { screen } from '@testing-library/react'
+import { screen, fireEvent } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { withPermissions } from '@/test/permissions'
@@ -128,5 +128,40 @@ describe('VehicleDetailPage', () => {
     })
     await screen.findByRole('heading', { name: /DJI Mavic 3 \(Falcon\)/ })
     expect(screen.getByRole('button', { name: /Add Registration/ })).toBeInTheDocument()
+  })
+
+  it('loads the vehicle photo with the session token and shows it from a blob URL', async () => {
+    let auth = null
+    mockMount({ vehicle: () => HttpResponse.json({ ...VEHICLE, photo_url: '/api/vehicles/7/photo/view' }) })
+    server.use(http.get('/api/vehicles/7/photo/view', ({ request }) => {
+      auth = request.headers.get('Authorization')
+      return new HttpResponse(new Uint8Array([0x89, 0x50, 0x4e, 0x47]), { headers: { 'Content-Type': 'image/png' } })
+    }))
+    render()
+    const img = await screen.findByRole('img', { name: /DJI Mavic 3 \(Falcon\)/ })
+    expect(img.getAttribute('src')).toMatch(/^blob:/)
+    expect(auth).toBe('Bearer test-token')
+  })
+
+  it('previews the registration expiry as the same date three years on', async () => {
+    mockMount()
+    render()
+    fireEvent.click(await screen.findByRole('button', { name: /Add Registration/ }))
+    fireEvent.change(screen.getByLabelText('Registration Date'), { target: { value: '2023-01-01' } })
+    expect(screen.getByLabelText('Expiry (auto: +3 years)')).toHaveValue('2026-01-01')
+    fireEvent.change(screen.getByLabelText('Registration Date'), { target: { value: '2024-02-29' } })
+    expect(screen.getByLabelText('Expiry (auto: +3 years)')).toHaveValue('2027-02-28')
+  })
+
+  it('shows Next Due from the current registration, not the latest dated one', async () => {
+    mockMount({
+      registrations: () => HttpResponse.json([
+        { id: 2, vehicle_id: 7, registration_number: 'REG-NEWER', registration_date: '2025-05-01', expiry_date: '2028-05-01', is_current: false },
+        { id: 1, vehicle_id: 7, registration_number: 'REG-CURRENT', registration_date: '2024-01-01', expiry_date: '2027-01-01', is_current: true },
+      ]),
+    })
+    render()
+    expect(await screen.findByText('Next Due: 2027-01-01')).toBeInTheDocument()
+    expect(screen.getByText(/REG-CURRENT \| Registered: 2024-01-01/)).toBeInTheDocument()
   })
 })

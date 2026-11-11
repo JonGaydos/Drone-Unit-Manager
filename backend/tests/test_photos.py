@@ -397,7 +397,7 @@ def _thumbnail_in_thread(photo_id, results):
     sig, exp = _sign_photo(photo_id, "thumbnail")
     session = database.SessionLocal()
     try:
-        results.append(photos_router.view_thumbnail(photo_id, session, None, sig, exp))
+        results.append(photos_router.view_thumbnail(photo_id, session, None, None, sig, exp))
     finally:
         session.close()
 
@@ -499,7 +499,7 @@ def test_a_thumbnail_whose_save_does_not_commit_is_removed(db, upload_dir, monke
     sig, exp = _sign_photo(photo.id, "thumbnail")
 
     with pytest.raises(StaleDataError):
-        photos_router.view_thumbnail(photo.id, db, None, sig, exp)
+        photos_router.view_thumbnail(photo.id, db, None, None, sig, exp)
 
     assert not os.path.exists(os.path.join(upload_dir, "thumb_test_photos_sig.png"))
 
@@ -534,3 +534,51 @@ def test_purge_removes_a_thumbnail_the_record_never_named(client, db, upload_dir
 
     assert resp.status_code == 200, resp.text
     assert not os.path.exists(stray)
+
+
+# 4. API tokens on the file routes (D-24) -----------------------------------
+
+def _api_token(client, admin_headers, **overrides):
+    resp = client.post("/api/api-tokens", headers=admin_headers,
+                       json={"name": "Reader", "read_only": True, **overrides})
+    assert resp.status_code == 200, resp.text
+    return {"Authorization": f"Bearer {resp.json()['token']}"}
+
+
+@pytest.mark.parametrize("action", ["view", "thumbnail"])
+def test_api_token_fetches_photo_files(client, db, admin_headers, upload_dir, action):
+    photo, _ = _photo_on_disk(db, upload_dir)
+
+    resp = client.get(f"/api/photos/{photo.id}/{action}", headers=_api_token(client, admin_headers))
+
+    assert resp.status_code == 200, resp.text
+
+
+def test_api_token_out_of_scope_is_refused(client, db, admin_headers, upload_dir):
+    photo, _ = _photo_on_disk(db, upload_dir)
+
+    resp = client.get(f"/api/photos/{photo.id}/view", headers=_api_token(client, admin_headers, scopes=["flights"]))
+
+    assert resp.status_code == 403
+
+
+# 5. Unlinking needs a real photo and a real flight or incident (H-2) --------
+
+@pytest.mark.parametrize("kind, seed", [("flight", _seed_flight), ("incident", _seed_incident)])
+def test_unlink_with_a_missing_photo_or_target_is_404(client, db, admin_headers, kind, seed):
+    photo = _seed_photo(db)
+    target = seed(db)
+
+    assert client.delete(f"/api/photos/{photo.id}/{kind}/999999", headers=admin_headers).status_code == 404
+    assert client.delete(f"/api/photos/999999/{kind}/{target.id}", headers=admin_headers).status_code == 404
+
+
+@pytest.mark.parametrize("kind, seed", [("flight", _seed_flight), ("incident", _seed_incident)])
+def test_unlink_of_real_records_still_succeeds(client, db, admin_headers, kind, seed):
+    photo = _seed_photo(db)
+    target = seed(db)
+    assert client.post(f"/api/photos/{photo.id}/{kind}/{target.id}", headers=admin_headers).status_code == 200
+
+    assert client.delete(f"/api/photos/{photo.id}/{kind}/{target.id}", headers=admin_headers).status_code == 200
+    # Unlinking again is a no-op, like linking twice.
+    assert client.delete(f"/api/photos/{photo.id}/{kind}/{target.id}", headers=admin_headers).status_code == 200

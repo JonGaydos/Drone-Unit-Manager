@@ -78,6 +78,36 @@ describe('FlightDetailPage', () => {
     expect(screen.getByText('No telemetry data available for this flight.')).toBeInTheDocument()
   })
 
+  // E-17: at 375 px the action row (Back, GPX, KML, Refresh from API, Edit)
+  // did not wrap and Edit was cut off; the row and its button group now wrap.
+  it('lets the header action row wrap on a narrow screen', async () => {
+    mockMount({ flight: () => HttpResponse.json({ ...FLIGHT, has_telemetry: true }) })
+    render()
+    await screen.findByText('Flight on 2026-05-01')
+    const bar = screen.getByRole('link', { name: /Back to Flights/ }).parentElement
+    expect(bar).toHaveClass('flex-wrap')
+    const buttons = screen.getByRole('button', { name: /GPX/ }).parentElement
+    expect(buttons).toHaveClass('flex-wrap')
+  })
+
+  // E-16: the sensor and attachment values linked to the whole Fleet tab;
+  // they open the matching item's detail page, as the battery does.
+  it('links the sensor package and attachments to their detail pages', async () => {
+    mockMount({ flight: () => HttpResponse.json({
+      ...FLIGHT, sensor_package: 'SN-77', attachment_top: 'Spotlight (AT-5)', attachment_bottom: 'UNKNOWN-1',
+    }) })
+    server.use(http.get('/api/fleet/options', () => HttpResponse.json(fleetOptions({
+      vehicles: [vehicleOption({ id: 2, nickname: 'Falcon', model: 'Mavic 3' })],
+      sensors: [{ id: 7, serial_number: 'SN-77', name: 'Thermal' }],
+      attachments: [{ id: 5, serial_number: 'AT-5', name: 'Spotlight' }],
+    }))))
+    render()
+    expect(await screen.findByRole('link', { name: 'SN-77' })).toHaveAttribute('href', '/fleet/sensors/7')
+    expect(screen.getByRole('link', { name: 'Spotlight (AT-5)' })).toHaveAttribute('href', '/fleet/attachments/5')
+    // No matching item: the list tab, as before.
+    expect(screen.getByRole('link', { name: 'UNKNOWN-1' })).toHaveAttribute('href', '/fleet?tab=attachments')
+  })
+
   it('shows the no-telemetry empty state', async () => {
     mockMount()
     render()
@@ -125,6 +155,39 @@ describe('FlightDetailPage', () => {
   // reshuffled every field. They now share one grid; the cells that have a
   // read-only counterpart must keep their order, and the value must become an
   // editable control in place.
+  it('shows and edits landing address, coordinates, distance and operating cost', async () => {
+    let patchBody = null
+    mockMount({ flight: () => HttpResponse.json({
+      ...FLIGHT, landing_address: 'North Field', takeoff_lat: 44.5, takeoff_lon: -93.25,
+      landing_lat: 44.6, landing_lon: -93.2, distance_m: 1200, operating_cost: 35.5,
+    }) })
+    server.use(http.patch('/api/flights/:id', async ({ request }) => {
+      patchBody = await request.json()
+      return HttpResponse.json(FLIGHT)
+    }))
+    const { user } = render('admin')
+    expect(await screen.findByText('North Field')).toBeInTheDocument()
+    expect(screen.getByText('44.5, -93.25')).toBeInTheDocument()
+    expect(screen.getByText('44.6, -93.2')).toBeInTheDocument()
+    expect(screen.getByText('1200 m')).toBeInTheDocument()
+    expect(screen.getByText('$35.50')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.clear(screen.getByLabelText('Landing'))
+    await user.type(screen.getByLabelText('Landing'), 'South Field')
+    await user.clear(screen.getByLabelText('Takeoff Latitude'))
+    await user.type(screen.getByLabelText('Takeoff Latitude'), '45')
+    await user.clear(screen.getByLabelText('Landing Longitude'))
+    await user.clear(screen.getByLabelText('Distance (m)'))
+    await user.type(screen.getByLabelText('Distance (m)'), '1500')
+    await user.clear(screen.getByLabelText('Operating Cost ($)'))
+    await user.type(screen.getByLabelText('Operating Cost ($)'), '40')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(patchBody).toEqual({
+      landing_address: 'South Field', takeoff_lat: 45, landing_lon: null, distance_m: 1500, operating_cost: 40,
+    }))
+  })
+
   it('keeps the field order and container when switching into edit mode', async () => {
     mockMount()
     const { user } = render('admin')

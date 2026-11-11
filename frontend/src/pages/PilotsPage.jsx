@@ -19,19 +19,24 @@ function PilotModal({ pilot, canManage, canSeeContacts, onSave, onClose }) {
     first_name: '', last_name: '', email: '', phone: '', phone_type: 'work', phone_work: '', badge_number: '', status: 'active', counts_toward_totals: true, notes: ''
   })
   const [saving, setSaving] = useState(false)
+  const toast = useToast()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    const missing = [['first_name', 'First Name'], ['last_name', 'Last Name']]
+      .filter(([key]) => !String(form[key] ?? '').trim()).map(([, label]) => label)
+    if (missing.length) { toast.error(`Required: ${missing.join(', ')}`); return }
     setSaving(true)
     try { await onSave(form) } finally { setSaving(false) }
   }
 
-  const field = (label, key, type = 'text') => (
+  const field = (label, key, type = 'text', required = false) => (
     <div>
-      <label htmlFor={`pilot-${key}`} className="block text-sm font-medium text-foreground mb-1">{label}</label>
+      <label htmlFor={`pilot-${key}`} className="block text-sm font-medium text-foreground mb-1">{label}{required && ' *'}</label>
       <input
         id={`pilot-${key}`}
         type={type}
+        required={required}
         value={form[key] || ''}
         onChange={(e) => setForm({ ...form, [key]: e.target.value })}
         className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring text-sm"
@@ -43,8 +48,8 @@ function PilotModal({ pilot, canManage, canSeeContacts, onSave, onClose }) {
     <Modal open onClose={onClose} title={pilot ? 'Edit Pilot' : 'Add Pilot'} className="max-w-md">
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            {field('First Name', 'first_name')}
-            {field('Last Name', 'last_name')}
+            {field('First Name', 'first_name', 'text', true)}
+            {field('Last Name', 'last_name', 'text', true)}
           </div>
           {canSeeContacts && (
             <>

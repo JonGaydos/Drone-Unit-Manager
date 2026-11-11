@@ -5,7 +5,8 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, selectinload
 
-from app.constants import TRAINING_LOG_NOT_FOUND
+from app.constants import TRAINING_LOG_NOT_FOUND, TRAINING_OUTCOMES, TRAINING_TYPES
+from app.services.choices import require_choices
 from app.deps import DBSession
 from app.models.user import User
 from app.routers.auth import require_permission
@@ -24,10 +25,23 @@ from app.schemas.training_log import (
 router = APIRouter(prefix="/api/training-logs", tags=["training-logs"])
 
 LOGS_EDIT = "logs.edit"
+TRAINING_CHOICES = {"training_type": TRAINING_TYPES, "outcome": TRAINING_OUTCOMES}
 
 ViewUser = Annotated[User, Depends(require_permission("logs.view"))]
 CreateUser = Annotated[User, Depends(require_permission("logs.create"))]
 EditUser = Annotated[User, Depends(require_permission(LOGS_EDIT))]
+
+
+def _require_end_after_start(update_data: dict, current) -> None:
+    """422 when the end time (sent, or stored) is before the start time."""
+    start = update_data.get("start_time", getattr(current, "start_time", None))
+    end = update_data.get("end_time", getattr(current, "end_time", None))
+    if start is None or end is None:
+        return
+    if (start.tzinfo is None) != (end.tzinfo is None):
+        start, end = start.replace(tzinfo=None), end.replace(tzinfo=None)
+    if end < start:
+        raise HTTPException(422, "End time must be after start time")
 
 
 def _vehicle_display(vehicle: Vehicle) -> str:
@@ -144,11 +158,13 @@ def get_training_log(training_id: int, db: DBSession, user: ViewUser):
     return _training_to_out(training, db)
 
 
-@router.post("", response_model=TrainingLogOut, responses=responses(401))
+@router.post("", response_model=TrainingLogOut, responses=responses(401, 422))
 def create_training_log(data: TrainingLogCreate, db: DBSession, admin: CreateUser):
     from app.services.audit import log_action
     pilots_data = data.pilots
     training_dict = data.model_dump(exclude={"pilots"})
+    require_choices(training_dict, None, TRAINING_CHOICES)
+    _require_end_after_start(training_dict, None)
     training = TrainingLog(**training_dict, created_by_id=admin.id)
     db.add(training)
     db.flush()
@@ -165,7 +181,7 @@ def create_training_log(data: TrainingLogCreate, db: DBSession, admin: CreateUse
     return _training_to_out(training, db)
 
 
-@router.patch("/{training_id}", response_model=TrainingLogOut, responses=responses(401, 404))
+@router.patch("/{training_id}", response_model=TrainingLogOut, responses=responses(401, 404, 422))
 def update_training_log(training_id: int, data: TrainingLogUpdate, db: DBSession, admin: EditUser):
     training = db.query(TrainingLog).filter(TrainingLog.id == training_id).first()
     if not training:
@@ -173,6 +189,8 @@ def update_training_log(training_id: int, data: TrainingLogUpdate, db: DBSession
     _require_edit(db, admin, training)
     update_data = data.model_dump(exclude_unset=True)
     pilots_data = update_data.pop("pilots", None)
+    require_choices(update_data, training, TRAINING_CHOICES)
+    _require_end_after_start(update_data, training)
     for key, value in update_data.items():
         setattr(training, key, value)
     if pilots_data is not None:
@@ -197,12 +215,14 @@ def delete_training_log(training_id: int, db: DBSession, admin: EditUser):
     return {"ok": True}
 
 
-@router.post("/{training_id}/pilots", response_model=TrainingLogPilotOut, responses=responses(401, 404))
+@router.post("/{training_id}/pilots", response_model=TrainingLogPilotOut, responses=responses(401, 404, 409))
 def add_pilot_to_training(training_id: int, data: TrainingLogPilotIn, db: DBSession, admin: EditUser):
     training = db.query(TrainingLog).filter(TrainingLog.id == training_id).first()
     if not training:
         raise HTTPException(status_code=404, detail=TRAINING_LOG_NOT_FOUND)
     _require_edit(db, admin, training)
+    if db.query(TrainingLogPilot).filter(TrainingLogPilot.training_log_id == training_id, TrainingLogPilot.pilot_id == data.pilot_id).first():
+        raise HTTPException(status_code=409, detail="This pilot is already on this training")
     tp = TrainingLogPilot(
         training_log_id=training_id,
         pilot_id=data.pilot_id,

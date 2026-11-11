@@ -3,25 +3,18 @@ import { useParams, Link } from 'react-router-dom'
 import { api, getSection } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
-import { STATUS_COLORS } from '@/lib/constants'
+import { EQUIPMENT_STATUSES, STATUS_COLORS } from '@/lib/constants'
 import { ArrowLeft, Package, Edit } from 'lucide-react'
 import DocumentUpload from '@/components/DocumentUpload'
 import MaintenanceHistoryCard from '@/components/MaintenanceHistoryCard'
 import EditActions from '@/components/EditActions'
-
-const STATUS_OPTIONS = [
-  { value: 'active', label: 'Active' },
-  { value: 'maintenance', label: 'Maintenance' },
-  { value: 'retired', label: 'Retired' },
-  { value: 'damaged', label: 'Damaged' },
-]
 
 // Inline edit form definition; the fields render from this config.
 const EDIT_FIELDS = [
   { key: 'name', label: 'Name' },
   { key: 'category', label: 'Category' },
   { key: 'serial_number', label: 'Serial Number' },
-  { key: 'status', label: 'Status', type: 'select', options: STATUS_OPTIONS },
+  { key: 'status', label: 'Status', type: 'select', options: EQUIPMENT_STATUSES.other },
   { key: 'acquired_date', label: 'Acquired Date', type: 'date' },
   { key: 'decommissioned_date', label: 'Decommissioned Date', type: 'date' },
 ]
@@ -60,8 +53,9 @@ export default function OtherEquipmentDetailPage() {
     setSaving(true)
     try {
       const payload = { ...editForm }
-      if (!payload.acquired_date) delete payload.acquired_date
-      if (!payload.decommissioned_date) delete payload.decommissioned_date
+      // An emptied date is sent as null, which clears it.
+      payload.acquired_date = payload.acquired_date || null
+      payload.decommissioned_date = payload.decommissioned_date || null
       const updated = await api.patch(`/other-equipment/${id}`, payload)
       setItem(updated)
       setEditing(false)

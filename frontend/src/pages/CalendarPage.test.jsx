@@ -1,9 +1,16 @@
-import { describe, it, expect } from 'vitest'
-import { screen, within, fireEvent, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi } from 'vitest'
+import { screen, within, fireEvent, waitFor, act } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { renderWithProviders } from '@/test/render'
 import CalendarPage from './CalendarPage'
+
+// Keep the global stub's markup but record the props, so a test can fire
+// datesSet and read the events handed to FullCalendar.
+const fc = vi.hoisted(() => ({ props: null }))
+vi.mock('@fullcalendar/react', () => ({
+  default: (props) => { fc.props = props; return <div data-testid="fullcalendar-stub" /> },
+}))
 
 // @fullcalendar/react is globally stubbed to <div data-testid="fullcalendar-stub" />.
 // Because the stub never fires datesSet, the page does NOT fetch /calendar on
@@ -54,5 +61,43 @@ describe('CalendarPage', () => {
 
     await waitFor(() => expect(body).not.toBeNull())
     expect(body).toMatchObject({ title: 'Range Day', category: 'event', start_date: '2026-07-01' })
+  })
+
+  it('refuses an end date before the start date or a blank title without saving', async () => {
+    let posted = false
+    server.use(http.post('/api/calendar/events', () => { posted = true; return HttpResponse.json({ id: 1 }) }))
+    const { user } = renderWithProviders(<CalendarPage />, { role: 'admin' })
+    await screen.findByRole('heading', { name: 'Calendar' })
+    await user.click(screen.getByRole('button', { name: 'Add event / leave' }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.change(within(dialog).getByLabelText('Title'), { target: { value: '   ' } })
+    fireEvent.change(within(dialog).getByLabelText('Start date'), { target: { value: '2026-11-25' } })
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Required: Title')).toBeInTheDocument()
+    fireEvent.change(within(dialog).getByLabelText('Title'), { target: { value: 'Backwards' } })
+    const end = within(dialog).getByLabelText('End date (optional)')
+    expect(end).toHaveAttribute('min', '2026-11-25')
+    fireEvent.change(end, { target: { value: '2026-11-01' } })
+    // The min attribute stops a browser submit; the handler checks as well.
+    fireEvent.submit(dialog.querySelector('form'))
+    expect(await screen.findByText('End date cannot be before the start date')).toBeInTheDocument()
+    expect(posted).toBe(false)
+  })
+
+  it('hands FullCalendar an all-day end one day past the last day, which it treats as exclusive', async () => {
+    server.use(http.get('/api/calendar', () => HttpResponse.json({
+      events: [
+        { id: 'event-1', event_id: 1, title: 'Leave', category: 'leave', start: '2026-11-10', end: '2026-11-12', all_day: true },
+        { id: 'event-2', event_id: 2, title: 'One day', category: 'event', start: '2026-11-20', end: null, all_day: true },
+      ],
+      flight_counts: {},
+    })))
+    renderWithProviders(<CalendarPage />, { role: 'admin' })
+    await screen.findByTestId('fullcalendar-stub')
+    act(() => fc.props.datesSet({ startStr: '2026-11-01T00:00:00', endStr: '2026-12-01T00:00:00' }))
+    await waitFor(() => expect(fc.props.events.some(e => e.id === 'event-1')).toBe(true))
+    const leave = fc.props.events.find(e => e.id === 'event-1')
+    expect(leave).toMatchObject({ start: '2026-11-10', end: '2026-11-13', allDay: true })
+    expect(fc.props.events.find(e => e.id === 'event-2').end).toBeUndefined()
   })
 })

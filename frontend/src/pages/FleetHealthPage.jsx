@@ -74,15 +74,15 @@ export default function FleetHealthPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center text-primary"><QuadcopterIcon className="w-5 h-5" /></div>
-          <div><p className="text-2xl font-bold text-foreground">{summary.total_vehicles}</p><p className="text-xs text-muted-foreground">Active Vehicles</p></div>
+          <div><p className="text-2xl font-bold text-foreground">{summary.total_vehicles}</p><p className="text-xs text-muted-foreground">Vehicles in Service</p></div>
         </div>
         <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-blue-500/15 flex items-center justify-center text-blue-400"><Battery className="w-5 h-5" /></div>
-          <div><p className="text-2xl font-bold text-foreground">{summary.total_batteries}</p><p className="text-xs text-muted-foreground">Total Batteries</p></div>
+          <div><p className="text-2xl font-bold text-foreground">{summary.total_batteries}</p><p className="text-xs text-muted-foreground">Batteries in Service</p></div>
         </div>
         <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center text-emerald-400"><Activity className="w-5 h-5" /></div>
-          <div><p className="text-2xl font-bold text-foreground">{summary.avg_battery_health}%</p><p className="text-xs text-muted-foreground">Avg Battery Health</p></div>
+          <div><p className="text-2xl font-bold text-foreground">{summary.avg_battery_health == null ? '—' : `${summary.avg_battery_health}%`}</p><p className="text-xs text-muted-foreground">Avg Battery Health</p></div>
         </div>
         <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
           <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${summary.total_overdue_maintenance > 0 ? 'bg-red-500/15 text-red-400' : 'bg-emerald-500/15 text-emerald-400'}`}>
@@ -146,7 +146,7 @@ export default function FleetHealthPage() {
                 </tr>
               ))}
               {sortedVehicles.length === 0 && (
-                <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">No active vehicles</td></tr>
+                <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">No vehicles in service</td></tr>
               )}
             </tbody>
           </table>

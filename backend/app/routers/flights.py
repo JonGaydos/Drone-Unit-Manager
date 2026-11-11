@@ -3,7 +3,7 @@ from datetime import date
 from math import ceil
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload
@@ -128,21 +128,10 @@ def _flight_order(sort: str, order: str) -> list:
     return keys + [Flight.date.desc().nulls_first(), Flight.takeoff_time.desc().nulls_first(), Flight.id.desc()]
 
 
-@router.get("")
-def list_flights(
-    db: DBSession,
-    user: ViewUser,
-    pilot_id: int | None = None,
-    vehicle_id: int | None = None,
-    purpose: str | None = None,
-    date_from: date | None = None,
-    date_to: date | None = None,
-    review_status: str | None = None,
-    search: str | None = None,
-    sort: str = "date",
-    order: str = "desc",
-    page: int = 1,
-    per_page: int = 100):
+def filtered_flights(db, pilot_id=None, vehicle_id=None, purpose=None, date_from=None,
+                     date_to=None, review_status=None, search=None):
+    """The Flights page's filters as a query, joined to pilot and vehicle for the
+    search. Shared by the list and the CSV export so both cover the same flights."""
     filters = []
     if pilot_id:
         filters.append(Flight.pilot_id == pilot_id)
@@ -160,8 +149,26 @@ def list_flights(
         filters.append(Flight.review_status == review_status)
     if search and search.strip():
         filters.append(_flight_search(search.strip()))
-    base = (db.query(Flight).outerjoin(Pilot, Pilot.id == Flight.pilot_id)
+    return (db.query(Flight).outerjoin(Pilot, Pilot.id == Flight.pilot_id)
             .outerjoin(Vehicle, Vehicle.id == Flight.vehicle_id).filter(*filters))
+
+@router.get("")
+def list_flights(
+    db: DBSession,
+    user: ViewUser,
+    pilot_id: int | None = None,
+    vehicle_id: int | None = None,
+    purpose: str | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    review_status: str | None = None,
+    search: str | None = None,
+    sort: str = "date",
+    order: str = "desc",
+    page: Annotated[int, Query(ge=1)] = 1,
+    # 1000 is what the Analytics page asks for when it pages through every flight.
+    per_page: Annotated[int, Query(ge=1, le=1000)] = 100):
+    base = filtered_flights(db, pilot_id, vehicle_id, purpose, date_from, date_to, review_status, search)
     total = base.with_entities(func.count(Flight.id)).scalar()
     offset = (page - 1) * per_page
     flights = base.options(
@@ -172,7 +179,7 @@ def list_flights(
         "total": total,
         "page": page,
         "per_page": per_page,
-        "total_pages": ceil(total / per_page) if per_page > 0 else 1,
+        "total_pages": ceil(total / per_page),
     }
 
 
@@ -596,14 +603,56 @@ def refresh_flight_from_api(flight_id: int, db: DBSession, admin: AdminUser):
     }
 
 
-@router.post("", response_model=FlightOut, responses=responses(401))
+# A typed duration may differ from the times by this much: the edit forms round
+# times to the minute.
+DURATION_TOLERANCE_S = 60
+TIME_FIELDS = ("takeoff_time", "landing_time")
+
+
+def _fill_and_check_times(db, values: dict, sent: set, stored: Flight | None = None) -> None:
+    """Fill a missing date and duration from the times, then check the three agree.
+
+    ``values`` is what will be written; ``stored`` the flight it overlays (None on
+    create). The date follows a changed takeoff and the duration follows changed
+    times unless the caller sent them. Only rules touching a sent field are
+    checked, so an edit of something else still saves an imported flight whose
+    stored values disagree.
+    """
+    def current(name):
+        if name in values:
+            return values[name]
+        return getattr(stored, name) if stored is not None else None
+
+    takeoff, landing = current("takeoff_time"), current("landing_time")
+    times_sent = bool(sent & set(TIME_FIELDS))
+    if "takeoff_time" in sent and "date" not in sent and takeoff is not None:
+        values["date"] = local_flight_date(takeoff, display_zone(db))
+    if times_sent and "duration_seconds" not in sent and takeoff and landing and landing > takeoff:
+        values["duration_seconds"] = int((landing - takeoff).total_seconds())
+
+    if times_sent and takeoff and landing and landing <= takeoff:
+        raise HTTPException(422, "Landing time must be after takeoff time")
+    day = current("date")
+    if sent & {"date", "takeoff_time"} and day and takeoff:
+        expected = local_flight_date(takeoff, display_zone(db))
+        if day != expected:
+            raise HTTPException(422, f"Date must match the takeoff date ({expected})")
+    duration = current("duration_seconds")
+    if sent & {"duration_seconds", *TIME_FIELDS} and duration is not None and takeoff and landing:
+        if abs(duration - (landing - takeoff).total_seconds()) > DURATION_TOLERANCE_S:
+            raise HTTPException(422, "Duration must match the takeoff and landing times")
+
+
+@router.post("", response_model=FlightOut, responses=responses(401, 422))
 def create_flight(
     data: FlightCreate,
     db: DBSession,
     admin: Annotated[User, Depends(require_permission("flights.create"))],
 ):
     from app.services.audit import log_action
-    flight = Flight(**data.model_dump(), review_status=NEEDS_REVIEW, pilot_confirmed=True,
+    values = data.model_dump()
+    _fill_and_check_times(db, values, {k for k, v in values.items() if v is not None})
+    flight = Flight(**values, review_status=NEEDS_REVIEW, pilot_confirmed=True,
                     data_source="manual", created_by_id=admin.id)
     db.add(flight)
     db.flush()
@@ -658,7 +707,7 @@ def _returns_to_queue(db, user: User, flight: Flight, update_data: dict) -> bool
     return bool(_changed_fields(flight, update_data, content))
 
 
-@router.patch("/{flight_id}", response_model=FlightOut, responses=responses(401, 403, 404))
+@router.patch("/{flight_id}", response_model=FlightOut, responses=responses(401, 403, 404, 422))
 def update_flight(
     flight_id: int,
     data: FlightUpdate,
@@ -671,6 +720,7 @@ def update_flight(
         raise HTTPException(status_code=404, detail=FLIGHT_NOT_FOUND)
     update_data = data.model_dump(exclude_unset=True)
     _check_edit_allowed(db, admin, flight, update_data)
+    _fill_and_check_times(db, update_data, set(update_data), flight)
     if _returns_to_queue(db, admin, flight, update_data):
         update_data["review_status"] = NEEDS_REVIEW
     # Flights are records of what happened, so every changed field is audited.

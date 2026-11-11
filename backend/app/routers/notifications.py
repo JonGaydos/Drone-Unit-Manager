@@ -33,6 +33,13 @@ DEFAULT_CATEGORIES = [
 # Not RFC-complete; just rejects newlines/control chars and obvious non-emails.
 _CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f]")
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s.]+(?:\.[^@\s.]+)+\Z")
+DEFAULT_SEND_TIME = "07:00"
+# 24-hour HH:MM. A value the scheduler cannot read would silently never send.
+SEND_TIME_RE = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d\Z")
+
+# A test digest is logged with this status, not "sent", so it never counts as
+# the day's scheduled digest.
+TEST_SEND_STATUS = "test"
 
 # Test sends allowed per user in the window. The digest carries unit data and
 # the override address can be anywhere, so the test button must not become a
@@ -40,6 +47,8 @@ EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s.]+(?:\.[^@\s.]+)+\Z")
 _TEST_SEND_LIMIT = 3
 _TEST_SEND_WINDOW = 600  # seconds
 _test_sends: dict[int, list[float]] = defaultdict(list)
+# SMTP test emails (Integrations) get the same limit, counted on their own.
+_smtp_test_sends: dict[int, list[float]] = defaultdict(list)
 
 
 class NotificationPrefUpdate(BaseModel):
@@ -64,17 +73,34 @@ class NotificationPrefOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-def _check_test_send_rate(user_id: int) -> None:
-    """Count a test send for ``user_id``, refusing it past the limit.
+def _check_test_send_rate(user_id: int, sends: dict[int, list[float]] = _test_sends) -> None:
+    """Count a test send for ``user_id`` in ``sends``, refusing it past the limit.
 
     Raises:
         HTTPException: 429 when the user has used up the window's sends.
     """
     now = time()
-    recent = [t for t in _test_sends[user_id] if now - t < _TEST_SEND_WINDOW]
+    recent = [t for t in sends[user_id] if now - t < _TEST_SEND_WINDOW]
     if len(recent) >= _TEST_SEND_LIMIT:
         raise HTTPException(429, "Too many test emails. Try again in a few minutes.")
-    _test_sends[user_id] = recent + [now]
+    sends[user_id] = recent + [now]
+
+
+def check_smtp_test_rate(user_id: int) -> None:
+    """The test-digest limit, applied to SMTP test emails (429 past it)."""
+    _check_test_send_rate(user_id, _smtp_test_sends)
+
+
+def _check_pref_values(data: NotificationPrefUpdate) -> None:
+    """Refuse a send time, send day or category the digest cannot use (400)."""
+    if data.send_time is not None and not SEND_TIME_RE.match(data.send_time):
+        raise HTTPException(400, "send_time must be a 24-hour time HH:MM, 00:00 to 23:59")
+    if data.send_day is not None and not 0 <= data.send_day <= 6:
+        raise HTTPException(400, "send_day must be 0 (Monday) to 6 (Sunday)")
+    if data.categories is not None:
+        unknown = [c for c in data.categories if c not in DEFAULT_CATEGORIES]
+        if unknown:
+            raise HTTPException(400, f"Unknown digest categories: {', '.join(map(str, unknown))}")
 
 
 def _get_or_create_pref(db: Session, user_id: int) -> NotificationPreference:
@@ -117,7 +143,17 @@ def update_preferences(
     db: DBSession,
     user: CurrentUser,
 ):
-    """Update the current user's email notification preferences."""
+    """Update the current user's email notification preferences.
+
+    A field left out keeps its value. A field sent as null clears it: send_day
+    and email_override become empty, send_time and categories go back to their
+    defaults; enabled and frequency cannot be null.
+    """
+    _check_pref_values(data)
+    sent = data.model_fields_set
+    for field in ("enabled", "frequency"):
+        if field in sent and getattr(data, field) is None:
+            raise HTTPException(400, f"{field} cannot be empty")
     pref = _get_or_create_pref(db, user.id)
     if data.enabled is not None:
         pref.enabled = data.enabled
@@ -125,14 +161,14 @@ def update_preferences(
         if data.frequency not in ("daily", "weekly", "off"):
             raise HTTPException(400, "Frequency must be 'daily', 'weekly', or 'off'")
         pref.frequency = data.frequency
-    if data.send_time is not None:
-        pref.send_time = data.send_time
-    if data.send_day is not None:
+    if "send_time" in sent:
+        pref.send_time = data.send_time or DEFAULT_SEND_TIME
+    if "send_day" in sent:
         pref.send_day = data.send_day
-    if data.categories is not None:
-        pref.categories = json.dumps(data.categories)
-    if data.email_override is not None:
-        override = data.email_override.strip()
+    if "categories" in sent:
+        pref.categories = json.dumps(DEFAULT_CATEGORIES if data.categories is None else data.categories)
+    if "email_override" in sent:
+        override = (data.email_override or "").strip()
         if not override:
             pref.email_override = None
         elif not can(db, user, "digest.redirect"):
@@ -191,11 +227,11 @@ def send_test_digest(
                details=f"to={to_email}, sent={success}")
     db.commit()
     if success:
-        # Log the send
+        # Logged as a test so the scheduler still sends today's digest.
         log = NotificationLog(
             user_id=user.id,
             subject=subject,
-            status="sent",
+            status=TEST_SEND_STATUS,
             categories_included=json.dumps(list(digest.keys())),
             item_count=sum(len(v) if isinstance(v, list) else 0 for v in digest.values()),
         )
@@ -210,10 +246,12 @@ def send_test_digest(
 def get_notification_log(
     db: DBSession,
     user: CurrentUser,
-    limit: int = 50):
-    """Get notification send history for the current user."""
+    limit: int = 50,
+    mine: bool = False):
+    """Get notification send history: an admin sees every user's unless
+    ``mine`` asks for their own only (the preferences card); others see their own."""
     q = db.query(NotificationLog)
-    if user.role != "admin":
+    if mine or user.role != "admin":
         q = q.filter(NotificationLog.user_id == user.id)
     logs = q.order_by(NotificationLog.sent_at.desc()).limit(limit).all()
     return [

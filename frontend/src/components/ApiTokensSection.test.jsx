@@ -91,4 +91,12 @@ describe('ApiTokensSection', () => {
     expect(await screen.findByText('expired')).toBeInTheDocument()
     expect(screen.queryByText('active')).toBeNull()
   })
+
+  // F-14: the help text said tokens never expire while the form offers an expiry.
+  it('describes the optional expiry in the help text', async () => {
+    mockMount([])
+    renderWithProviders(<ApiTokensSection />, { role: 'admin' })
+    expect(await screen.findByText(/last until revoked unless you set an expiry/)).toBeInTheDocument()
+    expect(screen.queryByText(/never expire until revoked/)).toBeNull()
+  })
 })

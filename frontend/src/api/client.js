@@ -78,6 +78,24 @@ function parseFilename(disposition, fallback) {
   return fallback
 }
 
+/** Read a response body chunk by chunk, reporting the bytes received so far.
+ *  @param {Response} res - The response to read.
+ *  @param {(bytes: number) => void} onProgress - Called after each chunk.
+ *  @returns {Promise<Blob>} The whole body, typed as the response was. */
+async function readWithProgress(res, onProgress) {
+  const reader = res.body.getReader()
+  const chunks = []
+  let received = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    chunks.push(value)
+    received += value.length
+    onProgress(received)
+  }
+  return new Blob(chunks, { type: res.headers.get('Content-Type') || '' })
+}
+
 /** Build a request AbortSignal that fires when the caller's signal aborts or the
  *  timeout elapses (whichever first). Pass timeoutMs 0/falsy to skip the timeout.
  *  @returns {{signal: AbortSignal|undefined, timeoutId: ReturnType<typeof setTimeout>|null}} */
@@ -101,17 +119,34 @@ function httpError(message, status) {
   return error
 }
 
+// Where a FastAPI validation error points, before the field itself.
+const LOC_ROOTS = new Set(['body', 'query', 'path', 'header', 'cookie', 'form'])
+
+/** One FastAPI validation error as text that names its field, e.g.
+ *  "Duration seconds: Input should be greater than or equal to 0". An error on
+ *  the whole body (a model validator) has no field and keeps only its message.
+ *  @param {Object} e - An item of a 422 detail list. @returns {string} */
+function validationMessage(e) {
+  const msg = String(e.msg || e.message || JSON.stringify(e)).replace(/^Value error, /, '')
+  const field = [...(e.loc || [])].reverse().find(p => typeof p === 'string' && !LOC_ROOTS.has(p))
+  if (!field) return msg
+  const label = field.replaceAll('_', ' ')
+  return `${label.charAt(0).toUpperCase()}${label.slice(1)}: ${msg}`
+}
+
+/** An error response's detail as one line of text, or null when it has none. */
+export function detailText(detail) {
+  if (typeof detail === 'string') return detail
+  if (Array.isArray(detail)) return detail.map(validationMessage).join('; ')
+  return null
+}
+
 /** Parse a non-OK response body and throw a sanitized Error. Hides SQL errors,
  *  tracebacks, and internal paths. Always throws.
  *  @param {Response} res @returns {Promise<never>} */
 async function throwSanitizedError(res) {
   const error = await res.json().catch(() => ({ detail: res.statusText }))
-  let sanitized = 'An error occurred. Please try again.'
-  if (typeof error.detail === 'string') {
-    sanitized = error.detail
-  } else if (Array.isArray(error.detail)) {
-    sanitized = error.detail.map(e => e.msg || e.message || JSON.stringify(e)).join('; ')
-  }
+  const sanitized = detailText(error.detail) ?? 'An error occurred. Please try again.'
   // Don't expose SQL errors, tracebacks, or internal paths
   if (sanitized.includes('SQL') || sanitized.includes('Traceback') || sanitized.includes('/app/')) {
     throw httpError('An unexpected error occurred. Please try again.', res.status)
@@ -304,17 +339,19 @@ export const api = {
    * GET a file and trigger a browser download from the response blob.
    * Extracts the filename from Content-Disposition, defaulting to "export.csv".
    * @param {string} path - API endpoint path.
-   * @param {{timeout?: number, signal?: AbortSignal}} [options={}] - timeout in
-   *   ms (default 30s, 0 disables) and an optional caller AbortSignal.
+   * @param {{timeout?: number, signal?: AbortSignal, onProgress?: (bytes: number) => void}} [options={}] -
+   *   timeout in ms (default 30s, 0 disables), an optional caller AbortSignal,
+   *   and an optional callback told the bytes received so far as they arrive.
    * @returns {Promise<void>}
    */
   download: async (path, options = {}) => {
+    const { onProgress, ...fetchOptions } = options
     const token = localStorage.getItem('token')
     const res = await fetchWithTimeout(`${API_BASE}${path}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
-    }, options)
+    }, fetchOptions)
     if (!res.ok) throw new Error('Download failed')
-    const blob = await res.blob()
+    const blob = onProgress && res.body ? await readWithProgress(res, onProgress) : await res.blob()
     const filename = parseFilename(res.headers.get('Content-Disposition'), 'export.csv')
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -357,6 +394,21 @@ export const api = {
     URL.revokeObjectURL(url)
   },
   /**
+   * GET a stored file as a Blob with the session token, for images an <img>
+   * cannot load itself (a bare img request sends no Authorization header).
+   * @param {string} path - API endpoint path serving the file.
+   * @param {{timeout?: number, signal?: AbortSignal}} [options={}]
+   * @returns {Promise<Blob>}
+   */
+  blob: async (path, options = {}) => {
+    const token = localStorage.getItem('token')
+    const res = await fetchWithTimeout(`${API_BASE}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    }, options)
+    if (!res.ok) throw httpError('Could not load file', res.status)
+    return res.blob()
+  },
+  /**
    * Upload a file via multipart/form-data POST.
    * Does not set Content-Type header (browser sets boundary automatically).
    * @param {string} path - API endpoint path.
@@ -380,12 +432,7 @@ export const api = {
     }, options)
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
-      let msg = 'Upload failed'
-      if (typeof data.detail === 'string') {
-        msg = data.detail
-      } else if (Array.isArray(data.detail)) {
-        msg = data.detail.map(e => e.msg || e.message || JSON.stringify(e)).join('; ')
-      }
+      const msg = detailText(data.detail) ?? 'Upload failed'
       if (msg.includes('SQL') || msg.includes('Traceback') || msg.includes('/app/')) {
         throw new Error('An unexpected error occurred')
       }

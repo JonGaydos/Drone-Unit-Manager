@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { withPermissions } from '@/test/permissions'
@@ -80,6 +80,23 @@ describe('SettingsPage', () => {
     expect(await screen.findByText('Organization')).toBeInTheDocument()
   })
 
+  it('refuses a currency rule period outside 1-3650 days without saving', async () => {
+    mockMount()
+    let posted = false
+    server.use(http.post('/api/currency/rules', () => { posted = true; return HttpResponse.json({}) }))
+    const { user } = renderWithProviders(<SettingsPage />, { role: 'admin' })
+    await screen.findByText('Quarterly currency')
+    await user.click(screen.getByRole('button', { name: /New Rule/ }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Long' } })
+    const days = within(dialog).getByLabelText('Period (days)')
+    expect(days).toHaveAttribute('max', '3650')
+    fireEvent.change(days, { target: { value: '99999' } })
+    await user.click(within(dialog).getAllByRole('button').find(b => /Create|Save/.test(b.textContent)))
+    expect(await screen.findByText('Period must be 1 to 3650 days')).toBeInTheDocument()
+    expect(posted).toBe(false)
+  })
+
   it('loads settings into the organization field', async () => {
     mockMount()
     renderWithProviders(<SettingsPage />, { role: 'admin' })
@@ -154,13 +171,10 @@ describe('SettingsPage', () => {
     expect(org).toEqual({ key: 'org_name', value: 'New Org Name' })
   })
 
-  // Defense-in-depth: handleSave() -> gatherInputs() seeds from `{ ...settings }`,
-  // which includes secrets returned by GET /settings as the redaction marker
-  // ("********"). The General tab renders no input for skydio_api_token /
-  // smtp_password to override them, so gatherInputs() must DROP any key whose
-  // current value is the marker before the bulk PUT. The marker must never be
-  // echoed back to the server, while real edited non-secret values still ride
-  // along.
+  // Defense-in-depth: GET /settings returns secrets as the redaction marker
+  // ("********"). handleSave() sends only the General fields that changed, so
+  // the marker must never be echoed back to the server, while real edited
+  // non-secret values still ride along.
   it('General-tab save drops redacted secret markers from the bulk payload (never echoes "********")', async () => {
     let body = null
     mockMount()
@@ -187,6 +201,44 @@ describe('SettingsPage', () => {
     // A real edited non-secret value is still present.
     const org = body.find(i => i.key === 'org_name')
     expect(org).toEqual({ key: 'org_name', value: 'New Org Name' })
+  })
+
+  it('keeps the General fields disabled until the settings have loaded', async () => {
+    let release
+    const loaded = new Promise(r => { release = r })
+    mockMount({
+      settings: async () => { await loaded; return HttpResponse.json([{ key: 'org_name', value: 'Metro PD Drone Unit' }]) },
+    })
+    renderWithProviders(<SettingsPage />, { role: 'admin' })
+    await screen.findByText('Quarterly currency')
+    const before = await screen.findByLabelText('Organization Name')
+    expect(before).toBeDisabled()
+
+    release()
+    // Typing is only possible once the stored value is in place, so nothing
+    // typed early is wiped when the loaded value arrives.
+    await waitFor(() => expect(screen.getByLabelText('Organization Name')).toBeEnabled())
+    expect(screen.getByLabelText('Organization Name')).toHaveValue('Metro PD Drone Unit')
+  })
+
+  it('does not send an untouched time zone or idle lock that is showing its default', async () => {
+    let bulkBody = null
+    mockMount({
+      settings: () => HttpResponse.json([{ key: 'org_name', value: 'Metro PD Drone Unit' }]),
+    })
+    server.use(
+      http.put('/api/settings/bulk', async ({ request }) => { bulkBody = await request.json(); return HttpResponse.json({ ok: true }) }),
+    )
+    const { user } = renderWithProviders(<SettingsPage />, { role: 'admin' })
+    await screen.findByText('Quarterly currency')
+    const orgInput = await screen.findByDisplayValue('Metro PD Drone Unit')
+    await waitFor(() => expect(orgInput).toBeEnabled())
+    await user.clear(orgInput)
+    await user.type(orgInput, 'Renamed Unit')
+    await user.click(screen.getByRole('button', { name: 'Save Settings' }))
+
+    await waitFor(() => expect(bulkBody).not.toBeNull())
+    expect(bulkBody).toEqual([{ key: 'org_name', value: 'Renamed Unit' }])
   })
 
   it('saves the selected display timezone in the bulk payload', async () => {
@@ -370,6 +422,30 @@ describe('SettingsPage', () => {
       const [path, options] = spy.mock.calls[0]
       expect(path).toMatch(/^\/backup\/export/)
       expect(options).toMatchObject({ timeout: 0 })
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  // The archive streams while it is built, so a long backup shows how much has
+  // arrived instead of a spinner with no sign of life.
+  it('shows how much of the backup has downloaded', async () => {
+    const { api } = await import('@/api/client')
+    let report
+    let finish
+    const spy = vi.spyOn(api, 'download').mockImplementation((_path, options) => {
+      report = options.onProgress
+      return new Promise(resolve => { finish = resolve })
+    })
+    try {
+      mockMount()
+      const { user } = renderWithProviders(<SettingsPage />, { role: 'admin' })
+      await screen.findByText('Settings')
+      await user.click(await screen.findByRole('button', { name: /Download Backup|Export Backup/i }))
+
+      act(() => report(5 * 1024 * 1024))
+      expect(await screen.findByText(/5\.0 MB/)).toBeInTheDocument()
+      await act(async () => finish())
     } finally {
       spy.mockRestore()
     }
@@ -564,5 +640,185 @@ describe('SettingsPage role permissions', () => {
 
       await waitFor(() => expect(email).toHaveValue('changed@example.org'))
     })
+  })
+})
+
+describe('SettingsPage settings fixes', () => {
+  // F-03: Save Settings sent every key loaded at page open, so a change saved
+  // meanwhile by another card or admin (sidebar, SMTP, sync) was reverted.
+  it('Save Settings sends only the General fields that changed', async () => {
+    let body = null
+    mockMount({
+      settings: () => HttpResponse.json([
+        { key: 'org_name', value: 'Sample Unit' },
+        { key: 'display_timezone', value: 'America/Chicago' },
+        { key: 'idle_lock_minutes', value: '60' },
+        { key: 'sidebar_config', value: '[]' },
+        { key: 'smtp_host', value: 'mail.example.test' },
+        { key: 'sync_interval', value: '30' },
+        { key: 'telemetry_sync_interval', value: '60' },
+      ]),
+    })
+    server.use(http.put('/api/settings/bulk', async ({ request }) => {
+      body = await request.json()
+      return HttpResponse.json({ ok: true })
+    }))
+    const { user } = renderWithProviders(<SettingsPage />, { role: 'admin' })
+    await screen.findByText('Quarterly currency')
+    const select = await screen.findByLabelText('Time Zone')
+    await waitFor(() => expect(select).toHaveValue('America/Chicago'))
+    await user.selectOptions(select, 'America/Denver')
+    await user.click(screen.getByRole('button', { name: 'Save Settings' }))
+
+    await waitFor(() => expect(body).not.toBeNull())
+    expect(body).toEqual([{ key: 'display_timezone', value: 'America/Denver' }])
+  })
+
+  // F-04: the API Tokens tab rendered the whole General tab under the tokens.
+  it('shows only token management on the API Tokens tab', async () => {
+    mockMount()
+    server.use(http.get('/api/api-tokens', () => HttpResponse.json([])))
+    const { user } = renderWithProviders(<SettingsPage />, { role: 'admin' })
+    await screen.findByText('Quarterly currency')
+    await user.click(screen.getByRole('button', { name: 'API Tokens' }))
+
+    await waitFor(() => expect(screen.queryByText('Quarterly currency')).toBeNull())
+    expect(screen.queryByText('Organization')).toBeNull()
+    expect(screen.queryByRole('button', { name: /Save Settings/ })).toBeNull()
+  })
+
+  // G-1: the manual promised digest preferences in Settings > General.
+  it('shows every user the email digest card on the General tab', async () => {
+    mockMount()
+    server.use(http.get('/api/auth/me', () => HttpResponse.json(withPermissions({ id: 9, username: 'v', role: 'viewer' }))))
+    renderWithProviders(<SettingsPage />, { role: 'viewer' })
+    expect(await screen.findByRole('heading', { name: 'Email Digest' })).toBeInTheDocument()
+    expect(await screen.findByLabelText('Send me email digests')).toBeChecked()
+  })
+
+  // F-07: a blank organization name was saved.
+  it('refuses a blank organization name without saving', async () => {
+    let saved = false
+    mockMount()
+    server.use(http.put('/api/settings/bulk', () => { saved = true; return HttpResponse.json({ ok: true }) }))
+    const { user } = renderWithProviders(<SettingsPage />, { role: 'admin' })
+    await screen.findByText('Quarterly currency')
+    const orgInput = await screen.findByDisplayValue('Metro PD Drone Unit')
+    await user.clear(orgInput)
+    await user.type(orgInput, '   ')
+    await user.click(screen.getByRole('button', { name: /Save Settings/ }))
+
+    expect(await screen.findByText('Required: Organization Name')).toBeInTheDocument()
+    expect(saved).toBe(false)
+  })
+
+  // F-08: the API Documentation card linked to /docs, which production does not serve.
+  it('hides the API Documentation card when the server does not serve the docs', async () => {
+    mockMount()
+    renderWithProviders(<SettingsPage />, { role: 'admin' })
+    await screen.findByText('Quarterly currency')
+    await new Promise(resolve => setTimeout(resolve, 50))
+    expect(screen.queryByText('API Documentation')).toBeNull()
+  })
+
+  it('shows the API Documentation card when the server serves the docs', async () => {
+    mockMount()
+    server.use(http.get('/api/health', () => HttpResponse.json({ status: 'ok', api_docs: true })))
+    renderWithProviders(<SettingsPage />, { role: 'admin' })
+    expect(await screen.findByText('API Documentation')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Open API Documentation/ })).toHaveAttribute('href', '/docs')
+  })
+
+  describe('Edit User', () => {
+    const openEdit = async (user, name) => {
+      await user.click(await screen.findByRole('button', { name: 'Users' }))
+      const row = (await screen.findByText(name)).closest('tr')
+      await user.click(within(row).getByTitle('Edit user'))
+      return screen.findByRole('dialog')
+    }
+
+    // F-11: an admin could change another user's email only through the API.
+    it('edits the email and sends it only when it changed', async () => {
+      const bodies = []
+      mockMount({
+        users: () => HttpResponse.json([
+          { id: 1, username: 'admin', display_name: 'Admin User', role: 'admin', is_active: true },
+          { id: 2, username: 'jpilot', display_name: 'Jamie Pilot', role: 'pilot', is_active: true, email: 'old@example.test' },
+        ]),
+      })
+      server.use(
+        http.get('/api/permissions', () => HttpResponse.json({ registry: [], values: {} })),
+        http.patch('/api/auth/users/2', async ({ request }) => {
+          const body = await request.json()
+          bodies.push(body)
+          return HttpResponse.json({ id: 2, username: 'jpilot', display_name: 'Jamie Pilot', role: 'pilot', is_active: true, email: body.email ?? 'old@example.test' })
+        }),
+      )
+      const { user } = renderWithProviders(<SettingsPage />, { role: 'admin' })
+      let dialog = await openEdit(user, 'Jamie Pilot')
+      const email = within(dialog).getByLabelText('Email')
+      expect(email).toHaveValue('old@example.test')
+      await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+      await waitFor(() => expect(bodies).toHaveLength(1))
+      expect(bodies[0]).not.toHaveProperty('email')
+
+      dialog = await openEdit(user, 'Jamie Pilot')
+      await user.clear(within(dialog).getByLabelText('Email'))
+      await user.type(within(dialog).getByLabelText('Email'), 'new@example.test')
+      await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+      await waitFor(() => expect(bodies).toHaveLength(2))
+      expect(bodies[1].email).toBe('new@example.test')
+    })
+
+    // F-12: a blank display name was saved and showed as nothing.
+    it('refuses a blank display name without saving', async () => {
+      let patched = false
+      mockMount()
+      server.use(
+        http.get('/api/permissions', () => HttpResponse.json({ registry: [], values: {} })),
+        http.patch('/api/auth/users/2', () => { patched = true; return HttpResponse.json({}) }),
+      )
+      const { user } = renderWithProviders(<SettingsPage />, { role: 'admin' })
+      const dialog = await openEdit(user, 'Jamie Pilot')
+      const name = within(dialog).getByLabelText('Display Name')
+      await user.clear(name)
+      await user.type(name, '   ')
+      await user.click(within(dialog).getByRole('button', { name: 'Save' }))
+
+      expect(await screen.findByText('Required: Display Name')).toBeInTheDocument()
+      expect(patched).toBe(false)
+    })
+  })
+
+  // F-13: the reset said 6 characters while the server needs 12 with an
+  // uppercase letter and a number.
+  it('checks a reset password against the server policy before sending it', async () => {
+    let posted = false
+    mockMount()
+    server.use(
+      http.get('/api/permissions', () => HttpResponse.json({ registry: [], values: {} })),
+      http.post('/api/auth/users/2/reset-password', () => { posted = true; return HttpResponse.json({ ok: true }) }),
+    )
+    const { user } = renderWithProviders(<SettingsPage />, { role: 'admin' })
+    await user.click(await screen.findByRole('button', { name: 'Users' }))
+    const row = (await screen.findByText('Jamie Pilot')).closest('tr')
+    await user.click(within(row).getByTitle('Reset password'))
+    const field = within(row).getByPlaceholderText('New password')
+
+    await user.click(within(row).getByRole('button', { name: 'Set' }))
+    expect(await screen.findByText('Password must be at least 12 characters')).toBeInTheDocument()
+    await user.type(field, 'longenough123')
+    await user.click(within(row).getByRole('button', { name: 'Set' }))
+    expect(await screen.findByText('Password must contain at least one uppercase letter')).toBeInTheDocument()
+    await user.clear(field)
+    await user.type(field, 'LongEnoughPass')
+    await user.click(within(row).getByRole('button', { name: 'Set' }))
+    expect(await screen.findByText('Password must contain at least one number')).toBeInTheDocument()
+    expect(posted).toBe(false)
+
+    await user.clear(field)
+    await user.type(field, 'LongEnough123')
+    await user.click(within(row).getByRole('button', { name: 'Set' }))
+    await waitFor(() => expect(posted).toBe(true))
   })
 })

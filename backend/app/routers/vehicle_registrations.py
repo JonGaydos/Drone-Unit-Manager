@@ -1,10 +1,12 @@
-from datetime import date, timedelta
+from datetime import date
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, StringConstraints, model_validator
 
+from app.constants import DOCUMENT_NOT_FOUND
 from app.deps import DBSession
+from app.models.document import Document
 from app.models.user import User
 from app.routers.auth import require_permission
 from app.models.vehicle import Vehicle
@@ -18,11 +20,19 @@ ManageUser = Annotated[User, Depends(require_permission("registrations.manage"))
 
 
 class RegistrationCreate(BaseModel):
-    registration_number: Optional[str] = None
+    registration_number: Optional[Annotated[str, StringConstraints(strip_whitespace=True, max_length=100)]] = None
     registration_date: Optional[date] = None
     expiry_date: Optional[date] = None
     document_id: Optional[int] = None
     notes: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _check(self):
+        if not self.registration_number and not self.registration_date:
+            raise ValueError("Give a registration number or a registration date")
+        if self.registration_date and self.expiry_date and self.expiry_date < self.registration_date:
+            raise ValueError("Expiry date cannot be before the registration date")
+        return self
 
 
 class RegistrationOut(BaseModel):
@@ -38,6 +48,29 @@ class RegistrationOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+def keep_one_current(db, vehicle_id: int) -> None:
+    """Leave the vehicle with exactly one current registration when it has any.
+
+    With none current, the latest registration (by registration date, then id)
+    becomes current; with several, only the latest of them stays current.
+    """
+    regs = db.query(VehicleRegistration).filter(VehicleRegistration.vehicle_id == vehicle_id).all()
+    current = [r for r in regs if r.is_current]
+    if not regs or len(current) == 1:
+        return
+    keep = max(current or regs, key=lambda r: (r.registration_date or date.min, r.id))
+    for reg in regs:
+        reg.is_current = reg is keep
+
+
+def _three_years_after(d: date) -> date:
+    """The same calendar date three years on; Feb 29 falls back to Feb 28."""
+    try:
+        return d.replace(year=d.year + 3)
+    except ValueError:
+        return d.replace(year=d.year + 3, day=28)
+
+
 @router.post("/api/vehicles/{vehicle_id}/registrations", response_model=RegistrationOut, responses=responses(404))
 def create_registration(
     vehicle_id: int,
@@ -48,11 +81,15 @@ def create_registration(
     vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_id).first()
     if not vehicle:
         raise HTTPException(404, "Vehicle not found")
+    if data.document_id is not None and not db.query(Document).filter(
+        Document.id == data.document_id, Document.deleted_at.is_(None)
+    ).first():
+        raise HTTPException(404, DOCUMENT_NOT_FOUND)
 
     # Auto-calculate expiry if not provided: registration_date + 3 years (FAA Part 107)
     expiry = data.expiry_date
     if not expiry and data.registration_date:
-        expiry = data.registration_date + timedelta(days=1095)
+        expiry = _three_years_after(data.registration_date)
 
     for current in db.query(VehicleRegistration).filter(
         VehicleRegistration.vehicle_id == vehicle_id,
@@ -118,5 +155,7 @@ def delete_registration(
     if not reg:
         raise HTTPException(404, "Registration not found")
     db.delete(reg)
+    db.flush()
+    keep_one_current(db, reg.vehicle_id)
     db.commit()
     return {"ok": True}

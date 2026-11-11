@@ -4,7 +4,7 @@ import { api, getSection } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { formatDuration } from '@/lib/utils'
-import { STATUS_COLORS } from '@/lib/constants'
+import { STATUS_COLORS, statusOptions } from '@/lib/constants'
 import { ArrowLeft, Battery, Clock, Edit, Zap, Activity, Loader2, Plus } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
@@ -81,11 +81,11 @@ export default function BatteryDetailPage() {
     setSaving(true)
     try {
       const payload = { ...editForm }
-      if (payload.health_pct === '') delete payload.health_pct
-      else payload.health_pct = Number.parseFloat(payload.health_pct)
+      // An emptied health or date is sent as null, which clears it.
+      payload.health_pct = payload.health_pct === '' ? null : Number.parseFloat(payload.health_pct)
       payload.cycle_count = Number.parseInt(payload.cycle_count, 10) || 0
-      if (!payload.acquired_date) delete payload.acquired_date
-      if (!payload.decommissioned_date) delete payload.decommissioned_date
+      payload.acquired_date = payload.acquired_date || null
+      payload.decommissioned_date = payload.decommissioned_date || null
       const updated = await api.patch(`/batteries/${id}`, payload)
       setBattery(updated)
       setEditing(false)
@@ -149,10 +149,7 @@ export default function BatteryDetailPage() {
                     <label htmlFor="status" className="block text-xs font-medium text-muted-foreground mb-1">Status</label>
                     <select id="status" value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})}
                       className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm">
-                      <option value="active">Active</option>
-                      <option value="inactive">Inactive</option>
-                      <option value="maintenance">Maintenance</option>
-                      <option value="retired">Retired</option>
+                      {statusOptions('battery', editForm.status).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                   </div>
                   <div>

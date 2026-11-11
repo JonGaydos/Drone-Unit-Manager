@@ -1,5 +1,6 @@
 import io
 import logging
+import re
 import os
 from datetime import date
 from types import SimpleNamespace
@@ -228,6 +229,18 @@ def _build_pdf_summary_table(summary: dict, styles, primary_light, avail_width) 
     return [table, Spacer(1, 16)]
 
 
+# Longest text a PDF table cell or chart label shows. A row taller than the
+# page cannot be laid out at all (reportlab LayoutError), so a 10,000-character
+# name or note is cut rather than failing the whole report.
+PDF_CELL_MAX_CHARS = 500
+CHART_LABEL_MAX_CHARS = 30
+
+
+def _clip(value, limit: int) -> str:
+    text = str(value)
+    return text if len(text) <= limit else text[:limit - 3] + "..."
+
+
 def _build_pdf_data_table(rows: list, columns: list, header_bg, alt_row, white, cell_style, header_cell_style, avail_width) -> list:
     """Build PDF data table elements."""
     from reportlab.lib.colors import HexColor
@@ -237,8 +250,9 @@ def _build_pdf_data_table(rows: list, columns: list, header_bg, alt_row, white, 
     table_data = [table_header]
 
     for row in rows[:200]:
-        vals = list(row.values())
-        table_row = [Paragraph(_esc(v) if v is not None else "-", cell_style) for v in vals]
+        # "_links" (and any other underscore key) is for the preview, not a column.
+        vals = [v for k, v in row.items() if not k.startswith("_")]
+        table_row = [Paragraph(_esc(_clip(v, PDF_CELL_MAX_CHARS)) if v is not None else "-", cell_style) for v in vals]
         table_data.append(table_row)
 
     col_w = avail_width / max(len(columns), 1)
@@ -318,6 +332,24 @@ def _logo_image(logo_path: str, width: float):
     return flowable
 
 
+def _chart_image(buf, max_width: float, max_height: float):
+    """The chart PNG as a flowable, as large as fits the box at its own aspect
+    ratio. Forced into a fixed box, a pie chart printed as an ellipse."""
+    from PIL import Image as PILImage
+    from reportlab.platypus import Image as RLImage
+    with PILImage.open(buf) as img:
+        img_w, img_h = img.size
+    buf.seek(0)
+    scale = min(max_width / img_w, max_height / img_h)
+    return RLImage(buf, width=img_w * scale, height=img_h * scale)
+
+
+# Reports that describe the current state (every battery, every live cert)
+# rather than a period: a date range would not filter them, so none is offered
+# or printed. Mirrored by REPORT_FILTERS in frontend/src/pages/ReportsPage.jsx.
+DATELESS_REPORTS = {"battery_status", "pilot_certifications"}
+
+
 def _pdf_masthead(data: dict, config: ReportConfig, org_name: str, logo_path: str | None, theme: SimpleNamespace) -> list:
     """The masthead flowables: logo on the left with organization over report
     title to its right, or the text stacked when there is no logo."""
@@ -331,11 +363,15 @@ def _pdf_masthead(data: dict, config: ReportConfig, org_name: str, logo_path: st
         except Exception:
             logo_flowable = None
 
-    date_range = data.get("summary", {}).get("date_range") or f"{config.date_from or 'All'} to {config.date_to or 'Present'}"
+    if config.report_type in DATELESS_REPORTS:
+        period = f"As of {date.today()}"
+    else:
+        date_range = data.get("summary", {}).get("date_range") or f"{config.date_from or 'All'} to {config.date_to or 'Present'}"
+        period = f"Date Range: {_esc(date_range)}  |  Generated: {date.today()}"
     masthead_text = [
         Paragraph(_esc(org_name), theme.title_style),
         Paragraph(_esc(data.get("title", "Report")), theme.title_h1_style),
-        Paragraph(f"Date Range: {_esc(date_range)}  |  Generated: {date.today()}", theme.subtitle_style),
+        Paragraph(period, theme.subtitle_style),
     ]
 
     if not logo_flowable:
@@ -383,7 +419,7 @@ def _render_report_pdf(data: dict, config: ReportConfig, org_name: str, logo_pat
     matplotlib.use("Agg")
     from reportlab.lib.pagesizes import letter
     from reportlab.lib.units import inch
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RLImage
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 
     theme = _pdf_theme()
     buffer = io.BytesIO()
@@ -403,7 +439,7 @@ def _render_report_pdf(data: dict, config: ReportConfig, org_name: str, logo_pat
     if chart_buf:
         elements.extend([
             Paragraph("Chart", theme.heading_style),
-            RLImage(chart_buf, width=6.5 * inch, height=3 * inch),
+            _chart_image(chart_buf, 6.5 * inch, 3 * inch),
             Spacer(1, 12),
         ])
 
@@ -477,8 +513,7 @@ def generate_per_pilot_zip(config: ReportConfig, db: DBSession, user: ReportUser
             )
             data = _dispatch_report(single_config, db)
             pdf_buf = _render_report_pdf(data, single_config, org_name, logo_path)
-            safe_name = (pilot.full_name or f"pilot_{pilot.id}").replace("/", "_").replace("\\", "_").replace(" ", "_")
-            zf.writestr(f"{safe_name}_review_{period_label}.pdf", pdf_buf.read())
+            zf.writestr(_review_file_name(pilot, period_label), pdf_buf.read())
 
     zip_buffer.seek(0)
     return StreamingResponse(
@@ -486,6 +521,14 @@ def generate_per_pilot_zip(config: ReportConfig, db: DBSession, user: ReportUser
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="per_pilot_reviews_{period_label}.zip"'},
     )
+
+
+def _review_file_name(pilot, period_label: str) -> str:
+    """A per-pilot ZIP entry name: the name cut to 60 characters (Windows cannot
+    extract a 10,000-character one) and the pilot id, so two pilots sharing a
+    name do not overwrite each other on extract."""
+    name = re.sub(r'[<>:"/\\|?*\s]+', "_", pilot.full_name or "pilot").strip("_")[:60] or "pilot"
+    return f"{name}_{pilot.id}_review_{period_label}.pdf"
 
 
 def _chart_bar_by_key(ax, rows, key, value_key, title, ylabel, colors, plt):
@@ -505,11 +548,9 @@ def _chart_bar_by_key(ax, rows, key, value_key, title, ylabel, colors, plt):
     return True
 
 
-def _chart_barh(ax, rows, label_key, value_key, title, xlabel, colors, plt, truncate=None):
+def _chart_barh(ax, rows, label_key, value_key, title, xlabel, colors, plt, truncate=CHART_LABEL_MAX_CHARS):
     """Draw a horizontal bar chart from rows."""
-    labels = [r.get(label_key, "?") for r in rows][:10]
-    if truncate:
-        labels = [l[:truncate] for l in labels]
+    labels = [_clip(r.get(label_key, "?"), truncate) for r in rows][:10]
     values = [r.get(value_key, 0) for r in rows][:10]
     ax.barh(labels, values, color=colors[:len(labels)], edgecolor="white", linewidth=0.5)
     ax.set_xlabel(xlabel, fontsize=9)
@@ -521,7 +562,7 @@ def _chart_barh(ax, rows, label_key, value_key, title, xlabel, colors, plt, trun
 def _chart_grouped_bars(ax, rows, label_key, hr_keys, title, limit=10):
     """Draw a grouped bar chart with flight/mission/training hours."""
     import numpy as np
-    labels = [str(r.get(label_key, "?")) for r in rows][:limit]
+    labels = [_clip(r.get(label_key, "?"), CHART_LABEL_MAX_CHARS) for r in rows][:limit]
     groups = [[r.get(k, 0) for r in rows][:limit] for k in hr_keys]
     x = np.arange(len(labels))
     width = 0.25
@@ -640,6 +681,7 @@ def _flight_summary_row(f) -> dict:
         "purpose": f.purpose or "—",
         "duration_min": round((f.duration_seconds or 0) / 60, 1),
         "location": f.takeoff_address or "—",
+        "_links": {"pilot": f.pilot_id, "vehicle": f.vehicle_id},
     }
 
 
@@ -699,9 +741,11 @@ def _pilot_hours(config: ReportConfig, db: Session):
     if config.pilot_ids:
         q = q.filter(Pilot.id.in_(config.pilot_ids))
 
-    # Only include active pilots when no specific pilots are filtered
+    # With no pilots chosen: every active pilot (at 0 hours if they did not
+    # fly), plus any pilot since made inactive who flew in the period, so the
+    # total matches the Flight Summary for the same range.
     if not config.pilot_ids:
-        q = q.filter(Pilot.status == "active")
+        q = q.having(or_(Pilot.status == "active", func.count(Flight.id) > 0))
 
     # A vendor or guest operator would otherwise sit in the report at 0.0
     # hours, which reads as a unit pilot who did not fly.
@@ -715,6 +759,7 @@ def _pilot_hours(config: ReportConfig, db: Session):
             "flights": r.flights,
             "hours": round(r.seconds / 3600, 1),
             "avg_min": round(r.seconds / max(r.flights, 1) / 60, 1),
+            "_links": {"pilot": r.id},
         })
 
     return {
@@ -747,7 +792,7 @@ def _equipment_utilization(config: ReportConfig, db: Session):
         join_conditions.append(Flight.pilot_id.in_(config.pilot_ids))
 
     q = db.query(
-        Vehicle.manufacturer, Vehicle.model, Vehicle.nickname, Vehicle.serial_number,
+        Vehicle.id, Vehicle.manufacturer, Vehicle.model, Vehicle.nickname, Vehicle.serial_number,
         func.count(Flight.id).label("flights"),
         func.coalesce(func.sum(Flight.duration_seconds), 0).label("seconds"),
     ).select_from(Vehicle).outerjoin(Flight, and_(*join_conditions))
@@ -765,6 +810,7 @@ def _equipment_utilization(config: ReportConfig, db: Session):
             "serial": r.serial_number,
             "flights": r.flights,
             "hours": round(r.seconds / 3600, 1),
+            "_links": {"vehicle": r.id},
         })
 
     # Naming aircraft means "tell me about these", so they stay listed at 0.
@@ -856,6 +902,7 @@ def _certification_row(pc, today: date) -> dict:
         "issue_date": str(pc.issue_date) if pc.issue_date else "—",
         "expiration_date": str(pc.expiration_date) if pc.expiration_date else "—",
         "days_until_expiry": days_until if days_until is not None else "N/A",
+        "_links": {"pilot": pc.pilot_id},
     }
 
 
@@ -1081,6 +1128,7 @@ def _pilot_activity_summary(config: ReportConfig, db: Session):
             "mission_hours": mission_hrs,
             "training_hours": training_hrs,
             "total_hours": total_hrs,
+            "_links": {"pilot": pilot.id},
         })
 
     rows.sort(key=lambda r: r["total_hours"], reverse=True)

@@ -42,6 +42,14 @@ describe('CommandPalette', () => {
     expect(await screen.findByPlaceholderText(/Search pilots/)).toBeInTheDocument()
   })
 
+  // D-18: the input took focus 20 ms after opening, so keys typed at once
+  // went to the page instead.
+  it('takes the keys typed straight after Ctrl+K', async () => {
+    const { user } = renderPalette()
+    await user.keyboard('{Control>}k{/Control}pil')
+    expect(screen.getByPlaceholderText(/Search pilots/)).toHaveValue('pil')
+  })
+
   it('opens on the open-command-palette event', async () => {
     renderPalette()
     await screen.findByTestId('location')

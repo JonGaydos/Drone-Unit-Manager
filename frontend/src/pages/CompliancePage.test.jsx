@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { renderWithProviders } from '@/test/render'
@@ -73,6 +73,33 @@ describe('CompliancePage', () => {
     // Rule details rendered as text, not [object Object]
     expect(screen.getByText(/Quarterly: 1\/5 hours flown/)).toBeInTheDocument()
     expect(screen.queryByText(/\[object Object\]/)).toBeNull()
+  })
+
+  it('names the pilot and certification on an expiring-cert item, apart from its label', async () => {
+    mockMount({
+      compliance: () => HttpResponse.json({
+        ...COMPLIANCE,
+        expiring_certifications: [
+          { pilot_id: 32, pilot_name: 'Robin Vale', cert_type_id: 1, cert_type_name: 'Part 107', days_remaining: 22 },
+        ],
+      }),
+    })
+    renderWithProviders(<CompliancePage />, { role: 'admin' })
+    const item = await screen.findByRole('button', { name: /Expiring Certification/ })
+    expect(item).toHaveTextContent('Expiring Certification Robin Vale - Part 107 - 22 days remaining')
+  })
+
+  it('offers Generate Compliance Report only to a role that can generate reports', async () => {
+    mockMount()
+    renderWithProviders(<CompliancePage />, { role: 'supervisor' })
+    expect(await screen.findByRole('button', { name: /Generate Compliance Report/ })).toBeInTheDocument()
+  })
+
+  it('hides Generate Compliance Report from a viewer', async () => {
+    mockMount()
+    renderWithProviders(<CompliancePage />, { role: 'viewer' })
+    await screen.findByText('Ada Lovelace')
+    expect(screen.queryByRole('button', { name: /Generate Compliance Report/ })).toBeNull()
   })
 
   it('shows the failure fallback when /dashboard/compliance 500s', async () => {
@@ -179,6 +206,83 @@ describe('CompliancePage', () => {
 
       await screen.findByRole('heading', { name: 'Compliance Dashboard' })
       expect(within(tile()).getByText('100%')).toBeInTheDocument()
+    })
+  })
+
+  describe('currency reminders', () => {
+    // G-6: the API takes an intro message but the dialog had no field for it.
+    it('sends the optional message typed in the confirm dialog', async () => {
+      let sent = null
+      mockMount()
+      server.use(
+        http.post('/api/currency/send-reminders/start', async ({ request }) => {
+          sent = await request.json()
+          return HttpResponse.json({ job_id: 'j1' })
+        }),
+        http.get('/api/currency/jobs/j1', () => HttpResponse.json({
+          id: 'j1', status: 'done', progress: { done: 1, total: 1 },
+          result: { sent: 1, skipped_no_email: 0, skipped_current: 0, failed: 0 },
+        })),
+      )
+      const { user } = renderWithProviders(<CompliancePage />, { role: 'admin' })
+      await user.click(await screen.findByRole('button', { name: /Send Reminders/ }))
+      const dialog = await screen.findByRole('dialog')
+      expect(within(dialog).getByText(/to 1 lapsed pilot\?/)).toBeInTheDocument()
+      await user.type(within(dialog).getByLabelText('Message to pilots (optional)'), 'Book a training flight this week.')
+      await user.click(within(dialog).getByRole('button', { name: 'Send' }))
+
+      await waitFor(() => expect(sent).not.toBeNull())
+      expect(sent.custom_message).toBe('Book a training flight this week.')
+      expect(await screen.findByText('Reminders: 1 sent')).toBeInTheDocument()
+    })
+
+    it('sends nothing when the dialog is cancelled', async () => {
+      let posted = false
+      mockMount()
+      server.use(http.post('/api/currency/send-reminders/start', () => { posted = true; return HttpResponse.json({}) }))
+      const { user } = renderWithProviders(<CompliancePage />, { role: 'admin' })
+      await user.click(await screen.findByRole('button', { name: /Send Reminders/ }))
+      const dialog = await screen.findByRole('dialog')
+      await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+      expect(posted).toBe(false)
+    })
+
+    // G-8: reminders ran inside one request, with only a disabled button for
+    // minutes on a large unit.
+    it('runs the reminders as a job and shows its progress', async () => {
+      let polls = 0
+      mockMount()
+      server.use(
+        http.post('/api/currency/send-reminders/start', () => HttpResponse.json({ job_id: 'j2' })),
+        http.get('/api/currency/jobs/j2', () => {
+          polls += 1
+          if (polls === 1) return HttpResponse.json({ id: 'j2', status: 'running', progress: { done: 1, total: 2 } })
+          return HttpResponse.json({
+            id: 'j2', status: 'done', progress: { done: 2, total: 2 },
+            result: { sent: 1, skipped_no_email: 1, skipped_current: 0, failed: 0 },
+          })
+        }),
+      )
+      const { user } = renderWithProviders(<CompliancePage />, { role: 'admin' })
+      await user.click(await screen.findByRole('button', { name: /Send Reminders/ }))
+      await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Send' }))
+
+      expect(await screen.findByText('Sending 1 of 2')).toBeInTheDocument()
+      expect(await screen.findByText('Reminders: 1 sent, 1 skipped (no email)', {}, { timeout: 3000 })).toBeInTheDocument()
+      expect(screen.queryByText(/Sending \d/)).toBeNull()
+    })
+
+    it('reports a failed reminder job', async () => {
+      mockMount()
+      server.use(
+        http.post('/api/currency/send-reminders/start', () => HttpResponse.json({ job_id: 'j3' })),
+        http.get('/api/currency/jobs/j3', () => HttpResponse.json({ id: 'j3', status: 'failed', error: 'SMTP down' })),
+      )
+      const { user } = renderWithProviders(<CompliancePage />, { role: 'admin' })
+      await user.click(await screen.findByRole('button', { name: /Send Reminders/ }))
+      await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Send' }))
+      expect(await screen.findByText('SMTP down')).toBeInTheDocument()
     })
   })
 })

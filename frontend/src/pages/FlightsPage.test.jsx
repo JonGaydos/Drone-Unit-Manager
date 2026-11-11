@@ -5,6 +5,7 @@ import { server } from '@/test/server'
 import { withPermissions } from '@/test/permissions'
 import { fleetOptions, pilotOption, vehicleOption } from '@/test/options'
 import { renderWithProviders } from '@/test/render'
+import { zonedInputToUtcIso } from '@/lib/utils'
 import FlightsPage from './FlightsPage'
 
 // Mount endpoints (Promise.all in load()):
@@ -49,6 +50,10 @@ async function selectEveryRow() {
   await screen.findByText(/\d+ selected/)
   return user
 }
+
+// The search box's debounce runs once after mount and sets page 1; let it pass
+// before paging, so a test sees only the page changes it makes.
+const settleSearchDebounce = () => new Promise(resolve => setTimeout(resolve, 350))
 
 // Records the bulk-update POST body, or leaves it null if nothing was sent.
 function captureBulkUpdate() {
@@ -146,6 +151,114 @@ describe('FlightsPage', () => {
 
     await screen.findByRole('link', { name: 'Jane Doe' })
     expect(lastFlightsUrl.searchParams.get('review_status')).toBe('reviewed')
+  })
+
+  it.each([
+    ['Pilot', 'pilot-1', 'pilot_id', '6'],
+    ['Vehicle', 'vehicle-1', 'vehicle_id', '3'],
+    ['Purpose', 'purpose-1', 'purpose', 'Search'],
+  ])('goes back to page 1 when the %s filter changes', async (_label, id, param, value) => {
+    let lastUrl = null
+    mockMount({
+      flights: ({ request }) => {
+        lastUrl = new URL(request.url)
+        return HttpResponse.json({ flights: FLIGHTS, total: 500, total_pages: 5 })
+      },
+    })
+    const { user, container } = renderWithProviders(<FlightsPage />, { role: 'admin' })
+    await screen.findByRole('link', { name: 'Jane Doe' })
+    await settleSearchDebounce()
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    await waitFor(() => expect(lastUrl.searchParams.get('page')).toBe('2'))
+
+    await user.selectOptions(container.querySelector(`#${id}`), value)
+
+    // The request that carries the new filter asks for page 1.
+    await waitFor(() => expect(lastUrl.searchParams.get(param)).toBe(value))
+    expect(lastUrl.searchParams.get('page')).toBe('1')
+    expect(screen.getByText('Page 1 of 5')).toBeInTheDocument()
+  })
+
+  it('goes back to page 1 when a date filter changes', async () => {
+    let lastUrl = null
+    mockMount({
+      flights: ({ request }) => {
+        lastUrl = new URL(request.url)
+        return HttpResponse.json({ flights: FLIGHTS, total: 500, total_pages: 5 })
+      },
+    })
+    const { user } = renderWithProviders(<FlightsPage />, { role: 'admin' })
+    await screen.findByRole('link', { name: 'Jane Doe' })
+    await settleSearchDebounce()
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    await waitFor(() => expect(lastUrl.searchParams.get('page')).toBe('2'))
+
+    await user.type(screen.getByLabelText('Date From'), '2026-05-01')
+
+    await waitFor(() => expect(lastUrl.searchParams.get('date_from')).toBe('2026-05-01'))
+    expect(lastUrl.searchParams.get('page')).toBe('1')
+  })
+
+  it('Add Flight refuses a negative duration in the input itself (B-17)', async () => {
+    mockMount()
+    const { user } = renderWithProviders(<FlightsPage />, { role: 'admin' })
+    await screen.findByRole('link', { name: 'Jane Doe' })
+    await user.click(screen.getByRole('button', { name: /Add Flight/ }))
+    const form = (await screen.findAllByRole('button', { name: 'Add Flight' })).at(-1).closest('form')
+    expect(within(form).getByLabelText('Duration (seconds)')).toHaveAttribute('min', '0')
+  })
+
+  it('Add Flight sends times, notes, addresses, coordinates, distance and cost', async () => {
+    let body = null
+    mockMount()
+    server.use(http.post('/api/flights', async ({ request }) => { body = await request.json(); return HttpResponse.json({ id: 9 }) }))
+    const { user } = renderWithProviders(<FlightsPage />, { role: 'admin' })
+    await screen.findByRole('link', { name: 'Jane Doe' })
+    await user.click(screen.getByRole('button', { name: /Add Flight/ }))
+    const form = (await screen.findAllByRole('button', { name: 'Add Flight' })).at(-1).closest('form')
+    const f = (label) => within(form).getByLabelText(label)
+    await user.type(f('Takeoff Time'), '2026-05-01T10:00')
+    await user.type(f('Landing Time'), '2026-05-01T10:30')
+    await user.type(f('Landing Address'), 'North Field')
+    await user.type(f('Takeoff Latitude'), '44.5')
+    await user.type(f('Takeoff Longitude'), '-93.25')
+    await user.type(f('Landing Latitude'), '44.6')
+    await user.type(f('Landing Longitude'), '-93.2')
+    await user.type(f('Distance (m)'), '1200')
+    await user.type(f('Operating Cost ($)'), '35.5')
+    await user.type(f('Notes'), 'Hand entry')
+    await user.click(within(form).getByRole('button', { name: 'Add Flight' }))
+
+    await waitFor(() => expect(body).not.toBeNull())
+    expect(body).toEqual({
+      takeoff_time: zonedInputToUtcIso('2026-05-01T10:00'),
+      landing_time: zonedInputToUtcIso('2026-05-01T10:30'),
+      landing_address: 'North Field',
+      takeoff_lat: 44.5, takeoff_lon: -93.25, landing_lat: 44.6, landing_lon: -93.2,
+      distance_m: 1200, operating_cost: 35.5, notes: 'Hand entry',
+    })
+  })
+
+  it('Export CSV sends the active filters', async () => {
+    let exported = null
+    mockMount()
+    server.use(http.get('/api/export/flights/csv', ({ request }) => {
+      exported = new URL(request.url)
+      return new HttpResponse('Flight ID', { headers: { 'Content-Type': 'text/csv' } })
+    }))
+    const { user, container } = renderWithProviders(<FlightsPage />, { role: 'admin' })
+    await screen.findByRole('link', { name: 'Jane Doe' })
+    await user.selectOptions(container.querySelector('#pilot-1'), '6')
+    await user.selectOptions(container.querySelector('#purpose-1'), 'Search')
+    // The status toggle comes before the per-row status badges.
+    await user.click(screen.getAllByRole('button', { name: 'Reviewed' })[0])
+    await user.click(screen.getByRole('button', { name: /Export CSV/ }))
+
+    await waitFor(() => expect(exported).not.toBeNull())
+    expect(exported.searchParams.get('pilot_id')).toBe('6')
+    expect(exported.searchParams.get('purpose')).toBe('Search')
+    expect(exported.searchParams.get('review_status')).toBe('reviewed')
+    expect(exported.searchParams.get('page')).toBeNull()
   })
 
   it('hides bulk-selection checkboxes from a pilot but shows them to a supervisor', async () => {
@@ -368,6 +481,18 @@ describe('FlightsPage', () => {
     await waitFor(() => expect(body).toEqual({ duration_seconds: 700 }))
   })
 
+  it('clearing the date in the row editor sends null', async () => {
+    let body = null
+    mockMount()
+    server.use(http.patch('/api/flights/:id', async ({ request }) => { body = await request.json(); return HttpResponse.json({}) }))
+    const { user, container } = renderWithProviders(<FlightsPage />, { user: { id: 7, username: 'pilot', role: 'pilot', pilot_id: 5 } })
+    await screen.findByRole('link', { name: 'Jane Doe' })
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.clear(container.querySelector('tr input[type="date"]'))
+    await user.click(screen.getByTitle('Save'))
+    await waitFor(() => expect(body).toEqual({ date: null }))
+  })
+
   it('clearing the duration alone sends no PATCH and shows no update message', async () => {
     let patched = false
     mockMount()
@@ -438,5 +563,19 @@ describe('FlightsPage', () => {
       expect(bar.reviewed()).toBeInTheDocument()
       expect(bar.remove()).toBeInTheDocument()
     })
+  })
+
+  // E-14: a native select is as wide as its longest option, so one very long
+  // pilot name pushed the page sideways. The filter selects are capped and
+  // clip their text.
+  it('caps the width of the filter selects (E-14)', async () => {
+    mockMount()
+    renderWithProviders(<FlightsPage />, { role: 'supervisor' })
+    await screen.findAllByText('Jane Doe')
+    const filters = [...document.querySelectorAll('select')].filter(s => /^All /.test(s.options[0]?.text || ''))
+    expect(filters.length).toBeGreaterThan(0)
+    for (const select of filters) {
+      expect(select).toHaveClass('max-w-64', 'truncate')
+    }
   })
 })

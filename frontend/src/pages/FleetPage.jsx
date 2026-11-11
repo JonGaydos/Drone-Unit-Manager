@@ -9,6 +9,7 @@ import { useConfirm } from '@/hooks/useConfirm'
 import { Plus, Edit, Trash2, Search, Battery, Gamepad2, Warehouse, Cpu, Paperclip, Package, ChevronUp, ChevronDown, Download, Loader2, Merge } from 'lucide-react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 import { daysUntil } from '@/lib/utils'
+import { EQUIPMENT_STATUSES } from '@/lib/constants'
 
 // ─── Generic Equipment Modal ────────────────────────────────────────────────
 
@@ -35,13 +36,21 @@ function EquipmentModal({ title, record, fields, onSave, onClose, vehicleModels 
   fields.forEach(f => { defaults[f.key] = '' })
   const [form, setForm] = useState(record || defaults)
   const [saving, setSaving] = useState(false)
+  const toast = useToast()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    const missing = fields.filter(f => f.required && !String(form[f.key] ?? '').trim()).map(f => f.label)
+    if (missing.length) { toast.error(`Required: ${missing.join(', ')}`); return }
     const data = { ...form }
     fields.forEach(f => {
       if (f.type === 'number' && data[f.key]) data[f.key] = Number.parseFloat(data[f.key])
-      if (data[f.key] === '') delete data[f.key]
+      if (data[f.key] !== '') return
+      // On an edit, a field the user emptied is sent as null, which clears it;
+      // one that was empty to begin with is left out.
+      const stored = record?.[f.key]
+      if (record?.id && stored != null && stored !== '') data[f.key] = null
+      else delete data[f.key]
     })
     setSaving(true)
     try { await onSave(data) } finally { setSaving(false) }
@@ -54,14 +63,18 @@ function EquipmentModal({ title, record, fields, onSave, onClose, vehicleModels 
             if (f.type === 'select') {
               return (
                 <div key={f.key}>
-                  <label htmlFor={`field-${f.key}`} className="block text-sm font-medium text-foreground mb-1">{f.label}</label>
+                  <label htmlFor={`field-${f.key}`} className="block text-sm font-medium text-foreground mb-1">{f.label}{f.required && ' *'}</label>
                   <select
                     id={`field-${f.key}`}
-                    value={form[f.key] || ''}
+                    value={form[f.key] ?? ''}
                     onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
                     className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
                   >
-                    {f.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    {/* A stored value outside the list (an older status) stays selectable. */}
+                    {(!form[f.key] || f.options.some(o => o.value === form[f.key])
+                      ? f.options
+                      : [{ value: form[f.key], label: form[f.key] }, ...f.options]
+                    ).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                 </div>
               )
@@ -69,12 +82,12 @@ function EquipmentModal({ title, record, fields, onSave, onClose, vehicleModels 
             if (f.type === 'combobox') {
               return (
                 <div key={f.key}>
-                  <label htmlFor={`field-${f.key}`} className="block text-sm font-medium text-foreground mb-1">{f.label}</label>
+                  <label htmlFor={`field-${f.key}`} className="block text-sm font-medium text-foreground mb-1">{f.label}{f.required && ' *'}</label>
                   <input
                     id={`field-${f.key}`}
                     type="text"
                     list={`${f.key}-options`}
-                    value={form[f.key] || ''}
+                    value={form[f.key] ?? ''}
                     onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
                     className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring text-sm"
                     placeholder="Select or type a model..."
@@ -87,11 +100,12 @@ function EquipmentModal({ title, record, fields, onSave, onClose, vehicleModels 
             }
             return (
               <div key={f.key}>
-                <label htmlFor={`field-${f.key}`} className="block text-sm font-medium text-foreground mb-1">{f.label}</label>
+                <label htmlFor={`field-${f.key}`} className="block text-sm font-medium text-foreground mb-1">{f.label}{f.required && ' *'}</label>
                 <input
                   id={`field-${f.key}`}
                   type={f.type || 'text'}
-                  value={form[f.key] || ''}
+                  required={f.required}
+                  value={form[f.key] ?? ''}
                   onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring text-sm"
                 />
@@ -114,7 +128,7 @@ function EquipmentModal({ title, record, fields, onSave, onClose, vehicleModels 
 
 // ─── Generic Equipment Table ────────────────────────────────────────────────
 
-function EquipmentTable({ items, columns, canManage, onEdit, onDelete, onMerge, emptyMessage, sortKey, sortDir, onToggleSort }) {
+function EquipmentTable({ items, columns, canManage, onEdit, onDelete, deleteLabel = 'Delete', onMerge, emptyMessage, sortKey, sortDir, onToggleSort }) {
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden">
       <div className="overflow-x-auto">
@@ -139,7 +153,7 @@ function EquipmentTable({ items, columns, canManage, onEdit, onDelete, onMerge, 
             <tr key={item.id} className="border-b border-border/50 hover:bg-accent/30 transition-colors">
               {columns.map(c => (
                 <td key={c.key} className={`px-4 py-3 ${c.align === 'right' ? 'text-right' : ''} ${c.primary ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
-                  {c.render ? c.render(item) : (item[c.key] || '—')}
+                  {c.render ? c.render(item) : ((item[c.key] ?? '') === '' ? '—' : item[c.key])}
                 </td>
               ))}
               <td className="px-4 py-3 text-right">
@@ -153,7 +167,7 @@ function EquipmentTable({ items, columns, canManage, onEdit, onDelete, onMerge, 
                         <Merge className="w-4 h-4" />
                       </button>
                     )}
-                    <button onClick={() => onDelete(item.id)} className="p-1.5 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10" aria-label="Delete">
+                    <button onClick={() => onDelete(item.id)} className="p-1.5 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10" aria-label={deleteLabel} title={deleteLabel}>
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -217,15 +231,17 @@ const TAB_CONFIGS = {
     icon: QuadcopterIcon,
     label: 'Vehicles',
     endpoint: '/vehicles',
+    // The API keeps a vehicle and its flight history, marking it retired.
+    retireOnDelete: true,
     columns: [
-      { key: 'nickname', label: 'Vehicle', primary: true, render: v => {
+      { key: 'nickname', label: 'Vehicle', primary: true, value: v => v.nickname || v.serial_number, render: v => {
         const name = v.nickname || v.serial_number || '—'
         return <Link to={`/fleet/vehicles/${v.id}`} className="text-primary hover:underline">{name}</Link>
       }},
       { key: 'manufacturer', label: 'Manufacturer' },
       { key: 'model', label: 'Model' },
       { key: 'serial_number', label: 'Serial Number' },
-      { key: 'faa_registration', label: 'FAA Reg', render: v => v._reg_number || v.faa_registration || '—' },
+      { key: 'faa_registration', label: 'FAA Reg', value: v => v._reg_number || v.faa_registration, render: v => v._reg_number || v.faa_registration || '—' },
       { key: 'next_due', label: 'Next Due', sortable: true, render: v => {
         if (!v._reg_expiry) return <span className="text-muted-foreground">--</span>
         const days = daysUntil(v._reg_expiry)
@@ -248,15 +264,13 @@ const TAB_CONFIGS = {
       { key: 'status', label: 'Status', render: v => <StatusBadge status={v.status} /> },
     ],
     fields: [
-      { key: 'serial_number', label: 'Serial Number' },
+      { key: 'serial_number', label: 'Serial Number', required: true },
       { key: 'provider_serial', label: 'API Serial (what the provider calls this aircraft)' },
-      { key: 'manufacturer', label: 'Manufacturer' },
-      { key: 'model', label: 'Model' },
+      { key: 'manufacturer', label: 'Manufacturer', required: true },
+      { key: 'model', label: 'Model', required: true },
       { key: 'nickname', label: 'Nickname' },
       ...LIFECYCLE_FIELDS,
-      { key: 'status', label: 'Status', type: 'select', options: [
-        { value: 'active', label: 'Active' }, { value: 'maintenance', label: 'Maintenance' }, { value: 'retired', label: 'Retired' }
-      ]},
+      { key: 'status', label: 'Status', type: 'select', options: EQUIPMENT_STATUSES.vehicle },
       { key: 'notes', label: 'Notes' },
     ],
   },
@@ -266,7 +280,7 @@ const TAB_CONFIGS = {
     label: 'Batteries',
     endpoint: '/batteries',
     columns: [
-      { key: 'nickname', label: 'Battery', primary: true, render: b => {
+      { key: 'nickname', label: 'Battery', primary: true, value: b => b.nickname || b.serial_number, render: b => {
         const name = b.nickname || b.serial_number || '—'
         return <Link to={`/fleet/batteries/${b.id}`} className="text-primary hover:underline">{name}</Link>
       }},
@@ -280,7 +294,7 @@ const TAB_CONFIGS = {
       { key: 'status', label: 'Status', render: b => <StatusBadge status={b.status} /> },
     ],
     fields: [
-      { key: 'serial_number', label: 'Serial Number' },
+      { key: 'serial_number', label: 'Serial Number', required: true },
       { key: 'nickname', label: 'Nickname' },
       { key: 'manufacturer', label: 'Manufacturer' },
       { key: 'model', label: 'Model' },
@@ -288,10 +302,7 @@ const TAB_CONFIGS = {
       { key: 'cycle_count', label: 'Cycle Count', type: 'number' },
       { key: 'health_pct', label: 'Health %', type: 'number' },
       ...LIFECYCLE_FIELDS,
-      { key: 'status', label: 'Status', type: 'select', options: [
-        { value: 'active', label: 'Active' }, { value: 'charging', label: 'Charging' },
-        { value: 'maintenance', label: 'Maintenance' }, { value: 'retired', label: 'Retired' }
-      ]},
+      { key: 'status', label: 'Status', type: 'select', options: EQUIPMENT_STATUSES.battery },
     ],
   },
   controllers: {
@@ -300,7 +311,7 @@ const TAB_CONFIGS = {
     label: 'Controllers',
     endpoint: '/controllers',
     columns: [
-      { key: 'nickname', label: 'Controller', primary: true, render: c => {
+      { key: 'nickname', label: 'Controller', primary: true, value: c => c.nickname || c.serial_number, render: c => {
         const name = c.nickname || c.serial_number || '—'
         return <Link to={`/fleet/controllers/${c.id}`} className="text-primary hover:underline">{name}</Link>
       }},
@@ -311,14 +322,12 @@ const TAB_CONFIGS = {
       { key: 'status', label: 'Status', render: c => <StatusBadge status={c.status} /> },
     ],
     fields: [
-      { key: 'serial_number', label: 'Serial Number' },
+      { key: 'serial_number', label: 'Serial Number', required: true },
       { key: 'nickname', label: 'Nickname' },
       { key: 'manufacturer', label: 'Manufacturer' },
       { key: 'model', label: 'Model' },
       ...LIFECYCLE_FIELDS,
-      { key: 'status', label: 'Status', type: 'select', options: [
-        { value: 'active', label: 'Active' }, { value: 'maintenance', label: 'Maintenance' }, { value: 'retired', label: 'Retired' }
-      ]},
+      { key: 'status', label: 'Status', type: 'select', options: EQUIPMENT_STATUSES.controller },
     ],
   },
   docks: {
@@ -327,7 +336,7 @@ const TAB_CONFIGS = {
     label: 'Docks',
     endpoint: '/docks',
     columns: [
-      { key: 'name', label: 'Name', primary: true, render: d => {
+      { key: 'name', label: 'Name', primary: true, value: d => d.name || d.serial_number, render: d => {
         const name = d.name || d.serial_number || '—'
         return <Link to={`/fleet/docks/${d.id}`} className="text-primary hover:underline">{name}</Link>
       }},
@@ -339,15 +348,13 @@ const TAB_CONFIGS = {
       { key: 'status', label: 'Status', render: d => <StatusBadge status={d.status} /> },
     ],
     fields: [
-      { key: 'serial_number', label: 'Serial Number' },
+      { key: 'serial_number', label: 'Serial Number', required: true },
       { key: 'name', label: 'Name' },
       { key: 'location_name', label: 'Location Name' },
       { key: 'lat', label: 'Latitude', type: 'number' },
       { key: 'lon', label: 'Longitude', type: 'number' },
       ...LIFECYCLE_FIELDS,
-      { key: 'status', label: 'Status', type: 'select', options: [
-        { value: 'online', label: 'Online' }, { value: 'offline', label: 'Offline' }, { value: 'maintenance', label: 'Maintenance' }
-      ]},
+      { key: 'status', label: 'Status', type: 'select', options: EQUIPMENT_STATUSES.dock },
     ],
   },
   sensors: {
@@ -356,7 +363,7 @@ const TAB_CONFIGS = {
     label: 'Sensors',
     endpoint: '/sensors',
     columns: [
-      { key: 'name', label: 'Name', primary: true, render: s => {
+      { key: 'name', label: 'Name', primary: true, value: s => s.name || s.serial_number, render: s => {
         const name = s.name || s.serial_number || '—'
         return <Link to={`/fleet/sensors/${s.id}`} className="text-primary hover:underline">{name}</Link>
       }},
@@ -368,15 +375,13 @@ const TAB_CONFIGS = {
       { key: 'status', label: 'Status', render: s => <StatusBadge status={s.status} /> },
     ],
     fields: [
-      { key: 'serial_number', label: 'Serial Number' },
+      { key: 'serial_number', label: 'Serial Number', required: true },
       { key: 'name', label: 'Name' },
       { key: 'type', label: 'Type' },
       { key: 'manufacturer', label: 'Manufacturer' },
       { key: 'model', label: 'Model' },
       ...LIFECYCLE_FIELDS,
-      { key: 'status', label: 'Status', type: 'select', options: [
-        { value: 'active', label: 'Active' }, { value: 'maintenance', label: 'Maintenance' }, { value: 'retired', label: 'Retired' }
-      ]},
+      { key: 'status', label: 'Status', type: 'select', options: EQUIPMENT_STATUSES.sensor },
     ],
   },
   attachments: {
@@ -385,7 +390,7 @@ const TAB_CONFIGS = {
     label: 'Attachments',
     endpoint: '/attachments',
     columns: [
-      { key: 'name', label: 'Name', primary: true, render: a => {
+      { key: 'name', label: 'Name', primary: true, value: a => a.name || a.serial_number, render: a => {
         const name = a.name || a.serial_number || '—'
         return <Link to={`/fleet/attachments/${a.id}`} className="text-primary hover:underline">{name}</Link>
       }},
@@ -397,15 +402,13 @@ const TAB_CONFIGS = {
       { key: 'status', label: 'Status', render: a => <StatusBadge status={a.status} /> },
     ],
     fields: [
-      { key: 'serial_number', label: 'Serial Number' },
+      { key: 'serial_number', label: 'Serial Number', required: true },
       { key: 'name', label: 'Name' },
       { key: 'type', label: 'Type' },
       { key: 'manufacturer', label: 'Manufacturer' },
       { key: 'model', label: 'Model' },
       ...LIFECYCLE_FIELDS,
-      { key: 'status', label: 'Status', type: 'select', options: [
-        { value: 'active', label: 'Active' }, { value: 'maintenance', label: 'Maintenance' }, { value: 'retired', label: 'Retired' }
-      ]},
+      { key: 'status', label: 'Status', type: 'select', options: EQUIPMENT_STATUSES.attachment },
     ],
   },
   other: {
@@ -423,18 +426,20 @@ const TAB_CONFIGS = {
       { key: 'status', label: 'Status', render: o => <StatusBadge status={o.status} /> },
     ],
     fields: [
-      { key: 'name', label: 'Name' },
+      { key: 'name', label: 'Name', required: true },
       { key: 'category', label: 'Category' },
       { key: 'serial_number', label: 'Serial Number' },
       ...LIFECYCLE_FIELDS,
-      { key: 'status', label: 'Status', type: 'select', options: [
-        { value: 'active', label: 'Active' }, { value: 'maintenance', label: 'Maintenance' },
-        { value: 'retired', label: 'Retired' }, { value: 'damaged', label: 'Damaged' }
-      ]},
+      { key: 'status', label: 'Status', type: 'select', options: EQUIPMENT_STATUSES.other },
       { key: 'notes', label: 'Notes' },
     ],
   },
 }
+
+// Each tab opens sorted by its first column. A column's `value` is what its
+// cell shows, so sort and search work on that rather than the raw field.
+const firstColumnKey = (tab) => TAB_CONFIGS[tab]?.columns[0].key
+const cellValue = (column, item) => (column?.value ? column.value(item) : item[column?.key])
 
 // ─── Main Component ─────────────────────────────────────────────────────────
 
@@ -452,7 +457,7 @@ export default function FleetPage() {
   const [modal, setModal] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [sortKey, setSortKey] = useState('name')
+  const [sortKey, setSortKey] = useState(() => firstColumnKey(initialTab))
   const [sortDir, setSortDir] = useState('asc')
   const [vehicleModels, setVehicleModels] = useState([])
   const { can } = useAuth()
@@ -510,7 +515,7 @@ export default function FleetPage() {
   useEffect(() => {
     setSearch('')
     setModal(null)
-    setSortKey('name')
+    setSortKey(firstColumnKey(activeTab))
     setSortDir('asc')
     void load()
   }, [activeTab])
@@ -550,9 +555,17 @@ export default function FleetPage() {
   }
 
   const handleDelete = (id) => {
+    const noun = singularize(config.label)
+    const wording = config.retireOnDelete ? {
+      title: `Retire ${noun}`,
+      message: `Retire this ${noun.toLowerCase()}? It stays on record with its flight history, marked retired. Edit it to set it back in service.`,
+      confirmLabel: 'Retire',
+    } : {
+      title: `Delete ${noun}`,
+      message: `Are you sure you want to delete this ${noun.toLowerCase()}? This cannot be undone.`,
+    }
     requestConfirm({
-      title: `Delete ${singularize(config.label)}`,
-      message: `Are you sure you want to delete this ${singularize(config.label).toLowerCase()}? This cannot be undone.`,
+      ...wording,
       onConfirm: async () => {
         try {
           await api.delete(`${config.endpoint}/${id}`)
@@ -572,28 +585,26 @@ export default function FleetPage() {
       }
       const searchable = config.columns.map(c => {
         if (c.key === 'status') return item.status || ''
-        return item[c.key] || ''
+        return cellValue(c, item) ?? ''
       }).join(' ')
       return searchable.toLowerCase().includes(search.toLowerCase())
     })
+    const sortColumn = config.columns.find(c => c.key === sortKey) || { key: sortKey }
     return [...list].sort((a, b) => {
-      let aVal, bVal
-      // For vehicle nickname column, sort by nickname or serial_number
-      if (sortKey === 'nickname' && activeTab === 'vehicles') {
-        aVal = (a.nickname || a.serial_number || '').toLowerCase()
-        bVal = (b.nickname || b.serial_number || '').toLowerCase()
-      } else if (typeof a[sortKey] === 'number' || typeof b[sortKey] === 'number') {
-        aVal = a[sortKey] ?? 0
-        bVal = b[sortKey] ?? 0
+      let aVal = cellValue(sortColumn, a)
+      let bVal = cellValue(sortColumn, b)
+      if (typeof aVal === 'number' || typeof bVal === 'number') {
+        aVal = aVal ?? 0
+        bVal = bVal ?? 0
       } else {
-        aVal = (a[sortKey] || '').toString().toLowerCase()
-        bVal = (b[sortKey] || '').toString().toLowerCase()
+        aVal = (aVal || '').toString().toLowerCase()
+        bVal = (bVal || '').toString().toLowerCase()
       }
       if (aVal < bVal) return sortDir === 'asc' ? -1 : 1
       if (aVal > bVal) return sortDir === 'asc' ? 1 : -1
       return 0
     })
-  }, [items, search, statusFilter, sortKey, sortDir, config.columns, activeTab])
+  }, [items, search, statusFilter, sortKey, sortDir, config.columns])
 
   // Items withheld by the status filter alone. Search narrowing is visible to
   // the user as they type; a status filter they did not set is not, so only the
@@ -695,6 +706,7 @@ export default function FleetPage() {
           canManage={canManage}
           onEdit={(item) => setModal(item)}
           onDelete={handleDelete}
+          deleteLabel={config.retireOnDelete ? 'Retire' : 'Delete'}
           onMerge={['vehicles', 'batteries', 'sensors', 'attachments'].includes(activeTab) && canManage ? (item) => { setMergeTarget(item); setMergeFromId('') } : null}
           emptyMessage={`No ${config.label.toLowerCase()} found`}
           sortKey={sortKey}

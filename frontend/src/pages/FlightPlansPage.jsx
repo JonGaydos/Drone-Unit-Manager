@@ -6,9 +6,10 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { useConfirm } from '@/hooks/useConfirm'
 import { ownsRecord } from '@/lib/ownership'
 import { sortVehicles, sortPilotsActiveFirst, vehicleDisplayName } from '@/lib/formatters'
+import { changedFields } from '@/lib/utils'
 import {
   ClipboardCheck, Plus, Filter, X, Loader2, Check, Ban, Clock,
-  ChevronDown, ChevronUp, Cloud, Download,
+  ChevronDown, ChevronUp, Cloud, Download, Pencil, RotateCcw,
 } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 
@@ -22,28 +23,56 @@ const STATUS_COLORS = {
 
 const STATUSES = ['pending', 'approved', 'denied', 'cancelled', 'completed']
 
-function PlanModal({ pilots, vehicles, currentUser, onSave, onClose }) {
+/** The plan form's fields, seeded from a plan when editing. */
+function planForm(plan, autoFillPilotId) {
+  const text = (v) => (v == null ? '' : String(v))
+  return {
+    title: text(plan?.title),
+    date_planned: plan?.date_planned ? String(plan.date_planned).slice(0, 16) : '',
+    pilot_id: plan ? text(plan.pilot_id) : (autoFillPilotId ? String(autoFillPilotId) : ''),
+    vehicle_id: text(plan?.vehicle_id),
+    location: text(plan?.location),
+    lat: text(plan?.lat),
+    lon: text(plan?.lon),
+    purpose: text(plan?.purpose),
+    case_number: text(plan?.case_number),
+    description: text(plan?.description),
+    max_altitude_planned: text(plan?.max_altitude_planned),
+    estimated_duration_min: text(plan?.estimated_duration_min),
+    checklist_completed: Boolean(plan?.checklist_completed),
+    notes: text(plan?.notes),
+    ...(plan ? { linked_flight_id: text(plan.linked_flight_id) } : {}),
+  }
+}
+
+const PLAN_INT_FIELDS = ['pilot_id', 'vehicle_id', 'estimated_duration_min', 'linked_flight_id']
+const PLAN_FLOAT_FIELDS = ['lat', 'lon', 'max_altitude_planned']
+
+/** The request body: numbers parsed; an emptied field is null on an edit (it
+ *  clears) and left out on a new plan. */
+function planPayload(fields, editing) {
+  const data = { ...fields }
+  for (const [key, value] of Object.entries(data)) {
+    if (value === '') {
+      if (editing) data[key] = null
+      else delete data[key]
+    } else if (PLAN_INT_FIELDS.includes(key)) data[key] = Number.parseInt(value, 10)
+    else if (PLAN_FLOAT_FIELDS.includes(key)) data[key] = Number.parseFloat(value)
+  }
+  return data
+}
+
+/** Submit a new plan, or edit `plan` (only the changed fields are sent). */
+function PlanModal({ plan, pilots, vehicles, currentUser, onSave, onClose }) {
   const toast = useToast()
-  const autoFillPilotId = currentUser?.pilot_id || ''
-  const [form, setForm] = useState({
-    title: '',
-    date_planned: '',
-    pilot_id: autoFillPilotId ? String(autoFillPilotId) : '',
-    vehicle_id: '',
-    location: '',
-    purpose: '',
-    case_number: '',
-    description: '',
-    max_altitude_planned: '',
-    estimated_duration_min: '',
-    checklist_completed: false,
-    notes: '',
-  })
+  const editing = Boolean(plan)
+  const [initial] = useState(() => planForm(plan, currentUser?.pilot_id))
+  const [form, setForm] = useState(initial)
   const [saving, setSaving] = useState(false)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!form.title || !form.date_planned || !form.pilot_id) return
+    if (!form.title.trim() || !form.date_planned || !form.pilot_id) return
     // Validate altitude
     if (form.max_altitude_planned) {
       const alt = Number.parseFloat(form.max_altitude_planned)
@@ -52,18 +81,14 @@ function PlanModal({ pilots, vehicles, currentUser, onSave, onClose }) {
         return
       }
     }
-    const data = { ...form }
-    data.pilot_id = Number.parseInt(data.pilot_id, 10)
-    if (data.vehicle_id) data.vehicle_id = Number.parseInt(data.vehicle_id, 10); else delete data.vehicle_id
-    if (data.max_altitude_planned) data.max_altitude_planned = Number.parseFloat(data.max_altitude_planned); else delete data.max_altitude_planned
-    if (data.estimated_duration_min) data.estimated_duration_min = Number.parseInt(data.estimated_duration_min, 10); else delete data.estimated_duration_min
-    Object.keys(data).forEach(k => { if (data[k] === '') delete data[k] })
+    const data = planPayload(editing ? changedFields(initial, form) : form, editing)
+    if (editing && Object.keys(data).length === 0) { onClose(); return }
     setSaving(true)
     try { await onSave(data) } finally { setSaving(false) }
   }
 
   return (
-    <Modal open onClose={onClose} title="Submit Flight Plan" className="max-w-2xl max-h-[90vh] overflow-y-auto">
+    <Modal open onClose={onClose} title={editing ? 'Edit Flight Plan' : 'Submit Flight Plan'} className="max-w-2xl max-h-[90vh] overflow-y-auto">
       <form onSubmit={handleSubmit} className="space-y-3">
         <div>
           <label htmlFor="title" className="block text-sm font-medium text-foreground mb-1">Title *</label>
@@ -102,6 +127,18 @@ function PlanModal({ pilots, vehicles, currentUser, onSave, onClose }) {
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
+            <label htmlFor="plan-lat" className="block text-sm font-medium text-foreground mb-1">Latitude</label>
+            <input id="plan-lat" type="number" step="any" min="-90" max="90" value={form.lat} onChange={e => setForm({ ...form, lat: e.target.value })}
+              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+          </div>
+          <div>
+            <label htmlFor="plan-lon" className="block text-sm font-medium text-foreground mb-1">Longitude</label>
+            <input id="plan-lon" type="number" step="any" min="-180" max="180" value={form.lon} onChange={e => setForm({ ...form, lon: e.target.value })}
+              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
             <label htmlFor="purpose" className="block text-sm font-medium text-foreground mb-1">Purpose</label>
             <input id="purpose" type="text" value={form.purpose} onChange={e => setForm({ ...form, purpose: e.target.value })}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
@@ -125,7 +162,7 @@ function PlanModal({ pilots, vehicles, currentUser, onSave, onClose }) {
           </div>
           <div>
             <label htmlFor="est-duration-min" className="block text-sm font-medium text-foreground mb-1">Est. Duration (min)</label>
-            <input id="est-duration-min" type="number" value={form.estimated_duration_min} onChange={e => setForm({ ...form, estimated_duration_min: e.target.value })}
+            <input id="est-duration-min" type="number" min="0" value={form.estimated_duration_min} onChange={e => setForm({ ...form, estimated_duration_min: e.target.value })}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
           </div>
         </div>
@@ -140,10 +177,17 @@ function PlanModal({ pilots, vehicles, currentUser, onSave, onClose }) {
           <textarea id="notes" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })}
             rows={2} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm resize-none" />
         </div>
+        {editing && (
+          <div>
+            <label htmlFor="linked-flight-id" className="block text-sm font-medium text-foreground mb-1">Linked Flight ID</label>
+            <input id="linked-flight-id" type="number" min="1" value={form.linked_flight_id} onChange={e => setForm({ ...form, linked_flight_id: e.target.value })}
+              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" placeholder="The flight flown under this plan" />
+          </div>
+        )}
         <div className="flex gap-2 pt-2">
           <button type="submit" disabled={saving}
             className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2">
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Submit Plan'}
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : (editing ? 'Save Changes' : 'Submit Plan')}
           </button>
           <button type="button" onClick={onClose}
             className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm">Cancel</button>
@@ -160,7 +204,7 @@ function DenyModal({ plan, onDeny, onClose }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!reason) return
+    if (!reason.trim()) return
     setSaving(true)
     try { await onDeny(plan.id, { denial_reason: reason, review_notes: notes || undefined }) } finally { setSaving(false) }
   }
@@ -199,6 +243,7 @@ export default function FlightPlansPage() {
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
   const [denyTarget, setDenyTarget] = useState(null)
+  const [editTarget, setEditTarget] = useState(null)
   const [expandedId, setExpandedId] = useState(null)
   const [viewMode, setViewMode] = useState('all') // 'all' or 'mine'
   const [statusFilter, setStatusFilter] = useState('')
@@ -289,14 +334,36 @@ export default function FlightPlansPage() {
     })
   }
 
-  const handleAdminEdit = async (id) => {
+  const handleEdit = async (data) => {
     try {
-      await api.patch(`/flight-plans/${id}`, { status: 'pending' })
-      toast.success('Plan reopened as pending for editing')
+      const updated = await api.patch(`/flight-plans/${editTarget.id}`, data)
+      toast.success(updated?.status === 'pending' && editTarget.status !== 'pending'
+        ? 'Flight plan updated and returned to pending review'
+        : 'Flight plan updated')
+      setEditTarget(null)
       void load()
     } catch (err) {
       toast.error(err.message)
     }
+  }
+
+  // Admin only: put a denied or cancelled plan back in the review queue.
+  const handleReopen = (plan) => {
+    requestConfirm({
+      title: 'Reopen Flight Plan',
+      message: `Reopen "${plan.title}"? It returns to pending and goes back to the review queue.`,
+      confirmLabel: 'Reopen',
+      confirmVariant: 'primary',
+      onConfirm: async () => {
+        try {
+          await api.patch(`/flight-plans/${plan.id}`, { status: 'pending' })
+          toast.success('Flight plan reopened as pending')
+          void load()
+        } catch (err) {
+          toast.error(err.message)
+        }
+      }
+    })
   }
 
   const handleDelete = (id) => {
@@ -413,15 +480,13 @@ export default function FlightPlansPage() {
                           className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent" title="Details">
                           {expandedId === plan.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                         </button>
-                        {canApprove && plan.status === 'pending' && (
+                        {/* No self-review: the server rejects approving or denying a plan you submitted. */}
+                        {canApprove && plan.status === 'pending' && plan.submitted_by_id !== user?.id && (
                           <>
-                            {/* No self-approval: the server rejects approving a plan you submitted. */}
-                            {plan.submitted_by_id !== user?.id && (
-                              <button onClick={() => handleApprove(plan.id)}
-                                className="p-1.5 text-muted-foreground hover:text-emerald-400 rounded-lg hover:bg-emerald-500/10" title="Approve">
-                                <Check className="w-4 h-4" />
-                              </button>
-                            )}
+                            <button onClick={() => handleApprove(plan.id)}
+                              className="p-1.5 text-muted-foreground hover:text-emerald-400 rounded-lg hover:bg-emerald-500/10" title="Approve">
+                              <Check className="w-4 h-4" />
+                            </button>
                             <button onClick={() => setDenyTarget(plan)}
                               className="p-1.5 text-muted-foreground hover:text-red-400 rounded-lg hover:bg-red-500/10" title="Deny">
                               <Ban className="w-4 h-4" />
@@ -434,10 +499,18 @@ export default function FlightPlansPage() {
                             <X className="w-4 h-4" />
                           </button>
                         )}
+                        {/* Mirrors the API: edit level covers the plan, and only an admin edits
+                            a plan that is not pending or denied. */}
+                        {canRecord('flight_plans.edit', ownsRecord(user, plan.submitted_by_id)) && (isAdmin || plan.status === 'pending' || plan.status === 'denied') && (
+                          <button onClick={() => setEditTarget(plan)} aria-label="Edit plan"
+                            className="p-1.5 text-muted-foreground hover:text-primary rounded-lg hover:bg-primary/10" title="Edit">
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                        )}
                         {isAdmin && (plan.status === 'cancelled' || plan.status === 'denied') && (
-                          <button onClick={() => { /* Admin override edit - reopen plan */ void handleAdminEdit(plan.id) }}
-                            className="p-1.5 text-muted-foreground hover:text-primary rounded-lg hover:bg-primary/10" title="Edit (Admin Override)">
-                            <ClipboardCheck className="w-4 h-4" />
+                          <button onClick={() => handleReopen(plan)}
+                            className="p-1.5 text-muted-foreground hover:text-primary rounded-lg hover:bg-primary/10" title="Reopen">
+                            <RotateCcw className="w-4 h-4" />
                           </button>
                         )}
                         {canApprove && (
@@ -532,6 +605,10 @@ export default function FlightPlansPage() {
       {showAdd && (
         <PlanModal pilots={pilots} vehicles={vehicles} currentUser={user}
           onSave={handleCreate} onClose={() => setShowAdd(false)} />
+      )}
+      {editTarget && (
+        <PlanModal plan={editTarget} pilots={pilots} vehicles={vehicles} currentUser={user}
+          onSave={handleEdit} onClose={() => setEditTarget(null)} />
       )}
       {denyTarget && (
         <DenyModal plan={denyTarget}

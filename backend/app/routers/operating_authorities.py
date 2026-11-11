@@ -10,7 +10,7 @@ from datetime import date
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, StringConstraints, field_validator, model_validator
 from sqlalchemy import func
 
 from app.constants import OPERATING_AUTHORITY_NOT_FOUND
@@ -37,9 +37,14 @@ ManageUser = Annotated[User, Depends(require_permission("authority.manage"))]
 DOCUMENT_ENTITY_TYPE = "operating_authority"
 
 
+# The title is required: trimmed, never blank.
+AuthorityTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+EXPIRY_BEFORE_ISSUE = "Expiry date cannot be before the issue date"
+
+
 class AuthorityCreate(BaseModel):
     authority_type: str
-    title: str
+    title: AuthorityTitle
     identifier: Optional[str] = None
     issue_date: Optional[date] = None
     expiry_date: Optional[date] = None
@@ -47,16 +52,30 @@ class AuthorityCreate(BaseModel):
     grounds_unit: bool = True
     notes: Optional[str] = None
 
+    @model_validator(mode="after")
+    def _dates(self):
+        if self.issue_date and self.expiry_date and self.expiry_date < self.issue_date:
+            raise ValueError(EXPIRY_BEFORE_ISSUE)
+        return self
+
 
 class AuthorityUpdate(BaseModel):
     authority_type: Optional[str] = None
-    title: Optional[str] = None
+    title: Optional[AuthorityTitle] = None
     identifier: Optional[str] = None
     issue_date: Optional[date] = None
     expiry_date: Optional[date] = None
     record_status: Optional[str] = None
     grounds_unit: Optional[bool] = None
     notes: Optional[str] = None
+
+    @field_validator("title")
+    @classmethod
+    def _not_null(cls, v):
+        # Optional only so a patch can leave it out; a sent null is refused.
+        if v is None:
+            raise ValueError("cannot be empty")
+        return v
 
 
 def _validate(authority_type: Optional[str], record_status: Optional[str]) -> None:
@@ -138,13 +157,17 @@ def create_authority(data: AuthorityCreate, db: DBSession, user: ManageUser):
     return _serialize(a, date.today())
 
 
-@router.patch("/{authority_id}", responses=responses(400, 401, 404))
+@router.patch("/{authority_id}", responses=responses(400, 401, 404, 422))
 def update_authority(authority_id: int, data: AuthorityUpdate, db: DBSession, user: ManageUser):
     a = db.query(OperatingAuthority).filter(OperatingAuthority.id == authority_id).first()
     if not a:
         raise HTTPException(404, OPERATING_AUTHORITY_NOT_FOUND)
     update_data = data.model_dump(exclude_unset=True)
     _validate(update_data.get("authority_type"), update_data.get("record_status"))
+    issue = update_data.get("issue_date", a.issue_date)
+    expiry = update_data.get("expiry_date", a.expiry_date)
+    if issue and expiry and expiry < issue:
+        raise HTTPException(422, EXPIRY_BEFORE_ISSUE)
     for key, val in update_data.items():
         setattr(a, key, val)
     log_action(db, user.id, user.display_name, "update", "operating_authority", a.id, a.title,

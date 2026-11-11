@@ -5,12 +5,13 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { useConfirm } from '@/hooks/useConfirm'
-import { addDays, daysUntil, formatHours, formatDuration, normalizeDateValue } from '@/lib/utils'
-import { STATUS_COLORS } from '@/lib/constants'
+import { addMonths, daysUntil, formatHours, formatDuration, normalizeDateValue } from '@/lib/utils'
+import { STATUS_COLORS, statusOptions } from '@/lib/constants'
 import { ArrowLeft, Clock, Calendar, Battery, Edit, Gamepad2, Cpu, Paperclip, Camera, ShieldCheck, Plus, Trash2, AlertTriangle, Cog, X, Save } from 'lucide-react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 import DocumentUpload from '@/components/DocumentUpload'
 import MaintenanceHistoryCard from '@/components/MaintenanceHistoryCard'
+import { useAuthedImage } from '@/hooks/useAuthedImage'
 
 export default function VehicleDetailPage() {
   const { id } = useParams()
@@ -23,6 +24,7 @@ export default function VehicleDetailPage() {
   const toast = useToast()
   const [confirmProps, requestConfirm] = useConfirm()
   const [vehicle, setVehicle] = useState(null)
+  const photoSrc = useAuthedImage(vehicle?.photo_url)
   const [stats, setStats] = useState(null)
   const [flights, setFlights] = useState([])
   const [batteries, setBatteries] = useState([])
@@ -157,8 +159,8 @@ export default function VehicleDetailPage() {
       <div className="bg-card border border-border rounded-xl p-6">
         <div className="flex items-start gap-4">
           <div className="relative shrink-0">
-            {vehicle.photo_url ? (
-              <img src={vehicle.photo_url} alt={displayName}
+            {photoSrc ? (
+              <img src={photoSrc} alt={displayName}
                 className="w-16 h-16 rounded-2xl object-cover" />
             ) : (
               <div className="w-16 h-16 rounded-2xl bg-primary/15 flex items-center justify-center text-primary">
@@ -221,10 +223,7 @@ export default function VehicleDetailPage() {
                     <label htmlFor="status" className="block text-xs font-medium text-muted-foreground mb-1">Status</label>
                     <select id="status" value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})}
                       className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm">
-                      <option value="active">Active</option>
-                      <option value="inactive">Inactive</option>
-                      <option value="maintenance">Maintenance</option>
-                      <option value="retired">Retired</option>
+                      {statusOptions('vehicle', editForm.status).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                   </div>
                 </div>
@@ -458,7 +457,7 @@ export default function VehicleDetailPage() {
 
         {/* Current Registration Summary */}
         {(() => {
-          const current = [...registrations].sort((a, b) => (b.registration_date || '').localeCompare(a.registration_date || ''))[0]
+          const current = registrations.find(r => r.is_current)
           if (current) {
             const daysLeft = daysUntil(current.expiry_date)
             const isExpired = daysLeft !== null && daysLeft < 0
@@ -524,7 +523,7 @@ export default function VehicleDetailPage() {
                 <label htmlFor="expiry-auto-3-years" className="block text-xs font-medium text-foreground mb-1">Expiry (auto: +3 years)</label>
                 <input id="expiry-auto-3-years" type="text" readOnly
                   value={regForm.registration_date ? (() => {
-                    return addDays(regForm.registration_date, 1095)
+                    return addMonths(regForm.registration_date, 36)
                   })() : '--'}
                   className="w-full px-3 py-1.5 bg-muted border border-border rounded-lg text-muted-foreground text-sm cursor-not-allowed" />
               </div>

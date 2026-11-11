@@ -22,7 +22,10 @@ class Settings(BaseSettings):
     UPLOAD_DIR: Path = Path("")  # File upload storage path
     MEDIA_CACHE_DIR: Path = Path("")  # Cached media (thumbnails, etc.)
     SESSION_EXPIRE_MINUTES: int = 720  # JWT token lifetime (12 hours); the browser also locks after 30 min idle
-    CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
+    # Extra origins allowed to call the API from a browser. None by default: the
+    # app serves its own pages, and the Vite dev server proxies /api, so neither
+    # needs one. Set as a JSON list, e.g. CORS_ORIGINS=["http://localhost:5173"].
+    CORS_ORIGINS: list[str] = []
     MAX_UPLOAD_SIZE: int = 50 * 1024 * 1024  # 50 MB, one file
     # A bulk archive is a different thing from a single upload. A full
     # Airdata export runs to hundreds of megabytes and is the first thing a

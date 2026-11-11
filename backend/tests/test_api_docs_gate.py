@@ -59,3 +59,13 @@ def test_the_health_endpoint_still_works_with_docs_off(monkeypatch):
         assert client.get("/api/health").status_code == 200
     finally:
         importlib.reload(main)
+
+
+def test_the_health_endpoint_says_whether_the_docs_are_served(monkeypatch):
+    """Settings shows its API Documentation card only when /docs exists (F-08)."""
+    for enabled in (False, True):
+        client, main = _client_with_docs(enabled, monkeypatch)
+        try:
+            assert client.get("/api/health").json()["api_docs"] is enabled
+        finally:
+            importlib.reload(main)

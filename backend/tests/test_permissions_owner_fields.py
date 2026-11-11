@@ -32,7 +32,7 @@ def test_mission_log_response_has_created_by(client, pilot_headers, pilot_user):
 
 
 def test_training_log_response_has_created_by(client, pilot_headers, pilot_user):
-    body = {"date": "2026-03-01", "title": "T", "training_type": "recurrent"}
+    body = {"date": "2026-03-01", "title": "T", "training_type": "Recurrent"}
     created = client.post("/api/training-logs", headers=pilot_headers, json=body)
     assert created.status_code in (200, 201), created.text
     assert created.json()["created_by_id"] == pilot_user.id

@@ -37,17 +37,42 @@ def _get_thresholds(db: Session):
     return DEFAULT_THRESHOLDS
 
 
+def _reports_metar(s: dict) -> bool:
+    """An airport station: it has an ICAO id and, when the list says, reports METAR."""
+    if not s.get("icaoId"):
+        return False
+    site_types = s.get("siteType")
+    return site_types is None or "METAR" in site_types
+
+
 def _find_nearest_station(stations: list, lat: float, lon: float) -> tuple[dict | None, float]:
     """Find the nearest METAR station by haversine distance."""
     nearest = None
     min_dist = float('inf')
     for s in stations:
-        if isinstance(s, dict) and s.get("lat") and s.get("lon"):
+        if isinstance(s, dict) and s.get("lat") and s.get("lon") and _reports_metar(s):
             d = _haversine(lat, lon, float(s["lat"]), float(s["lon"]))
             if d < min_dist:
                 min_dist = d
                 nearest = s
     return nearest, min_dist
+
+
+CEILING_COVERS = {"BKN", "OVC", "OVX", "VV"}
+
+
+def _ceiling_ft(metar: dict):
+    """Lowest broken, overcast or vertical-visibility layer base, in feet AGL."""
+    bases = [c.get("base") for c in metar.get("clouds") or []
+             if isinstance(c, dict) and c.get("cover") in CEILING_COVERS and c.get("base") is not None]
+    if metar.get("vertVis") is not None:
+        bases.append(metar["vertVis"])
+    if not bases:
+        return None
+    try:
+        return min(int(b) for b in bases)
+    except (TypeError, ValueError):
+        return None
 
 
 def _fetch_metar_taf(lat: float, lon: float) -> dict:
@@ -66,10 +91,10 @@ def _fetch_metar_taf(lat: float, lon: float) -> dict:
         if not nearest_station:
             return result
 
-        station_id = nearest_station.get("icaoId") or nearest_station.get("id", "")
+        station_id = nearest_station["icaoId"]
         result["station"] = {
             "id": station_id,
-            "name": nearest_station.get("name", ""),
+            "name": nearest_station.get("site") or nearest_station.get("name") or "",
             "distance_miles": round(min_dist, 1),
             "lat": nearest_station.get("lat"),
             "lon": nearest_station.get("lon"),
@@ -89,8 +114,8 @@ def _fetch_metar_taf(lat: float, lon: float) -> dict:
                     "wind_speed_kt": m.get("wspd"),
                     "wind_gust_kt": m.get("wgst"),
                     "visibility_miles": m.get("visib"),
-                    "ceiling_ft": m.get("ceil"),
-                    "flight_category": m.get("fltcat"),
+                    "ceiling_ft": _ceiling_ft(m),
+                    "flight_category": m.get("fltCat"),
                     "wx_string": m.get("wxString"),
                     "altimeter_inhg": m.get("altim"),
                     "observation_time": m.get("reportTime"),
@@ -121,6 +146,8 @@ def _fetch_local_weather(lat: float, lon: float) -> tuple[dict | None, list | No
             "forecast_hours": 12,
             "temperature_unit": "fahrenheit",
             "wind_speed_unit": "mph",
+            # Hourly times in the location's own zone, not GMT.
+            "timezone": "auto",
         })
         if resp.status_code != 200:
             return None, None
@@ -280,6 +307,15 @@ def _compute_advisory(data, thresholds=None):
     lw = data.get("local_weather") or {}
     metar = data.get("metar") or {}
     t = thresholds or DEFAULT_THRESHOLDS
+
+    if not lw and not metar:
+        return {"status": "unknown", "reasons": ["No weather data available for this location"]}
+    if not metar:
+        status = "caution"
+        reasons.append("No METAR observation nearby: flight category, ceiling and visibility not checked")
+    if not lw:
+        status = "caution"
+        reasons.append("Local forecast unavailable: temperature and precipitation not checked")
 
     wind = lw.get("wind_speed_mph") or (metar.get("wind_speed_kt", 0) or 0) * 1.151
     gusts = lw.get("wind_gusts_mph") or (metar.get("wind_gust_kt", 0) or 0) * 1.151

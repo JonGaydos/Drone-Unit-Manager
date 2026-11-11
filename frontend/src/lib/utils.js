@@ -181,6 +181,27 @@ export function daysUntil(iso) {
   return dayNumber(ymd) - dayNumber(todayLocal())
 }
 
+/** Days ahead within which a certification counts as expiring (the compliance dashboard's window). */
+export const CERT_EXPIRING_DAYS = 90
+
+/**
+ * A certification's state as the matrix shows it: 'expired' once its
+ * expiration date has passed, 'expiring' within CERT_EXPIRING_DAYS, otherwise
+ * its stored status. Renewed and never-issued records keep their status, as
+ * the compliance dashboard leaves them out.
+ * @param {{status?: string, expiration_date?: string|null}} [cert]
+ * @returns {string}
+ */
+export function certDisplayStatus(cert) {
+  const status = cert?.status || 'not_started'
+  if (!cert?.expiration_date || status === 'renewed' || status === 'not_issued') return status
+  const days = daysUntil(cert.expiration_date)
+  if (days == null) return status
+  if (days < 0) return 'expired'
+  if (days <= CERT_EXPIRING_DAYS) return 'expiring'
+  return status
+}
+
 /**
  * Format an ISO datetime string to a localized date and time (e.g. "Mar 26, 2026, 3:45 PM").
  * Expects a `Z`-suffixed (UTC) ISO string for flight times; a naive (offset-less)
@@ -316,4 +337,33 @@ export function changedFields(initial, current) {
   return Object.fromEntries(
     Object.entries(current).filter(([key, value]) => String(value) !== String(initial[key])),
   )
+}
+
+/**
+ * Settle a form's empty values before a save: on an edit, a field the user
+ * emptied becomes null (a PATCH then clears it); a field that was empty to
+ * begin with, and every empty field on a create, is left out.
+ * @param {Object} data - The form values to send (changed in place).
+ * @param {Object|null} initial - The record being edited, or null on a create.
+ * @returns {Object} data
+ */
+export function emptiedToNull(data, initial) {
+  Object.keys(data).forEach(key => {
+    if (data[key] !== '') return
+    const stored = initial?.[key]
+    if (initial && stored != null && stored !== '') data[key] = null
+    else delete data[key]
+  })
+  return data
+}
+
+/** Open an input's picker (a datalist or date control) on focus. Chrome throws
+ *  NotAllowedError when focus did not come from a user gesture (a scripted
+ *  focus), which is harmless, so it is ignored. */
+export function showPickerSafely(el) {
+  try {
+    el?.showPicker?.()
+  } catch {
+    // No user gesture: leave the picker closed.
+  }
 }

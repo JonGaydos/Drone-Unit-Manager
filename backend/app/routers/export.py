@@ -20,6 +20,7 @@ from app.services.local_time import display_zone, stamped_on_or_after, stamped_o
 from app.services.pilot_contacts import hides_contacts, redact_audit_changes, redact_audit_details
 from app.models.pilot import Pilot
 from app.models.vehicle import Vehicle
+from app.models.vehicle_registration import VehicleRegistration
 from app.models.maintenance import MaintenanceRecord
 from app.models.certification import PilotCertification, CertificationType
 from app.models.training_log import TrainingLog
@@ -39,6 +40,8 @@ from app.deps import AdminForm, DBSession
 from app.routers.auth import require_permission
 from app.services.audit import log_action
 from app.services.audit_capture import machine_run
+from app.services.flight_scope import vehicle_flight_totals
+from app.services.permissions import can
 from app.services.import_service import ImportTooLarge
 from app.responses import responses
 
@@ -153,6 +156,9 @@ def _flight_csv_row(f, local_tz, with_email: bool = True):
         _csv_safe(_csv_eq(f.attachment_right)),
         _csv_safe(_csv_eq(f.carrier)),
         _csv_safe(f.purpose or ""),
+        f.date.isoformat() if f.date else "",
+        _csv_safe(f.case_number or ""),
+        _csv_safe(f.notes or ""),
     ]
 
 
@@ -162,11 +168,19 @@ def export_flights_csv(
     user: ExportUser,
     _view: FlightsView,
     date_from: date | None = None,
-    date_to: date | None = None):
+    date_to: date | None = None,
+    pilot_id: int | None = None,
+    vehicle_id: int | None = None,
+    purpose: str | None = None,
+    review_status: str | None = None,
+    search: str | None = None):
     """Export flights as CSV in the Skydio flight-list column order (plus Purpose).
 
+    Takes the Flights page's filters, so the file holds the flights in view.
+
     Columns match the Skydio Cloud export so the file round-trips through the
-    Skydio importer, with Purpose appended at the end. Equipment slots use
+    Skydio importer, with Purpose, Date, Case Number and Notes appended at the
+    end (Date keeps the day of a flight entered without a takeoff time). Equipment slots use
     "N/A" when empty, matching the Skydio convention. Takeoff and Land are the
     stored UTC values; Local Takeoff Time is converted to the configured
     display timezone.
@@ -174,11 +188,9 @@ def export_flights_csv(
     local_tz = display_zone(db)
     with_email = not hides_contacts(db, user)
 
-    q = db.query(Flight).options(joinedload(Flight.pilot), joinedload(Flight.vehicle))
-    if date_from:
-        q = q.filter(Flight.date >= date_from)
-    if date_to:
-        q = q.filter(Flight.date <= date_to)
+    from app.routers.flights import filtered_flights
+    q = filtered_flights(db, pilot_id, vehicle_id, purpose, date_from, date_to, review_status, search)
+    q = q.options(joinedload(Flight.pilot), joinedload(Flight.vehicle))
     flights = _cap_rows(q.order_by(Flight.date.desc()).all(), "flights")
 
     output = io.StringIO()
@@ -188,7 +200,7 @@ def export_flights_csv(
         "Takeoff Address", "Takeoff Latitude", "Takeoff Longitude",
         "Land", "Duration (seconds)", "Battery", "Sensor Package",
         "Attachment (TOP)", "Attachment (BOTTOM)", "Attachment (LEFT)",
-        "Attachment (RIGHT)", "Carrier(s)", "Purpose",
+        "Attachment (RIGHT)", "Carrier(s)", "Purpose", "Date", "Case Number", "Notes",
     ])
     for f in flights:
         writer.writerow(_flight_csv_row(f, local_tz, with_email))
@@ -230,14 +242,25 @@ def export_pilots_csv(db: DBSession, user: ExportUser, _manage: PilotsManage):
 @router.get("/vehicles/csv", responses=responses(401))
 def export_vehicles_csv(db: DBSession, user: ExportUser, _view: FleetView):
     vehicles = _cap_rows(db.query(Vehicle).order_by(Vehicle.manufacturer).all(), "vehicles")
+    # Counted flights, the same scope as the vehicle stats; blank without flights.view.
+    totals = vehicle_flight_totals(db) if can(db, user, "flights.view") else None
+    # FAA Reg is the current registration's number, as on the Fleet page, with
+    # the legacy field as the fallback (and the only source without registrations.view).
+    current_regs = {}
+    if can(db, user, "registrations.view"):
+        current_regs = {r.vehicle_id: r.registration_number for r in db.query(VehicleRegistration).filter(
+            VehicleRegistration.is_current.is_(True)).all()}
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["Serial", "Manufacturer", "Model", "Nickname", "FAA Reg", "Status", "Flights", "Hours"])
+    writer.writerow(["Serial", "Manufacturer", "Model", "Nickname", "FAA Reg", "Status", "Flights", "Hours",
+                     "Acquired", "Decommissioned"])
     for v in vehicles:
+        flights, hours = totals.get(v.id, (0, 0.0)) if totals is not None else ("", None)
         writer.writerow([
             _csv_safe(v.serial_number), _csv_safe(v.manufacturer), _csv_safe(v.model),
-            _csv_safe(v.nickname or ""), _csv_safe(v.faa_registration or ""), _csv_safe(v.status),
-            v.total_flights, round(v.total_flight_hours, 1),
+            _csv_safe(v.nickname or ""), _csv_safe(current_regs.get(v.id) or v.faa_registration or ""),
+            _csv_safe(v.status), flights, round(hours, 1) if hours is not None else "",
+            v.acquired_date or "", v.decommissioned_date or "",
         ])
     output.seek(0)
     return StreamingResponse(
@@ -311,7 +334,9 @@ def export_equipment_csv(equipment_type: str, db: DBSession, user: ExportUser, _
     writer = csv.writer(output)
     writer.writerow([header for header, _ in columns])
     for row in rows:
-        writer.writerow([_csv_safe(getattr(row, attr, None) or "") for _, attr in columns])
+        # Blank only when empty: a zero is written as 0.
+        values = [getattr(row, attr, None) for _, attr in columns]
+        writer.writerow([_csv_safe("" if v is None else v) for v in values])
     output.seek(0)
     return StreamingResponse(
         iter([output.getvalue()]),
@@ -671,14 +696,25 @@ def export_audit_csv(
     user: ExportUser,
     _view: AuditView,
     date_from: date | None = None,
-    date_to: date | None = None):
+    date_to: date | None = None,
+    user_id: int | None = None,
+    entity_type: str | None = None,
+    action: str | None = None):
+    """The audit log as CSV, with the Audit Log page's filters."""
     from app.models.audit_log import AuditLog
+    from app.routers.audit import filtered_audit_logs
     local_tz = display_zone(db)
-    q = db.query(AuditLog)
-    if date_from:
-        q = q.filter(stamped_on_or_after(AuditLog.created_at, date_from, local_tz))
-    if date_to:
-        q = q.filter(stamped_on_or_before(AuditLog.created_at, date_to, local_tz))
+    q = filtered_audit_logs(db, entity_type=entity_type, user_id=user_id, action=action,
+                            date_from=date_from, date_to=date_to)
+    filters = {"date_from": date_from, "date_to": date_to, "user_id": user_id,
+               "entity_type": entity_type, "action": action}
+    shown = ", ".join(f"{k}={v}" for k, v in filters.items() if v not in (None, ""))
+    # The file holds the log as it stood when asked for, not this export's own entry.
+    from sqlalchemy import func
+    q = q.filter(AuditLog.id <= (db.query(func.max(AuditLog.id)).scalar() or 0))
+    log_action(db, user.id, user.display_name, "export", "audit_log",
+               details=f"audit_log_export.csv, {shown or 'all entries'}")
+    db.commit()
     q = q.order_by(AuditLog.created_at.desc(), AuditLog.id.desc()).execution_options(stream_results=True)
     return StreamingResponse(
         _audit_csv_stream(q, local_tz, hides_contacts(db, user)),

@@ -50,7 +50,7 @@ def _incident_body():
 
 
 def _log_body():
-    return {"date": "2026-03-01", "title": "Log", "training_type": "drill"}
+    return {"date": "2026-03-01", "title": "Log", "training_type": "Recurrent"}
 
 
 def _schedule(db):

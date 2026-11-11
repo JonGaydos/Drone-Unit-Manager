@@ -33,7 +33,6 @@ from app.models.currency_rule import CurrencyRule
 from app.models.equipment_checkout import EquipmentCheckout
 from app.models.checklist import ChecklistTemplate, ChecklistCompletion
 from app.models.component import Component
-from app.models.geofence import Geofence
 from app.models.notification_preference import NotificationPreference
 from app.models.notification_log import NotificationLog
 from app.models.battery_reading import BatteryReading
@@ -81,7 +80,6 @@ __all__ = [
     "ChecklistTemplate",
     "ChecklistCompletion",
     "Component",
-    "Geofence",
     "NotificationPreference",
     "NotificationLog",
     "BatteryReading",

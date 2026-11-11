@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { withPermissions } from '@/test/permissions'
@@ -21,7 +21,7 @@ const CERT_TYPES = [
 const MATRIX = [
   {
     pilot_id: 5, pilot_name: 'Ada Lovelace',
-    certs: { 1: { id: 100, status: 'valid', issue_date: '2024-01-01', expiration_date: '2026-01-01' } },
+    certs: { 1: { id: 100, status: 'valid', issue_date: '2024-01-01', expiration_date: '2099-01-01' } },
   },
 ]
 
@@ -129,10 +129,38 @@ describe('CertificationsPage', () => {
     const dialog = await screen.findByRole('dialog')
     await user.click(within(dialog).getByRole('button', { name: 'Remove' }))
 
-    // Confirm dialog appears on top; confirm the removal.
+    // Confirm dialog appears on top, says the renewal history goes too; confirm.
+    expect(await screen.findByText(/and its renewal history/)).toBeInTheDocument()
     await user.click(await screen.findByRole('button', { name: 'Confirm' }))
 
     expect(deleted).toBe('100')
+  })
+
+  it('sends null for a date or number cleared in Edit Certification (C-F21)', async () => {
+    let body = null
+    mockMount({ matrix: () => HttpResponse.json({ matrix: [{ ...MATRIX[0], certs: { 1: {
+      ...MATRIX[0].certs[1], certificate_number: 'CN-1', notes: null } } }] }) })
+    server.use(
+      http.get('/api/pilot-certifications/:id/history', () => HttpResponse.json([])),
+      http.get('/api/documents', () => HttpResponse.json([])),
+      http.patch('/api/pilot-certifications/100', async ({ request }) => {
+        body = await request.json()
+        return HttpResponse.json({ id: 100 })
+      }),
+    )
+    const { user } = renderWithProviders(<CertificationsPage />, { role: 'admin' })
+    await screen.findByRole('link', { name: 'Ada Lovelace' })
+    await user.click(screen.getByText('valid'))
+    const dialog = await screen.findByRole('dialog')
+    await user.clear(within(dialog).getByLabelText('Expiration Date'))
+    await user.clear(within(dialog).getByLabelText('Certificate Number'))
+    await user.click(within(dialog).getByRole('button', { name: 'Update' }))
+
+    await waitFor(() => expect(body).not.toBeNull())
+    expect(body.expiration_date).toBeNull()
+    expect(body.certificate_number).toBeNull()
+    expect(body).not.toHaveProperty('notes')
+    expect(body.issue_date).toBe('2024-01-01')
   })
 
   it('hides and unhides a cert type from the types tab', async () => {
@@ -205,5 +233,53 @@ describe('CertificationsPage', () => {
     renderWithProviders(<CertificationsPage />, { role: 'pilot', permissions: { 'files.view': 'no' } })
     await screen.findByRole('link', { name: 'Ada Lovelace' })
     expect(asked).toBe(false)
+  })
+
+  it('marks expired and expiring cells and filters by that state', async () => {
+    const soon = new Date(Date.now() + 20 * 86400000).toISOString().slice(0, 10)
+    mockMount({
+      matrix: () => HttpResponse.json({ matrix: [
+        { pilot_id: 5, pilot_name: 'Ada Lovelace', certs: {
+          1: { id: 100, status: 'complete', expiration_date: '2020-01-01' },
+          2: { id: 101, status: 'complete', expiration_date: soon },
+        } },
+        { pilot_id: 6, pilot_name: 'Grace Hopper', certs: {
+          1: { id: 102, status: 'complete', expiration_date: '2099-01-01' },
+          2: { id: null, status: 'not_started', expiration_date: null },
+        } },
+      ] }),
+    })
+    const { user } = renderWithProviders(<CertificationsPage />, { role: 'admin' })
+    await screen.findByRole('link', { name: 'Ada Lovelace' })
+    const table = screen.getByRole('table')
+    expect(within(table).getByText('expired')).toHaveClass('text-danger')
+    expect(within(table).getByText('expiring soon')).toHaveClass('text-warning')
+    expect(within(table).getByText('complete')).toHaveClass('text-success')
+    await user.selectOptions(screen.getByDisplayValue('All Statuses'), 'expired')
+    expect(screen.getByRole('link', { name: 'Ada Lovelace' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Grace Hopper' })).toBeNull()
+    await user.selectOptions(screen.getByDisplayValue('expired'), 'expiring')
+    expect(screen.getByRole('link', { name: 'Ada Lovelace' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Grace Hopper' })).toBeNull()
+  })
+
+  it('hides pilots with no certification records when Hide empty is ticked', async () => {
+    mockMount({
+      matrix: () => HttpResponse.json({ matrix: [
+        { pilot_id: 5, pilot_name: 'Ada Lovelace', certs: {
+          1: { id: 100, status: 'complete', expiration_date: '2099-01-01' },
+          2: { id: null, status: 'not_started', expiration_date: null },
+        } },
+        { pilot_id: 6, pilot_name: 'Grace Hopper', certs: {
+          1: { id: null, status: 'not_started', expiration_date: null },
+          2: { id: null, status: 'not_started', expiration_date: null },
+        } },
+      ] }),
+    })
+    const { user } = renderWithProviders(<CertificationsPage />, { role: 'admin' })
+    await screen.findByRole('link', { name: 'Grace Hopper' })
+    await user.click(screen.getByRole('checkbox', { name: /Hide empty/i }))
+    expect(screen.getByRole('link', { name: 'Ada Lovelace' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Grace Hopper' })).toBeNull()
   })
 })

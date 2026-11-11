@@ -46,4 +46,30 @@ describe('Layout', () => {
     expect(await screen.findByRole('heading', { name: 'Pilots' })).toBeInTheDocument()
     expect(screen.getByText('Pilots child')).toBeInTheDocument()
   })
+
+  // E-18: at tablet width (768 px) a docked 240 px sidebar left the pages too
+  // little room and they scrolled sideways. The sidebar docks from the lg
+  // breakpoint (1024 px); below it the menu button opens it as an overlay.
+  it('docks the sidebar only from the lg breakpoint', async () => {
+    renderWithProviders(
+      <Routes>
+        <Route element={<Layout />}>
+          <Route path="/" element={<div>Child page content</div>} />
+        </Route>
+      </Routes>,
+      { role: 'admin' },
+    )
+    await screen.findByText('Child page content')
+
+    const menuBar = screen.getByRole('button', { name: 'Open menu' }).parentElement
+    expect(menuBar).toHaveClass('lg:hidden')
+    expect(menuBar).not.toHaveClass('md:hidden')
+    const aside = document.querySelector('aside')
+    expect(aside).toHaveClass('max-lg:-translate-x-full', 'lg:w-60')
+    expect(aside.className).not.toMatch(/(^|\s)(max-)?md:/)
+    const content = screen.getByText('Child page content').closest('main').parentElement
+    expect(content).toHaveClass('lg:pl-60')
+    expect(content).not.toHaveClass('md:pl-60')
+    expect(screen.getByRole('button', { name: 'Toggle sidebar' })).toHaveClass('lg:flex')
+  })
 })

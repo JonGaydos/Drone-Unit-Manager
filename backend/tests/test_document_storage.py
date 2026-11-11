@@ -15,6 +15,7 @@ import pytest
 
 from app.config import settings
 from app.models.document import Document
+from app.models.operating_authority import OperatingAuthority
 
 PDF_A = b"%PDF-1.4 first"
 PDF_B = b"%PDF-1.4 second, different"
@@ -127,6 +128,10 @@ def test_purge_of_one_leaves_the_other(client, db, admin_headers, upload_dir):
 
 
 def test_operating_authority_document_gets_unique_name(client, db, admin_headers, upload_dir):
+    authority = OperatingAuthority(authority_type="coa", title="Blanket COA")
+    db.add(authority)
+    db.commit()
+    assert authority.id == 1
     a = _upload(client, admin_headers, PDF_A, filename="coa.pdf", entity_type="operating_authority", entity_id=1)
     b = _upload(client, admin_headers, PDF_B, filename="coa.pdf", entity_type="operating_authority", entity_id=1)
 

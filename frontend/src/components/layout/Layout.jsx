@@ -57,7 +57,7 @@ export function Layout() {
     <div className="min-h-screen bg-background">
       <CommandPalette />
       {/* Mobile top bar */}
-      <div className="md:hidden fixed top-0 left-0 right-0 h-14 bg-card border-b border-border flex items-center px-4 z-40">
+      <div className="lg:hidden fixed top-0 left-0 right-0 h-14 bg-card border-b border-border flex items-center px-4 z-40">
         <button onClick={() => setMobileOpen(!mobileOpen)} aria-label="Open menu" className="p-1">
           <Menu className="w-5 h-5 text-foreground" />
         </button>
@@ -66,15 +66,15 @@ export function Layout() {
 
       {/* Mobile overlay backdrop */}
       {mobileOpen && (
-        <button className="md:hidden fixed inset-0 bg-black/50 z-40 cursor-default" onClick={() => setMobileOpen(false)} aria-label="Close menu" />
+        <button className="lg:hidden fixed inset-0 bg-black/50 z-40 cursor-default" onClick={() => setMobileOpen(false)} aria-label="Close menu" />
       )}
 
       <Sidebar mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} />
-      <div className={`transition-all duration-300 ${sidebarCollapsed ? 'md:pl-16' : 'md:pl-60'}`}>
-        <div className="hidden md:block">
+      <div className={`transition-all duration-300 ${sidebarCollapsed ? 'lg:pl-16' : 'lg:pl-60'}`}>
+        <div className="hidden lg:block">
           <TopBar title={title} />
         </div>
-        <main className="p-4 md:p-6 pt-18 md:pt-6">
+        <main className="p-4 md:p-6 pt-18 lg:pt-6">
           <PageErrorBoundary key={location.pathname}>
             <div className="page-enter">
               <Outlet />

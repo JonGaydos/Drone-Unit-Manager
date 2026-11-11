@@ -69,8 +69,8 @@ describe('PilotsPage', () => {
     await user.click(screen.getByRole('button', { name: /Add Pilot/ }))
     const dialog = await screen.findByRole('dialog')
 
-    await user.type(within(dialog).getByLabelText('First Name'), 'Katherine')
-    await user.type(within(dialog).getByLabelText('Last Name'), 'Johnson')
+    await user.type(within(dialog).getByLabelText('First Name *'), 'Katherine')
+    await user.type(within(dialog).getByLabelText('Last Name *'), 'Johnson')
     await user.type(within(dialog).getByLabelText('Email'), 'kj@unit.gov')
     await user.click(within(dialog).getByRole('button', { name: 'Add Pilot' }))
 
@@ -95,8 +95,8 @@ describe('PilotsPage', () => {
       await screen.findByRole('link', { name: /Ada Lovelace/ })
       await user.click(screen.getByRole('button', { name: /Add Pilot/ }))
       const dialog = await screen.findByRole('dialog')
-      await user.type(within(dialog).getByLabelText('First Name'), 'Katherine')
-      await user.type(within(dialog).getByLabelText('Last Name'), 'Johnson')
+      await user.type(within(dialog).getByLabelText('First Name *'), 'Katherine')
+      await user.type(within(dialog).getByLabelText('Last Name *'), 'Johnson')
       return { user, dialog, body: () => captured }
     }
 
@@ -119,6 +119,23 @@ describe('PilotsPage', () => {
     })
   })
 
+  it('marks first and last name required and names a blank one', async () => {
+    mockMount()
+    let posted = false
+    server.use(http.post('/api/pilots', () => { posted = true; return HttpResponse.json({}) }))
+    const { user } = renderWithProviders(<PilotsPage />, { role: 'admin' })
+    await screen.findByRole('link', { name: /Ada Lovelace/ })
+    await user.click(screen.getByRole('button', { name: /Add Pilot/ }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByLabelText('First Name *')).toBeRequired()
+    expect(within(dialog).getByLabelText('Last Name *')).toBeRequired()
+    await user.type(within(dialog).getByLabelText('First Name *'), 'Ann')
+    await user.type(within(dialog).getByLabelText('Last Name *'), '  ')
+    await user.click(within(dialog).getByRole('button', { name: 'Add Pilot' }))
+    expect(await screen.findByText('Required: Last Name')).toBeInTheDocument()
+    expect(posted).toBe(false)
+  })
+
   it('hides the Add Pilot control for a non-supervisor (pilot)', async () => {
     server.use(http.get('/api/auth/me', () => HttpResponse.json(withPermissions({ id: 3, username: 'p', role: 'pilot' }))))
     mockMount()
@@ -136,7 +153,7 @@ describe('PilotsPage', () => {
     })
     await screen.findByRole('link', { name: /Ada Lovelace/ })
     await user.click(screen.getByRole('button', { name: 'Edit' }))
-    await screen.findByLabelText('First Name')
+    await screen.findByLabelText('First Name *')
     expect(screen.queryByLabelText('Email')).toBeNull()
     expect(screen.queryByLabelText(/Work Cell/i)).toBeNull()
     await user.click(screen.getByRole('button', { name: /Save|Update/ }))

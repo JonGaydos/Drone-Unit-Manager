@@ -28,11 +28,11 @@ function getEntityName(entity, entityType) {
   return entity.name || `#${entity.id}`
 }
 
-// Only in-fleet entities are selectable for new maintenance/schedules.
-// "maintenance" status stays selectable (that's what gets maintained);
-// retired/damaged/etc. are excluded. Entities without a status are kept.
+// Only in-fleet entities are selectable for new maintenance/schedules:
+// retired and damaged items are excluded; every in-service status (active,
+// maintenance, charging, online, offline) stays. Entities without a status are kept.
 function isActiveEntity(entity) {
-  return !entity.status || entity.status === 'active' || entity.status === 'maintenance'
+  return !['retired', 'damaged'].includes(entity.status)
 }
 
 // Filter a list to active entities, keeping the currently-referenced entity
@@ -73,8 +73,15 @@ function MaintenanceModal({ record, onSave, onClose, entityLists, pilots }) {
       setSubmitError(`Please select a ${data.entity_type}.`)
       return
     }
+    if (!(data.description || '').trim()) {
+      setSubmitError('Description is required.')
+      return
+    }
     if (data.entity_id) data.entity_id = Number.parseInt(data.entity_id, 10)
     Object.keys(data).forEach(k => { if (data[k] === '') delete data[k] })
+    for (const k of ['cost', 'next_due_hours']) {
+      if (data[k] != null) data[k] = Number.parseFloat(data[k])
+    }
     setSubmitting(true)
     try {
       await onSave(data)
@@ -100,6 +107,8 @@ function MaintenanceModal({ record, onSave, onClose, entityLists, pilots }) {
               <option value="battery">Battery</option>
               <option value="controller">Controller</option>
               <option value="dock">Dock</option>
+              <option value="sensor">Sensor</option>
+              <option value="attachment">Attachment</option>
               <option value="organization">Organization-wide</option>
               <option value="other">Other</option>
             </select>
@@ -140,9 +149,10 @@ function MaintenanceModal({ record, onSave, onClose, entityLists, pilots }) {
           )}
         </div>
         <div>
-          <label htmlFor="description" className="block text-sm font-medium text-foreground mb-1">Description</label>
+          <label htmlFor="description" className="block text-sm font-medium text-foreground mb-1">Description *</label>
           <input id="description"
             type="text"
+            required
             value={form.description || ''}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
             className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring text-sm"
@@ -170,6 +180,33 @@ function MaintenanceModal({ record, onSave, onClose, entityLists, pilots }) {
               onChange={(e) => setForm({ ...form, performed_date: e.target.value })}
               onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) setForm(prev => ({...prev, performed_date: n})) }}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+            />
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <div>
+            <label htmlFor="cost" className="block text-sm font-medium text-foreground mb-1">Cost</label>
+            <input id="cost" type="number" min="0" step="0.01"
+              value={form.cost ?? ''}
+              onChange={(e) => setForm({ ...form, cost: e.target.value })}
+              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
+            />
+          </div>
+          <div>
+            <label htmlFor="next-due-date" className="block text-sm font-medium text-foreground mb-1">Next Due Date</label>
+            <input id="next-due-date" type="date"
+              value={form.next_due_date || ''}
+              onChange={(e) => setForm({ ...form, next_due_date: e.target.value })}
+              onBlur={e => { const n = normalizeDateValue(e.target.value); if (n !== e.target.value) setForm(prev => ({...prev, next_due_date: n})) }}
+              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
+            />
+          </div>
+          <div>
+            <label htmlFor="next-due-hours" className="block text-sm font-medium text-foreground mb-1">Next Due Hours</label>
+            <input id="next-due-hours" type="number" min="0" step="0.1"
+              value={form.next_due_hours ?? ''}
+              onChange={(e) => setForm({ ...form, next_due_hours: e.target.value })}
+              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm"
             />
           </div>
         </div>
@@ -272,6 +309,8 @@ function ScheduleModal({ schedule, onSave, onClose, entityLists }) {
               <option value="battery">Battery</option>
               <option value="controller">Controller</option>
               <option value="dock">Dock</option>
+              <option value="sensor">Sensor</option>
+              <option value="attachment">Attachment</option>
               <option value="organization">Organization-wide</option>
               <option value="other">Other</option>
             </select>
@@ -335,7 +374,9 @@ function ScheduleModal({ schedule, onSave, onClose, entityLists }) {
             className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring text-sm"
           />
           {form.frequency !== 'one_time' && (
-            <p className="text-xs text-muted-foreground mt-1">Leave blank to auto-calculate from the frequency.</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {schedule ? 'Leave blank to keep the current due date.' : 'Leave blank to auto-calculate from the frequency.'}
+            </p>
           )}
         </div>
         <div>
@@ -365,18 +406,21 @@ function resolveEntityName(entityType, entityId, entityLists) {
   if (entityType === 'organization') return 'Organization-wide'
   // Legacy "other" records (and typeless ones) carry no entity reference.
   if (entityType === 'other' && !entityId) return 'Other'
+  const typeLabel = entityType ? entityType.charAt(0).toUpperCase() + entityType.slice(1) : 'Item'
+  if (!entityId) return `${typeLabel} (no item)`
   const list = entityLists[entityType] || []
   const entity = list.find(e => e.id === entityId)
-  return entity ? getEntityName(entity, entityType) : `${entityType} #${entityId}`
+  return entity ? getEntityName(entity, entityType) : `${typeLabel} #${entityId}`
 }
 
 // Render entity reference — clickable Link for vehicles, plain text for others
 function EntityRef({ entityType, entityId, entityLists }) {
   const name = resolveEntityName(entityType, entityId, entityLists)
-  if (entityType === 'vehicle') {
-    return <Link to={`/fleet/vehicles/${entityId}`} className="text-primary hover:underline capitalize">{name}</Link>
+  // Names are shown as stored: no CSS capitalizing, which altered serials.
+  if (entityType === 'vehicle' && entityId) {
+    return <Link to={`/fleet/vehicles/${entityId}`} className="text-primary hover:underline">{name}</Link>
   }
-  return <span className="text-foreground capitalize">{name}</span>
+  return <span className="text-foreground">{name}</span>
 }
 
 export default function MaintenancePage() {
@@ -397,7 +441,7 @@ export default function MaintenancePage() {
   const [confirmProps, requestConfirm] = useConfirm()
 
   // Entity lists for name resolution and dropdowns
-  const [entityLists, setEntityLists] = useState({ vehicle: [], battery: [], controller: [], dock: [], other: [] })
+  const [entityLists, setEntityLists] = useState({ vehicle: [], battery: [], controller: [], dock: [], sensor: [], attachment: [], other: [] })
   const [pilots, setPilots] = useState([])
 
   // Load entity lists and pilots on mount
@@ -411,6 +455,8 @@ export default function MaintenancePage() {
         battery: fleet.batteries || [],
         controller: fleet.controllers || [],
         dock: fleet.docks || [],
+        sensor: fleet.sensors || [],
+        attachment: fleet.attachments || [],
         other: fleet.other_equipment || [],
       })
       setPilots(pilotsData)
@@ -672,7 +718,8 @@ export default function MaintenancePage() {
             </thead>
             <tbody>
               {filteredSchedules.map(s => {
-                const days = daysUntil(s.next_due)
+                // A done or ended schedule is not due, so it gets no countdown.
+                const days = s.is_active ? daysUntil(s.next_due) : null
                 const urgencyColor = (() => {
                   if (days === null) return 'text-muted-foreground'
                   if (days < 0) return 'text-red-400'
@@ -714,6 +761,7 @@ export default function MaintenancePage() {
                         <button
                           onClick={() => setDocsModal({ entityType: 'maintenance_schedule', entityId: s.id, title: s.name })}
                           title="Documents"
+                          aria-label="Documents"
                           className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent"
                         >
                           <Paperclip className="w-4 h-4" />
@@ -722,6 +770,7 @@ export default function MaintenancePage() {
                           <button
                             onClick={() => handleScheduleComplete(s.id)}
                             title="Mark Complete"
+                            aria-label="Mark Complete"
                             className="p-1.5 text-muted-foreground hover:text-emerald-400 rounded-lg hover:bg-emerald-500/10"
                           >
                             <CheckCircle className="w-4 h-4" />
@@ -731,12 +780,16 @@ export default function MaintenancePage() {
                           <>
                             <button
                               onClick={() => setScheduleModal(s)}
+                              title="Edit schedule"
+                              aria-label="Edit schedule"
                               className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent"
                             >
                               <Edit className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => handleScheduleDelete(s.id)}
+                              title="Delete schedule"
+                              aria-label="Delete schedule"
                               className="p-1.5 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10"
                             >
                               <Trash2 className="w-4 h-4" />

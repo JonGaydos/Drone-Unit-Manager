@@ -55,3 +55,21 @@ def flight_counts(flight, pilot=None) -> bool:
         return False
     pilot = pilot if pilot is not None else getattr(flight, "pilot", None)
     return pilot is None or pilot.counts_toward_totals
+
+
+def vehicle_flight_totals(db, vehicle_ids=None) -> dict:
+    """Counted flights and hours per vehicle id, as ``{id: (flights, hours)}``.
+
+    Vehicle totals are worked out from the flights each time rather than read
+    from the stored columns, which nothing keeps up to date. A vehicle with no
+    counted flights is left out of the result.
+    """
+    from sqlalchemy import func
+    q = db.query(
+        Flight.vehicle_id,
+        func.count(Flight.id),
+        func.coalesce(func.sum(Flight.duration_seconds), 0),
+    ).filter(counted_flight_clause(), Flight.vehicle_id.isnot(None))
+    if vehicle_ids is not None:
+        q = q.filter(Flight.vehicle_id.in_(vehicle_ids))
+    return {vid: (count, secs / 3600) for vid, count, secs in q.group_by(Flight.vehicle_id).all()}

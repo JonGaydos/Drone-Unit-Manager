@@ -57,7 +57,7 @@ The dashboard is your home page and provides an at-a-glance overview of your dro
 
 ### 2.1 Overview Cards
 
-Six cards at the top show key metrics: Total Flights, Total Flight Hours, Active Pilots, Fleet Size, Flights Needing Review, and Upcoming Certification Expirations. Each card is clickable and navigates to the relevant page.
+Six cards at the top show key metrics: Total Flights, Total Flight Hours, Pilots Flying (30d), Vehicles Flown (30d), Flights Needing Review, and Upcoming Certification Expirations. Each card is clickable and navigates to the relevant page.
 
 ### 2.2 Recent Flights
 
@@ -507,7 +507,7 @@ Bulk flight actions follow the same settings as single ones. Selecting flights a
 | Mark alerts read or dismiss them (shared for everyone) | Yes | No | No |
 | Generate reports | Yes | Yes | No |
 | Export CSV | Yes | Yes | Yes |
-| Manage operating authority and geofences | Yes | No | No |
+| Manage operating authority | Yes | No | No |
 | Manage vehicle registrations | No | No | No |
 | View the audit log | No | No | No |
 | Send the email digest to another address | Yes | No | No |
@@ -515,7 +515,7 @@ Bulk flight actions follow the same settings as single ones. Selecting flights a
 **Always enforced, whatever the grid says**
 
 - Nobody approves a flight plan they submitted.
-- A legal hold blocks delete and purge.
+- A legal hold blocks edits, delete and purge.
 - The last active admin cannot be demoted, deactivated or deleted.
 - A viewer can never change unit data. Change settings for the Viewer column are locked to No or None. The server refuses them, ignores any stored value (including one from a restored backup), and the grid greys them out.
 
@@ -533,7 +533,7 @@ Bulk flight actions follow the same settings as single ones. Selecting flights a
 
 ### 19.1 Navigation
 
-On mobile devices, the sidebar is replaced by a hamburger menu in the top-left corner. Tap the menu icon to open the sidebar as an overlay. The sidebar closes automatically when you navigate to a page.
+On phones and tablets (screens narrower than 1024 pixels), the sidebar is replaced by a hamburger menu in the top-left corner. Tap the menu icon to open the sidebar as an overlay. The sidebar closes automatically when you navigate to a page.
 
 ### 19.2 Responsive Tables
 

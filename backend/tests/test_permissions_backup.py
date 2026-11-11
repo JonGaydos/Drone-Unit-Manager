@@ -39,7 +39,8 @@ def _restore(client, headers, archive, tmp_path, monkeypatch):
     upload_dir.mkdir(exist_ok=True)
     monkeypatch.setattr(app_settings, "UPLOAD_DIR", upload_dir)
     monkeypatch.setattr(app_settings, "DATA_DIR", tmp_path)
-    resp = client.post(IMPORT_URL, headers=headers, files={"file": ("b.zip", archive, "application/zip")})
+    resp = client.post(IMPORT_URL, headers=headers, data={"confirm_restore": "REPLACE ALL DATA"},
+                       files={"file": ("b.zip", archive, "application/zip")})
     assert resp.status_code == 200, resp.text
 
 

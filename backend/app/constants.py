@@ -19,7 +19,6 @@ MISSION_LOG_NOT_FOUND = "Mission log not found"
 FLIGHT_PLAN_NOT_FOUND = "Flight plan not found"
 ALERT_NOT_FOUND = "Alert not found"
 USER_NOT_FOUND = "User not found"
-GEOFENCE_NOT_FOUND = "Geofence not found"
 PHOTO_NOT_FOUND = "Photo not found"
 CERTIFICATION_TYPE_NOT_FOUND = "Certification type not found"
 PILOT_CERTIFICATION_NOT_FOUND = "Pilot certification not found"
@@ -68,7 +67,7 @@ APP_TITLE = "Drone Unit Manager"
 # Bump this in the same commit as the release tag.
 APP_VERSION = "3.4.2"
 
-# ── Folder / geofence messages ───────────────────────────────────────────────
+# ── Folder messages ──────────────────────────────────────────────────────────
 FOLDER_NOT_FOUND = "Folder not found"
 
 # ── API paths ────────────────────────────────────────────────────────────────
@@ -78,7 +77,7 @@ LOGO_VIEW_PATH = "/api/settings/logo/view"
 API_TOKEN_NOT_CONFIGURED = "API token not configured"
 
 # Settings whose values contain secrets. Never returned to any role, and left
-# out of backups and the audit log.
+# out of the audit log. Backups carry them, so a restore keeps integrations.
 SECRET_KEYS = {
     "skydio_api_token", "skydio_token_id",
     "smtp_password",
@@ -89,4 +88,13 @@ SECRET_KEYS = {
 INCIDENT_SEVERITIES = ("minor", "moderate", "major", "critical")
 INCIDENT_STATUSES = ("open", "investigating", "resolved", "closed")
 INCIDENT_REPORT_TYPES = ("incident", "success")
+# The Incidents page's category lists: incident reports, then success reports.
+INCIDENT_CATEGORIES = (
+    "crash", "near_miss", "equipment_failure", "injury", "airspace_violation", "other",
+    "missing_person_found", "suspect_located", "evidence_collected", "community_event",
+    "training_success", "other_success",
+)
 MISSION_STATUSES = ("planned", "in_progress", "completed", "cancelled")
+# The Training Log page's lists (TRAINING_TYPES and OUTCOME_OPTIONS in TrainingLogPage.jsx).
+TRAINING_TYPES = ("Initial", "Recurrent", "Proficiency", "Special")
+TRAINING_OUTCOMES = ("completed", "incomplete", "failed")

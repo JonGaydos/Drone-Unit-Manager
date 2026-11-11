@@ -14,9 +14,13 @@ function RecoveryBanner({ recovery }) {
         <AlertTriangle className="w-4 h-4 text-amber-500" /> Restored backup detected
       </p>
       <p className="mt-1 text-muted-foreground">
-        Your data is back, but passwords are never included in a backup. Enter the{' '}
+        Your data is back, but this backup was made before passwords were included. Enter the{' '}
         <span className="font-medium text-foreground">username of an administrator from the restored data</span>, a
         new password, and the install token to regain access. Organization and name fields are ignored in this step.
+      </p>
+      <p className="mt-1 text-muted-foreground">
+        Not in this backup, so set again after you sign in: reset the other users' passwords (Settings, Users), and
+        re-enter API tokens, the SMTP password and the Skydio token.
       </p>
     </div>
   )
@@ -124,8 +128,11 @@ export default function SetupPage({ recovery = false }) {
     try {
       const result = await api.post('/auth/setup', form, { headers: { 'X-Install-Token': installToken } })
       localStorage.setItem('token', result.token)
-      // Move to optional setup (logo, Skydio, SMTP, initial import).
-      setStep(3)
+      // A reclaimed install already has its logo, settings and data, so go
+      // straight into the app. A fresh install moves to optional setup (logo,
+      // Skydio, SMTP, initial import).
+      if (recovery) globalThis.location.href = '/'
+      else setStep(3)
     } catch (err) {
       setError(err.message || 'Setup failed')
     } finally {

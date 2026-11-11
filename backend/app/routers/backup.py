@@ -1,15 +1,20 @@
 """Full backup export and import for Drone Unit Manager.
 
 Export creates a ZIP with manifest, JSON database dump, and uploaded files.
-Import requires a fresh install (no users) and restores everything.
+A backup holds everything, with no encryption: password hashes, API tokens and
+secret settings included, so a restored install signs in as before. Import onto
+a fresh install takes the install token; onto a live install it takes an admin
+and a typed confirmation.
 """
 
 import io
 import json
 import logging
 import os
+import queue
 import secrets
 import tempfile
+import threading
 import zipfile
 from datetime import date, datetime, timezone
 
@@ -75,12 +80,10 @@ from app.models.currency_rule import CurrencyRule
 from app.models.equipment_checkout import EquipmentCheckout
 from app.models.checklist import ChecklistTemplate, ChecklistCompletion
 from app.models.component import Component
-from app.models.geofence import Geofence
 from app.models.notification_preference import NotificationPreference
 from app.models.notification_log import NotificationLog
 from app.models.telemetry import TelemetryPoint
 from app.responses import responses
-from app.routers.settings import SECRET_KEYS
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +106,6 @@ EXPORT_ORDER = [
     ("flight_purposes", FlightPurpose),
     ("certification_types", CertificationType),
     ("currency_rules", CurrencyRule),
-    ("geofences", Geofence),
     ("operating_authorities", OperatingAuthority),
     ("role_permissions", RolePermission),
     # Tier 2: Base entities
@@ -156,22 +158,16 @@ EXPORT_ORDER = [
 
 
 def _serialize_database(db: Session) -> tuple[dict, dict]:
-    """Serialize every main table to ``{table_name: rows}``, redacting secrets.
+    """Serialize every main table to ``{table_name: rows}``.
 
-    Setting rows whose key is a known secret are dropped, and user password
-    hashes are blanked (the column is non-nullable, so the key stays with an
-    empty string; restored accounts need a password reset). Returns
-    ``(database, row_counts)``.
+    Nothing is redacted: user password hashes, API token rows and the secret
+    settings (SECRET_KEYS) are written as stored, so a restore brings back
+    working logins, tokens and integrations. Returns ``(database, row_counts)``.
     """
     database = {}
     counts = {}
     for table_name, model_class in EXPORT_ORDER:
         rows = _serialize_table(db, model_class)
-        if table_name == "settings":
-            rows = [r for r in rows if r.get("key") not in SECRET_KEYS]
-        elif table_name == "users":
-            for r in rows:
-                r["password_hash"] = ""
         database[table_name] = rows
         counts[table_name] = len(rows)
         logger.info("  Exported %s: %d rows", table_name, len(rows))
@@ -180,11 +176,23 @@ def _serialize_database(db: Session) -> tuple[dict, dict]:
 
 def build_backup_archive(db: Session, include_telemetry: bool = False) -> tuple[tempfile.SpooledTemporaryFile, dict]:
     """Build a full backup ZIP into a SpooledTemporaryFile and return it
-    seeked to position 0, along with the manifest.
+    seeked to position 0, along with the manifest. Used by the scheduled
+    backup job; the download streams instead (stream_backup_archive).
+    """
+    spooled = tempfile.SpooledTemporaryFile(max_size=50 * 1024 * 1024)
+    manifest = write_backup_archive(db, spooled, include_telemetry)
+    spooled.seek(0)
+    return spooled, manifest
+
+
+def write_backup_archive(db: Session, out, include_telemetry: bool = False) -> dict:
+    """Write a full backup ZIP to the file object ``out`` and return the manifest.
 
     The ZIP contains manifest.json, database.json, optionally telemetry.json,
-    and every uploaded file under 'uploads/...'. This is the reusable core
-    shared by the download endpoint and the scheduled backup job.
+    and every uploaded file under 'uploads/...'. ``out`` need not be seekable:
+    zipfile then writes each entry's sizes after its data, so the archive can
+    be sent while it is being built. This is the reusable core shared by the
+    download endpoint and the scheduled backup job.
     """
     database, table_counts = _serialize_database(db)
     manifest = {
@@ -206,9 +214,7 @@ def build_backup_archive(db: Session, include_telemetry: bool = False) -> tuple[
             tel_db.close()
         manifest["tables"]["telemetry_points"] = telemetry_count
 
-    # Create ZIP
-    spooled = tempfile.SpooledTemporaryFile(max_size=50 * 1024 * 1024)
-    with zipfile.ZipFile(spooled, "w", zipfile.ZIP_DEFLATED) as zf:
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(MANIFEST_FILE, json.dumps(manifest, cls=_BackupEncoder, indent=2))
         zf.writestr(DATABASE_FILE, json.dumps(database, cls=_BackupEncoder))
 
@@ -224,8 +230,92 @@ def build_backup_archive(db: Session, include_telemetry: bool = False) -> tuple[
                     arc_name = "uploads/" + os.path.relpath(full_path, upload_dir).replace("\\", "/")
                     zf.write(full_path, arc_name)
 
-    spooled.seek(0)
-    return spooled, manifest
+    return manifest
+
+
+# Chunks held between the archive builder and the response. Bounded, so a slow
+# client slows the build instead of letting the archive pile up in memory.
+EXPORT_QUEUE_CHUNKS = 64
+
+
+class _ExportStopped(Exception):
+    """The download went away; the builder stops."""
+
+
+def _put_unless_stopped(q: queue.Queue, item, stopped: threading.Event) -> None:
+    while True:
+        if stopped.is_set():
+            raise _ExportStopped()
+        try:
+            q.put(item, timeout=0.5)
+            return
+        except queue.Full:
+            continue
+
+
+class _QueueWriter:
+    """Write end handed to zipfile: every write becomes a chunk on the queue.
+
+    It has no tell() or seek(), so zipfile treats it as a stream.
+    """
+
+    def __init__(self, q: queue.Queue, stopped: threading.Event):
+        self._q = q
+        self._stopped = stopped
+
+    def write(self, data) -> int:
+        if data:
+            _put_unless_stopped(self._q, bytes(data), self._stopped)
+        return len(data)
+
+    def flush(self) -> None:
+        pass
+
+
+def stream_backup_archive(include_telemetry: bool = False):
+    """Yield a full backup ZIP chunk by chunk while it is being built.
+
+    The archive is written on a worker thread (with its own session) into a
+    bounded queue, and each chunk is yielded as soon as it exists, so the first
+    bytes reach the browser at once rather than after minutes of telemetry. If
+    the consumer stops early, the worker stops at its next write. A build error
+    is raised here, which cuts the download short rather than ending it as if
+    it were complete.
+    """
+    q: queue.Queue = queue.Queue(maxsize=EXPORT_QUEUE_CHUNKS)
+    stopped = threading.Event()
+    finished = object()
+
+    def build():
+        outcome = finished
+        db = database.SessionLocal()   # call-time resolution, see import_backup
+        try:
+            write_backup_archive(db, _QueueWriter(q, stopped), include_telemetry)
+            logger.info("Backup export complete")
+        except _ExportStopped:
+            logger.info("Backup export stopped: the download ended early")
+            return
+        except Exception as exc:
+            logger.exception("Backup export failed")
+            outcome = exc
+        finally:
+            db.close()
+        try:
+            _put_unless_stopped(q, outcome, stopped)
+        except _ExportStopped:
+            pass
+
+    threading.Thread(target=build, name="backup-export", daemon=True).start()
+    try:
+        while True:
+            item = q.get()
+            if item is finished:
+                return
+            if isinstance(item, Exception):
+                raise item
+            yield item
+    finally:
+        stopped.set()
 
 
 class _BackupEncoder(json.JSONEncoder):
@@ -376,11 +466,12 @@ def init_install_token() -> str | None:
     login, logging it so an operator can read it from container logs.
 
     "No usable login" covers a genuine fresh install (no users) and a database
-    restored from a backup (users exist but every password hash was redacted, so
-    nobody can sign in). Both need the token: the first to import a backup, the
-    second to reactivate an admin. Returns None (and issues nothing) once a real
-    login exists. Called at startup and again after an import, since a restore
-    blanks the hashes and re-opens the no-usable-login state."""
+    restored from an older backup (users exist but every password hash is blank,
+    since backups once left them out, so nobody can sign in). Both need the
+    token: the first to import a backup, the second to reactivate an admin.
+    Returns None (and issues nothing) once a real login exists. Called at
+    startup and again after an import, since a restore of such a backup
+    re-opens the no-usable-login state."""
     from app.routers.auth import _has_usable_login
     db = database.SessionLocal()   # call-time resolution, see import_backup
     try:
@@ -438,8 +529,8 @@ def verify_install_token(provided: str) -> bool:
     """Constant-time check of a provided install token against the token file.
 
     False when the file is missing, empty, or the value does not match, so the
-    caller can fail closed. Used to gate both backup import and, after a redacted
-    restore, admin reactivation on the setup screen."""
+    caller can fail closed. Used to gate both backup import and, after a restore
+    that left no usable login, admin reactivation on the setup screen."""
     provided = (provided or "").strip()
     if not provided:
         return False
@@ -516,27 +607,31 @@ def _safe_zip_member_path(upload_dir: str, relative: str) -> str:
 
 
 def _restore_uploads(zf: zipfile.ZipFile, upload_dir: str) -> int:
-    """Extract every 'uploads/...' entry in the backup ZIP into upload_dir on
-    disk. Rejects entries that try to escape upload_dir via absolute paths,
-    '..' segments, or symlinks. Runs inside _restore_archive, which import_backup
+    """Make upload_dir match the backup: extract every 'uploads/...' entry in
+    the ZIP, then remove files under upload_dir that the backup does not name.
+    Rejects entries that try to escape upload_dir via absolute paths, '..'
+    segments, or symlinks. Runs inside _restore_archive, which import_backup
     keeps off the event loop."""
     files_restored = 0
     files_rejected = 0
+    in_backup = set()
     upload_prefix = "uploads/"
     for name in zf.namelist():
         if not name.startswith(upload_prefix) or name.endswith("/"):
             continue
         relative = name[len(upload_prefix):]
-        # Reject entries whose declared decompressed size exceeds the cap before
-        # reading them into memory (zip-bomb guard).
-        if zf.getinfo(name).file_size > MAX_UPLOAD_ENTRY_BYTES:
-            logger.warning("Refused backup entry %s: decompressed size exceeds cap", name)
-            files_rejected += 1
-            continue
         try:
             dest = _safe_zip_member_path(upload_dir, relative)
         except ValueError as exc:
             logger.warning("Refused backup entry %s: %s", name, exc)
+            files_rejected += 1
+            continue
+        # Named by the backup, so kept on disk even if refused below.
+        in_backup.add(os.path.realpath(dest))
+        # Reject entries whose declared decompressed size exceeds the cap before
+        # reading them into memory (zip-bomb guard).
+        if zf.getinfo(name).file_size > MAX_UPLOAD_ENTRY_BYTES:
+            logger.warning("Refused backup entry %s: decompressed size exceeds cap", name)
             files_rejected += 1
             continue
         os.makedirs(os.path.dirname(dest), exist_ok=True)
@@ -545,7 +640,35 @@ def _restore_uploads(zf: zipfile.ZipFile, upload_dir: str) -> int:
         files_restored += 1
     if files_rejected:
         logger.warning("Skipped %d unsafe backup entries", files_rejected)
+    _remove_uploads_not_in(upload_dir, in_backup)
     return files_restored
+
+
+def _remove_uploads_not_in(upload_dir: str, keep: set[str]) -> None:
+    """Delete files under upload_dir whose real path is not in keep.
+
+    Runs after extraction, so a failed restore never loses a file first. Only
+    files are removed (a symlink is unlinked, never followed). Skipped entirely
+    when upload_dir holds the data folder, where the databases live.
+    """
+    real_root = os.path.realpath(upload_dir)
+    real_data = os.path.realpath(str(app_settings.DATA_DIR))
+    if real_data == real_root or real_data.startswith(real_root + os.sep):
+        logger.warning("Upload folder %s holds the data folder; stale uploads not removed", upload_dir)
+        return
+    removed = 0
+    for dirpath, _, filenames in os.walk(upload_dir):
+        for fname in filenames:
+            path = os.path.join(dirpath, fname)
+            if os.path.realpath(path) in keep:
+                continue
+            try:
+                os.remove(path)
+                removed += 1
+            except OSError as exc:
+                logger.warning("Could not remove stale upload %s: %s", path, exc)
+    if removed:
+        logger.info("Removed %d uploads not in the backup", removed)
 
 
 @router.get("/export")
@@ -561,14 +684,12 @@ def export_backup(
                details=f"include_telemetry={include_telemetry}")
     db.commit()
 
-    spooled, _ = build_backup_archive(db, include_telemetry=include_telemetry)
-
     today = date.today().isoformat()
     filename = f"drone_unit_manager_backup_{today}.zip"
-    logger.info("Backup export complete: %s", filename)
 
+    # Streamed as it is built: headers and the first bytes go out at once.
     return StreamingResponse(
-        spooled,
+        stream_backup_archive(include_telemetry=include_telemetry),
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
@@ -622,27 +743,21 @@ def _audit_key(row) -> tuple:
 def _prepare_restore_rows(db: Session, name: str, rows: list[dict]) -> list[dict]:
     """Adjust one table's backup rows before they are inserted.
 
-    A backup file is admin-supplied and could be edited by hand, so nothing in
-    it may grant access or rewrite history:
-    - API tokens are never restored; a restored install does not accept
-      credentials minted elsewhere.
-    - Password hashes are blanked (an honest export already blanks them), so a
-      restore can never plant a known password; admins re-claim access with the
-      install token.
+    A restore brings back everything the backup holds, including password
+    hashes and API tokens (only an admin or the install-token holder can run
+    one, and either already controls the install). What it may not do is let a
+    session from before the restore act as someone else, or rewrite history:
     - Each user gets a fresh random token version. Users are restored by id, so
       a login token issued before the restore would otherwise sign in as
-      whoever holds that id in the restored data.
+      whoever holds that id in the restored data. Everyone signs in again.
     - Role permissions pass the same checks as the write API: rows with an
       unknown key, an invalid value, the admin role, a locked viewer cell, or a
       change permission without its view key are dropped.
     - Audit entries are appended, not substituted: they lose their ids, and any
       entry this install already holds is skipped rather than duplicated.
     """
-    if name == "api_tokens":
-        return []
     if name == "users":
         for r in rows:
-            r["password_hash"] = ""
             r["token_version"] = secrets.randbelow(2**31 - 1) + 1
     elif name == "role_permissions":
         rows, dropped = permissions.restorable_overrides(rows)
@@ -664,6 +779,8 @@ def _prepare_restore_rows(db: Session, name: str, rows: list[dict]) -> list[dict
 
 
 CONFIRM_HOLDS_TEXT = "RESTORE HELD ITEMS"
+# Typed by the operator to restore onto an install that people can sign in to.
+CONFIRM_RESTORE_TEXT = "REPLACE ALL DATA"
 
 # Held tables: the fields that, if the backup disagrees with the live row,
 # mean the restore changes the held item.
@@ -722,8 +839,8 @@ def _restore_main_tables(db: Session, db_tables: dict, held_items: list[dict] | 
 
     A restore makes the database match the backup, so each table is wiped and
     reloaded rather than appended to (appending would collide on the backup's
-    explicit ids). The exceptions are in _prepare_restore_rows: the audit trail
-    is appended to, and API tokens are dropped rather than restored.
+    explicit ids). The exception is in _prepare_restore_rows: the audit trail
+    is appended to.
 
     PRAGMA defer_foreign_keys holds every FK check until COMMIT
     and, unlike PRAGMA foreign_keys, is honored inside a transaction -- so the
@@ -862,7 +979,7 @@ def _restore_telemetry(zf: zipfile.ZipFile) -> tuple[bool, int]:
     return count > 0, count
 
 
-async def _read_backup_upload(request: Request) -> tuple[bytes, str]:
+async def _read_backup_upload(request: Request) -> tuple[bytes, str, str]:
     """The uploaded ZIP from the multipart body. Read by hand, after the caller
     is authorized: as a declared File() parameter FastAPI would spool the whole
     body (up to the archive cap) before this route could refuse the caller."""
@@ -871,7 +988,8 @@ async def _read_backup_upload(request: Request) -> tuple[bytes, str]:
         file = form.get("file")
         if not isinstance(file, StarletteUploadFile):
             raise HTTPException(400, "No backup file in the request")
-        return await file.read(), str(form.get("confirm_holds") or "")
+        return (await file.read(), str(form.get("confirm_holds") or ""),
+                str(form.get("confirm_restore") or ""))
     finally:
         await form.close()
 
@@ -882,7 +1000,8 @@ def _note_restore_steps(db, summary: AuditLog, outcome: str) -> None:
     db.commit()
 
 
-def _restore_archive(db, content: bytes, principal: str, confirm_holds: str = "") -> dict | JSONResponse:
+def _restore_archive(db, content: bytes, principal: str, confirm_holds: str = "",
+                     confirm_restore: str = "") -> dict | JSONResponse:
     """Restore a backup ZIP: main tables, telemetry, then uploaded files.
     Synchronous and slow (minutes for a large install); the route runs it
     off the event loop so the rest of the app keeps answering meanwhile."""
@@ -900,6 +1019,19 @@ def _restore_archive(db, content: bytes, principal: str, confirm_holds: str = ""
     logger.info("Importing backup from %s (version %s), principal=%s",
                 manifest.get("export_date"), manifest.get("app_version"), principal)
 
+    # A live install (anyone can sign in) is replaced only on the typed
+    # confirmation: the restore swaps every table and signs everyone out. A
+    # fresh install, or one locked out by an older backup, has nothing to lose.
+    from app.routers.auth import _has_usable_login
+    if _has_usable_login(db) and confirm_restore != CONFIRM_RESTORE_TEXT:
+        return JSONResponse(status_code=409, content={
+            "detail": ("This install is in use. Restoring replaces all data, users, API tokens, "
+                       "settings and uploaded files with the backup's copy, and signs everyone out. "
+                       f"Type {CONFIRM_RESTORE_TEXT} to restore anyway."),
+            "confirm_restore_text": CONFIRM_RESTORE_TEXT,
+            "backup_date": manifest.get("export_date"),
+        })
+
     db_tables = json.loads(zf.read(DATABASE_FILE))
     # Decided before the first delete: a restore that would remove or change a
     # legal hold needs the typed confirmation, and changes nothing without it.
@@ -912,21 +1044,22 @@ def _restore_archive(db, content: bytes, principal: str, confirm_holds: str = ""
     tables_imported, rows_imported, _, summary = _restore_main_tables(
         db, db_tables, held_items, principal, backup_date)
 
-    # A restore blanks every password hash, so the install is left with no
-    # usable login. Keep the SAME install token available (and logged) so the
-    # operator can reactivate an admin on the setup screen; /auth/setup
-    # retires it once that succeeds. init_install_token reuses the existing
-    # token file untouched -- it never replaces a token -- and only mints one
-    # when none is on disk (an admin restoring in-app, where no token existed
-    # at boot). No-ops if a usable login somehow remains. This runs before the
-    # later steps, so a failure in them still leaves a way back in.
-    init_install_token()
+    # The restored password hashes normally leave a usable login, and then the
+    # install token has done its job and is retired. A backup made before hashes
+    # were included leaves none: keep the SAME install token available (and
+    # logged) so the operator can reactivate an admin on the setup screen;
+    # /auth/setup retires it once that succeeds. init_install_token reuses the
+    # existing token file untouched -- it never replaces a token -- and only
+    # mints one when none is on disk (an admin restoring in-app, where no token
+    # existed at boot). This runs before the later steps, so a failure in them
+    # still leaves a way back in.
+    if init_install_token() is None:
+        retire_install_token()
 
     # Telemetry lives in a separate database, so it cannot share the main
     # transaction. A failure is surfaced rather than swallowed: the operator
-    # can reactivate an admin with the install token and retry, which is safe
-    # because the whole restore is idempotent (every table is replaced, not
-    # appended).
+    # can sign in and retry, which is safe because the whole restore is
+    # idempotent (every table is replaced, not appended).
     try:
         telemetry_imported, telemetry_count = _restore_telemetry(zf)
     except Exception as exc:
@@ -960,9 +1093,14 @@ async def import_backup(request: Request):
     """Import a full backup from a ZIP file (multipart field ``file``).
 
     Authorization:
-    - Existing install (any user present): requires Admin JWT.
+    - Existing install (any user present): requires Admin JWT. When anyone can
+      sign in, the form field ``confirm_restore`` must also be the exact text
+      REPLACE ALL DATA; without it the response is 409 with
+      ``confirm_restore_text`` and nothing changes.
     - Fresh install (no users): requires X-Install-Token header matching
       the token generated at startup (printed to container logs).
+    A restore that would remove or change a held item also needs
+    ``confirm_holds`` (409 with ``held_items`` otherwise).
     """
     # Resolved at call time (like _telemetry_session) so the test suite's
     # per-test engines are used; an imported-by-name SessionLocal binds at
@@ -971,12 +1109,13 @@ async def import_backup(request: Request):
     try:
         principal = _verify_admin_or_install_token(request, db)
 
-        content, confirm_holds = await _read_backup_upload(request)
+        content, confirm_holds, confirm_restore = await _read_backup_upload(request)
         if len(content) > 500 * 1024 * 1024:
             raise HTTPException(413, "Backup file too large (max 500MB)")
 
         # No sync or scheduled backup may run while tables are being replaced.
         with sync_guard_http(), restoring():
-            return await run_in_threadpool(_restore_archive, db, content, principal, confirm_holds)
+            return await run_in_threadpool(_restore_archive, db, content, principal, confirm_holds,
+                                           confirm_restore)
     finally:
         db.close()

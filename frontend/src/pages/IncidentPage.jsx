@@ -70,11 +70,15 @@ function IncidentModal({ pilots, vehicles, flights, onSave, onClose }) {
     report_type: 'incident', impact_level: '', outcome_description: '',
   })
   const [saving, setSaving] = useState(false)
+  const toast = useToast()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!form.title || !form.description) return
-    const data = { ...form }
+    const title = form.title.trim()
+    const description = form.description.trim()
+    const missing = [!title && 'Title', !description && 'Description'].filter(Boolean)
+    if (missing.length) { toast.error(`Required: ${missing.join(', ')}`); return }
+    const data = { ...form, title, description }
     if (data.pilot_id) data.pilot_id = Number.parseInt(data.pilot_id, 10); else delete data.pilot_id
     if (data.vehicle_id) data.vehicle_id = Number.parseInt(data.vehicle_id, 10); else delete data.vehicle_id
     if (data.flight_id) data.flight_id = Number.parseInt(data.flight_id, 10); else delete data.flight_id

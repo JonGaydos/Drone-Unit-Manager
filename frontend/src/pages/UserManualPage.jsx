@@ -53,13 +53,13 @@ Default settings:
 • **Create**: Supervisor and Pilot can create flights, flight plans, incidents, logs, maintenance records and calendar events. Viewer cannot.
 • **Edit**: Supervisor All, Pilot Own, Viewer None, for flights, flight plans, incidents, logs, maintenance records, calendar events, pilot profiles, documents and photos.
 • **Delete flights**: Supervisor All, Pilot None.
-• **Supervisor only**: Review and bulk actions on flights, approving and denying flight plans, resolving and deleting incidents, maintenance schedules, fleet management, deleting checkouts, creating, deleting or merging pilots, certifications, checklist templates, document restore and legal hold, folders, alerts, operating authority and geofences, and sending the email digest to another address.
+• **Supervisor only**: Review and bulk actions on flights, approving and denying flight plans, resolving and deleting incidents, maintenance schedules, fleet management, deleting checkouts, creating, deleting or merging pilots, certifications, checklist templates, document restore and legal hold, folders, alerts, operating authority, and sending the email digest to another address.
 • **Pilot and Supervisor**: Completing maintenance schedules, updating vehicle location, checking equipment out and in, completing checklists, viewing pilot email and phone, and generating reports.
 • **Nobody but admin**: Vehicle registrations management and the audit log.
 
 Admin only, never delegable: user management, the permission grid, settings and integrations, backup and restore, API tokens, bulk imports, flight purposes, and permanent purge. Your own password, theme, profile and notification preferences stay available to every signed-in user.
 
-Always enforced, whatever the grid says: nobody approves a flight plan they submitted; a legal hold blocks delete and purge; the last active admin cannot be demoted, deactivated or deleted; and a viewer can never hold a change permission. The grid greys out those cells, the server refuses to save them, and any stored value is ignored (including one from a restored backup).
+Always enforced, whatever the grid says: nobody approves or denies a flight plan they submitted; a legal hold blocks edits, delete and purge; the last active admin cannot be demoted, deactivated or deleted; and a viewer can never hold a change permission. The grid greys out those cells, the server refuses to save them, and any stored value is ignored (including one from a restored backup).
 
 Reviewed flights and currency: a flight logged by hand always starts as Needs Review. When a user without the review permission changes a reviewed flight, it returns to the review queue; saving unchanged values does not count as a change. Only reviewed flights count toward pilot currency, so a flight waiting for review does not count until a supervisor reviews it.`
       },
@@ -71,7 +71,7 @@ You stay signed in for up to 12 hours. After 30 minutes with no activity in any 
       },
       {
         title: 'Navigating the App',
-        body: 'Use the sidebar on the left to navigate between sections. The sidebar can be collapsed using the arrow at the bottom. On mobile devices, tap the menu icon in the top-left corner to open the sidebar. Admins can reorder and hide sidebar items from Settings.'
+        body: 'Use the sidebar on the left to navigate between sections. The sidebar can be collapsed using the arrow at the bottom. On phones and tablets, tap the menu icon in the top-left corner to open the sidebar. Admins can reorder and hide sidebar items from Settings.'
       },
       {
         title: 'Themes',
@@ -348,7 +348,7 @@ When nothing is outstanding, the card shows an "All clear" message. The count of
     content: [
       {
         title: 'Flight Plan Submission',
-        body: 'Pilots can submit flight plans for approval by a user with the approval permission (a supervisor by default). Nobody approves a plan they submitted. Include the mission objective, location, date/time, equipment, and weather conditions.'
+        body: 'Pilots can submit flight plans for approval by a user with the approval permission (a supervisor by default). Nobody approves or denies a plan they submitted. Include the mission objective, location, date/time, equipment, and weather conditions. Edit (pencil) changes a pending or denied plan; editing a denied or approved plan returns it to pending review. An admin can Reopen a denied or cancelled plan, which puts it back in the review queue.'
       },
       {
         title: 'Pre-Flight Checklists',
@@ -368,7 +368,7 @@ When nothing is outstanding, the card shows an "All clear" message. The count of
         title: 'Deleting, Recently Deleted and Legal Hold',
         body: `Deleting a document or photo moves it to Recently deleted rather than removing it. Users with the restore permission (supervisors by default) can restore it from there, and admins can delete it permanently. Deleting a folder moves its documents to Unfiled.
 
-Users with the legal hold permission (supervisors by default) can place a document or photo on legal hold. A held item shows a lock and cannot be deleted or permanently removed until the hold is released. Viewing and downloading documents and photos is recorded in the audit log.`
+Users with the legal hold permission (supervisors by default) can place a document or photo on legal hold. A held item shows a lock and cannot be edited, deleted or permanently removed until the hold is released; a held document can still be moved to another folder. Viewing and downloading documents and photos is recorded in the audit log.`
       },
       {
         title: 'Photo Gallery',
@@ -496,6 +496,7 @@ The card also has a **Disconnect** button. Disconnecting clears the stored Skydi
 • **Airdata JSON** — Single flight JSON exports from Airdata.com
 • **Airdata ZIP** — Bulk export of all flights from Airdata.com (ZIP of JSON files)
 • **Parrot / ANAFI** — GUTMA JSON flight logs
+• **Flights CSV (exported from this app)** — The Flights page's Export CSV, read back in (for example onto another install). Pick this format by hand; rows already in the app are skipped
 
 Format is auto-detected, or you can pick a specific format. Select multiple files at once using Ctrl+click or Shift+click. The app processes them sequentially with live progress tracking and automatic deduplication.`
       },
@@ -505,7 +506,7 @@ Format is auto-detected, or you can pick a specific format. Select multiple file
       },
       {
         title: 'Email Digest Notifications',
-        body: 'Once SMTP is configured, each user can set up email digest preferences in Settings > General. Choose daily or weekly frequency, preferred send time, and which categories to include: pending flight plan approvals, flights needing review, expiring certifications, expiring registrations, overdue maintenance, assigned missions, overdue equipment checkouts, and recent incidents.'
+        body: 'Once SMTP is configured, each user can set up email digest preferences in the Email Digest card on Settings > General. Turn digests on or off, choose daily or weekly (and the weekday), the hour to send at, and which categories to include: pending flight plan approvals, flights needing review, expiring certifications, expiring registrations, overdue maintenance, assigned missions, overdue equipment checkouts, and recent incidents. Roles allowed to redirect the digest can send it to another address. Preview shows what the next digest would hold, Send Test emails it now (a few times per 10 minutes), and the card lists recent sends. A test send does not stand in for the scheduled digest.'
       },
     ]
   },
@@ -519,7 +520,7 @@ Format is auto-detected, or you can pick a specific format. Select multiple file
       },
       {
         title: 'API Tokens',
-        body: `The API Tokens tab (admin only) issues long-lived keys for external tools that call the Drone Unit Manager API. When creating a token, choose a name, read-only or read & write access, and a scope — either all areas or specific ones (Fleet, Flights, Pilots & Certifications, Maintenance, Operations, Documents & Media, Reports & Dashboard, Audit Log). The Audit Log area is never part of all areas and must be chosen explicitly. The token value is shown once, so copy it immediately. Existing tokens list their prefix, access, areas, and last-used time, and can be revoked. Settings, users, backups, and sync are never reachable with an API token.`
+        body: `The API Tokens tab (admin only) issues long-lived keys for external tools that call the Drone Unit Manager API. When creating a token, choose a name, read-only or read & write access, an optional expiry (30 days, 90 days or 1 year; without one the token lasts until revoked), and a scope — either all areas or specific ones (Fleet, Flights, Pilots & Certifications, Maintenance, Operations, Documents & Media, Reports & Dashboard, Audit Log). The Audit Log area is never part of all areas and must be chosen explicitly. The token value is shown once, so copy it immediately. Existing tokens list their prefix, access, areas, and last-used time, and can be revoked. Settings, users, backups, and sync are never reachable with an API token.`
       },
       {
         title: 'Organization Settings',
@@ -551,7 +552,7 @@ Click "Save Sidebar Config" to apply.`
         title: 'Audit Log',
         body: `The Audit Log (admin only by default) shows a complete history of all actions taken in the system: who did what, when, and what changed. Use it for accountability and compliance auditing.
 
-Every change to unit data is recorded automatically, including changes made by imports, syncs and scheduled jobs. Each entry shows the person's display name and login name, and the full list of fields that changed with old and new values. Bulk changes and background jobs appear as one summary entry with counts and record IDs, and name the person who started the job. Contact details such as email and phone numbers are hidden. Entries that came from a restored backup are marked Imported. Export CSV downloads every matching entry, including the login name, full changes and an Imported column.`
+Every change to unit data is recorded automatically, including changes made by imports, syncs and scheduled jobs. Each entry shows the person's display name and login name, and the full list of fields that changed with old and new values. Bulk changes and background jobs appear as one summary entry with counts and record IDs, and name the person who started the job. Contact details such as email and phone numbers are hidden. Entries that came from a restored backup are marked Imported. Filters narrow the list by entity type, action, user and a From/To date range (days in the organization time zone). Export CSV downloads every entry matching the filters, including the login name, full changes and an Imported column.`
       },
     ]
   },
@@ -561,7 +562,7 @@ Every change to unit data is recorded automatically, including changes made by i
     content: [
       {
         title: 'In-App Backup',
-        body: `Admins can download a full backup from Settings → General → Backup & Restore. Click "Export Backup" to download a ZIP containing every table as JSON plus all uploaded files. A checkbox controls whether flight telemetry (GPS, altitude, speed) is included; telemetry can be very large, so it is optional. The export is admin-only and recorded in the audit log.`
+        body: `Admins can download a full backup from Settings → General → Backup & Restore. Click "Export Backup" to download a ZIP containing every table as JSON plus all uploaded files. The backup holds everything a restore needs, including password hashes, API tokens, and the SMTP password and Skydio token, with no encryption, so keep it as safe as the server itself. A checkbox controls whether flight telemetry (GPS, altitude, speed) is included; telemetry can be very large, so it is optional. The export is admin-only and recorded in the audit log.`
       },
       {
         title: 'Automated Backups',
@@ -569,13 +570,15 @@ Every change to unit data is recorded automatically, including changes made by i
       },
       {
         title: 'Restoring From Backup',
-        body: `Restore is done on a fresh install. On the setup screen, choose "Restore from a backup instead?", upload the backup ZIP, and enter the install token. The token is written to install_token.txt in the container's data directory (/app/data) and also printed to the container logs at first boot.
+        body: `On a fresh install, open the setup screen, choose "Restore from a backup instead?", upload the backup ZIP, and enter the install token. The token is written to install_token.txt in the container's data directory (/app/data) and also printed to the container logs at first boot.
 
-Passwords are never included in a backup, so right after a restore no one can sign in yet. The setup screen reopens in recovery mode ("Restored backup detected"): enter the username of an administrator from the restored data, a new password, and the install token to reactivate that admin. The token is required for this step (it proves host access) and is retired once an admin is reactivated. Other restored users keep blank passwords until that admin resets them from Settings → Users.
+A restore brings back everything: data, files, settings, users with their passwords, API tokens, and the SMTP password and Skydio token. Everyone signs in again with their usual password, and the install token is retired.
+
+Older backups, made before passwords were included, left them out. After restoring one of those, no one can sign in yet, so the setup screen reopens in recovery mode ("Restored backup detected"): enter the username of an administrator from the restored data, a new password, and the install token to reactivate that admin. The app then opens directly. Other restored users keep blank passwords until that admin resets them from Settings → Users, and API tokens, the SMTP password and the Skydio token need to be set again.
 
 Audit entries from the backup are added to this install's own and marked Imported.
 
-Restoring into an install that already has working logins is an operator task done against the backup API (POST /api/backup/import) with an admin token rather than through the app. If the backup would remove or change a photo or document under legal hold, the API refuses it with a list of the held items and changes nothing. To go ahead, send the call again with the form field confirm_holds set to the exact text RESTORE HELD ITEMS. Each held item that is removed or changed gets its own audit entry.`
+Restoring into an install that already has working logins is an operator task done against the backup API (POST /api/backup/import) with an admin token rather than through the app. It replaces all data, users, API tokens, settings and files and signs everyone out, so the API first refuses with 409 and changes nothing. To go ahead, send the call again with the form field confirm_restore set to the exact text REPLACE ALL DATA. If the backup would also remove or change a photo or document under legal hold, the API then refuses with a list of the held items; send the call again with confirm_holds set to the exact text RESTORE HELD ITEMS as well. Each held item that is removed or changed gets its own audit entry.`
       },
       {
         title: 'Filesystem Backup (Fallback)',

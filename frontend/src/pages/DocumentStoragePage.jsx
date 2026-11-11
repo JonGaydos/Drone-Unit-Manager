@@ -629,14 +629,16 @@ export default function DocumentStoragePage() {
                         )}
                         {canRecord('files.edit', ownsDocument(user, doc)) && (
                           <>
-                            <button
-                              onClick={() => { setEditingDoc(doc.id); setEditDocTitle(doc.title || doc.filename || '') }}
-                              className="p-1 text-muted-foreground hover:text-foreground rounded hover:bg-accent/30"
-                              title="Rename"
-                              aria-label="Edit"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
+                            {!doc.legal_hold && (
+                              <button
+                                onClick={() => { setEditingDoc(doc.id); setEditDocTitle(doc.title || doc.filename || '') }}
+                                className="p-1 text-muted-foreground hover:text-foreground rounded hover:bg-accent/30"
+                                title="Rename"
+                                aria-label="Edit"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                             <div className="relative">
                               <button
                                 onClick={() => setMovingDoc(movingDoc === doc.id ? null : doc.id)}

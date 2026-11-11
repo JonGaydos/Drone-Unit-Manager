@@ -117,10 +117,14 @@ export default function OperatingAuthorityPage() {
 
   const submit = async (e) => {
     e.preventDefault()
+    if (!form.title.trim()) { toast.error('Required: Title'); return }
+    if (form.issue_date && form.expiry_date && form.expiry_date < form.issue_date) {
+      toast.error('Expiry date cannot be before the issue date'); return
+    }
     setSaving(true)
     const body = {
       authority_type: form.authority_type,
-      title: form.title,
+      title: form.title.trim(),
       identifier: form.identifier || null,
       issue_date: form.issue_date || null,
       expiry_date: form.expiry_date || null,
@@ -318,6 +322,7 @@ export default function OperatingAuthorityPage() {
               label="Expiry date"
               type="date"
               value={form.expiry_date}
+              min={form.issue_date || undefined}
               onChange={e => setForm({ ...form, expiry_date: e.target.value })}
             />
           </div>

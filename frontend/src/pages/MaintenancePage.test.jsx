@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within, fireEvent } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { withPermissions } from '@/test/permissions'
@@ -279,5 +279,96 @@ describe('MaintenancePage', () => {
     expect(screen.getByRole('option', { name: 'B-002' })).toBeInTheDocument()
     await user.selectOptions(type, 'controller')
     expect(await screen.findByRole('option', { name: 'Pad' })).toBeInTheDocument()
+  })
+
+  it('marks Description required and names it when left blank', async () => {
+    mockMount()
+    let posted = false
+    server.use(http.post('/api/maintenance', () => { posted = true; return HttpResponse.json({}) }))
+    const { user } = renderWithProviders(<MaintenancePage />, { role: 'admin' })
+    await screen.findByText('Prop swap')
+    await user.click(screen.getByRole('button', { name: /Add Maintenance/ }))
+    const dialog = await screen.findByRole('dialog', { name: 'Add Maintenance' })
+    const description = within(dialog).getByLabelText('Description *')
+    expect(description).toBeRequired()
+    await user.selectOptions(within(dialog).getByLabelText('Entity'), '1')
+    await user.type(description, '   ')
+    await user.click(within(dialog).getByRole('button', { name: 'Add Maintenance' }))
+    expect(await within(dialog).findByText('Description is required.')).toBeInTheDocument()
+    expect(posted).toBe(false)
+  })
+
+  it('shows entity names as stored and a schedule with no item plainly', async () => {
+    mockMount({
+      vehicles: [vehicleOption({ id: 1, nickname: 'Unit-ab7c', model: 'X10', serialNumber: 'SN-001' })],
+      maintenance: () => HttpResponse.json([]),
+      schedules: () => HttpResponse.json([
+        { ...SCHEDULES[0], id: 31, name: 'Prop check' },
+        { ...SCHEDULES[0], id: 32, name: 'Orphan task', entity_id: null },
+      ]),
+    })
+    renderWithProviders(<MaintenancePage />, { role: 'admin' })
+    const link = await screen.findByRole('link', { name: 'Unit-ab7c' })
+    expect(link).not.toHaveClass('capitalize')
+    expect(screen.getByText('Vehicle (no item)')).toBeInTheDocument()
+    expect(screen.queryByText(/#null/i)).toBeNull()
+  })
+
+  it('offers every record type and field the API takes in Add Maintenance', async () => {
+    let posted = null
+    mockMount({
+      batteries: [serialOption(7, 'Cell C', 'B-7', 'charging'), serialOption(8, 'Cell R', 'B-8', 'retired')],
+    })
+    server.use(
+      http.get('/api/fleet/options', () => HttpResponse.json(fleetOptions({
+        vehicles: VEHICLES,
+        batteries: [serialOption(7, 'Cell C', 'B-7', 'charging'), serialOption(8, 'Cell R', 'B-8', 'retired')],
+        sensors: [serialOption(3, 'Thermal', 'S-3')],
+        attachments: [serialOption(4, 'Spotlight', 'A-4')],
+      }))),
+      http.post('/api/maintenance', async ({ request }) => { posted = await request.json(); return HttpResponse.json({ id: 99, ...posted }) }),
+    )
+    const { user } = renderWithProviders(<MaintenancePage />, { role: 'admin' })
+    await screen.findByText('Prop swap')
+    await user.click(screen.getByRole('button', { name: /Add Maintenance/ }))
+    const dialog = await screen.findByRole('dialog', { name: 'Add Maintenance' })
+    const entityType = within(dialog).getByLabelText('Entity Type')
+    expect([...entityType.options].map(o => o.value)).toEqual(expect.arrayContaining(['sensor', 'attachment']))
+
+    await user.selectOptions(entityType, 'battery')
+    const entity = within(dialog).getByLabelText('Entity')
+    expect(within(entity).getByRole('option', { name: 'Cell C' })).toBeInTheDocument()
+    expect(within(entity).queryByRole('option', { name: 'Cell R' })).toBeNull()
+
+    await user.selectOptions(entityType, 'sensor')
+    await user.selectOptions(within(dialog).getByLabelText('Entity'), '3')
+    await user.type(within(dialog).getByLabelText('Description *'), 'Lens clean')
+    await user.type(within(dialog).getByLabelText('Cost'), '0')
+    await user.type(within(dialog).getByLabelText('Next Due Hours'), '25.5')
+    fireEvent.change(within(dialog).getByLabelText('Next Due Date'), { target: { value: '2026-12-01' } })
+    await user.click(within(dialog).getByRole('button', { name: 'Add Maintenance' }))
+    await waitFor(() => expect(posted).not.toBeNull())
+    expect(posted).toMatchObject({ entity_type: 'sensor', entity_id: 3, cost: 0, next_due_hours: 25.5, next_due_date: '2026-12-01' })
+  })
+
+  it('drops Overdue on a done task, names the row buttons and gives the edit hint that holds', async () => {
+    mockMount({
+      schedules: () => HttpResponse.json([
+        { id: 40, name: 'One-off fix', entity_type: 'vehicle', entity_id: 1, frequency: 'one_time',
+          is_active: false, last_completed: '2026-01-05', next_due: '2026-01-01' },
+        { ...SCHEDULES[0], next_due: '2026-01-01' },
+      ]),
+    })
+    const { user } = renderWithProviders(<MaintenancePage />, { role: 'admin' })
+    const doneRow = (await screen.findByText('One-off fix')).closest('tr')
+    expect(within(doneRow).getByText('Done')).toBeInTheDocument()
+    expect(within(doneRow).queryByText(/Overdue/)).toBeNull()
+    const liveRow = screen.getByText('Monthly check').closest('tr')
+    expect(within(liveRow).getByText('(Overdue)')).toBeInTheDocument()
+
+    expect(within(liveRow).getByRole('button', { name: 'Delete schedule' })).toBeInTheDocument()
+    await user.click(within(liveRow).getByRole('button', { name: 'Edit schedule' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Schedule / Task' })
+    expect(within(dialog).getByText('Leave blank to keep the current due date.')).toBeInTheDocument()
   })
 })

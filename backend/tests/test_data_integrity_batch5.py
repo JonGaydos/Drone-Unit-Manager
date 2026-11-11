@@ -139,7 +139,8 @@ def test_flight_detail_is_none_only_for_a_404():
 # 3. One sync at a time --------------------------------------------------------------
 
 @pytest.mark.parametrize("path", ["/api/sync/now", "/api/sync/deep", "/api/sync/telemetry", "/api/sync/cleanup"])
-def test_second_sync_is_refused_while_one_runs(client, admin_headers, path):
+def test_second_sync_is_refused_while_one_runs(client, db, admin_headers, path):
+    _configure_skydio(db)
     with sync_guard():
         assert client.post(path, headers=admin_headers).status_code == 409
 

@@ -120,7 +120,8 @@ export default function CheckoutsPage() {
   const loadItems = async (type) => {
     const t = TYPES.find(x => x.value === type)
     const fleet = await api.get('/fleet/options').catch(() => ({}))
-    setCoItems(fleet[t.optionsKey] || [])
+    // Retired or damaged kit cannot be checked out (the API refuses it).
+    setCoItems((fleet[t.optionsKey] || []).filter(i => !['retired', 'damaged'].includes(i.status)))
   }
 
   const onTypeChange = (type) => { setCoType(type); setCoForm(f => ({ ...f, entity_id: '' })); void loadItems(type) }
