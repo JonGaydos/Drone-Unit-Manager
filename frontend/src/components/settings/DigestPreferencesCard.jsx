@@ -119,7 +119,7 @@ export default function DigestPreferencesCard() {
     }
   }
 
-  const hourOptions = HOURS.includes(form.send_time) ? HOURS : [...HOURS, form.send_time].sort()
+  const hourOptions = HOURS.includes(form.send_time) ? HOURS : [...HOURS, form.send_time].sort((a, b) => a.localeCompare(b))
   const previewSections = preview && !preview.empty ? Object.entries(preview.sections || {}) : []
 
   return (

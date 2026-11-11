@@ -3,7 +3,7 @@
  * vehicles, and flights from anywhere. Opens on the keyboard shortcut or via
  * the `open-command-palette` window event (fired by the top bar search button).
  */
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
@@ -103,8 +103,13 @@ export function CommandPalette() {
     }
   }, [])
 
-  // The input focuses itself on mount (autoFocus), so the first keys typed
-  // after opening land in it rather than on the page behind.
+  // Focus the input as soon as it mounts (layout effect, before the browser
+  // handles the next key), so the first keys typed after opening land in it
+  // rather than on the page behind.
+  useLayoutEffect(() => {
+    if (open) inputRef.current?.focus()
+  }, [open])
+
   useEffect(() => {
     if (!open) { setQuery(''); setResults([]); setTypeFilter(null); setActive(0) }
   }, [open])
@@ -198,7 +203,6 @@ export function CommandPalette() {
           <Search className="w-4 h-4 text-muted-foreground shrink-0" />
           <input
             ref={inputRef}
-            autoFocus
             value={query}
             onChange={e => { setQuery(e.target.value); setActive(0) }}
             onKeyDown={onKeyDown}

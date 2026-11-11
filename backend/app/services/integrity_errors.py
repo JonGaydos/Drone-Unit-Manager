@@ -16,8 +16,11 @@ CONFLICT = ("This change conflicts with other records: it is still in use elsewh
 
 _NOT_NULL = "NOT NULL constraint failed:"
 _FOREIGN_KEY = "FOREIGN KEY constraint failed"
-_INSERT = re.compile(r'^\s*INSERT INTO "?(\w+)"? \((.*?)\) VALUES \((.*?)\)', re.IGNORECASE | re.DOTALL)
-_UPDATE = re.compile(r'^\s*UPDATE "?(\w+)"? SET (.*?) WHERE ', re.IGNORECASE | re.DOTALL)
+# Column and placeholder lists hold no ")", so negated classes match them
+# without backtracking.
+_INSERT = re.compile(r'^\s*INSERT INTO "?(\w+)"? \(([^)]*)\) VALUES \(([^)]*)\)', re.IGNORECASE)
+_UPDATE = re.compile(r'^\s*UPDATE "?(\w+)"? SET ', re.IGNORECASE)
+_WHERE = re.compile(r'\sWHERE\s', re.IGNORECASE)
 
 
 def _bound_columns(statement: str) -> tuple[str | None, list[str], bool]:
@@ -31,8 +34,9 @@ def _bound_columns(statement: str) -> tuple[str | None, list[str], bool]:
             return None, [], False
         return m.group(1), [c for c, v in zip(columns, values) if v == "?"], True
     m = _UPDATE.match(statement)
-    if m:
-        pairs = [p.split("=", 1) for p in m.group(2).split(",")]
+    where = _WHERE.search(statement, m.end()) if m else None
+    if m and where:
+        pairs = [p.split("=", 1) for p in statement[m.end():where.start()].split(",")]
         if any(len(p) != 2 for p in pairs):
             return None, [], False
         return m.group(1), [c.strip().strip('"') for c, v in pairs if v.strip() == "?"], False

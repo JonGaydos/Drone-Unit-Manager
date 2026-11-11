@@ -125,8 +125,10 @@ async def lifespan(app: FastAPI):
     from app.routers.backup import init_install_token
     init_install_token()
     start_scheduler()
-    yield
-    stop_scheduler()
+    try:
+        yield
+    finally:
+        stop_scheduler()
 
 
 # The interactive API docs hand an unauthenticated visitor the entire API
