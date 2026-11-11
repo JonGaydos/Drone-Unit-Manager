@@ -45,7 +45,12 @@ function EquipmentModal({ title, record, fields, onSave, onClose, vehicleModels 
     const data = { ...form }
     fields.forEach(f => {
       if (f.type === 'number' && data[f.key]) data[f.key] = Number.parseFloat(data[f.key])
-      if (data[f.key] === '') delete data[f.key]
+      if (data[f.key] !== '') return
+      // On an edit, a field the user emptied is sent as null, which clears it;
+      // one that was empty to begin with is left out.
+      const stored = record?.[f.key]
+      if (record?.id && stored != null && stored !== '') data[f.key] = null
+      else delete data[f.key]
     })
     setSaving(true)
     try { await onSave(data) } finally { setSaving(false) }

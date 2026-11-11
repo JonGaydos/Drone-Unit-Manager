@@ -71,16 +71,9 @@ export default function DockDetailPage() {
     setSaving(true)
     try {
       const payload = { ...editForm }
-      if (payload.lat === '') {
-        delete payload.lat
-      } else {
-        payload.lat = Number.parseFloat(payload.lat)
-      }
-      if (payload.lon === '') {
-        delete payload.lon
-      } else {
-        payload.lon = Number.parseFloat(payload.lon)
-      }
+      // An emptied coordinate is sent as null, which clears it.
+      payload.lat = payload.lat === '' ? null : Number.parseFloat(payload.lat)
+      payload.lon = payload.lon === '' ? null : Number.parseFloat(payload.lon)
       const updated = await api.patch(`/docks/${id}`, payload)
       setDock(updated)
       setEditing(false)

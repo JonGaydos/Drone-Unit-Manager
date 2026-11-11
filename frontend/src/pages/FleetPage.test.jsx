@@ -375,6 +375,31 @@ describe('FleetPage', () => {
     expect(within(dialog).getByLabelText('Cycle Count')).toHaveValue(0)
   })
 
+  it('sends null for a field cleared in the edit modal and leaves empty untouched fields out', async () => {
+    let body = null
+    mockVehicles([{ id: 1, nickname: 'Falcon', manufacturer: 'DJI', model: 'Mavic 3', serial_number: 'SN-001',
+      status: 'active', notes: 'Old note', acquired_date: '2025-01-02' }])
+    server.use(http.patch('/api/vehicles/1', async ({ request }) => {
+      body = await request.json()
+      return HttpResponse.json({ id: 1 })
+    }))
+    const { user } = renderWithProviders(<FleetPage />, { role: 'admin' })
+    const row = (await screen.findByRole('link', { name: 'Falcon' })).closest('tr')
+    await user.click(within(row).getByRole('button', { name: 'Edit' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.clear(within(dialog).getByLabelText('Notes'))
+    await user.clear(within(dialog).getByLabelText('Nickname'))
+    await user.clear(within(dialog).getByLabelText('Acquired Date'))
+    await user.click(within(dialog).getByRole('button', { name: 'Update' }))
+
+    await waitFor(() => expect(body).not.toBeNull())
+    expect(body.notes).toBeNull()
+    expect(body.nickname).toBeNull()
+    expect(body.acquired_date).toBeNull()
+    expect(body).not.toHaveProperty('decommissioned_date')
+    expect(body.serial_number).toBe('SN-001')
+  })
+
   it('offers the shared dock statuses in the fleet modal', async () => {
     mockVehicles()
     server.use(http.get('/api/docks', () => HttpResponse.json([])))

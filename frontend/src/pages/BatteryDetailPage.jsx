@@ -81,11 +81,11 @@ export default function BatteryDetailPage() {
     setSaving(true)
     try {
       const payload = { ...editForm }
-      if (payload.health_pct === '') delete payload.health_pct
-      else payload.health_pct = Number.parseFloat(payload.health_pct)
+      // An emptied health or date is sent as null, which clears it.
+      payload.health_pct = payload.health_pct === '' ? null : Number.parseFloat(payload.health_pct)
       payload.cycle_count = Number.parseInt(payload.cycle_count, 10) || 0
-      if (!payload.acquired_date) delete payload.acquired_date
-      if (!payload.decommissioned_date) delete payload.decommissioned_date
+      payload.acquired_date = payload.acquired_date || null
+      payload.decommissioned_date = payload.decommissioned_date || null
       const updated = await api.patch(`/batteries/${id}`, payload)
       setBattery(updated)
       setEditing(false)

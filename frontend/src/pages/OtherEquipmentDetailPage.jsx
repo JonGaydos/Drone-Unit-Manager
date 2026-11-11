@@ -53,8 +53,9 @@ export default function OtherEquipmentDetailPage() {
     setSaving(true)
     try {
       const payload = { ...editForm }
-      if (!payload.acquired_date) delete payload.acquired_date
-      if (!payload.decommissioned_date) delete payload.decommissioned_date
+      // An emptied date is sent as null, which clears it.
+      payload.acquired_date = payload.acquired_date || null
+      payload.decommissioned_date = payload.decommissioned_date || null
       const updated = await api.patch(`/other-equipment/${id}`, payload)
       setItem(updated)
       setEditing(false)
