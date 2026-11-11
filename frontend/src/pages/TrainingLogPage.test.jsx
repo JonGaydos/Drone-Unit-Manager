@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { screen } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { fleetOptions, pilotOption, vehicleOption } from '@/test/options'
@@ -81,5 +81,28 @@ describe('TrainingLogPage', () => {
     for (const select of filters) {
       expect(select).toHaveClass('max-w-64', 'truncate')
     }
+  })
+
+  it('sends null for fields emptied in Edit Training (B-23)', async () => {
+    let body = null
+    mockMount({ trainings: () => HttpResponse.json([{ ...TRAININGS[0], notes: 'Old note', vehicle_id: 2 }]) })
+    server.use(http.patch('/api/training-logs/1', async ({ request }) => {
+      body = await request.json()
+      return HttpResponse.json({ id: 1 })
+    }))
+    const { user } = renderWithProviders(<TrainingLogPage />, { role: 'admin' })
+    await user.click(await screen.findByText('Night Ops Recurrent'))
+    await user.click(await screen.findByRole('button', { name: 'Edit Training' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.clear(within(dialog).getByLabelText('Notes'))
+    await user.clear(within(dialog).getByLabelText('Instructor'))
+    await user.selectOptions(within(dialog).getByLabelText('Drone Used'), '')
+    await user.click(within(dialog).getByRole('button', { name: /Save|Update/ }))
+
+    await waitFor(() => expect(body).not.toBeNull())
+    expect(body.notes).toBeNull()
+    expect(body.instructor).toBeNull()
+    expect(body.vehicle_id).toBeNull()
+    expect(body.training_type).toBe('Recurrent')
   })
 })

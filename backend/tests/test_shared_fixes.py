@@ -48,3 +48,35 @@ def test_dock_patch_null_clears_coordinates(client, db, admin_headers):
     assert resp.status_code == 200, resp.text
     db.expire_all()
     assert (db.get(Dock, d.id).lat, db.get(Dock, d.id).lon) == (None, None)
+
+
+# --- B-23: mission and training edits clear a field sent as null -------------
+
+def test_mission_patch_null_clears_optional_fields(client, db, admin_headers):
+    v = Vehicle(serial_number="AREA10-V2", manufacturer="Acme", model="Quad")
+    db.add(v)
+    db.commit()
+    created = client.post("/api/mission-logs", headers=admin_headers, json={
+        "date": "2026-03-01", "title": "Area 10 mission", "man_hours": 1, "notes": "Old note",
+        "location": "Field", "vehicle_id": v.id, "pilots": []})
+    assert created.status_code in (200, 201), created.text
+
+    resp = client.patch(f"/api/mission-logs/{created.json()['id']}", headers=admin_headers,
+                        json={"notes": None, "location": None, "vehicle_id": None})
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert (body["notes"], body["location"], body["vehicle_id"]) == (None, None, None)
+
+
+def test_training_patch_null_clears_optional_fields(client, admin_headers):
+    created = client.post("/api/training-logs", headers=admin_headers, json={
+        "date": "2026-03-01", "title": "Area 10 training", "training_type": "Recurrent",
+        "man_hours": 1, "notes": "Old note", "instructor": "Coach", "pilots": []})
+    assert created.status_code in (200, 201), created.text
+
+    resp = client.patch(f"/api/training-logs/{created.json()['id']}", headers=admin_headers,
+                        json={"notes": None, "instructor": None})
+
+    assert resp.status_code == 200, resp.text
+    assert (resp.json()["notes"], resp.json()["instructor"]) == (None, None)

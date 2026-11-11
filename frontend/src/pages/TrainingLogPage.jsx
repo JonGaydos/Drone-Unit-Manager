@@ -6,7 +6,7 @@ import { ownsLog } from '@/lib/ownership'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Modal } from '@/components/ui/Modal'
 import { useConfirm } from '@/hooks/useConfirm'
-import { normalizeDateValue, todayLocal } from '@/lib/utils'
+import { emptiedToNull, normalizeDateValue, todayLocal } from '@/lib/utils'
 import { OUTCOME_COLORS } from '@/lib/constants'
 import { sortVehicles, sortPilotsActiveFirst, vehicleDisplayName } from '@/lib/formatters'
 import { Link } from 'react-router-dom'
@@ -41,10 +41,9 @@ function TrainingModal({ pilots, vehicles, onSave, onClose, initial }) {
     e.preventDefault()
     const data = { ...form }
     if (data.vehicle_id) data.vehicle_id = Number.parseInt(data.vehicle_id, 10)
-    else delete data.vehicle_id
     if (data.man_hours) data.man_hours = Number.parseFloat(data.man_hours)
     else data.man_hours = 0
-    Object.keys(data).forEach(k => { if (data[k] === '') delete data[k] })
+    emptiedToNull(data, initial)
     // Ensure required fields are present
     if (!data.training_type) data.training_type = 'Recurrent'
     data.pilots = pilotEntries

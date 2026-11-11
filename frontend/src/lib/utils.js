@@ -339,6 +339,24 @@ export function changedFields(initial, current) {
   )
 }
 
+/**
+ * Settle a form's empty values before a save: on an edit, a field the user
+ * emptied becomes null (a PATCH then clears it); a field that was empty to
+ * begin with, and every empty field on a create, is left out.
+ * @param {Object} data - The form values to send (changed in place).
+ * @param {Object|null} initial - The record being edited, or null on a create.
+ * @returns {Object} data
+ */
+export function emptiedToNull(data, initial) {
+  Object.keys(data).forEach(key => {
+    if (data[key] !== '') return
+    const stored = initial?.[key]
+    if (initial && stored != null && stored !== '') data[key] = null
+    else delete data[key]
+  })
+  return data
+}
+
 /** Open an input's picker (a datalist or date control) on focus. Chrome throws
  *  NotAllowedError when focus did not come from a user gesture (a scripted
  *  focus), which is harmless, so it is ignored. */
