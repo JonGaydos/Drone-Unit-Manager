@@ -105,3 +105,103 @@ def test_certification_patch_null_clears_dates_and_number(client, db, admin_head
     assert resp.status_code == 200, resp.text
     assert (resp.json()["expiration_date"], resp.json()["certificate_number"]) == (None, None)
     assert resp.json()["issue_date"] == "2024-01-01"
+
+
+# --- B-5, C-F3, D-4: integrity errors name the field -------------------------
+
+CONFLICT = "conflicts with other records"
+
+
+def _flight_id(client, admin_headers):
+    resp = client.post("/api/flights", headers=admin_headers, json={"date": "2026-03-01", "duration_seconds": 60})
+    assert resp.status_code in (200, 201), resp.text
+    return resp.json()["id"]
+
+
+def _assert_names(resp, *words):
+    assert resp.status_code == 422, resp.text
+    detail = resp.json()["detail"]
+    assert isinstance(detail, str) and CONFLICT not in detail
+    for word in words:
+        assert word in detail
+
+
+def test_flight_create_with_unknown_pilot_is_422_naming_it(client, admin_headers):
+    resp = client.post("/api/flights", headers=admin_headers,
+                       json={"pilot_id": 999999, "date": "2026-03-01", "duration_seconds": 60})
+    _assert_names(resp, "pilot_id", "999999")
+
+
+def test_flight_create_with_unknown_vehicle_is_422_naming_it(client, admin_headers):
+    resp = client.post("/api/flights", headers=admin_headers,
+                       json={"vehicle_id": 888888, "date": "2026-03-01", "duration_seconds": 60})
+    _assert_names(resp, "vehicle_id", "888888")
+
+
+def test_flight_patch_and_bulk_with_unknown_pilot_are_422(client, admin_headers):
+    fid = _flight_id(client, admin_headers)
+    _assert_names(client.patch(f"/api/flights/{fid}", headers=admin_headers, json={"pilot_id": 999999}),
+                  "pilot_id")
+    _assert_names(client.post("/api/flights/bulk-update", headers=admin_headers,
+                              json={"flight_ids": [fid], "pilot_id": 999999}), "pilot_id")
+
+
+def test_flight_patch_null_required_field_is_422_naming_it(client, admin_headers):
+    fid = _flight_id(client, admin_headers)
+    _assert_names(client.patch(f"/api/flights/{fid}", headers=admin_headers, json={"review_status": None}),
+                  "review_status")
+    _assert_names(client.patch(f"/api/flights/{fid}", headers=admin_headers, json={"pilot_confirmed": None}),
+                  "pilot_confirmed")
+
+
+def test_certification_assign_with_unknown_pilot_is_422(client, db, admin_headers):
+    from app.models import CertificationType
+    ct = CertificationType(name="Area 10 FK", category="training")
+    db.add(ct)
+    db.commit()
+    resp = client.post("/api/pilot-certifications", headers=admin_headers,
+                       json={"pilot_id": 999999, "certification_type_id": ct.id})
+    _assert_names(resp, "pilot_id", "999999")
+
+
+def test_certification_assign_with_unknown_type_is_422(client, db, admin_headers):
+    from app.models import Pilot
+    pilot = Pilot(first_name="Robin", last_name="Area10")
+    db.add(pilot)
+    db.commit()
+    resp = client.post("/api/pilot-certifications", headers=admin_headers,
+                       json={"pilot_id": pilot.id, "certification_type_id": 777777})
+    _assert_names(resp, "certification_type_id")
+
+
+def test_incident_with_unknown_pilot_is_422(client, admin_headers):
+    resp = client.post("/api/incidents", headers=admin_headers, json={
+        "date": "2026-03-01", "title": "Area 10", "description": "Made-up report",
+        "severity": "minor", "category": "other", "pilot_id": 99999})
+    _assert_names(resp, "pilot_id", "99999")
+
+
+def test_uniqueness_and_delete_conflicts_stay_409():
+    import asyncio
+    from sqlalchemy.exc import IntegrityError
+    from app.main import integrity_conflict
+
+    class _Req:
+        method, url = "POST", type("U", (), {"path": "/api/x"})()
+
+    for message, statement, params in [
+        ("UNIQUE constraint failed: vehicles.serial_number",
+         "INSERT INTO vehicles (serial_number) VALUES (?)", ("SN-1",)),
+        ("FOREIGN KEY constraint failed", "DELETE FROM pilots WHERE pilots.id = ?", (5,)),
+    ]:
+        resp = asyncio.run(integrity_conflict(_Req(), IntegrityError(statement, params, Exception(message))))
+        assert resp.status_code == 409
+        assert CONFLICT in resp.body.decode()
+
+
+def test_clearing_a_required_fleet_column_is_422_naming_it(client, db, admin_headers):
+    b = Battery(serial_number="AREA10-B2", cycle_count=33)
+    db.add(b)
+    db.commit()
+    _assert_names(client.patch(f"/api/batteries/{b.id}", headers=admin_headers, json={"cycle_count": None}),
+                  "cycle_count")

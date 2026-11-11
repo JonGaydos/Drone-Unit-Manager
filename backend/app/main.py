@@ -198,14 +198,16 @@ async def add_request_id(request: Request, call_next):
 
 @app.exception_handler(IntegrityError)
 async def integrity_conflict(request: Request, exc: IntegrityError):
-    """A write the database refused, most often deleting a record that other
-    records still point at. That is a conflict for the caller to resolve, not
-    a server fault, so it is a 409 with a plain message instead of a 500."""
+    """A write the database refused. A missing required value or a reference
+    to a record that does not exist is the caller's input, a 422 naming the
+    field; anything else (most often deleting a record that other records
+    still point at, or a duplicate) is a 409 conflict. Never a 500."""
+    from starlette.concurrency import run_in_threadpool
+    from app import database
+    from app.services.integrity_errors import integrity_reply
     logger.warning("Integrity error on %s %s: %s", request.method, request.url.path, exc.orig)
-    return JSONResponse(
-        {"detail": "This change conflicts with other records: it is still in use elsewhere, or duplicates an existing entry."},
-        status_code=409,
-    )
+    status, detail = await run_in_threadpool(integrity_reply, database.engine, database.Base.metadata, exc)
+    return JSONResponse({"detail": detail}, status_code=status)
 
 
 @app.exception_handler(PermissionError)
