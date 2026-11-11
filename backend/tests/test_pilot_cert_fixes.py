@@ -385,6 +385,26 @@ def test_matrix_shows_an_orphaned_renewed_cert_so_it_can_be_removed(client, db, 
     assert cell["id"] == live.id
 
 
+
+# --- C-F21: Edit Certification opens from the matrix cell, so the cell carries notes ---
+
+
+def test_matrix_cell_carries_the_cert_notes(client, db, admin_headers):
+    pilot = _pilot(db)
+    ct = _cert_type(db)
+    pc = _cert(db, pilot.id, ct.id, expiry=date(2030, 1, 1))
+    pc.notes = "Checkride with the chief pilot"
+    db.commit()
+    cell = client.get("/api/certifications/matrix", headers=admin_headers).json()["matrix"][0]["certs"][str(ct.id)]
+    assert cell["notes"] == "Checkride with the chief pilot"
+
+
+def test_matrix_placeholder_cell_has_empty_notes(client, db, admin_headers):
+    _pilot(db)
+    ct = _cert_type(db)
+    cell = client.get("/api/certifications/matrix", headers=admin_headers).json()["matrix"][0]["certs"][str(ct.id)]
+    assert cell["notes"] is None
+
 # --- C-F22: the compliance expiring-cert item names the pilot and the cert ---
 
 

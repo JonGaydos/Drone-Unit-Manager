@@ -430,6 +430,7 @@ def _cert_cell(pc) -> dict:
             "expiration_date": None,
             "certificate_number": None,
             "nist_level": None,
+            "notes": None,
         }
     return {
         "id": pc.id,
@@ -438,6 +439,8 @@ def _cert_cell(pc) -> dict:
         "expiration_date": pc.expiration_date.isoformat() if pc.expiration_date else None,
         "certificate_number": pc.certificate_number,
         "nist_level": pc.nist_level,
+        # Edit Certification opens from this cell, so it needs the notes too.
+        "notes": pc.notes,
     }
 
 
