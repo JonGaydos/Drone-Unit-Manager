@@ -80,3 +80,28 @@ def test_training_patch_null_clears_optional_fields(client, admin_headers):
 
     assert resp.status_code == 200, resp.text
     assert (resp.json()["notes"], resp.json()["instructor"]) == (None, None)
+
+
+# --- C-F21: certification edits clear a field sent as null -------------------
+
+def _cert(db, **fields):
+    from app.models import CertificationType, Pilot, PilotCertification
+    pilot = Pilot(first_name="Robin", last_name="Area10")
+    ct = CertificationType(name="Area 10 Cert", category="training")
+    db.add_all([pilot, ct])
+    db.flush()
+    pc = PilotCertification(pilot_id=pilot.id, certification_type_id=ct.id, status="active", **fields)
+    db.add(pc)
+    db.commit()
+    return pc
+
+
+def test_certification_patch_null_clears_dates_and_number(client, db, admin_headers):
+    pc = _cert(db, issue_date=date(2024, 1, 1), expiration_date=date(2026, 10, 1), certificate_number="CN-1")
+
+    resp = client.patch(f"/api/pilot-certifications/{pc.id}", headers=admin_headers,
+                        json={"expiration_date": None, "certificate_number": None})
+
+    assert resp.status_code == 200, resp.text
+    assert (resp.json()["expiration_date"], resp.json()["certificate_number"]) == (None, None)
+    assert resp.json()["issue_date"] == "2024-01-01"

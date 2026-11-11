@@ -7,7 +7,7 @@ import { ownsPilot } from '@/lib/ownership'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Modal } from '@/components/ui/Modal'
 import { useConfirm } from '@/hooks/useConfirm'
-import { addMonths, certDisplayStatus, normalizeDateValue, todayLocal } from '@/lib/utils'
+import { addMonths, certDisplayStatus, emptiedToNull, normalizeDateValue, todayLocal } from '@/lib/utils'
 import { CERT_STATUS_COLORS } from '@/lib/constants'
 import { sortByName, sortPilotsActiveFirst } from '@/lib/formatters'
 import { Plus, Edit, Trash2, ShieldCheck, Search, Filter, Download, ChevronLeft, ChevronRight, Loader2, Eye, EyeOff } from 'lucide-react'
@@ -136,7 +136,7 @@ function AssignCertModal({ pilots, certTypes, existingCert, defaults, onSave, on
     data.certification_type_id = Number.parseInt(data.certification_type_id, 10)
     if (data.nist_level) data.nist_level = Number.parseInt(data.nist_level, 10)
     else data.nist_level = null
-    Object.keys(data).forEach(k => { if (data[k] === '') delete data[k] })
+    emptiedToNull(data, existingCert)
     setSaving(true)
     try { await onSave(data, isEditing ? existingCert.id : null) } finally { setSaving(false) }
   }
