@@ -136,15 +136,17 @@ describe('CertificationsPage', () => {
     expect(deleted).toBe('100')
   })
 
-  it('sends null for a date or number cleared in Edit Certification (C-F21)', async () => {
-    let body = null
+  // Opens Edit Certification on Ada's cert with the cell fields given, and
+  // records the PATCH body the dialog sends.
+  async function openEditCert(cellFields) {
+    const sent = { body: null }
     mockMount({ matrix: () => HttpResponse.json({ matrix: [{ ...MATRIX[0], certs: { 1: {
-      ...MATRIX[0].certs[1], certificate_number: 'CN-1', notes: null } } }] }) })
+      ...MATRIX[0].certs[1], ...cellFields } } }] }) })
     server.use(
       http.get('/api/pilot-certifications/:id/history', () => HttpResponse.json([])),
       http.get('/api/documents', () => HttpResponse.json([])),
       http.patch('/api/pilot-certifications/100', async ({ request }) => {
-        body = await request.json()
+        sent.body = await request.json()
         return HttpResponse.json({ id: 100 })
       }),
     )
@@ -152,11 +154,17 @@ describe('CertificationsPage', () => {
     await screen.findByRole('link', { name: 'Ada Lovelace' })
     await user.click(screen.getByText('valid'))
     const dialog = await screen.findByRole('dialog')
+    return { user, dialog, sent }
+  }
+
+  it('sends null for a date or number cleared in Edit Certification (C-F21)', async () => {
+    const { user, dialog, sent } = await openEditCert({ certificate_number: 'CN-1', notes: null })
     await user.clear(within(dialog).getByLabelText('Expiration Date'))
     await user.clear(within(dialog).getByLabelText('Certificate Number'))
     await user.click(within(dialog).getByRole('button', { name: 'Update' }))
 
-    await waitFor(() => expect(body).not.toBeNull())
+    await waitFor(() => expect(sent.body).not.toBeNull())
+    const body = sent.body
     expect(body.expiration_date).toBeNull()
     expect(body.certificate_number).toBeNull()
     expect(body).not.toHaveProperty('notes')
@@ -164,28 +172,14 @@ describe('CertificationsPage', () => {
   })
 
   it('shows the stored notes in Edit Certification and sends null when they are cleared (C-F21)', async () => {
-    let body = null
-    mockMount({ matrix: () => HttpResponse.json({ matrix: [{ ...MATRIX[0], certs: { 1: {
-      ...MATRIX[0].certs[1], notes: 'Checkride with the chief pilot' } } }] }) })
-    server.use(
-      http.get('/api/pilot-certifications/:id/history', () => HttpResponse.json([])),
-      http.get('/api/documents', () => HttpResponse.json([])),
-      http.patch('/api/pilot-certifications/100', async ({ request }) => {
-        body = await request.json()
-        return HttpResponse.json({ id: 100 })
-      }),
-    )
-    const { user } = renderWithProviders(<CertificationsPage />, { role: 'admin' })
-    await screen.findByRole('link', { name: 'Ada Lovelace' })
-    await user.click(screen.getByText('valid'))
-    const dialog = await screen.findByRole('dialog')
+    const { user, dialog, sent } = await openEditCert({ notes: 'Checkride with the chief pilot' })
     const notes = within(dialog).getByLabelText('Notes')
     expect(notes).toHaveValue('Checkride with the chief pilot')
     await user.clear(notes)
     await user.click(within(dialog).getByRole('button', { name: 'Update' }))
 
-    await waitFor(() => expect(body).not.toBeNull())
-    expect(body.notes).toBeNull()
+    await waitFor(() => expect(sent.body).not.toBeNull())
+    expect(sent.body.notes).toBeNull()
   })
 
   it('hides and unhides a cert type from the types tab', async () => {
