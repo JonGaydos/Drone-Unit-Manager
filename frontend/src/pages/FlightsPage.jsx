@@ -117,7 +117,7 @@ function FlightModal({ pilots, vehicles, purposes, batteries, sensors, attachmen
             </div>
             <div>
               <label htmlFor="duration-seconds" className="block text-sm font-medium text-foreground mb-1">Duration (seconds)</label>
-              <input id="duration-seconds" type="number" value={form.duration_seconds} onChange={e => setForm({...form, duration_seconds: e.target.value})}
+              <input id="duration-seconds" type="number" min="0" value={form.duration_seconds} onChange={e => setForm({...form, duration_seconds: e.target.value})}
                 className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
             </div>
           </div>
@@ -851,7 +851,7 @@ function FlightEditRow({ f, editForm, setEditForm, pilots, purposes, onSave, onC
         </select>
       </td>
       <td className="px-4 py-2 text-right">
-        <input type="number" value={editForm.duration_seconds} onChange={e => setEditForm({...editForm, duration_seconds: e.target.value})}
+        <input type="number" min="0" value={editForm.duration_seconds} onChange={e => setEditForm({...editForm, duration_seconds: e.target.value})}
           className="w-20 px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm text-right" placeholder="sec" />
       </td>
       <td className="px-4 py-2 hidden lg:table-cell text-foreground">{f.takeoff_address || '—'}</td>

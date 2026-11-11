@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { api } from '@/api/client'
+import { api, detailText } from '@/api/client'
 import { inSequence } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -577,10 +577,7 @@ function EditModal({ photo, pilots, onClose, onSuccess }) {
       }
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
-        let msg = 'Update failed'
-        if (typeof data.detail === 'string') msg = data.detail
-        else if (Array.isArray(data.detail)) msg = data.detail.map(e => e.msg || e.message || JSON.stringify(e)).join('; ')
-        throw new Error(msg)
+        throw new Error(detailText(data.detail) ?? 'Update failed')
       }
       onSuccess()
     } catch (err) {

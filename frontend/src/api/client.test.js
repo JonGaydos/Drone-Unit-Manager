@@ -196,6 +196,25 @@ describe('error sanitization', () => {
     await expect(api.get('/err')).rejects.toThrow('a; b')
   })
 
+  it('names the field of each FastAPI validation error (B-17)', async () => {
+    server.use(http.post('/api/err', () => HttpResponse.json({ detail: [
+      { loc: ['body', 'duration_seconds'], msg: 'Input should be greater than or equal to 0', type: 'greater_than_equal' },
+      { loc: ['query', 'per_page'], msg: 'Input should be less than or equal to 1000' },
+      { loc: ['body', 'pilots', 0, 'hours'], msg: 'Input should be a valid number' },
+      { loc: ['body'], msg: 'Value error, Landing must be after takeoff' },
+    ] }, { status: 422 })))
+    await expect(api.post('/err', {})).rejects.toThrow(
+      'Duration seconds: Input should be greater than or equal to 0; Per page: Input should be less than or equal to 1000; '
+      + 'Hours: Input should be a valid number; Landing must be after takeoff')
+  })
+
+  it('names the field on a non-OK upload too', async () => {
+    server.use(http.post('/api/import', () => HttpResponse.json({ detail: [
+      { loc: ['body', 'file'], msg: 'Field required' },
+    ] }, { status: 422 })))
+    await expect(api.upload('/import', new FormData())).rejects.toThrow('File: Field required')
+  })
+
   it('replaces SQL details with a generic message', async () => {
     const sensitive = 'SQL error near SELECT * FROM users'
     server.use(http.get('/api/err', () =>

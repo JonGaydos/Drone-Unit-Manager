@@ -199,6 +199,15 @@ describe('FlightsPage', () => {
     expect(lastUrl.searchParams.get('page')).toBe('1')
   })
 
+  it('Add Flight refuses a negative duration in the input itself (B-17)', async () => {
+    mockMount()
+    const { user } = renderWithProviders(<FlightsPage />, { role: 'admin' })
+    await screen.findByRole('link', { name: 'Jane Doe' })
+    await user.click(screen.getByRole('button', { name: /Add Flight/ }))
+    const form = (await screen.findAllByRole('button', { name: 'Add Flight' })).at(-1).closest('form')
+    expect(within(form).getByLabelText('Duration (seconds)')).toHaveAttribute('min', '0')
+  })
+
   it('Add Flight sends times, notes, addresses, coordinates, distance and cost', async () => {
     let body = null
     mockMount()
