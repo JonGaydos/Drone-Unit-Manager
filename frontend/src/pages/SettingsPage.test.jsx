@@ -203,6 +203,44 @@ describe('SettingsPage', () => {
     expect(org).toEqual({ key: 'org_name', value: 'New Org Name' })
   })
 
+  it('keeps the General fields disabled until the settings have loaded', async () => {
+    let release
+    const loaded = new Promise(r => { release = r })
+    mockMount({
+      settings: async () => { await loaded; return HttpResponse.json([{ key: 'org_name', value: 'Metro PD Drone Unit' }]) },
+    })
+    renderWithProviders(<SettingsPage />, { role: 'admin' })
+    await screen.findByText('Quarterly currency')
+    const before = await screen.findByLabelText('Organization Name')
+    expect(before).toBeDisabled()
+
+    release()
+    // Typing is only possible once the stored value is in place, so nothing
+    // typed early is wiped when the loaded value arrives.
+    await waitFor(() => expect(screen.getByLabelText('Organization Name')).toBeEnabled())
+    expect(screen.getByLabelText('Organization Name')).toHaveValue('Metro PD Drone Unit')
+  })
+
+  it('does not send an untouched time zone or idle lock that is showing its default', async () => {
+    let bulkBody = null
+    mockMount({
+      settings: () => HttpResponse.json([{ key: 'org_name', value: 'Metro PD Drone Unit' }]),
+    })
+    server.use(
+      http.put('/api/settings/bulk', async ({ request }) => { bulkBody = await request.json(); return HttpResponse.json({ ok: true }) }),
+    )
+    const { user } = renderWithProviders(<SettingsPage />, { role: 'admin' })
+    await screen.findByText('Quarterly currency')
+    const orgInput = await screen.findByDisplayValue('Metro PD Drone Unit')
+    await waitFor(() => expect(orgInput).toBeEnabled())
+    await user.clear(orgInput)
+    await user.type(orgInput, 'Renamed Unit')
+    await user.click(screen.getByRole('button', { name: 'Save Settings' }))
+
+    await waitFor(() => expect(bulkBody).not.toBeNull())
+    expect(bulkBody).toEqual([{ key: 'org_name', value: 'Renamed Unit' }])
+  })
+
   it('saves the selected display timezone in the bulk payload', async () => {
     let bulkBody = null
     mockMount({

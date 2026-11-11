@@ -76,6 +76,9 @@ function NoLinkedPilotBadge({ user }) {
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('general')
   const [settings, setSettings] = useState({})
+  // The General fields stay disabled until the stored values arrive, so
+  // nothing typed early is wiped when the loaded value replaces it.
+  const [settingsLoaded, setSettingsLoaded] = useState(false)
   const [saving, setSaving] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [exportedBytes, setExportedBytes] = useState(0)
@@ -371,6 +374,7 @@ export default function SettingsPage() {
       const map = {}
       data.forEach(s => { map[s.key] = s.value })
       setSettings(map)
+      setSettingsLoaded(true)
       if (map.org_logo) setLogoUrl(map.org_logo + '?t=' + Date.now())
       setSidebarItems(buildSidebarItems(map.sidebar_config))
       // Sidebar group headers default to shown unless explicitly disabled.
@@ -569,9 +573,20 @@ export default function SettingsPage() {
       if (!ref) continue
       // A password field left empty keeps the stored secret.
       if (ref.type === 'password' && ref.value === '') continue
-      if (ref.value !== (settings[key] ?? '')) changed[key] = ref.value
+      if (ref.value !== shownValue(key)) changed[key] = ref.value
     }
     return changed
+  }
+
+  // What a field showed when the settings loaded. The two selects show a
+  // default when nothing (or nothing valid) is stored; an untouched default is
+  // not a change.
+  const shownValue = (key) => {
+    if (key === 'display_timezone') return settings.display_timezone || 'America/Chicago'
+    if (key === 'idle_lock_minutes') {
+      return IDLE_LOCK_MINUTES.map(String).includes(settings.idle_lock_minutes) ? settings.idle_lock_minutes : '30'
+    }
+    return settings[key] ?? ''
   }
 
   const field = (label, key, type = 'text', description = '') => {
@@ -590,7 +605,7 @@ export default function SettingsPage() {
           defaultValue={isPassword ? '' : (settings[key] || '')}
           placeholder={hasMaskedValue ? 'Token saved (enter new to replace)' : ''}
           className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          disabled={!isAdmin}
+          disabled={!isAdmin || !settingsLoaded}
           onInput={() => setHasUnsavedChanges(true)}
         />
       </div>
@@ -1285,7 +1300,7 @@ export default function SettingsPage() {
               key={`display_timezone-${settings.display_timezone === undefined ? 'loading' : 'loaded'}`}
               defaultValue={settings.display_timezone || 'America/Chicago'}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              disabled={!isAdmin}
+              disabled={!isAdmin || !settingsLoaded}
               onInput={() => setHasUnsavedChanges(true)}
             >
               {TIMEZONES.map(tz => <option key={tz} value={tz}>{tz}</option>)}
@@ -1303,7 +1318,7 @@ export default function SettingsPage() {
               key={`idle_lock_minutes-${settings.idle_lock_minutes === undefined ? 'loading' : 'loaded'}`}
               defaultValue={IDLE_LOCK_MINUTES.map(String).includes(settings.idle_lock_minutes) ? settings.idle_lock_minutes : '30'}
               className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              disabled={!isAdmin}
+              disabled={!isAdmin || !settingsLoaded}
               onInput={() => setHasUnsavedChanges(true)}
             >
               {IDLE_LOCK_MINUTES.map(m => <option key={m} value={String(m)}>{idleLockLabel(m)}</option>)}
