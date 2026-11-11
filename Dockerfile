@@ -30,8 +30,11 @@ WORKDIR /app
 
 # curl is for the HEALTHCHECK below. Reports are drawn with ReportLab and
 # matplotlib's Agg backend, which need no system graphics libraries.
+# zlib1g is named so the security update is pulled in while the base image
+# still ships an older build (CVE-2026-76844, fixed in Debian's deb13u1).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    zlib1g \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
