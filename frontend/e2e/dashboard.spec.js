@@ -10,9 +10,10 @@ import { test, expect } from '@playwright/test'
 //
 // Real UI used (read from src/pages/DashboardPage.jsx):
 //   - Hero h2 greeting /Good (morning|afternoon|evening),/ (always renders).
-//   - Four StatTiles: "Flights (30d)", "Hours (30d)", "Active Pilots",
-//     "Fleet Size" — labels always render; values come from /dashboard/stats
-//     and /dashboard/trends (fleet_size reflects the 2 seeded vehicles).
+//   - Four StatTiles: "Flights (30d)", "Hours (30d)", "Pilots Flying (30d)",
+//     "Vehicles Flown (30d)" — labels always render; values come from
+//     /dashboard/stats and /dashboard/trends, and the vehicles tile's subtitle
+//     carries fleet_size ("2 in fleet" for the 2 seeded vehicles).
 //   - Section headings: "Recent Flights", "Currency Risk", "Activity by Month",
 //     "Top Pilots (30d)", "Top Vehicles (30d)", "Locations" — always render.
 //   - Recent Flights lists the 1 seeded Training flight (pilot "E2E Seedpilot").
@@ -34,12 +35,11 @@ test.describe('dashboard journey', () => {
     // Stat tile labels always render once loading resolves.
     await expect(page.getByText('Flights (30d)')).toBeVisible({ timeout: 15_000 })
     await expect(page.getByText('Hours (30d)')).toBeVisible()
-    await expect(page.getByText('Active Pilots')).toBeVisible()
-    await expect(page.getByText('Fleet Size')).toBeVisible()
+    await expect(page.getByText('Pilots Flying (30d)')).toBeVisible()
+    await expect(page.getByText('Vehicles Flown (30d)')).toBeVisible()
 
-    // Fleet Size tile reflects the 2 seeded vehicles (a real value, not 0).
-    const fleetTile = page.getByText('Fleet Size').locator('xpath=ancestor::div[1]')
-    await expect(fleetTile.getByText('2', { exact: true })).toBeVisible()
+    // The vehicles tile's subtitle reflects the 2 seeded vehicles (a real value, not 0).
+    await expect(page.getByText('2 in fleet', { exact: true })).toBeVisible()
 
     // Section tiles render their headings (real content, not error/empty crash).
     await expect(page.getByRole('heading', { name: /Recent Flights/ })).toBeVisible()
