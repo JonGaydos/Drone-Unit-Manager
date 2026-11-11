@@ -234,7 +234,8 @@ def _reset_login_rate_limiter():
     from app.routers import auth, notifications
 
     auth._login_attempts.clear()
-    auth._failed_by_user.clear()
+    auth._failed_by_user_ip.clear()
+    auth._failed_by_account.clear()
     auth._last_sweep = 0.0
     notifications._test_sends.clear()
     notifications._smtp_test_sends.clear()

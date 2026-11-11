@@ -178,22 +178,47 @@ def test_forged_forwarded_for_does_not_reset_login_limit(client, admin_user):
     assert codes[-1] == 429
 
 
-def test_account_locks_after_repeated_failures(client, admin_user, monkeypatch):
-    """Guesses spread across addresses still lock the targeted account, and the
-    lock holds even for the right password."""
+def _login_from(client, ip, password):
+    return client.post("/api/auth/login", headers={"X-Test-IP": ip},
+                       json={"username": "admin", "password": password}).status_code
+
+
+@pytest.fixture
+def per_header_ip(monkeypatch):
+    """Let each test request pick its client address, and lift the per-IP rate limit."""
     monkeypatch.setattr(auth_router, "_RATE_LIMIT", 1000)
+    monkeypatch.setattr(auth_router, "_client_ip", lambda request: request.headers.get("x-test-ip", "198.51.100.1"))
+
+
+def test_account_locks_after_repeated_failures(client, admin_user, per_header_ip):
+    """Repeated guesses from one address lock that address out of the account,
+    and the lock holds even for the right password."""
     for _ in range(auth_router._USER_FAIL_LIMIT):
-        assert client.post("/api/auth/login", json={"username": "admin", "password": "Wrong1Password"}).status_code == 401
-    locked = client.post("/api/auth/login", json={"username": "admin", "password": ADMIN_PASSWORD})
-    assert locked.status_code == 429
+        assert _login_from(client, "203.0.113.5", "Wrong1Password") == 401
+    assert _login_from(client, "203.0.113.5", ADMIN_PASSWORD) == 429
 
 
-def test_successful_login_clears_failure_count(client, admin_user, monkeypatch):
-    monkeypatch.setattr(auth_router, "_RATE_LIMIT", 1000)
+def test_guesser_cannot_lock_the_user_out_of_another_address(client, admin_user, per_header_ip):
+    """Knowing a username is not enough to lock its owner out: a lock from the
+    guesser's address does not apply to the owner's address."""
+    for _ in range(auth_router._USER_FAIL_LIMIT):
+        _login_from(client, "203.0.113.5", "Wrong1Password")
+    assert _login_from(client, "198.51.100.20", ADMIN_PASSWORD) == 200
+
+
+def test_guesses_spread_across_addresses_lock_the_account(client, admin_user, per_header_ip):
+    """One guess per address still locks the account once the account-wide
+    count is reached, even for the right password from a fresh address."""
+    for i in range(auth_router._ACCOUNT_FAIL_LIMIT):
+        assert _login_from(client, f"203.0.113.{i + 1}", "Wrong1Password") == 401
+    assert _login_from(client, "198.51.100.20", ADMIN_PASSWORD) == 429
+
+
+def test_successful_login_clears_failure_count(client, admin_user, per_header_ip):
     for _ in range(auth_router._USER_FAIL_LIMIT - 1):
-        client.post("/api/auth/login", json={"username": "admin", "password": "Wrong1Password"})
-    assert client.post("/api/auth/login", json={"username": "admin", "password": ADMIN_PASSWORD}).status_code == 200
-    assert "admin" not in auth_router._failed_by_user
+        _login_from(client, "203.0.113.5", "Wrong1Password")
+    assert _login_from(client, "203.0.113.5", ADMIN_PASSWORD) == 200
+    assert ("admin", "203.0.113.5") not in auth_router._failed_by_user_ip
 
 
 # 3. Flight plans: no self-approval, edits go back for review -----------------
