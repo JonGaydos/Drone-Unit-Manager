@@ -116,14 +116,13 @@ export default function UserManualPage() {
             <p className="text-sm text-muted-foreground">How to use Drone Unit Manager</p>
           </div>
         </div>
-        <div
-          role="group"
+        <fieldset
           aria-label="Manual layout"
-          className="inline-flex overflow-hidden rounded-lg border border-border bg-card"
+          className="m-0 inline-flex min-w-0 overflow-hidden rounded-lg border border-border bg-card p-0"
         >
           {viewButton('topics', 'Topics')}
           {viewButton('page', 'One page')}
-        </div>
+        </fieldset>
       </div>
 
       <div className="relative max-w-md">

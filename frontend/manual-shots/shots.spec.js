@@ -1,5 +1,5 @@
 /* global process */
-import { test } from '@playwright/test'
+import { expect, test } from '@playwright/test'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 import { getAdminToken } from '../e2e/helpers/seed.js'
@@ -27,6 +27,7 @@ for (const shot of SHOTS) {
     await page.waitForLoadState('networkidle')
     if (shot.prepare) await shot.prepare(page)
     await page.waitForLoadState('networkidle')
-    await shot.target(page).screenshot({ path: path.join(OUT_DIR, shot.file) })
+    const picture = await shot.target(page).screenshot({ path: path.join(OUT_DIR, shot.file) })
+    expect(picture.length).toBeGreaterThan(0)
   })
 }

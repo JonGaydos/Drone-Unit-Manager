@@ -2,11 +2,14 @@
 // line whose ** never closes stays linear instead of backtracking.
 function renderInline(text) {
   const parts = text.split(/\*\*(.+?)\*\*/)
-  return parts.map((part, i) =>
-    i % 2 === 1
-      ? <strong key={i} className="text-foreground">{part}</strong>
-      : part
-  )
+  // Key each bold part by where it starts in the line, which is unique.
+  let offset = 0
+  return parts.map((part, i) => {
+    const bold = i % 2 === 1
+    const start = offset
+    offset += part.length + (bold ? 4 : 0)
+    return bold ? <strong key={`b${start}`} className="text-foreground">{part}</strong> : part
+  })
 }
 
 export default function ManualText({ text }) {

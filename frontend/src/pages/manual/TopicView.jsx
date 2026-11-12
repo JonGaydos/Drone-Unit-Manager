@@ -23,8 +23,8 @@ export default function TopicView({ section, topic }) {
         <>
           <h3 className="mt-5 text-sm font-semibold text-foreground">Steps</h3>
           <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
-            {topic.steps.map((step, i) => (
-              <li key={i}><ManualText text={step} /></li>
+            {topic.steps.map((step) => (
+              <li key={step}><ManualText text={step} /></li>
             ))}
           </ol>
         </>
@@ -33,8 +33,8 @@ export default function TopicView({ section, topic }) {
         <>
           <h3 className="mt-5 text-sm font-semibold text-foreground">Good to know</h3>
           <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-            {topic.notes.map((note, i) => (
-              <li key={i}><ManualText text={note} /></li>
+            {topic.notes.map((note) => (
+              <li key={note}><ManualText text={note} /></li>
             ))}
           </ul>
         </>

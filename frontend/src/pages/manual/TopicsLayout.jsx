@@ -123,13 +123,12 @@ export default function TopicsLayout({ sections, currentKey, onSelect, searching
           <ChevronDown size={16} />
         </button>
         {pickerOpen && (
-          <div
-            role="region"
+          <section
             aria-label="Choose a topic"
             className="absolute left-0 right-0 z-10 mt-1 max-h-80 overflow-y-auto rounded-lg border border-border bg-card p-2 shadow-lg"
           >
             <TopicList sections={sections} currentKey={activeKey} openIds={openFor} onToggle={toggle} onPick={pick} />
-          </div>
+          </section>
         )}
       </div>
 

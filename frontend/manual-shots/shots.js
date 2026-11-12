@@ -175,9 +175,9 @@ export const SHOTS = [
       const boxes = page.getByRole('checkbox', { name: /^Select flight/ })
       await boxes.nth(0).check()
       await boxes.nth(1).check()
-      await page.getByText(/\d+ selected/).waitFor()
+      await page.getByText('2 selected', { exact: true }).waitFor()
     },
-    target: (page) => page.getByText(/\d+ selected/).locator('xpath=..'),
+    target: (page) => page.getByText('2 selected', { exact: true }).locator('xpath=..'),
   },
   formShot('missions-adding-missions.png', '/missions', {
     open: 'Add Mission',
