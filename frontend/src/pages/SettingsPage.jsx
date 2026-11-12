@@ -623,40 +623,6 @@ export default function SettingsPage() {
     if (activeTab !== 'users' || !isAdmin) return null
     return (
         <div className="max-w-2xl space-y-6">
-          {/* Change Password */}
-          <div className="bg-card border border-border rounded-xl p-6">
-            <form onSubmit={handleChangePassword}>
-              <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
-                <Key className="w-5 h-5" /> Change Password
-              </h3>
-              <div className="space-y-3">
-                <div>
-                  <label htmlFor="current-password" className="block text-sm font-medium text-foreground mb-1">Current Password</label>
-                  <input id="current-password" type="password" value={pwForm.current_password} onChange={e => setPwForm({...pwForm, current_password: e.target.value})} required
-                    className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
-                </div>
-                <div>
-                  <label htmlFor="new-password" className="block text-sm font-medium text-foreground mb-1">New Password</label>
-                  <input id="new-password" type="password" value={pwForm.new_password} onChange={e => setPwForm({...pwForm, new_password: e.target.value})} required minLength={12}
-                    className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
-                </div>
-                <div>
-                  <label htmlFor="confirm-new-password" className="block text-sm font-medium text-foreground mb-1">Confirm New Password</label>
-                  <input id="confirm-new-password" type="password" value={pwForm.confirm_password} onChange={e => setPwForm({...pwForm, confirm_password: e.target.value})} required minLength={12}
-                    className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
-                </div>
-                <button type="submit" disabled={changingPw}
-                  className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50">
-                  {changingPw ? <Loader2 className="w-4 h-4 animate-spin" /> : <Key className="w-4 h-4" />}
-                  Change Password
-                </button>
-                {pwMsg && (
-                  <p className={`text-sm ${pwMsg.ok ? 'text-emerald-400' : 'text-destructive'}`}>{pwMsg.message}</p>
-                )}
-              </div>
-            </form>
-          </div>
-
           {/* User Management */}
           <div className="bg-card border border-border rounded-xl p-6">
             <div className="flex items-center justify-between mb-4">
@@ -1260,6 +1226,41 @@ export default function SettingsPage() {
     )
   }
 
+  const renderChangePassword = () => (
+    <div className="bg-card border border-border rounded-xl p-6">
+      <form onSubmit={handleChangePassword}>
+        <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+          <Key className="w-5 h-5" /> Change Password
+        </h3>
+        <div className="space-y-3">
+          <div>
+            <label htmlFor="current-password" className="block text-sm font-medium text-foreground mb-1">Current Password</label>
+            <input id="current-password" type="password" value={pwForm.current_password} onChange={e => setPwForm({...pwForm, current_password: e.target.value})} required
+              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+          </div>
+          <div>
+            <label htmlFor="new-password" className="block text-sm font-medium text-foreground mb-1">New Password</label>
+            <input id="new-password" type="password" value={pwForm.new_password} onChange={e => setPwForm({...pwForm, new_password: e.target.value})} required minLength={12}
+              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+          </div>
+          <div>
+            <label htmlFor="confirm-new-password" className="block text-sm font-medium text-foreground mb-1">Confirm New Password</label>
+            <input id="confirm-new-password" type="password" value={pwForm.confirm_password} onChange={e => setPwForm({...pwForm, confirm_password: e.target.value})} required minLength={12}
+              className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+          </div>
+          <button type="submit" disabled={changingPw}
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50">
+            {changingPw ? <Loader2 className="w-4 h-4 animate-spin" /> : <Key className="w-4 h-4" />}
+            Change Password
+          </button>
+          {pwMsg && (
+            <p className={`text-sm ${pwMsg.ok ? 'text-emerald-400' : 'text-destructive'}`}>{pwMsg.message}</p>
+          )}
+        </div>
+      </form>
+    </div>
+  )
+
   const renderProfile = () => (
     <div className="bg-card border border-border rounded-xl p-6">
       <h3 className="text-lg font-semibold text-foreground mb-4">My Profile</h3>
@@ -1698,6 +1699,7 @@ export default function SettingsPage() {
       {activeTab === 'general' && (
       <div className="space-y-6 max-w-2xl">
       {renderProfile()}
+      {renderChangePassword()}
       <DigestPreferencesCard />
       {renderOrganization()}
       {renderCertLabels()}
