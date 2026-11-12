@@ -475,23 +475,121 @@ export const sections = [
     topics: [
       {
         id: 'viewing-flights',
-        title: 'Viewing Flights',
-        summary: 'The Flights page shows all recorded flights with filtering by date range, pilot, vehicle, purpose, and review status. Use the text search to find flights by pilot name, vehicle, purpose, location, case number, or flight ID. Search and column sorting cover every flight, not just the page on screen.'
+        title: 'Finding and filtering flights',
+        summary: 'The **Flights** page lists every recorded flight. Use the filters and the search box to narrow the list, and the column headings to sort it.',
+        image: {
+          src: '/manual/flights-viewing-flights.png',
+          alt: 'The filter bar on the Flights page with Date From, Date To, Pilot, Vehicle and Purpose',
+          caption: 'The filters above the flights list.',
+        },
+        steps: [
+          'Choose **Flights** in the sidebar.',
+          'Choose **All**, **Needs Review** or **Reviewed** at the top. The number beside **Needs Review** counts every flight waiting for review, not only the ones on screen.',
+          'Set **Date From** and **Date To** to show a range of dates.',
+          'Pick a **Pilot**, a **Vehicle** or a **Purpose**. Under **Purpose**, **No Purpose** shows flights that have none.',
+          'Type in **Search flights...** to find a word in the pilot, vehicle, purpose, location, case number or flight ID.',
+          'Click a column heading (**Date**, **Pilot**, **Vehicle**, **Purpose**, **Duration** or **Status**) to sort. Click it again to reverse the order.',
+          'Use **Previous** and **Next** at the bottom to move between pages.',
+        ],
+        notes: [
+          'Each page holds 100 flights. The line at the bottom, such as "Showing 1-100 of 250 flights", tells you where you are.',
+          'Filters, search and sorting cover every flight, not only the page on screen. Changing one takes you back to page 1.',
+          'The **Vehicle**, **Purpose** and **Location** columns are hidden on a narrow screen. Open the flight to see them.',
+          'Click a flight ID to open the flight, a pilot name to open the pilot, or a vehicle name to open the vehicle.',
+          'The small line under the status reads "Telemetry ✓" when the flight path is stored, "Telemetry pending" while it can still be fetched, and "No telemetry" when there is none to fetch. Flights you enter by hand show nothing there. Telemetry means the recorded track of the flight: position, height, speed and battery.',
+          'Everyone can see flights by default, including viewers.',
+        ],
       },
       {
         id: 'adding-flights-manually',
-        title: 'Adding Flights Manually',
-        summary: 'Click "Add Flight" to record a flight manually. Select the pilot, vehicle, date, duration, purpose, and optionally a takeoff address and case number. A flight added by hand always starts as Needs Review, whoever logs it.'
+        title: 'Adding a flight by hand',
+        summary: 'Use this to record a flight that did not come in from a drone provider, such as a flight you flew with an aircraft that is not connected.',
+        image: {
+          src: '/manual/flights-adding-flights-manually.png',
+          alt: 'The Add Flight dialog with pilot, vehicle, date, duration, purpose, times, addresses and equipment fields',
+          caption: 'The Add Flight dialog.',
+        },
+        steps: [
+          'On **Flights**, choose **Add Flight**.',
+          'Pick the **Pilot** and the **Vehicle**. If the vehicle has a problem (overdue maintenance, an expired registration or a status other than active), a box called **Pre-flight warnings for this vehicle** appears. The warnings do not stop you from saving.',
+          'Enter the **Date** and the **Duration (seconds)**. Or enter the **Takeoff Time** and **Landing Time** and leave the date and duration empty, and the app works them out.',
+          'Pick a **Purpose**.',
+          'Fill in anything else you know: **Takeoff Address**, **Landing Address**, the latitude and longitude boxes, **Distance (m)**, **Operating Cost ($)**, **Case Number**, **Battery**, **Sensor Package**, the four **Attachment** boxes, **Carrier(s)** and **Notes**.',
+          'Choose **Add Flight**.',
+        ],
+        notes: [
+          'The date and times in the form are in your unit\'s time zone.',
+          'A flight you add by hand always starts as **Needs Review**, whoever adds it.',
+          'To log a flight that is much like an earlier one, choose the copy icon (**Duplicate**) at the end of that row. The pilot, vehicle, purpose, takeoff address and equipment are filled in. The date, times and duration are left empty.',
+          'Supervisors and pilots can add flights by default. Viewers cannot, and do not see the button. An admin can change this under **Settings**.',
+        ],
       },
       {
         id: 'reviewing-flights',
-        title: 'Reviewing Flights',
-        summary: 'Flights imported from the Skydio API arrive with "Needs Review" status. Users with the review permission (supervisors by default) can review individual flights via the inline edit button, or use "Approve Page" to mark the visible page of pending flights as reviewed. Selecting rows with the checkboxes also enables bulk actions (reassign pilot, set purpose, mark reviewed, delete), each shown with a confirmation summarizing exactly what will change. When a user without the review permission edits a reviewed flight, it returns to the review queue.'
+        title: 'Reviewing flights',
+        summary: 'Flights that come in from a drone provider, and flights added by hand, wait as **Needs Review** until someone checks them. Reviewing means checking the pilot, purpose and details are right and marking the flight **Reviewed**.',
+        image: {
+          src: '/manual/flights-reviewing-flights.png',
+          alt: 'The bar that appears when flights are selected, with Reassign pilot, Set purpose, Mark reviewed, Delete and Clear',
+          caption: 'The bar for working on several selected flights at once.',
+        },
+        steps: [
+          'To review one flight, click the **Needs Review** badge in its row. It turns to **Reviewed**. Click it again to send it back.',
+          'To fix details at the same time, choose the pencil icon (**Edit**) at the end of the row. Change the **Date**, pilot, **Purpose** or **Duration** and choose the check mark to save, or the X to cancel.',
+          'To review everything on the page, choose **Approve Page** (it shows how many flights it covers) and confirm.',
+          'To change several flights, tick their boxes (the box in the heading selects the whole page). A bar shows how many are selected.',
+          'In that bar, pick **Reassign pilot…** or **Set purpose…**, or choose **Mark reviewed**. A message shows exactly what will change. Confirm to go ahead.',
+          'To remove flights, choose **Delete** in the bar, or the trash icon on one row, and confirm.',
+        ],
+        notes: [
+          'Reviewing, **Approve Page** and the selection boxes are for supervisors and admins by default.',
+          '**Reassign pilot…** and **Set purpose…** also need permission to edit every flight, which supervisors have. **Delete** needs permission to delete any flight. Pilots cannot delete flights by default.',
+          'Pilots can edit only their own flights by default. That means flights flown by their own pilot record, or logged by them. They cannot change the pilot on a flight.',
+          'If someone who cannot review changes a flight that is already **Reviewed**, it goes back to **Needs Review**.',
+          'Deleting a flight also removes its telemetry. It cannot be undone.',
+          'The number beside **Flights** in the sidebar shows how many flights wait for review.',
+          'An admin can change who may review, edit and delete under **Settings**.',
+        ],
       },
       {
         id: 'flight-detail',
-        title: 'Flight Detail',
-        summary: 'Click a flight ID to see the full detail page. If telemetry data was synced, you\'ll see an interactive map with the flight path and charts for altitude, speed, and battery level over time. The telemetry label reads "Telemetry ✓" when the flight path is stored, "Telemetry pending" while sync can still fetch it, and "No telemetry" when there is none to fetch. Flights entered by hand show no label.'
+        title: 'The flight page',
+        summary: 'Click a flight ID to open everything recorded about one flight: who flew it, what with, when and where, the telemetry charts and the flight path on a map.',
+        steps: [
+          'Click the flight ID in the **Flights** list.',
+          'Read the details in the card. The badges at the top show the review status, the telemetry label and where the flight came from.',
+          'If there is a recorded track, scroll down to see the **Flight Path** map and the charts **Altitude (ft)**, **Speed (mph)** and **Battery (%)**. Move the mouse over a chart to read exact values.',
+          'To change the flight, choose **Edit**, change the fields and choose **Save**. Choose **Cancel** to drop your changes.',
+          'To mark it checked, choose **Approve Flight**.',
+          'Choose **Back to Flights** to return to the list.',
+        ],
+        notes: [
+          'With no recorded track, a flight that has takeoff coordinates shows a **Flight Location** map instead, and a note says there is no telemetry.',
+          'A flight with a recorded track also has **GPX** and **KML** buttons. They download the flight path for other mapping programs (KML opens in Google Earth). They need permission to export, which everyone has by default.',
+          '**Approve Flight** shows only on a flight that needs review, for people who can review and edit it.',
+          '**Refresh from API** is for admins. It asks the drone provider again for the latest data and track of this flight. It is greyed out when the aircraft has no connected provider account.',
+          'In edit mode, people who can review also get a **Status** box and a **Unit totals** box. Untick **Counts** for a flight that should not count in your unit\'s totals, such as a vendor demo. A flight left out shows a **Not counted** badge.',
+          '**Max Altitude** and **Max Speed** come from the recorded track and cannot be edited.',
+          'The **Photos** card at the bottom lists photos linked to the flight. **Attach photos** adds photos from the Media page. Supervisors and admins can attach and detach by default.',
+          'Pilots can edit only their own flights by default, so **Edit** may be missing on others.',
+        ],
+      },
+      {
+        id: 'exporting-flights',
+        title: 'Exporting and importing flights as CSV',
+        summary: 'A CSV file is a plain table you can open in a spreadsheet. Export the flights you are looking at, or read an exported file back in, for example onto another install.',
+        steps: [
+          'On **Flights**, set the filters and search so the list shows the flights you want.',
+          'Choose **Export CSV**. A file with those flights downloads.',
+          'To read an exported file back in, an admin opens **Settings**, then the **Integrations** tab, and finds **Flight Log Import**.',
+          'Choose the file, set **Format** to **Flights CSV (exported from this app)**, and choose **Import**.',
+        ],
+        notes: [
+          'The file holds every flight the filters select, on every page, not only the page on screen.',
+          '**Export CSV** shows for people allowed to export, which is everyone by default.',
+          'Choose the **Flights CSV (exported from this app)** format by hand. Flights that are already in the app are skipped.',
+          'Only admins can import. Other flight log formats (Skydio, DJI, Litchi, Airdata and more) are covered under **Integrations**.',
+        ],
       },
     ]
   },
@@ -583,18 +681,137 @@ The list of named places (for example North, Central, South) is configured by ad
     ]
   },
   {
-    id: 'logs',
-    title: 'Mission Log & Training Log',
+    id: 'missions',
+    title: 'Mission Log',
     topics: [
       {
         id: 'mission-log',
-        title: 'Mission Log',
-        summary: `The Mission Log records non-flight missions and operations. Each entry has a date, title, reason/purpose, location, case number, drone used, man-hours, optional start/end times, description, and notes. You can attach multiple pilots to a mission, each with a role (PIC, Observer, Spotter, Visual Observer, Support) and hours. By default pilots can add entries and edit or delete the ones they created or are rostered on, and supervisors can change any entry; use the search box and date/pilot filters to find missions, and Export CSV to download the list.`
+        title: 'Finding missions',
+        summary: 'The **Mission Log** records work that is not a single flight: callouts, searches, demonstrations and other operations, with who took part and for how many hours.',
+        steps: [
+          'Choose **Mission Log** in the sidebar.',
+          'Type in **Search missions...** to find a word in a mission.',
+          'Use the two date boxes to show a range of dates, and the pilot box (it starts at **All Pilots**) to show one pilot\'s missions.',
+          'Click a row to open it. You see the description, case number, start and end times, notes and each pilot with their role. Click it again to close it.',
+        ],
+        notes: [
+          'The list shows the 200 most recent matches. If it says so under the table, narrow the dates or the search to reach older missions.',
+          'Each row shows the date, title, reason, location, drone, pilots, man hours and status. Some columns are hidden on a narrow screen.',
+          'Status is **Planned**, **In Progress**, **Completed** or **Cancelled**.',
+          'Choose **Export CSV** to download a CSV file (a table you can open in a spreadsheet). It holds all missions, not only the ones you filtered to.',
+          'Everyone can see the log by default, including viewers.',
+        ],
       },
       {
+        id: 'adding-missions',
+        title: 'Adding and changing a mission',
+        summary: 'Add a mission after the work is done, or plan one ahead and change its status later.',
+        image: {
+          src: '/manual/missions-adding-missions.png',
+          alt: 'The Add Mission dialog with date, status, title, reason, location, hours, drone and pilots involved',
+          caption: 'The Add Mission dialog, with one pilot added.',
+        },
+        steps: [
+          'On **Mission Log**, choose **Add Mission**.',
+          'Check the **Date** (it starts as today) and set the **Status**.',
+          'Type a **Title**. The **Date** and **Title** are required.',
+          'Pick a **Reason / Purpose** from the list. Choose **Other...** to type your own.',
+          'Fill in what you know: **Location**, **Case Number**, **Man Hours**, **Start Time**, **End Time**, **Drone Used**, **Description** and **Notes**.',
+          'Under **Pilots Involved**, choose **+ Add Pilot**. Pick the pilot, pick a role (**PIC**, **Observer**, **Spotter**, **Visual Observer** or **Support**) and enter their hours. Use the X to remove a line.',
+          'Choose **Add Mission**.',
+          'To change a mission later, open its row and choose **Edit Mission**, then **Save Changes**.',
+          'To remove one, choose the trash icon at the end of its row and confirm.',
+        ],
+        notes: [
+          'Supervisors and pilots can add missions by default. Viewers cannot.',
+          'Supervisors can change or delete any mission by default. Pilots can change or delete only their own: missions they created, or missions their pilot record is on.',
+          'An admin can change who may add and edit under **Settings**.',
+          'The **Reason / Purpose** list is the same list used for flights.',
+        ],
+      },
+      {
+        id: 'importing-missions',
+        title: 'Importing missions from a file',
+        summary: 'If you kept missions in a spreadsheet, an admin can bring them in instead of typing each one.',
+        steps: [
+          'On **Mission Log**, choose **Import**.',
+          'Choose a CSV or Excel file.',
+          'The window lists each field the app uses. Next to each, pick the column from your file that holds it. The app suggests matches. Choose "don\'t map" for fields you do not have.',
+          'Fields marked required must be matched. The button stays greyed out until they are.',
+          'Choose the **Import** button that shows the row count.',
+          'Read the summary, then choose **Done**.',
+        ],
+        notes: [
+          'Only admins see **Import**.',
+          'The summary tells you how many records were created, how many were skipped for a missing date, how many were already imported, and which names or drones it could not match.',
+          'Names that are not in your pilot list are recorded as Unknown. Rows for drones that are not in your fleet are skipped. Add the missing pilots or drones first if that matters.',
+          'There is a limit on how many rows can come in at once. If the window says so, split the file and import the rest.',
+        ],
+      },
+    ]
+  },
+  {
+    id: 'training',
+    title: 'Training Log',
+    topics: [
+      {
         id: 'training-log',
-        title: 'Training Log',
-        summary: 'The Training Log records training events. Each entry has a date, training type (e.g. Recurrent), title, location, instructor, man-hours, optional start/end times, and a drone used. Like missions, training entries support multiple pilots with a role and hours each (the Student role is also available for training).'
+        title: 'Finding training entries',
+        summary: 'The **Training Log** records training events: who trained, what kind of training it was, who taught it, for how long and how it went.',
+        steps: [
+          'Choose **Training Log** in the sidebar.',
+          'Type in **Search training...** to look through titles, types, locations, instructors and pilot names.',
+          'Use the two date boxes, the pilot box (**All Pilots**) and the type box (**All Types**) to narrow the list.',
+          'Click a row to open it. You see the description, drone, objectives, start and end times, notes and each pilot with their role. Click it again to close it.',
+        ],
+        notes: [
+          'Each row shows the date, title, type, instructor, location, pilots, man hours and outcome. Some columns are hidden on a narrow screen.',
+          'The types are **Initial**, **Recurrent**, **Proficiency** and **Special**. The outcome is **Completed**, **Incomplete** or **Failed**.',
+          'The log loads up to 200 entries at a time. The search looks only through the entries that are loaded, so narrow the dates first if you have many.',
+          'Choose **Export CSV** to download a CSV file (a table you can open in a spreadsheet). It holds all training entries, not only the ones you filtered to.',
+          'Everyone can see the log by default, including viewers.',
+        ],
+      },
+      {
+        id: 'adding-training',
+        title: 'Adding and changing a training entry',
+        summary: 'Add an entry after a training session so there is a record of who took part and how it went.',
+        image: {
+          src: '/manual/training-adding-training.png',
+          alt: 'The Add Training dialog with date, type, outcome, title, instructor, objectives and pilots or trainees',
+          caption: 'The Add Training dialog, with one pilot added.',
+        },
+        steps: [
+          'On **Training Log**, choose **Add Training**.',
+          'Check the **Date**. Pick the **Training Type** and the **Outcome**.',
+          'Type a **Title**. The **Date**, **Training Type** and **Title** are required.',
+          'Fill in what you know: **Location**, **Instructor**, **Man Hours**, **Start Time**, **End Time**, **Drone Used**, **Description**, **Objectives** and **Notes**.',
+          'Under **Pilots / Trainees**, choose **+ Add Pilot**. Pick the pilot, pick a role and enter their hours. Training has one more role than missions: **Student**.',
+          'Choose **Add Training**.',
+          'To change an entry later, open its row and choose **Edit Training**, then **Save Changes**.',
+          'To remove one, choose the trash icon at the end of its row and confirm.',
+        ],
+        notes: [
+          'Supervisors and pilots can add entries by default. Viewers cannot.',
+          'Supervisors can change or delete any entry by default. Pilots can change or delete only their own: entries they created, or entries their pilot record is on.',
+          'An admin can change who may add and edit under **Settings**. Missions and training share the same permissions.',
+        ],
+      },
+      {
+        id: 'importing-training',
+        title: 'Importing training from a file',
+        summary: 'If you kept training records in a spreadsheet, an admin can bring them in instead of typing each one.',
+        steps: [
+          'On **Training Log**, choose **Import**.',
+          'Choose a CSV or Excel file.',
+          'Next to each app field, pick the column from your file that holds it, or choose "don\'t map".',
+          'Match every field marked required, then choose the **Import** button that shows the row count.',
+          'Read the summary, then choose **Done**.',
+        ],
+        notes: [
+          'Only admins see **Import**.',
+          'It works the same way as the mission import. See **Importing missions from a file** for what the summary means.',
+        ],
       },
     ]
   },

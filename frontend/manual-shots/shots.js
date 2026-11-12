@@ -113,4 +113,80 @@ export const SHOTS = [
     },
     target: (page) => page.getByRole('dialog'),
   },
+  {
+    file: 'flights-viewing-flights.png',
+    route: '/flights',
+    target: (page) => page.locator('div.flex.flex-wrap.items-end.gap-3').first(),
+  },
+  {
+    file: 'flights-adding-flights-manually.png',
+    route: '/flights',
+    prepare: async (page) => {
+      await page.setViewportSize({ width: 1280, height: 1500 }) // tall enough to show the whole form
+      await page.getByRole('button', { name: 'Add Flight' }).click()
+      const dialog = page.getByRole('dialog')
+      await pickContaining(dialog.locator('#pilot'), 'Avery Brooks')
+      await pickContaining(dialog.locator('#vehicle'), 'Demo One')
+      await dialog.locator('#date').fill(isoDay(-1))
+      await dialog.locator('#duration-seconds').fill('900')
+      await pickContaining(dialog.locator('#purpose'), 'Training')
+      await dialog.locator('#takeoff-address').fill('Training Field A')
+      await dialog.locator('#landing-address').fill('Training Field A')
+      await dialog.locator('#case-number').fill('DEMO-0001')
+      await page.waitForTimeout(SETTLE_MS)
+    },
+    target: (page) => page.getByRole('dialog'),
+  },
+  {
+    file: 'flights-reviewing-flights.png',
+    route: '/flights',
+    prepare: async (page) => {
+      const boxes = page.getByRole('checkbox', { name: /^Select flight/ })
+      await boxes.nth(0).check()
+      await boxes.nth(1).check()
+      await page.getByText(/\d+ selected/).waitFor()
+    },
+    target: (page) => page.getByText(/\d+ selected/).locator('xpath=..'),
+  },
+  {
+    file: 'missions-adding-missions.png',
+    route: '/missions',
+    prepare: async (page) => {
+      await page.setViewportSize({ width: 1280, height: 1300 }) // tall enough to show the whole form
+      await page.getByRole('button', { name: 'Add Mission' }).click()
+      const dialog = page.getByRole('dialog')
+      await dialog.locator('#title').fill('Demo search support')
+      await dialog.locator('#location').fill('Riverside Park')
+      await dialog.locator('#man-hours').fill('2')
+      await pickContaining(dialog.locator('#drone-used'), 'Demo One')
+      await dialog.locator('#description').fill('Demo description of the mission.')
+      await dialog.getByRole('button', { name: '+ Add Pilot' }).click()
+      await pickContaining(dialog.locator('select').filter({ hasText: 'Select pilot...' }), 'Avery Brooks')
+      await dialog.locator('select').filter({ hasText: 'Role...' }).selectOption('PIC')
+      await dialog.getByPlaceholder('Hrs').fill('2')
+      await page.waitForTimeout(SETTLE_MS)
+    },
+    target: (page) => page.getByRole('dialog'),
+  },
+  {
+    file: 'training-adding-training.png',
+    route: '/training',
+    prepare: async (page) => {
+      await page.setViewportSize({ width: 1280, height: 1300 }) // tall enough to show the whole form
+      await page.getByRole('button', { name: 'Add Training' }).click()
+      const dialog = page.getByRole('dialog')
+      await dialog.locator('#title').fill('Demo proficiency session')
+      await dialog.locator('#location').fill('Training Field A')
+      await dialog.locator('#instructor').fill('Demo Instructor')
+      await dialog.locator('#man-hours').fill('3')
+      await pickContaining(dialog.locator('#drone-used'), 'Demo One')
+      await dialog.locator('#objectives').fill('Demo objectives for the session.')
+      await dialog.getByRole('button', { name: '+ Add Pilot' }).click()
+      await pickContaining(dialog.locator('select').filter({ hasText: 'Select pilot...' }), 'Avery Brooks')
+      await dialog.locator('select').filter({ hasText: 'Role...' }).selectOption('Student')
+      await dialog.getByPlaceholder('Hrs').fill('3')
+      await page.waitForTimeout(SETTLE_MS)
+    },
+    target: (page) => page.getByRole('dialog'),
+  },
 ]
