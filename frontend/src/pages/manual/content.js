@@ -4,97 +4,265 @@ export const sections = [
     title: 'Getting Started',
     topics: [
       {
+        id: 'using-this-manual',
+        title: 'Using this manual',
+        summary: 'Use this manual to look up one thing at a time, or to read everything in order.',
+        image: {
+          src: '/manual/manual-layout-switch.png',
+          alt: 'The Topics and One page switch at the top of the User Manual page',
+          caption: 'The switch at the top of the manual chooses between Topics and One page.',
+        },
+        steps: [
+          'Open **User Manual** in the sidebar.',
+          'Choose **Topics** to see a menu of sections on the left (a bar at the top on a phone). Pick a topic and only that topic shows. Use the Previous and Next buttons at the bottom to read in order.',
+          'Choose **One page** to see every section on one long page. Open a section to read it.',
+          'Type in the box labeled **Search the manual...** to find a word. The menu narrows to the topics that contain it, and the first match opens.',
+          'To share a topic, copy the address from your browser while the topic is open. Anyone who opens that address lands on the same topic.',
+        ],
+        notes: [
+          'The manual remembers your choice of **Topics** or **One page** on each device.',
+          'Opening a topic address always switches you to **Topics**.',
+          'Every role sees every topic. Where something is limited to some roles, the topic says so in plain words. An admin can change those limits, so ask your admin if your app behaves differently.',
+        ],
+      },
+      {
         id: 'first-run-setup',
-        title: 'First-Run Setup',
-        summary: `On first launch, a three-step setup wizard runs:
-
-• **Organization**: Org name, your name, email address.
-• **Admin Account**: Username + password (12+ chars, 1 uppercase, 1 number). No default credentials exist; the first account created becomes the administrator.
-• **Optional Setup**: Upload an organization logo, configure the Skydio API integration, configure SMTP for email digests, and import existing flight logs. Each section is independently skippable, anything skipped can be set up later from Settings.
-
-If you have a backup ZIP from another instance, choose "Restore from a backup instead?" on the setup screen. You'll need the install token printed to the container logs at first boot.`
+        title: 'First-time setup',
+        summary: 'The first time Drone Unit Manager starts, it asks you to set up your unit and create the first administrator. This happens once.',
+        steps: [
+          'Open the app address in your browser. The setup screen appears.',
+          'On the **Organization** step, enter **Organization Name**, pick your **Time Zone**, enter **Your Name** and **Email Address**. Only your name is required. Then choose **Continue**.',
+          'On the **Create Admin Account** step, choose a **Username** and a **Password**, and type the password again in **Confirm Password**.',
+          'Enter the **Install Token** (see the notes below), then choose **Create Account & Start**.',
+          'On the next screen, set up any of the optional items you want: **Organization Logo**, **Skydio Integration**, email sending, and **Initial Flight Log Import**. Each one is separate, so skip what you do not need.',
+          'Choose **Go to Dashboard**.',
+        ],
+        notes: [
+          'There is no default username or password. The account you create here becomes the administrator.',
+          'A password needs at least 12 characters, one capital letter and one number.',
+          'The install token is a long code that proves you control the server. Whoever installed the app can read it from a file named install_token.txt in the app data folder, or from the app startup log.',
+          'The time zone you pick sets how every date and time is shown. You can change it later in **Settings**, on the **General** tab, in the **Organization** card.',
+          'Everything on the optional screen can be done later from **Settings**.',
+        ],
       },
       {
-        id: 'user-roles',
-        title: 'User Roles',
-        summary: `The application has four roles: Admin, Supervisor, Pilot and Viewer. What Supervisors, Pilots and Viewers can do is configurable by an admin (see "Role Permissions" below). Defaults:
-
-• **Viewer**: Can view every feature and export CSV, and can never change unit data. Pilot email addresses and phone numbers are hidden from viewers.
-• **Pilot**: Can view every feature and create records. Can edit only their own flights, plans, incidents, logs, maintenance records, events, profile, documents and photos. Cannot delete flights.
-• **Supervisor**: Can edit most records, review and approve, manage pilots, fleet, certifications and checklists, and generate reports.
-• **Admin**: Full access including user management, the permission grid, system settings, and backups. The audit log is admin-only by default.`
-      },
-      {
-        id: 'role-permissions',
-        title: 'Role Permissions',
-        summary: `Admins set what each role can do in Settings (Users tab), in the Role Permissions card below User Management. Each setting is Yes or No, or None, Own or All for records that have an owner. Changes apply from each person's next request and do not sign anyone out. Use Save changes to apply, Discard to drop edits, and Reset to defaults to restore the table below. On a phone the grid becomes one card per feature with a Role selector.
-
-Own is a fixed rule per record:
-
-• **Flight**: The flight's pilot is your linked pilot, or you logged it.
-• **Flight plan**: You submitted it.
-• **Incident**: You reported it.
-• **Mission or training log**: You created it, or your linked pilot is on the roster.
-• **Maintenance record**: You created it.
-• **Calendar event**: You created it.
-• **Pilot profile**: Your linked pilot.
-• **Photo**: You uploaded it.
-• **Document**: You uploaded it, or it is attached to your own pilot record or certification.
-
-A login with no linked pilot owns no pilot profile, and only the flights it logged. Records created before this feature have no recorded creator, so only a role with All can edit them (apart from a roster match on logs). Own edit on flights cannot reassign a flight to a different pilot.
-
-Link every pilot login to its pilot record (Settings, Users, Edit, Link to Pilot). Own depends on that link, so an unlinked login gets refused on the flights and profile that are really its own, and its edit buttons disappear. User Management shows a "No linked pilot" badge on any pilot login without a link.
-
-Bulk flight actions follow the same settings as single ones. Selecting flights and marking them reviewed needs the review permission. Bulk delete also needs Delete at All, and bulk reassign pilot and bulk set purpose also need Edit at All.
-
-Default settings:
-
-• **View**: Supervisor, Pilot and Viewer can all view every feature. Turning a view off hides that feature's pages, lists, search results, exports, report sections and navigation entry, and switches off the settings that depend on it.
-• **Create**: Supervisor and Pilot can create flights, flight plans, incidents, logs, maintenance records and calendar events. Viewer cannot.
-• **Edit**: Supervisor All, Pilot Own, Viewer None, for flights, flight plans, incidents, logs, maintenance records, calendar events, pilot profiles, documents and photos.
-• **Delete flights**: Supervisor All, Pilot None.
-• **Supervisor only**: Review and bulk actions on flights, approving and denying flight plans, resolving and deleting incidents, maintenance schedules, fleet management, deleting checkouts, creating, deleting or merging pilots, certifications, checklist templates, document restore and legal hold, folders, alerts, operating authority, and sending the email digest to another address.
-• **Pilot and Supervisor**: Completing maintenance schedules, updating vehicle location, checking equipment out and in, completing checklists, viewing pilot email and phone, and generating reports.
-• **Nobody but admin**: Vehicle registrations management and the audit log.
-
-Admin only, never delegable: user management, the permission grid, settings and integrations, backup and restore, API tokens, bulk imports, flight purposes, and permanent purge. Your own password, theme, profile and notification preferences stay available to every signed-in user.
-
-Always enforced, whatever the grid says: nobody approves or denies a flight plan they submitted; a legal hold blocks edits, delete and purge; the last active admin cannot be demoted, deactivated or deleted; and a viewer can never hold a change permission. The grid greys out those cells, the server refuses to save them, and any stored value is ignored (including one from a restored backup).
-
-Reviewed flights and currency: a flight logged by hand always starts as Needs Review. When a user without the review permission changes a reviewed flight, it returns to the review queue; saving unchanged values does not count as a change. Only reviewed flights count toward pilot currency, so a flight waiting for review does not count until a supervisor reviews it.`
-      },
-      {
-        id: 'dates-times-and-sign-in',
-        title: 'Dates, Times and Sign-in',
-        summary: `Times are shown in the unit's time zone, set in Settings → General. A flight is dated by the local day it took off, so an evening flight stays on that day even though it is already the next day in UTC. CSV exports use the same local times, and an export's date range covers whole local days. The flight export also keeps the UTC takeoff and landing times beside the local ones.
-
-You stay signed in for up to 12 hours. After 30 minutes with no activity in any open tab, the app signs you out of this browser and asks you to sign in again. Signing out from the menu signs you out on every device.`
+        id: 'restoring-a-backup-at-setup',
+        title: 'Restoring a backup on a new install',
+        summary: 'If you are moving to a new install and have a backup file from the old one, restore it from the setup screen instead of starting empty.',
+        steps: [
+          'On the setup screen, choose **Restore from a backup instead?**.',
+          'Choose the backup file (a ZIP file) from the old install.',
+          'Enter the **Install Token** (see First-time setup for where to find it).',
+          'Choose **Restore Backup**. When it finishes, you are sent to the sign-in screen.',
+        ],
+        notes: [
+          'A backup holds everything, including passwords and keys. Store backup files as carefully as you store passwords.',
+          'If the restore would remove or change items under legal hold, the screen lists them. You must type RESTORE HELD ITEMS before it continues.',
+          'If the backup was made before passwords were included, the setup screen shows **Reactivate Administrator** instead. Enter the username of an administrator from the restored data, a new password and the install token, then choose **Reactivate & Sign In**. After you sign in, reset the other users\' passwords and re-enter any saved keys and email passwords.',
+        ],
       },
       {
         id: 'navigating-the-app',
-        title: 'Navigating the App',
-        summary: 'Use the sidebar on the left to navigate between sections. The sidebar can be collapsed using the arrow at the bottom. On phones and tablets, tap the menu icon in the top-left corner to open the sidebar. Admins can reorder and hide sidebar items from Settings.'
+        title: 'Finding your way around',
+        summary: 'The sidebar on the left lists every page you are allowed to see. The title of the page you are on shows in the bar at the top.',
+        steps: [
+          'Choose a name in the sidebar to open that page. The sidebar groups pages under Overview, Flight Ops, Fleet & Crew, Compliance, Media & Reports and System.',
+          'On a computer, use the arrow at the bottom of the sidebar to shrink it to icons or open it again.',
+          'On a phone or tablet, tap the menu icon at the top left to open the sidebar, then tap a page. It closes by itself.',
+          'Choose **User Manual** just above your name to open this manual.',
+          'To sign out, choose the **Log out** icon next to your name at the bottom of the sidebar.',
+        ],
+        notes: [
+          'You only see pages your role can view. If a page you expect is missing, ask an admin to check your role.',
+          'A red number beside **Flights** counts flights that still need review. An amber number beside **Flight Plans** counts plans waiting for approval.',
+          'Admins can reorder or hide sidebar items, and turn the group headings on or off, in **Settings**, on the **General** tab, in the **Sidebar Configuration** card. Choose **Save Sidebar Config** to keep the changes.',
+        ],
+      },
+      {
+        id: 'command-palette',
+        title: 'Search and jump (Ctrl+K)',
+        summary: 'Use the search box to jump to a page, or to find a pilot, vehicle or flight without browsing for it.',
+        steps: [
+          'Press Ctrl+K (Cmd+K on a Mac) anywhere in the app, or choose the search box at the top of the page.',
+          'Type part of a page name, such as Flights or Settings, and press Enter to go there.',
+          'Or type at least two letters of a name or number to search pilots, vehicles and flights. Each result has a tag that shows what kind of record it is.',
+          'Use the up and down arrow keys to move through the results, then press Enter to open one.',
+          'Press Escape to close the box.',
+        ],
+        notes: [
+          'Use the **All**, **Pilots**, **Vehicles** and **Flights** buttons under the box to show one kind of record. Page matches always show.',
+          'When the box is empty, your last few destinations appear under **Recent**.',
+          'The search box and the theme button are in the top bar, which shows on a computer or a wide tablet. On a phone, use the sidebar to move around.',
+          'Search only shows what your role can view.',
+        ],
       },
       {
         id: 'themes',
         title: 'Themes',
-        summary: 'Pick a color theme from the palette icon in the top bar. Fourteen themes are available (including Dark, Light, Glass, High Contrast, Night Vision, and the default Sandstone). Your choice is saved to your profile and follows you across devices.'
+        summary: 'A theme changes the colors of the whole app. Pick one that is easy on your eyes.',
+        steps: [
+          'Choose the palette button at the right of the top bar. It shows the name of your current theme.',
+          'Choose a theme from the list. The app changes right away.',
+        ],
+        notes: [
+          'There are 14 themes, including Dark, Light, Glass, High Contrast, Night Vision and Sandstone. Sandstone is what a new install starts with.',
+          'Your choice is saved to your profile, so it follows you to other devices.',
+          'The top bar, and so the theme button, shows on a computer or a wide tablet.',
+        ],
       },
       {
-        id: 'command-palette-ctrl-cmd-k',
-        title: 'Command Palette (Ctrl/Cmd+K)',
-        summary: `Press Ctrl+K (Cmd+K on Mac) anywhere in the app to open a global search overlay. You can also open it from the search button in the top bar. Press Escape to close.
-
-• **Jump to a page**: Type part of a page name (Flights, Pilots, Settings, etc.) and press Enter to navigate there.
-• **Search records**: Type at least two characters to search across pilots, vehicles, and flights. Results show a colored type tag for each match.
-• **Type-filter chips**: When results are shown, use the All / Pilots / Vehicles / Flights chips to narrow results to one record type (page matches are always shown).
-• **Recent jumps**: When the box is empty, your last few destinations appear under "Recent" for quick re-navigation.
-• **Keyboard navigation**: Use the up/down arrows to move through results and Enter to open the highlighted item.`
+        id: 'links-between-records',
+        title: 'Links between records',
+        summary: 'Names and numbers in the app are links. Choose one to jump straight to that item.',
+        notes: [
+          'Pilot names, vehicle names, battery serials, sensors, attachments and flight numbers open that item\'s detail page.',
+          'A purpose (the reason for a flight, such as Training) opens the Flights page filtered to that purpose.',
+          'Use your browser Back button to return to where you were.',
+          'You can only open an item if your role can view that part of the app.',
+        ],
       },
       {
-        id: 'cross-reference-links',
-        title: 'Cross-Reference Links',
-        summary: 'Throughout the app, pilot names, vehicle names, battery serials, sensor packages, attachments, purpose codes, and flight IDs are clickable orange links. Click any of these to navigate directly to that item\'s detail page. Purpose codes link to a filtered flights view showing all flights with that purpose.'
+        id: 'dates-and-times',
+        title: 'Dates and times',
+        summary: 'Every date and time in the app is shown in your unit\'s time zone, so everyone sees the same thing.',
+        notes: [
+          'An admin sets the time zone in **Settings**, on the **General** tab, in the **Organization** card (**Time Zone**).',
+          'A flight belongs to the local day it took off. An evening flight stays on that day, even if it is already the next day in UTC (the world time standard).',
+          'CSV files (spreadsheet files) that you export use the same local times. A date range on an export covers whole local days.',
+          'The flight export also includes the UTC takeoff and landing times next to the local ones.',
+        ],
+      },
+    ]
+  },
+  {
+    id: 'account-access',
+    title: 'Signing In and Your Account',
+    topics: [
+      {
+        id: 'signing-in',
+        title: 'Signing in',
+        summary: 'Sign in with the username and password an admin gave you. Your account is created by an admin, not by you.',
+        steps: [
+          'Open the app address in your browser.',
+          'Enter your **Username** and **Password**. Both are case-sensitive.',
+          'Choose **Sign In**.',
+        ],
+        notes: [
+          'If you do not have an account, ask an admin to add you.',
+          'An account that an admin has disabled cannot sign in. The screen says "Invalid credentials", the same as for a wrong password.',
+          'A session lasts up to 12 hours, then you sign in again.',
+          'If you try more than five times in one minute from the same device, sign-in pauses for a short while. Wait a minute and try again.',
+        ],
+      },
+      {
+        id: 'login-lock',
+        title: 'Locked out after wrong passwords',
+        summary: 'If you enter the wrong password too many times, the app locks sign-in for a while. This protects accounts from people guessing passwords.',
+        notes: [
+          'Ten wrong passwords for one account within 15 minutes, from the same device or network address, lock that address out of that account. Other addresses can still sign in.',
+          'Fifty wrong passwords for one account within 15 minutes, counted across all addresses, lock the account for everyone.',
+          'While locked, the screen says "Too many failed attempts for this account. Try again later." Even the right password is refused until the lock ends.',
+          'The lock ends by itself 15 minutes after the failed tries. There is nothing to reset and no admin step.',
+          'A successful sign-in clears the count for the address you signed in from.',
+          'Someone who only knows your username cannot lock you out from your own address.',
+        ],
+      },
+      {
+        id: 'sessions-and-idle-lock',
+        title: 'Staying signed in, signing out and the idle lock',
+        summary: 'The app signs you out when you stop using it, so a screen left open cannot be used by someone else.',
+        notes: [
+          'A session lasts up to 12 hours.',
+          'The idle lock signs you out of that browser when you have not used it for a while. The default is 30 minutes. Activity in any open tab keeps every tab signed in.',
+          'When the idle lock signs you out, the sign-in screen says so. Your other devices stay signed in.',
+          'Admins can change the wait to anything from 30 minutes to 12 hours in **Settings**, on the **General** tab, in the **Organization** card (**Idle lock**). It applies to every role, and a browser picks it up the next time it is refreshed.',
+          'Choosing **Log out** signs you out on every device you use, not only this one.',
+          'Changing a password, changing a role or disabling an account also signs that person out everywhere.',
+        ],
+      },
+      {
+        id: 'profile-and-password',
+        title: 'Your profile and password',
+        summary: 'Keep your email up to date, and change your password when you need to.',
+        steps: [
+          'Open **Settings**. On the **General** tab, find the **My Profile** card.',
+          'Change your **Email** and choose **Save Profile**.',
+          'To change a password, an admin opens **Settings**, then the **Users** tab, then the **Change Password** card. Enter **Current Password**, **New Password** and **Confirm New Password**, and choose **Change Password**.',
+        ],
+        notes: [
+          'A password needs at least 12 characters, one capital letter and one number.',
+          'Only an admin can change a display name. Everyone can change their own email.',
+          'If you are not an admin and forget your password, ask an admin. In **Settings**, on the **Users** tab, they choose the key icon (**Reset password**) beside your name, type a new password and choose **Set**.',
+          'Changing or resetting a password signs that person out on every other device.',
+        ],
+      },
+      {
+        id: 'user-roles',
+        title: 'Roles',
+        summary: 'Every account has one of four roles: Admin, Supervisor, Pilot or Viewer. The role decides what you can change. These are the starting settings, and an admin can change them.',
+        notes: [
+          '**Viewer**: Sees every part of the app and can export CSV files. Never changes anything. Pilot email addresses and phone numbers are hidden.',
+          '**Pilot**: Sees every part of the app and can add records, such as flights, flight plans, incidents and logs. Can edit only their own records. Cannot delete flights. Can complete checklists and maintenance tasks, check equipment in and out, update a vehicle\'s location and generate reports.',
+          '**Supervisor**: Can edit most records, review flights, approve and deny flight plans, manage pilots, fleet, certifications and checklists, and generate reports.',
+          '**Admin**: Everything. Only admins manage users, the permission settings, system settings, integrations, backups and API tokens.',
+          'Only admins see the audit log and manage vehicle registrations by default.',
+          'Nobody can approve or deny a flight plan they submitted themselves, whatever their role.',
+        ],
+      },
+      {
+        id: 'role-permissions',
+        title: 'Changing what each role can do',
+        summary: 'Admins decide what Supervisors, Pilots and Viewers can do, one setting at a time. Admins only.',
+        steps: [
+          'Open **Settings**, then the **Users** tab, and find the **Role Permissions** card.',
+          'Find the setting you want. Settings are grouped by feature, such as Flights or Pilots, with a column for each role.',
+          'Change a cell. It is Yes or No, or None, Own or All for records that have an owner.',
+          'Choose **Save changes** at the bottom to apply, or **Discard** to drop your edits.',
+          'To go back to the starting settings, choose **Reset to defaults**.',
+        ],
+        notes: [
+          'On a phone, the table becomes one card per feature, with a **Role** menu at the top.',
+          'Changes apply from each person\'s next action. Nobody is signed out.',
+          'Turning a feature\'s View off hides its pages, lists, search results, exports and sidebar entry, and also switches off the settings that depend on it.',
+          'Some cells are locked and greyed out. Admins are always on. Viewers can never change anything. A change setting stays off while its View is off.',
+          'Nobody can approve or deny their own flight plan. A legal hold blocks edits and deletes. The last active admin cannot be demoted, disabled or deleted.',
+          'These stay admin only and cannot be handed out: managing users, this permission screen, settings and integrations, backup and restore, API tokens, bulk imports, flight purposes and permanent purge.',
+          'Your own password, theme and profile are always yours to use.',
+        ],
+      },
+      {
+        id: 'default-permissions',
+        title: 'What each role can do by default',
+        summary: 'A quick reference for the starting settings. Check the **Role Permissions** card to see what your unit uses now.',
+        notes: [
+          '**View**: Supervisor, Pilot and Viewer can view every feature. Only the audit log is closed to all of them.',
+          '**Create**: Supervisors and Pilots can add flights, flight plans, incidents, logs, maintenance records and calendar events. Viewers cannot.',
+          '**Edit**: Supervisors can edit all of these records, and also pilot profiles, documents and photos. Pilots can edit only their own. Viewers cannot.',
+          '**Delete flights**: Supervisors only.',
+          '**Supervisors and admins only**: reviewing flights and bulk actions, approving or denying flight plans, resolving and deleting incidents, maintenance schedules, fleet management, deleting checkouts, adding, deleting or merging pilots, certifications, checklist templates, restoring documents and legal hold, folders, alerts, operating authority, and sending the email digest to another address.',
+          '**Pilots and supervisors**: completing maintenance tasks, updating a vehicle\'s location, checking equipment in and out, completing checklists, seeing pilot email and phone, and generating reports.',
+          '**Admins only**: vehicle registrations management and the audit log.',
+          'A flight added by hand always starts as **Needs Review**. If someone without review rights edits a reviewed flight, it goes back to the review queue. Only reviewed flights count toward pilot currency.',
+        ],
+      },
+      {
+        id: 'own-records',
+        title: 'What "Own" means',
+        summary: 'Where a setting says Own, you can change only records that belong to you. This is how Pilots can fix their own work without touching anyone else\'s.',
+        notes: [
+          '**Flight**: you are the flight\'s pilot, or you logged it.',
+          '**Flight plan**: you submitted it.',
+          '**Incident**: you reported it.',
+          '**Mission or training log**: you created it, or you are on its roster.',
+          '**Maintenance record**: you created it.',
+          '**Calendar event**: you created it.',
+          '**Pilot profile**: it is the pilot your login is linked to.',
+          '**Photo**: you uploaded it.',
+          '**Document**: you uploaded it, or it is on your own pilot record or certification.',
+          'Records made before this rule existed have no recorded creator. Only a role with All can edit them.',
+          'A pilot with Own on flights cannot hand a flight to a different pilot.',
+          'Own depends on linking each login to its pilot. An admin does this in **Settings**, on the **Users** tab, by choosing the edit icon (**Edit user**) and picking **Link to Pilot**. A pilot login with no link shows a **No linked pilot** badge and cannot edit its own flights or profile.',
+        ],
       },
     ]
   },
