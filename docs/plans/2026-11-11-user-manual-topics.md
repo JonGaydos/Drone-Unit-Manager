@@ -185,12 +185,12 @@ Each of these tasks has the same steps; only the area changes.
 ### Task 11: Remaining pictures, the old Markdown manual, and final checks
 
 **Files:**
-- Modify: `docs/USER_MANUAL.md` (replace with a pointer)
+- Delete: `docs/USER_MANUAL.md`
 - Modify: any file that links to `docs/USER_MANUAL.md` (none found on 2026-11-11 outside specs and plans; recheck)
 - Modify: `frontend/src/pages/manual/content.js` and `frontend/public/manual/` for staging pictures, if any
 
-- [ ] **Step 1: Replace `docs/USER_MANUAL.md`** with: a title, one line saying the manual is in the app under **User Manual** in the sidebar (address `/manual`), and that it has a Topics view and a One page view.
+- [ ] **Step 1: Delete `docs/USER_MANUAL.md`** (`git rm`). Grep the repo (excluding `node_modules`, `docs/specs`, `docs/plans`) for `USER_MANUAL`; point any hit to the in-app manual (**User Manual** in the sidebar, address `/manual`).
 - [ ] **Step 2: Staging pictures (only if Tasks 5 to 10 listed any).** Ask the owner before changing staging data. With approval: in the in-app browser with the owner signed in on 192.168.0.100:3015, rename the people, vehicles and places shown on those screens to fake values through the app, take the pictures, check them by eye, save them to `public/manual/`, and set the topics' `image`. Record what was changed on staging so it can be re-cloned from production.
 - [ ] **Step 3: Run the full frontend checks:** `npx vitest run`, `npm run lint`, `npm run build`, `npx playwright test`. Expected: all pass (the known local-only Node 24 failure `DocumentStoragePage > uploads a general document with no folder selected` is not a regression).
 - [ ] **Step 4: Run** `backend/venv/Scripts/python.exe -m pytest -q` in `backend`. Expected: PASS.
-- [ ] **Step 5: Commit** `Point the Markdown manual to the in-app manual`, push, and update PR 99's title to "Per-address login lock and a rewritten user manual" and its Summary and Test Plan to cover both.
+- [ ] **Step 5: Commit** `Remove the Markdown manual; the manual lives in the app`, push, and update PR 99's title to "Per-address login lock and a rewritten user manual" and its Summary and Test Plan to cover both.

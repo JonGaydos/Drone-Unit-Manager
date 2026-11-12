@@ -46,7 +46,7 @@ The work has failed, even if the views work, if any of these is true:
 - Mostly used for looking up a specific thing.
 - Read through the entire app so everything is explained simply.
 - Pictures in topics, and never real data in them. Staging data may be changed to fake names and locations to get the pictures (2026-11-11).
-- One manual only: the in-app manual. `docs/USER_MANUAL.md` is replaced by a short pointer to it (2026-11-11).
+- One manual only: the in-app manual. Its text lives in one content file in the frontend, so a manual update is an edit to that file. `docs/USER_MANUAL.md` is deleted; the manual is not needed on GitHub (2026-11-11).
 - One merge at the end: the manual work is built on the PR 99 branch (`fix/login-lockout-per-ip`) and merges with it once the manual is finished (2026-11-11).
 
 ## Builder's calls made in this design
@@ -100,5 +100,5 @@ The work has failed, even if the views work, if any of these is true:
 
 ## Other documents
 
-- `docs/USER_MANUAL.md` becomes a few lines: the manual lives in the app under **User Manual** (sidebar), with the page address `/manual`.
-- `README.md` and other docs that link to `docs/USER_MANUAL.md` point to the in-app manual instead.
+- `docs/USER_MANUAL.md` is deleted.
+- Any doc that links to it points to the in-app manual (**User Manual** in the sidebar, address `/manual`) instead.
