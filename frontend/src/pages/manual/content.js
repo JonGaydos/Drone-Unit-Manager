@@ -183,16 +183,17 @@ export const sections = [
       {
         id: 'profile-and-password',
         title: 'Your profile and password',
-        summary: 'Keep your email up to date. Passwords are changed by an admin.',
+        summary: 'Keep your email up to date and change your own password. Everyone can do both.',
         steps: [
           'Open **Settings**. On the **General** tab, find the **My Profile** card.',
           'Change your **Email** and choose **Save Profile**.',
+          'To change your password, find the **Change Password** card just below **My Profile**. Enter **Current Password**, **New Password** and **Confirm New Password**, then choose **Change Password**.',
         ],
         notes: [
           'A password needs at least 12 characters, one capital letter and one number.',
-          'Only admins can change a password in the app, because the **Change Password** card is on the **Users** tab of **Settings**, which only admins see. An admin opens it, enters **Current Password**, **New Password** and **Confirm New Password**, and chooses **Change Password**.',
+          'You need your current password to set a new one. After the change, the app keeps you signed in on this device.',
           'Only an admin can change a display name. Everyone can change their own email.',
-          'If you are not an admin and want a new password, or forget yours, ask an admin. In **Settings**, on the **Users** tab, they choose the key icon (**Reset password**) beside your name, type a new password and choose **Set**.',
+          'If you forget your password, ask an admin. In **Settings**, on the **Users** tab, they choose the key icon (**Reset password**) beside your name, type a new password and choose **Set**.',
           'Changing or resetting a password signs that person out on every other device.',
         ],
       },
@@ -227,7 +228,7 @@ export const sections = [
           'Some cells are locked and greyed out. Admins are always on. Viewers can never change anything. A change setting stays off while its View is off.',
           'Nobody can approve or deny their own flight plan. A legal hold blocks edits and deletes. The last active admin cannot be demoted, disabled or deleted.',
           'These stay admin only and cannot be handed out: managing users, this permission screen, settings and integrations, backup and restore, API tokens, bulk imports, flight purposes and permanent purge.',
-          'Your own theme and email are always yours to change. A password change goes through an admin.',
+          'Your own theme and email are always yours to change. You can also change your own password under **Settings**.',
         ],
       },
       {
@@ -1419,7 +1420,7 @@ export const sections = [
           caption: 'The Fleet Health page: summary cards, vehicle utilization and battery health.',
         },
         steps: [
-          'Press Ctrl+K (Cmd+K on a Mac), type Fleet Health and press Enter. The page has no sidebar link.',
+          'Choose **Fleet Health** in the sidebar, under **Fleet & Crew**, just below **Fleet**. You can also press Ctrl+K (Cmd+K on a Mac), type Fleet Health and press Enter.',
           'Read the five cards: **Vehicles in Service**, **Batteries in Service**, **Avg Battery Health**, **Overdue Maintenance** and **Total Flight Hours**.',
           'In **Vehicle Utilization**, click a heading (**Vehicle**, **Flights**, **Hours**, **Last Flight** or **Overdue**) to sort. Click a vehicle to open it.',
           'In **Battery Health**, each bar is one battery. Green means above 80 percent (**Good**), amber 50 to 80 (**Fair**) and red under 50 (**Poor**).',
@@ -1496,7 +1497,8 @@ export const sections = [
         ],
         notes: [
           'Supervisors and admins only.',
-          'Use **Assign Cert** for a pilot who has no record yet. Clicking a grey **not started** cell opens the **Edit Certification** dialog with that pilot and certification already filled in, and **Update** will also create the record. **Assign Cert** is the clearer route.',
+          'You can also click a grey **not started** cell on the matrix. It opens this same dialog with that pilot and certification already filled in.',
+          'A cell with no record opens nothing for people who cannot manage certifications.',
           'A pilot can hold one current record per certification. A second one is refused with a message to edit or renew the existing one.',
           'The expiry date cannot be before the issue date.',
           'To attach the certificate scan, open the saved certification (see Editing a certification) and use the document box at the bottom.',
@@ -2201,8 +2203,8 @@ export const sections = [
         summary: 'Settings holds the choices that apply to the whole unit. Everyone can open it to manage their own profile. Admins see much more.',
         steps: [
           'Choose **Settings** in the sidebar.',
-          'The **General** tab holds **My Profile** and **Email Digest** for everyone. For admins it also holds **Organization**, **Certification Status Labels**, **Weather Thresholds**, **Mission / Flight Purposes**, **Drone Locations**, **Default Location**, **Backup & Restore**, **Automated Backups**, **Currency Rules** and **Sidebar Configuration**.',
-          'The **Users** tab is for admins. It holds **Change Password**, **User Management** and **Role Permissions**.',
+          'The **General** tab holds **My Profile**, **Change Password** and **Email Digest** for everyone. For admins it also holds **Organization**, **Certification Status Labels**, **Weather Thresholds**, **Mission / Flight Purposes**, **Drone Locations**, **Default Location**, **Backup & Restore**, **Automated Backups**, **Currency Rules** and **Sidebar Configuration**.',
+          'The **Users** tab is for admins. It holds **User Management** and **Role Permissions**.',
           'The **Integrations** tab is for admins. It holds the Skydio connection, email sending and flight log import.',
           'The **API Tokens** tab is for admins. It holds the keys for other programs.',
         ],
