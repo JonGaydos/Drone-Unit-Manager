@@ -3,6 +3,12 @@
 //   route:   page to open
 //   prepare: optional, runs after the page loads (open a dialog, switch a tab)
 //   target:  returns the Locator that is photographed
+//
+// Most pictures open a dialog and fill it; formShot() builds those entries.
+// Its `fields` map has one entry per field, in order. The key says how to fill
+// it: '#id' types into that element, 'pick #id' chooses the option containing
+// the text, 'select #id' chooses the option with that value, and 'label Text'
+// types into the field with that label.
 
 const SETTLE_MS = 450 // dialogs slide in; wait for them to stop moving
 
@@ -21,6 +27,54 @@ const isoDay = (offset) => {
   d.setDate(d.getDate() + offset)
   return d.toISOString().slice(0, 10)
 }
+
+const dialogOf = (page) => page.getByRole('dialog')
+
+// The rounded card that contains `locator`.
+const cardOf = (locator) => locator.locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]')
+
+async function fillFields(dialog, fields) {
+  for (const [key, value] of Object.entries(fields)) {
+    const [how, ...rest] = key.split(' ')
+    const what = rest.join(' ')
+    if (how === 'pick') await pickContaining(dialog.locator(what), value)
+    else if (how === 'select') await dialog.locator(what).selectOption(value)
+    else if (how === 'label') await dialog.getByLabel(what).fill(value)
+    else await dialog.locator(key).fill(value)
+  }
+}
+
+// A picture of a dialog: optionally make the window taller, run `before`
+// (navigate or switch tabs), click the `open` button, fill `fields`, then run
+// `after` for anything a field map cannot express.
+function formShot(file, route, { open, height, before, fields = {}, after }) {
+  return {
+    file,
+    route,
+    prepare: async (page) => {
+      if (height) await page.setViewportSize({ width: 1280, height }) // tall enough to show the whole form
+      if (before) await before(page)
+      if (open) await page.getByRole('button', { name: open, exact: true }).first().click()
+      const dialog = dialogOf(page)
+      await fillFields(dialog, fields)
+      if (after) await after(dialog, page)
+      await page.waitForTimeout(SETTLE_MS)
+    },
+    target: dialogOf,
+  }
+}
+
+// Add one crew row to a mission or training log dialog.
+const addCrew = (role, hours) => async (dialog) => {
+  await dialog.getByRole('button', { name: '+ Add Pilot' }).click()
+  await pickContaining(dialog.locator('select').filter({ hasText: 'Select pilot...' }), 'Avery Brooks')
+  await dialog.locator('select').filter({ hasText: 'Role...' }).selectOption(role)
+  await dialog.getByPlaceholder('Hrs').fill(hours)
+}
+
+// Open the expiring certification of Jordan Ellis from the matrix.
+const openJordanCert = (page) =>
+  page.getByRole('row', { name: /Jordan Ellis/ }).locator('td').filter({ hasText: 'expiring soon' }).first().click()
 
 export const SHOTS = [
   {
@@ -43,100 +97,77 @@ export const SHOTS = [
     },
     target: (page) => page.locator('div.space-y-6').filter({ has: page.getByText('Active filters:') }).last(),
   },
-  {
-    file: 'calendar-adding-events.png',
-    route: '/calendar',
-    prepare: async (page) => {
-      await page.getByRole('button', { name: 'Add event / leave' }).click()
-      await page.getByLabel('Title').fill('Demo team briefing')
-      await page.getByLabel('Start date').fill(isoDay(4))
-      await page.getByLabel('End date (optional)').fill(isoDay(5))
-      await page.getByLabel('Notes (optional)').fill('Demo notes')
-      await page.waitForTimeout(SETTLE_MS)
+  formShot('calendar-adding-events.png', '/calendar', {
+    open: 'Add event / leave',
+    fields: {
+      'label Title': 'Demo team briefing',
+      'label Start date': isoDay(4),
+      'label End date (optional)': isoDay(5),
+      'label Notes (optional)': 'Demo notes',
     },
-    target: (page) => page.getByRole('dialog'),
-  },
-  {
-    file: 'flight-plans-submitting.png',
-    route: '/flight-plans',
-    prepare: async (page) => {
-      await page.setViewportSize({ width: 1280, height: 1100 }) // tall enough to show the whole form
-      await page.getByRole('button', { name: 'Submit Plan' }).click()
-      const dialog = page.getByRole('dialog')
-      await dialog.locator('#title').fill('Demo training flight')
-      await dialog.locator('#planned-date-time').fill(`${isoDay(6)}T14:00`)
-      await pickContaining(dialog.locator('#pilot'), 'Avery Brooks')
-      await pickContaining(dialog.locator('#vehicle'), 'Demo One')
-      await dialog.locator('#location').fill('Training Field A')
-      await dialog.locator('#purpose').fill('Training')
-      await dialog.locator('#max-altitude-ft').fill('200')
-      await dialog.locator('#est-duration-min').fill('30')
-      await page.waitForTimeout(SETTLE_MS)
+  }),
+  formShot('flight-plans-submitting.png', '/flight-plans', {
+    open: 'Submit Plan',
+    height: 1100,
+    fields: {
+      '#title': 'Demo training flight',
+      '#planned-date-time': `${isoDay(6)}T14:00`,
+      'pick #pilot': 'Avery Brooks',
+      'pick #vehicle': 'Demo One',
+      '#location': 'Training Field A',
+      '#purpose': 'Training',
+      '#max-altitude-ft': '200',
+      '#est-duration-min': '30',
     },
-    target: (page) => page.getByRole('dialog'),
-  },
+  }),
   {
     file: 'flight-plans-reviewing.png',
     route: '/flight-plans',
-    target: (page) => page.locator('table').locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]'),
+    target: (page) => cardOf(page.locator('table')),
   },
-  {
-    file: 'checklists-completing.png',
-    route: '/checklists',
-    prepare: async (page) => {
-      await page.setViewportSize({ width: 1280, height: 1000 }) // tall enough to show the whole dialog
-      await page.getByRole('button', { name: 'Complete Checklist' }).click()
-      const dialog = page.getByRole('dialog')
-      await pickContaining(dialog.locator('#template'), 'Demo Pre-Flight Checklist')
-      await pickContaining(dialog.locator('#pilot'), 'Avery Brooks')
-      await pickContaining(dialog.locator('#vehicle'), 'Demo One')
+  formShot('checklists-completing.png', '/checklists', {
+    open: 'Complete Checklist',
+    height: 1000,
+    fields: {
+      'pick #template': 'Demo Pre-Flight Checklist',
+      'pick #pilot': 'Avery Brooks',
+      'pick #vehicle': 'Demo One',
+    },
+    after: async (dialog) => {
       await dialog.getByRole('button', { name: 'Tick Propellers undamaged and tight' }).click()
       await dialog.getByRole('button', { name: 'Tick Battery charged and seated' }).click()
-      await page.waitForTimeout(SETTLE_MS)
     },
-    target: (page) => page.getByRole('dialog'),
-  },
-  {
-    file: 'checklists-templates.png',
-    route: '/checklists',
-    prepare: async (page) => {
-      await page.getByRole('button', { name: 'Create Template' }).click()
-      const dialog = page.getByRole('dialog')
-      await dialog.locator('#name').fill('Demo Landing Checklist')
-      await dialog.locator('#description').fill('Demo checklist for after each flight.')
-      await dialog.getByPlaceholder('Item 1...').fill('Aircraft powered down')
-      await dialog.getByRole('button', { name: 'Add Item' }).click()
-      await dialog.getByPlaceholder('Item 2...').fill('Battery removed')
-      await dialog.getByRole('button', { name: 'Add Item' }).click()
-      await dialog.getByPlaceholder('Item 3...').fill('Propellers inspected')
-      await page.waitForTimeout(SETTLE_MS)
+  }),
+  formShot('checklists-templates.png', '/checklists', {
+    open: 'Create Template',
+    fields: { '#name': 'Demo Landing Checklist', '#description': 'Demo checklist for after each flight.' },
+    after: async (dialog) => {
+      const items = ['Aircraft powered down', 'Battery removed', 'Propellers inspected']
+      for (const [i, text] of items.entries()) {
+        if (i > 0) await dialog.getByRole('button', { name: 'Add Item' }).click()
+        await dialog.getByPlaceholder(`Item ${i + 1}...`).fill(text)
+      }
     },
-    target: (page) => page.getByRole('dialog'),
-  },
+  }),
   {
     file: 'flights-viewing-flights.png',
     route: '/flights',
     target: (page) => page.locator('div.flex.flex-wrap.items-end.gap-3').first(),
   },
-  {
-    file: 'flights-adding-flights-manually.png',
-    route: '/flights',
-    prepare: async (page) => {
-      await page.setViewportSize({ width: 1280, height: 1500 }) // tall enough to show the whole form
-      await page.getByRole('button', { name: 'Add Flight' }).click()
-      const dialog = page.getByRole('dialog')
-      await pickContaining(dialog.locator('#pilot'), 'Avery Brooks')
-      await pickContaining(dialog.locator('#vehicle'), 'Demo One')
-      await dialog.locator('#date').fill(isoDay(-1))
-      await dialog.locator('#duration-seconds').fill('900')
-      await pickContaining(dialog.locator('#purpose'), 'Training')
-      await dialog.locator('#takeoff-address').fill('Training Field A')
-      await dialog.locator('#landing-address').fill('Training Field A')
-      await dialog.locator('#case-number').fill('DEMO-0001')
-      await page.waitForTimeout(SETTLE_MS)
+  formShot('flights-adding-flights-manually.png', '/flights', {
+    open: 'Add Flight',
+    height: 1500,
+    fields: {
+      'pick #pilot': 'Avery Brooks',
+      'pick #vehicle': 'Demo One',
+      '#date': isoDay(-1),
+      '#duration-seconds': '900',
+      'pick #purpose': 'Training',
+      '#takeoff-address': 'Training Field A',
+      '#landing-address': 'Training Field A',
+      '#case-number': 'DEMO-0001',
     },
-    target: (page) => page.getByRole('dialog'),
-  },
+  }),
   {
     file: 'flights-reviewing-flights.png',
     route: '/flights',
@@ -148,47 +179,31 @@ export const SHOTS = [
     },
     target: (page) => page.getByText(/\d+ selected/).locator('xpath=..'),
   },
-  {
-    file: 'missions-adding-missions.png',
-    route: '/missions',
-    prepare: async (page) => {
-      await page.setViewportSize({ width: 1280, height: 1300 }) // tall enough to show the whole form
-      await page.getByRole('button', { name: 'Add Mission' }).click()
-      const dialog = page.getByRole('dialog')
-      await dialog.locator('#title').fill('Demo search support')
-      await dialog.locator('#location').fill('Riverside Park')
-      await dialog.locator('#man-hours').fill('2')
-      await pickContaining(dialog.locator('#drone-used'), 'Demo One')
-      await dialog.locator('#description').fill('Demo description of the mission.')
-      await dialog.getByRole('button', { name: '+ Add Pilot' }).click()
-      await pickContaining(dialog.locator('select').filter({ hasText: 'Select pilot...' }), 'Avery Brooks')
-      await dialog.locator('select').filter({ hasText: 'Role...' }).selectOption('PIC')
-      await dialog.getByPlaceholder('Hrs').fill('2')
-      await page.waitForTimeout(SETTLE_MS)
+  formShot('missions-adding-missions.png', '/missions', {
+    open: 'Add Mission',
+    height: 1300,
+    fields: {
+      '#title': 'Demo search support',
+      '#location': 'Riverside Park',
+      '#man-hours': '2',
+      'pick #drone-used': 'Demo One',
+      '#description': 'Demo description of the mission.',
     },
-    target: (page) => page.getByRole('dialog'),
-  },
-  {
-    file: 'training-adding-training.png',
-    route: '/training',
-    prepare: async (page) => {
-      await page.setViewportSize({ width: 1280, height: 1300 }) // tall enough to show the whole form
-      await page.getByRole('button', { name: 'Add Training' }).click()
-      const dialog = page.getByRole('dialog')
-      await dialog.locator('#title').fill('Demo proficiency session')
-      await dialog.locator('#location').fill('Training Field A')
-      await dialog.locator('#instructor').fill('Demo Instructor')
-      await dialog.locator('#man-hours').fill('3')
-      await pickContaining(dialog.locator('#drone-used'), 'Demo One')
-      await dialog.locator('#objectives').fill('Demo objectives for the session.')
-      await dialog.getByRole('button', { name: '+ Add Pilot' }).click()
-      await pickContaining(dialog.locator('select').filter({ hasText: 'Select pilot...' }), 'Avery Brooks')
-      await dialog.locator('select').filter({ hasText: 'Role...' }).selectOption('Student')
-      await dialog.getByPlaceholder('Hrs').fill('3')
-      await page.waitForTimeout(SETTLE_MS)
+    after: addCrew('PIC', '2'),
+  }),
+  formShot('training-adding-training.png', '/training', {
+    open: 'Add Training',
+    height: 1300,
+    fields: {
+      '#title': 'Demo proficiency session',
+      '#location': 'Training Field A',
+      '#instructor': 'Demo Instructor',
+      '#man-hours': '3',
+      'pick #drone-used': 'Demo One',
+      '#objectives': 'Demo objectives for the session.',
     },
-    target: (page) => page.getByRole('dialog'),
-  },
+    after: addCrew('Student', '3'),
+  }),
   {
     file: 'fleet-fleet-list.png',
     route: '/fleet',
@@ -198,38 +213,25 @@ export const SHOTS = [
     },
     target: (page) => page.locator('div.space-y-4').filter({ has: page.locator('table') }).last(),
   },
-  {
-    file: 'fleet-adding-a-vehicle.png',
-    route: '/fleet',
-    prepare: async (page) => {
-      await page.setViewportSize({ width: 1280, height: 1000 }) // tall enough to show the whole form
-      await page.getByRole('button', { name: 'Add Vehicle' }).click()
-      const dialog = page.getByRole('dialog')
-      await dialog.locator('#field-serial_number').fill('DEMO-0004')
-      await dialog.locator('#field-manufacturer').fill('Skydio')
-      await dialog.locator('#field-model').fill('X10')
-      await dialog.locator('#field-nickname').fill('Demo Four')
-      await dialog.locator('#field-acquired_date').fill(isoDay(-30))
-      await page.waitForTimeout(SETTLE_MS)
+  formShot('fleet-adding-a-vehicle.png', '/fleet', {
+    open: 'Add Vehicle',
+    height: 1000,
+    fields: {
+      '#field-serial_number': 'DEMO-0004',
+      '#field-manufacturer': 'Skydio',
+      '#field-model': 'X10',
+      '#field-nickname': 'Demo Four',
+      '#field-acquired_date': isoDay(-30),
     },
-    target: (page) => page.getByRole('dialog'),
-  },
-  {
-    file: 'fleet-battery-readings.png',
-    route: '/fleet',
-    prepare: async (page) => {
+  }),
+  formShot('fleet-battery-readings.png', '/fleet', {
+    before: async (page) => {
       await page.getByRole('button', { name: 'Batteries' }).click()
       await page.getByRole('link', { name: 'Demo Battery 1', exact: true }).click()
-      await page.getByRole('button', { name: 'Record Reading' }).click()
-      const dialog = page.getByRole('dialog')
-      await dialog.locator('#health-1').fill('91')
-      await dialog.locator('#cycle-count-1').fill('30')
-      await dialog.locator('#voltage').fill('16.4')
-      await dialog.locator('#notes-1').fill('Demo monthly check')
-      await page.waitForTimeout(SETTLE_MS)
     },
-    target: (page) => page.getByRole('dialog'),
-  },
+    open: 'Record Reading',
+    fields: { '#health-1': '91', '#cycle-count-1': '30', '#voltage': '16.4', '#notes-1': 'Demo monthly check' },
+  }),
   {
     file: 'registrations-faa-registrations.png',
     route: '/fleet',
@@ -237,7 +239,7 @@ export const SHOTS = [
       await page.getByRole('link', { name: 'Demo One', exact: true }).click()
       await page.getByRole('heading', { name: 'FAA Registration' }).waitFor()
     },
-    target: (page) => page.getByRole('heading', { name: 'FAA Registration' }).locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]'),
+    target: (page) => cardOf(page.getByRole('heading', { name: 'FAA Registration' })),
   },
   {
     file: 'fleet-health-reading-fleet-health.png',
@@ -248,22 +250,19 @@ export const SHOTS = [
     },
     target: (page) => page.locator('div.space-y-6').filter({ has: page.getByRole('heading', { name: 'Fleet Health', level: 1 }) }).last(),
   },
-  {
-    file: 'checkouts-checking-equipment-out.png',
-    route: '/checkouts',
-    prepare: async (page) => {
-      await page.getByRole('button', { name: 'Check Out', exact: true }).click()
-      const dialog = page.getByRole('dialog')
-      await dialog.locator('#checkout-type').selectOption('battery')
+  formShot('checkouts-checking-equipment-out.png', '/checkouts', {
+    open: 'Check Out',
+    fields: { 'select #checkout-type': 'battery' },
+    after: async (dialog) => {
       await dialog.locator('#checkout-item option', { hasText: 'Demo Battery 3' }).waitFor({ state: 'attached' })
-      await pickContaining(dialog.locator('#checkout-item'), 'Demo Battery 3')
-      await pickContaining(dialog.locator('#checkout-pilot'), 'Riley Chen')
-      await dialog.getByLabel('Expected return (optional)').fill(isoDay(2))
-      await dialog.getByLabel('Notes (optional)').fill('Demo training day')
-      await page.waitForTimeout(SETTLE_MS)
+      await fillFields(dialog, {
+        'pick #checkout-item': 'Demo Battery 3',
+        'pick #checkout-pilot': 'Riley Chen',
+        'label Expected return (optional)': isoDay(2),
+        'label Notes (optional)': 'Demo training day',
+      })
     },
-    target: (page) => page.getByRole('dialog'),
-  },
+  }),
   {
     file: 'checkouts-active-and-returned-records.png',
     route: '/checkouts',
@@ -280,7 +279,7 @@ export const SHOTS = [
       await page.getByRole('link', { name: /Avery Brooks/ }).click()
       await page.getByRole('heading', { name: 'Avery Brooks' }).waitFor()
     },
-    target: (page) => page.getByRole('heading', { name: 'Avery Brooks' }).locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]'),
+    target: (page) => cardOf(page.getByRole('heading', { name: 'Avery Brooks' })),
   },
   {
     file: 'pilots-needs-attention.png',
@@ -290,23 +289,18 @@ export const SHOTS = [
       await page.getByRole('heading', { name: 'Needs Attention' }).waitFor()
       await page.getByText('Certification expiring').first().waitFor()
     },
-    target: (page) => page.getByRole('heading', { name: 'Needs Attention' }).locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]'),
+    target: (page) => cardOf(page.getByRole('heading', { name: 'Needs Attention' })),
   },
-  {
-    file: 'pilots-pilot-currency.png',
-    route: '/settings',
-    prepare: async (page) => {
-      await page.getByRole('button', { name: 'New Rule' }).click()
-      const dialog = page.getByRole('dialog')
-      await dialog.locator('#rule-name').fill('Demo quarterly currency')
-      await dialog.locator('#rule-desc').fill('Demo rule for the manual')
-      await dialog.locator('#rule-hours').fill('5')
-      await dialog.locator('#rule-days').fill('90')
-      await dialog.locator('#rule-flights').fill('3')
-      await page.waitForTimeout(SETTLE_MS)
+  formShot('pilots-pilot-currency.png', '/settings', {
+    open: 'New Rule',
+    fields: {
+      '#rule-name': 'Demo quarterly currency',
+      '#rule-desc': 'Demo rule for the manual',
+      '#rule-hours': '5',
+      '#rule-days': '90',
+      '#rule-flights': '3',
     },
-    target: (page) => page.getByRole('dialog'),
-  },
+  }),
   {
     file: 'certifications-certification-matrix.png',
     route: '/certifications',
@@ -314,32 +308,20 @@ export const SHOTS = [
       await page.getByLabel('Hide empty').check()
       await page.getByRole('row', { name: /Avery Brooks/ }).waitFor()
     },
-    target: (page) => page.locator('table').locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]'),
+    target: (page) => cardOf(page.locator('table')),
   },
-  {
-    file: 'certifications-editing-a-certification.png',
-    route: '/certifications',
-    prepare: async (page) => {
-      await page.setViewportSize({ width: 1280, height: 1000 })
-      await page.getByRole('row', { name: /Jordan Ellis/ }).locator('td').filter({ hasText: 'expiring soon' }).first().click()
-      const dialog = page.getByRole('dialog')
-      await dialog.getByLabel('Notes').fill('Demo note: certificate copy filed')
-      await page.waitForTimeout(SETTLE_MS)
-    },
-    target: (page) => page.getByRole('dialog'),
-  },
-  {
-    file: 'certifications-renewing-a-certification.png',
-    route: '/certifications',
-    prepare: async (page) => {
-      await page.getByRole('row', { name: /Jordan Ellis/ }).locator('td').filter({ hasText: 'expiring soon' }).first().click()
-      const dialog = page.getByRole('dialog')
+  formShot('certifications-editing-a-certification.png', '/certifications', {
+    height: 1000,
+    before: openJordanCert,
+    fields: { 'label Notes': 'Demo note: certificate copy filed' },
+  }),
+  formShot('certifications-renewing-a-certification.png', '/certifications', {
+    before: openJordanCert,
+    after: async (dialog) => {
       await dialog.getByRole('button', { name: 'Renew', exact: true }).click()
       await dialog.getByLabel('New Issue Date').fill(isoDay(0))
-      await page.waitForTimeout(SETTLE_MS)
     },
-    target: (page) => page.getByRole('dialog'),
-  },
+  }),
   {
     file: 'compliance-compliance-score.png',
     route: '/compliance',
@@ -349,75 +331,55 @@ export const SHOTS = [
     },
     target: (page) => page.locator('div.space-y-6').filter({ has: page.getByRole('heading', { name: 'Compliance Dashboard' }) }).last().locator('xpath=./div[2]'),
   },
-  {
-    file: 'operating-authority-operating-authority.png',
-    route: '/operating-authority',
-    prepare: async (page) => {
-      await page.getByRole('button', { name: 'Add Authority' }).click()
-      const dialog = page.getByRole('dialog')
-      await dialog.getByLabel('Title').fill('Demo blanket public safety COA')
-      await dialog.getByLabel('COA / waiver number').fill('DEMO-COA-0001')
-      await dialog.getByLabel('Issue date').fill(isoDay(-200))
-      await dialog.getByLabel('Expiry date').fill(isoDay(165))
-      await dialog.getByLabel('Notes').fill('Demo notes: altitude ceiling 400 ft')
-      await page.waitForTimeout(SETTLE_MS)
+  formShot('operating-authority-operating-authority.png', '/operating-authority', {
+    open: 'Add Authority',
+    fields: {
+      'label Title': 'Demo blanket public safety COA',
+      'label COA / waiver number': 'DEMO-COA-0001',
+      'label Issue date': isoDay(-200),
+      'label Expiry date': isoDay(165),
+      'label Notes': 'Demo notes: altitude ceiling 400 ft',
     },
-    target: (page) => page.getByRole('dialog'),
-  },
-  {
-    file: 'incidents-incident-reporting.png',
-    route: '/incidents',
-    prepare: async (page) => {
-      await page.setViewportSize({ width: 1280, height: 1300 })
-      await page.getByRole('button', { name: 'New Report' }).click()
-      const dialog = page.getByRole('dialog')
-      await dialog.locator('#severity').selectOption('minor')
-      await dialog.locator('#title').fill('Demo rough landing')
-      await dialog.locator('#category').selectOption('near_miss')
-      await dialog.locator('#location').fill('Training Field A')
-      await dialog.locator('#description').fill('Demo description: the aircraft landed harder than planned.')
-      await pickContaining(dialog.locator('#pilot'), 'Avery Brooks')
-      await pickContaining(dialog.locator('#vehicle'), 'Demo One')
-      await dialog.locator('#damage-description').fill('None')
-      await page.waitForTimeout(SETTLE_MS)
+  }),
+  formShot('incidents-incident-reporting.png', '/incidents', {
+    open: 'New Report',
+    height: 1300,
+    fields: {
+      'select #severity': 'minor',
+      '#title': 'Demo rough landing',
+      'select #category': 'near_miss',
+      '#location': 'Training Field A',
+      '#description': 'Demo description: the aircraft landed harder than planned.',
+      'pick #pilot': 'Avery Brooks',
+      'pick #vehicle': 'Demo One',
+      '#damage-description': 'None',
     },
-    target: (page) => page.getByRole('dialog'),
-  },
-  {
-    file: 'maintenance-adding-a-maintenance-record.png',
-    route: '/maintenance',
-    prepare: async (page) => {
-      await page.setViewportSize({ width: 1280, height: 1000 })
-      await page.getByRole('button', { name: 'Add Maintenance' }).click()
-      const dialog = page.getByRole('dialog')
-      await pickContaining(dialog.locator('#entity'), 'Demo One')
-      await dialog.locator('#maintenance-type').selectOption('inspection')
-      await dialog.locator('#description').fill('Demo propeller and motor inspection')
-      await pickContaining(dialog.locator('#performed-by'), 'Avery Brooks')
-      await dialog.locator('#performed-date').fill(isoDay(0))
-      await dialog.locator('#cost').fill('25')
-      await dialog.locator('#next-due-date').fill(isoDay(90))
-      await dialog.locator('#notes').fill('Demo notes: no damage found')
-      await page.waitForTimeout(SETTLE_MS)
+  }),
+  formShot('maintenance-adding-a-maintenance-record.png', '/maintenance', {
+    open: 'Add Maintenance',
+    height: 1000,
+    fields: {
+      'pick #entity': 'Demo One',
+      'select #maintenance-type': 'inspection',
+      '#description': 'Demo propeller and motor inspection',
+      'pick #performed-by': 'Avery Brooks',
+      '#performed-date': isoDay(0),
+      '#cost': '25',
+      '#next-due-date': isoDay(90),
+      '#notes': 'Demo notes: no damage found',
     },
-    target: (page) => page.getByRole('dialog'),
-  },
-  {
-    file: 'maintenance-schedules-and-tasks.png',
-    route: '/maintenance',
-    prepare: async (page) => {
-      await page.setViewportSize({ width: 1280, height: 1000 })
-      await page.getByRole('button', { name: 'Add Schedule / Task' }).click()
-      const dialog = page.getByRole('dialog')
-      await dialog.locator('#name').fill('Demo monthly airframe check')
-      await pickContaining(dialog.locator('#entity-1'), 'Demo One')
-      await dialog.locator('#frequency').selectOption('monthly')
-      await dialog.locator('#next-due').fill(isoDay(30))
-      await dialog.locator('#description-1').fill('Demo description: check arms, props and landing gear.')
-      await page.waitForTimeout(SETTLE_MS)
+  }),
+  formShot('maintenance-schedules-and-tasks.png', '/maintenance', {
+    open: 'Add Schedule / Task',
+    height: 1000,
+    fields: {
+      '#name': 'Demo monthly airframe check',
+      'pick #entity-1': 'Demo One',
+      'select #frequency': 'monthly',
+      '#next-due': isoDay(30),
+      '#description-1': 'Demo description: check arms, props and landing gear.',
     },
-    target: (page) => page.getByRole('dialog'),
-  },
+  }),
   {
     file: 'documents-folders-and-finding-documents.png',
     route: '/documents',
@@ -425,22 +387,13 @@ export const SHOTS = [
       await page.getByRole('treeitem', { name: /Demo Procedures/ }).click()
       await page.waitForTimeout(SETTLE_MS)
     },
-    target: (page) => page.getByRole('tree', { name: 'Document folders' }).locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]'),
+    target: (page) => cardOf(page.getByRole('tree', { name: 'Document folders' })),
   },
-  {
-    file: 'media-uploading-photos.png',
-    route: '/media',
-    prepare: async (page) => {
-      await page.setViewportSize({ width: 1280, height: 1000 })
-      await page.getByRole('button', { name: 'Upload' }).first().click()
-      const dialog = page.getByRole('dialog')
-      await dialog.getByLabel('Title').fill('Demo training field')
-      await dialog.getByLabel('Description').fill('Demo description')
-      await dialog.getByLabel('Date Taken').fill(isoDay(-3))
-      await page.waitForTimeout(SETTLE_MS)
-    },
-    target: (page) => page.getByRole('dialog'),
-  },
+  formShot('media-uploading-photos.png', '/media', {
+    open: 'Upload',
+    height: 1000,
+    fields: { 'label Title': 'Demo training field', 'label Description': 'Demo description', 'label Date Taken': isoDay(-3) },
+  }),
   {
     file: 'reports-building-a-report.png',
     route: '/reports',
@@ -448,7 +401,7 @@ export const SHOTS = [
       await page.getByRole('button', { name: 'Last 90d' }).click()
       await page.waitForTimeout(SETTLE_MS)
     },
-    target: (page) => page.getByRole('heading', { name: 'Report Builder' }).locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]'),
+    target: (page) => cardOf(page.getByRole('heading', { name: 'Report Builder' })),
   },
   {
     file: 'settings-email-digest.png',
@@ -459,27 +412,19 @@ export const SHOTS = [
       await page.evaluate(() => document.querySelectorAll('.sticky.bottom-4').forEach((el) => { el.style.display = 'none' }))
       await page.waitForTimeout(SETTLE_MS)
     },
-    target: (page) => page.getByRole('heading', { name: 'Email Digest' }).locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]'),
+    target: (page) => cardOf(page.getByRole('heading', { name: 'Email Digest' })),
   },
-  {
-    file: 'settings-api-tokens.png',
-    route: '/settings',
-    prepare: async (page) => {
-      await page.getByRole('button', { name: 'API Tokens' }).click()
-      await page.getByRole('button', { name: 'Create Token' }).click()
-      const dialog = page.getByRole('dialog')
-      await dialog.locator('#token-name').fill('Demo dashboard')
-      await dialog.locator('#token-expiry').selectOption('90')
-      await page.waitForTimeout(SETTLE_MS)
-    },
-    target: (page) => page.getByRole('dialog'),
-  },
+  formShot('settings-api-tokens.png', '/settings', {
+    before: (page) => page.getByRole('button', { name: 'API Tokens' }).click(),
+    open: 'Create Token',
+    fields: { '#token-name': 'Demo dashboard', 'select #token-expiry': '90' },
+  }),
   {
     file: 'backup-in-app-backup.png',
     route: '/settings',
     prepare: async (page) => {
       await page.getByRole('heading', { name: 'Backup & Restore' }).waitFor()
     },
-    target: (page) => page.getByRole('heading', { name: 'Backup & Restore' }).locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]'),
+    target: (page) => cardOf(page.getByRole('heading', { name: 'Backup & Restore' })),
   },
 ]

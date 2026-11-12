@@ -17,5 +17,5 @@ one PNG per entry in `shots.js` to `public/manual-pictures/`.
 - Never point this at staging or production.
 - Open every new picture and check it by eye before you commit it.
 - Add a picture by adding an entry to `SHOTS` in `shots.js`, then set the
-  topic's `image` in `src/pages/manual/content.js`.
+  topic's `image` in `src/pages/manual/content.json`.
 - This folder is not part of the normal `npx playwright test` run.
