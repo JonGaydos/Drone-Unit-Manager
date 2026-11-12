@@ -8,7 +8,7 @@ Takes the pictures used by the in-app User Manual.
 
 The run starts the local e2e backend on a fresh, empty database, creates the
 e2e admin, fills the database with fake demo data (`seed-demo.js`), then saves
-one PNG per entry in `shots.js` to `public/manual/`.
+one PNG per entry in `shots.js` to `public/manual-pictures/`.
 
 ## Rules
 

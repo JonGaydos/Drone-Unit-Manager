@@ -8,7 +8,7 @@ export const sections = [
         title: 'Using this manual',
         summary: 'Use this manual to look up one thing at a time, or to read everything in order.',
         image: {
-          src: '/manual/manual-layout-switch.png',
+          src: '/manual-pictures/manual-layout-switch.png',
           alt: 'The Topics and One page switch at the top of the User Manual page',
           caption: 'The switch at the top of the manual chooses between Topics and One page.',
         },
@@ -164,7 +164,7 @@ export const sections = [
           'While locked, the screen says "Too many failed attempts for this account. Try again later." Even the right password is refused until the lock ends.',
           'The lock ends by itself 15 minutes after the failed tries. There is nothing to reset and no admin step.',
           'A successful sign-in clears the count for the address you signed in from.',
-          'Someone who only knows your username cannot lock you out from your own address.',
+          'One other address cannot lock you out from your own address. But many wrong passwords from several addresses can lock the account for everyone, for up to 15 minutes.',
         ],
       },
       {
@@ -183,16 +183,16 @@ export const sections = [
       {
         id: 'profile-and-password',
         title: 'Your profile and password',
-        summary: 'Keep your email up to date, and change your password when you need to.',
+        summary: 'Keep your email up to date. Passwords are changed by an admin.',
         steps: [
           'Open **Settings**. On the **General** tab, find the **My Profile** card.',
           'Change your **Email** and choose **Save Profile**.',
-          'To change a password, an admin opens **Settings**, then the **Users** tab, then the **Change Password** card. Enter **Current Password**, **New Password** and **Confirm New Password**, and choose **Change Password**.',
         ],
         notes: [
           'A password needs at least 12 characters, one capital letter and one number.',
+          'Only admins can change a password in the app, because the **Change Password** card is on the **Users** tab of **Settings**, which only admins see. An admin opens it, enters **Current Password**, **New Password** and **Confirm New Password**, and chooses **Change Password**.',
           'Only an admin can change a display name. Everyone can change their own email.',
-          'If you are not an admin and forget your password, ask an admin. In **Settings**, on the **Users** tab, they choose the key icon (**Reset password**) beside your name, type a new password and choose **Set**.',
+          'If you are not an admin and want a new password, or forget yours, ask an admin. In **Settings**, on the **Users** tab, they choose the key icon (**Reset password**) beside your name, type a new password and choose **Set**.',
           'Changing or resetting a password signs that person out on every other device.',
         ],
       },
@@ -227,7 +227,7 @@ export const sections = [
           'Some cells are locked and greyed out. Admins are always on. Viewers can never change anything. A change setting stays off while its View is off.',
           'Nobody can approve or deny their own flight plan. A legal hold blocks edits and deletes. The last active admin cannot be demoted, disabled or deleted.',
           'These stay admin only and cannot be handed out: managing users, this permission screen, settings and integrations, backup and restore, API tokens, bulk imports, flight purposes and permanent purge.',
-          'Your own password, theme and profile are always yours to use.',
+          'Your own theme and email are always yours to change. A password change goes through an admin.',
         ],
       },
       {
@@ -275,7 +275,7 @@ export const sections = [
         title: 'What the dashboard shows',
         summary: 'The dashboard is the first page you see after you sign in. It gathers the numbers a unit checks every day: how compliant you are, what flew recently, and what needs attention. Click a card to open the page behind it.',
         image: {
-          src: '/manual/dashboard-overview.png',
+          src: '/manual-pictures/dashboard-overview.png',
           alt: 'The dashboard with the compliance score at the top, four 30-day cards, recent flights and the attention cards',
           caption: 'The dashboard: compliance score, 30-day cards, recent flights and the lists that need attention.',
         },
@@ -429,7 +429,7 @@ export const sections = [
         title: 'Filtering by clicking',
         summary: 'Click part of one chart and every other chart narrows to match. For example, click one pilot to see only their purposes, years and hours.',
         image: {
-          src: '/manual/analytics-filtering.png',
+          src: '/manual-pictures/analytics-filtering.png',
           alt: 'The Analytics page with one pilot selected and the active filter shown above the charts',
           caption: 'With a pilot selected, the Active filters bar appears and the other charts show only that pilot.',
         },
@@ -585,7 +585,7 @@ export const sections = [
         title: 'Submitting a plan',
         summary: 'Submit a plan before you fly, so a supervisor can approve it.',
         image: {
-          src: '/manual/flight-plans-submitting.png',
+          src: '/manual-pictures/flight-plans-submitting.png',
           alt: 'The Submit Flight Plan form with title, date, pilot, vehicle, location and other fields',
           caption: 'The Submit Flight Plan form.',
         },
@@ -609,7 +609,7 @@ export const sections = [
         title: 'Approving or denying a plan',
         summary: 'A reviewer decides each pending plan. Nobody can approve or deny a plan they submitted themselves, so a second person always makes the call.',
         image: {
-          src: '/manual/flight-plans-reviewing.png',
+          src: '/manual-pictures/flight-plans-reviewing.png',
           alt: 'The flight plans table with a pending plan and an approved plan and their action buttons',
           caption: 'The plans table. A pending plan shows approve and deny buttons to a reviewer.',
         },
@@ -654,7 +654,7 @@ export const sections = [
         title: 'Completing a pre-flight checklist',
         summary: 'Run a checklist before a flight and save the result as a record. Each submitted checklist is kept for compliance.',
         image: {
-          src: '/manual/checklists-completing.png',
+          src: '/manual-pictures/checklists-completing.png',
           alt: 'The Complete Pre-Flight Checklist dialog with a template chosen and some items ticked',
           caption: 'The Complete Pre-Flight Checklist dialog with two of four items ticked. The button changes to Submit as not passed because required items are open.',
         },
@@ -692,7 +692,7 @@ export const sections = [
         title: 'Building and managing templates',
         summary: 'A template is the list of items a checklist asks for. Supervisors and admins build them, and everyone completes them.',
         image: {
-          src: '/manual/checklists-templates.png',
+          src: '/manual-pictures/checklists-templates.png',
           alt: 'The Create Checklist Template dialog with a name, description and a list of items',
           caption: 'The Create Checklist Template dialog.',
         },
@@ -722,7 +722,7 @@ export const sections = [
         title: 'Finding and filtering flights',
         summary: 'The **Flights** page lists every recorded flight. Use the filters and the search box to narrow the list, and the column headings to sort it.',
         image: {
-          src: '/manual/flights-viewing-flights.png',
+          src: '/manual-pictures/flights-viewing-flights.png',
           alt: 'The filter bar on the Flights page with Date From, Date To, Pilot, Vehicle and Purpose',
           caption: 'The filters above the flights list.',
         },
@@ -749,7 +749,7 @@ export const sections = [
         title: 'Adding a flight by hand',
         summary: 'Use this to record a flight that did not come in from a drone provider, such as a flight you flew with an aircraft that is not connected.',
         image: {
-          src: '/manual/flights-adding-flights-manually.png',
+          src: '/manual-pictures/flights-adding-flights-manually.png',
           alt: 'The Add Flight dialog with pilot, vehicle, date, duration, purpose, times, addresses and equipment fields',
           caption: 'The Add Flight dialog.',
         },
@@ -758,7 +758,7 @@ export const sections = [
           'Pick the **Pilot** and the **Vehicle**. If the vehicle has a problem (overdue maintenance, an expired registration or a status other than active), a box called **Pre-flight warnings for this vehicle** appears. The warnings do not stop you from saving.',
           'Enter the **Date** and the **Duration (seconds)**. Or enter the **Takeoff Time** and **Landing Time** and leave **Date** and **Duration (seconds)** empty, and the app works them out.',
           'Pick a **Purpose**.',
-          'Fill in anything else you know: **Takeoff Address**, **Landing Address**, the latitude and longitude boxes, **Distance (m)**, **Operating Cost ($)**, **Case Number**, **Battery**, **Sensor Package**, the four **Attachment** boxes, **Carrier(s)** and **Notes**.',
+          'Fill in anything else you know: **Takeoff Address**, **Landing Address**, the latitude and longitude boxes, **Distance (m)**, **Operating Cost ($)**, **Case Number**, **Battery**, **Sensor Package**, the four attachment boxes (**Attachment (Top)**, **Attachment (Bottom)**, **Attachment (Left)** and **Attachment (Right)**), **Carrier(s)** and **Notes**.',
           'Choose **Add Flight**.',
         ],
         notes: [
@@ -775,7 +775,7 @@ export const sections = [
         title: 'Reviewing flights',
         summary: 'Flights that come in from a drone provider, and flights added by hand, wait as **Needs Review** until someone checks them. Reviewing means checking the pilot, purpose and details are right and marking the flight **Reviewed**.',
         image: {
-          src: '/manual/flights-reviewing-flights.png',
+          src: '/manual-pictures/flights-reviewing-flights.png',
           alt: 'The bar that appears when flights are selected, with Reassign pilot, Set purpose, Mark reviewed, Delete and Clear',
           caption: 'The bar for working on several selected flights at once.',
         },
@@ -866,7 +866,7 @@ export const sections = [
         title: 'Adding and changing a mission',
         summary: 'Add a mission after the work is done, or plan one ahead and change its status later.',
         image: {
-          src: '/manual/missions-adding-missions.png',
+          src: '/manual-pictures/missions-adding-missions.png',
           alt: 'The Add Mission dialog with date, status, title, reason, location, hours, drone and pilots involved',
           caption: 'The Add Mission dialog, with one pilot added.',
         },
@@ -936,7 +936,7 @@ export const sections = [
         title: 'Adding and changing a training entry',
         summary: 'Add an entry after a training session so there is a record of who took part and how it went.',
         image: {
-          src: '/manual/training-adding-training.png',
+          src: '/manual-pictures/training-adding-training.png',
           alt: 'The Add Training dialog with date, type, outcome, title, instructor, objectives and pilots or trainees',
           caption: 'The Add Training dialog, with one pilot added.',
         },
@@ -1001,7 +1001,7 @@ export const sections = [
         title: 'Adding events and leave',
         summary: 'Add your own entries for things that are not flights, such as a team briefing, a range day or time off. Everyone who can see the calendar sees them.',
         image: {
-          src: '/manual/calendar-adding-events.png',
+          src: '/manual-pictures/calendar-adding-events.png',
           alt: 'The Add event / leave dialog with title, category, dates and notes',
           caption: 'The Add event / leave dialog.',
         },
@@ -1065,7 +1065,7 @@ export const sections = [
         title: 'The pilot profile',
         summary: 'A pilot\'s profile page gathers their details, flight totals, certifications and currency in one place.',
         image: {
-          src: '/manual/pilots-pilot-profiles.png',
+          src: '/manual-pictures/pilots-pilot-profiles.png',
           alt: 'The profile card of a demo pilot with initials, name, email, a personal cell number and an active status badge',
           caption: 'The profile card at the top of a pilot page.',
         },
@@ -1104,7 +1104,7 @@ export const sections = [
         title: 'Pilot currency',
         summary: 'Currency means a pilot has flown enough recently. A currency rule sets the flight hours (and, if you want, the number of flights) a pilot must log within a number of days, for example 5 hours in 90 days.',
         image: {
-          src: '/manual/pilots-pilot-currency.png',
+          src: '/manual-pictures/pilots-pilot-currency.png',
           alt: 'The New Currency Rule dialog with a name, required hours, period in days and minimum flights filled in',
           caption: 'The New Currency Rule dialog in Settings.',
         },
@@ -1130,7 +1130,7 @@ export const sections = [
         title: 'Needs Attention',
         summary: 'The **Needs Attention** card on a pilot page lists what that pilot should fix: lapsed currency and certifications that are expired or about to expire.',
         image: {
-          src: '/manual/pilots-needs-attention.png',
+          src: '/manual-pictures/pilots-needs-attention.png',
           alt: 'The Needs Attention card of a demo pilot listing a certification that expires soon, with the number of items in the header',
           caption: 'The Needs Attention card with one item listed.',
         },
@@ -1157,7 +1157,7 @@ export const sections = [
         title: 'The Fleet page',
         summary: 'Use the Fleet page to see every piece of equipment your unit owns, one tab per kind, and to add, edit or retire it.',
         image: {
-          src: '/manual/fleet-fleet-list.png',
+          src: '/manual-pictures/fleet-fleet-list.png',
           alt: 'The Fleet page on the Vehicles tab with the tab bar, search box, status filter, Export CSV and Add Vehicle buttons, and a table of vehicles with their FAA registration due dates',
           caption: 'The Fleet page on the Vehicles tab, narrowed to the demo vehicles with the search box.',
         },
@@ -1182,7 +1182,7 @@ export const sections = [
         title: 'Adding and editing a vehicle',
         summary: 'Use this when you buy or are issued a new aircraft, or when a detail of an existing one changes. The other tabs work the same way, with their own fields.',
         image: {
-          src: '/manual/fleet-adding-a-vehicle.png',
+          src: '/manual-pictures/fleet-adding-a-vehicle.png',
           alt: 'The Add Vehicle dialog with serial number, manufacturer, model, nickname, acquired date and status filled in',
           caption: 'The Add Vehicle dialog.',
         },
@@ -1266,7 +1266,7 @@ export const sections = [
         title: 'Battery health readings',
         summary: 'A reading is a measurement of a battery on one day. Record readings now and then, and the battery\'s Health History shows how it ages.',
         image: {
-          src: '/manual/fleet-battery-readings.png',
+          src: '/manual-pictures/fleet-battery-readings.png',
           alt: 'The Record Battery Health Reading dialog with health percent, cycle count, voltage and notes filled in',
           caption: 'The Record Battery Health Reading dialog.',
         },
@@ -1328,7 +1328,7 @@ export const sections = [
         title: 'Equipment lists on flight forms',
         summary: 'When you add or edit a flight, the equipment boxes offer your fleet records, so you pick equipment instead of typing it.',
         steps: [
-          'In the flight form, click **Battery**, **Sensor Package** or one of the **Attachment** boxes.',
+          'In the flight form, click **Battery**, **Sensor Package** or one of the four attachment boxes (**Attachment (Top)**, **Attachment (Bottom)**, **Attachment (Left)**, **Attachment (Right)**).',
           'Pick an item from the list, or type to narrow it down.',
         ],
         notes: [
@@ -1343,7 +1343,7 @@ export const sections = [
         steps: [
           'On **Fleet**, open the **Vehicles**, **Batteries**, **Sensors** or **Attachments** tab.',
           'Find the record you want to keep. Choose the merge icon (**Merge**) on its row.',
-          'In the **Merge** dialog, open **Merge from (duplicate to remove)** and pick the duplicate.',
+          'In the merge dialog, open **Merge from (duplicate to remove)** and pick the duplicate.',
           'Choose **Merge**.',
         ],
         notes: [
@@ -1366,7 +1366,7 @@ export const sections = [
         title: 'FAA registrations on a vehicle',
         summary: 'Each vehicle keeps its FAA registrations on its own page, so you can see when the current one expires and what came before it.',
         image: {
-          src: '/manual/registrations-faa-registrations.png',
+          src: '/manual-pictures/registrations-faa-registrations.png',
           alt: 'The FAA Registration card of a vehicle with a Next Due banner, the days remaining, and a table of one current and one expired registration',
           caption: 'The FAA Registration card: the Next Due banner above the list of registrations.',
         },
@@ -1380,7 +1380,7 @@ export const sections = [
           'The badge is green with more than 90 days left, amber with 90 days or fewer, and red with under 30 days or overdue.',
           'A vehicle has one **Current** registration at a time. Older ones show **Previous**. Any registration whose expiry date has passed shows **Expired**, even if it is the current one.',
           'The same due date and number show in the **Next Due** and **FAA Reg** columns on the Fleet page.',
-          'The email digest lists current registrations that expire in the next 30 days.',
+          'The email digest lists current registrations of active vehicles that expire in the next 30 days.',
           'Everyone who can view registrations sees the card. By default that is admins, supervisors, pilots and viewers.',
         ],
       },
@@ -1414,7 +1414,7 @@ export const sections = [
         title: 'Reading the Fleet Health page',
         summary: 'Fleet Health gives a quick picture of how hard each vehicle is used and how healthy your batteries are.',
         image: {
-          src: '/manual/fleet-health-reading-fleet-health.png',
+          src: '/manual-pictures/fleet-health-reading-fleet-health.png',
           alt: 'The Fleet Health page with five summary cards, a Vehicle Utilization table and a Battery Health bar chart with a Good, Fair and Poor legend',
           caption: 'The Fleet Health page: summary cards, vehicle utilization and battery health.',
         },
@@ -1463,7 +1463,7 @@ export const sections = [
         title: 'The certification matrix',
         summary: 'The matrix is a grid of pilots down the side and certification types across the top. Each cell shows one pilot\'s status for one certification, so you can see gaps at a glance.',
         image: {
-          src: '/manual/certifications-certification-matrix.png',
+          src: '/manual-pictures/certifications-certification-matrix.png',
           alt: 'The certification matrix with demo pilots down the side and certification types across the top, cells coloured green, amber and red with expiry dates',
           caption: 'The matrix: green is fine, amber is expiring soon, red is expired.',
         },
@@ -1507,7 +1507,7 @@ export const sections = [
         title: 'Editing a certification',
         summary: 'Fix a date, a number or a note on a certification that already exists.',
         image: {
-          src: '/manual/certifications-editing-a-certification.png',
+          src: '/manual-pictures/certifications-editing-a-certification.png',
           alt: 'The Edit Certification dialog for a demo pilot with status, issue date, expiration date, certificate number, notes, and the Update, Renew, Remove and Cancel buttons',
           caption: 'The Edit Certification dialog, opened from a matrix cell.',
         },
@@ -1531,7 +1531,7 @@ export const sections = [
         title: 'Renewing a certification',
         summary: 'Renew when a pilot gets a new certificate. The old record is kept as history and a fresh one takes its place.',
         image: {
-          src: '/manual/certifications-renewing-a-certification.png',
+          src: '/manual-pictures/certifications-renewing-a-certification.png',
           alt: 'The renewal form inside the Edit Certification dialog with new issue date, new expiration, certificate number and notes',
           caption: 'The renewal form: enter the new issue date and the expiry fills in.',
         },
@@ -1627,7 +1627,7 @@ export const sections = [
           'Add anything else under **Notes**, then choose **Add Maintenance**.',
         ],
         image: {
-          src: '/manual/maintenance-adding-a-maintenance-record.png',
+          src: '/manual-pictures/maintenance-adding-a-maintenance-record.png',
           alt: 'The Add Maintenance window with fields for Entity Type, Entity, Maintenance Type, Description, Performed By, Performed Date, Cost, Next Due Date, Next Due Hours and Notes.',
           caption: 'The Add Maintenance window, filled in with demo data.',
         },
@@ -1667,7 +1667,7 @@ export const sections = [
           'Add a **Description** if it helps, then choose **Add Schedule**.',
         ],
         image: {
-          src: '/manual/maintenance-schedules-and-tasks.png',
+          src: '/manual-pictures/maintenance-schedules-and-tasks.png',
           alt: 'The Add Schedule / Task window with fields for Name, Entity Type, Entity, Frequency, Assigned To, Due Date and Description.',
           caption: 'The Add Schedule / Task window, filled in with demo data.',
         },
@@ -1716,7 +1716,7 @@ export const sections = [
         title: 'Checking equipment out',
         summary: 'Use a checkout to record who has a piece of equipment, so you always know where it is.',
         image: {
-          src: '/manual/checkouts-checking-equipment-out.png',
+          src: '/manual-pictures/checkouts-checking-equipment-out.png',
           alt: 'The Check Out Equipment dialog with type, item, pilot, expected return and notes',
           caption: 'The Check Out Equipment dialog.',
         },
@@ -1757,7 +1757,7 @@ export const sections = [
         title: 'Active and returned records',
         summary: 'The Checkouts page shows what is out now and keeps a history of what has been out before.',
         image: {
-          src: '/manual/checkouts-active-and-returned-records.png',
+          src: '/manual-pictures/checkouts-active-and-returned-records.png',
           alt: 'The Checkouts page with a Currently Out table and a History table with the Show returned box',
           caption: 'The Checkouts page: Currently Out above History.',
         },
@@ -1782,7 +1782,7 @@ export const sections = [
         title: 'The compliance dashboard',
         summary: 'The **Compliance** page shows how well the unit is keeping up with its paperwork and upkeep, as one score out of 100 with the problems behind it.',
         image: {
-          src: '/manual/compliance-compliance-score.png',
+          src: '/manual-pictures/compliance-compliance-score.png',
           alt: 'The Compliance Dashboard with a score circle and coloured cards for expired certifications, registrations, maintenance and incidents',
           caption: 'The compliance score and the cards behind it.',
         },
@@ -1845,7 +1845,7 @@ export const sections = [
         title: 'Operating authority',
         summary: 'The **Operating Authority** page tracks the unit\'s own COAs (certificates of authorization) and Part 107 waivers: when they were issued, when they expire, and the paperwork behind them.',
         image: {
-          src: '/manual/operating-authority-operating-authority.png',
+          src: '/manual-pictures/operating-authority-operating-authority.png',
           alt: 'The Add Operating Authority dialog with type, title, number, issue and expiry dates, record status and the Expiry grounds the unit box',
           caption: 'The Add Operating Authority dialog.',
         },
@@ -1919,7 +1919,7 @@ export const sections = [
         title: 'Reporting an incident or a success',
         summary: 'Use **Activity Reports** to record something that went wrong (a crash, near miss or equipment failure) or something that went well (a missing person found, evidence collected).',
         image: {
-          src: '/manual/incidents-incident-reporting.png',
+          src: '/manual-pictures/incidents-incident-reporting.png',
           alt: 'The Report Incident dialog with the Incident and Success switch, date, severity, title, category, description, pilot and vehicle filled in with demo data',
           caption: 'The Report Incident dialog.',
         },
@@ -2004,7 +2004,7 @@ export const sections = [
           'Choose **Upload**. With several photos the button reads **Upload** and the number of photos.',
         ],
         image: {
-          src: '/manual/media-uploading-photos.png',
+          src: '/manual-pictures/media-uploading-photos.png',
           alt: 'The Upload Photo window with a box to choose photos, Title, Description and Date Taken fields, and a list of pilots to tick.',
           caption: 'The Upload Photo window.',
         },
@@ -2063,7 +2063,7 @@ export const sections = [
           'Choose a document name to open it.',
         ],
         image: {
-          src: '/manual/documents-folders-and-finding-documents.png',
+          src: '/manual-pictures/documents-folders-and-finding-documents.png',
           alt: 'The Folders list on the Documents page with the folders General, Certifications, Insurance, Maintenance and Reports, a custom folder, and Unfiled.',
           caption: 'The Folders list. The numbers show how many documents each folder holds.',
         },
@@ -2143,7 +2143,7 @@ export const sections = [
           'Choose **Generate** to see the result under **Report Preview**, or choose **PDF** to download it.',
         ],
         image: {
-          src: '/manual/reports-building-a-report.png',
+          src: '/manual-pictures/reports-building-a-report.png',
           alt: 'The Report Builder card with Report Type, Date Range buttons and dates, an Include non-unit flights tick box, pilot and vehicle lists, a logo line and the Generate and PDF buttons.',
           caption: 'The Report Builder card.',
         },
@@ -2329,7 +2329,7 @@ export const sections = [
           'Choose **Preview** to see what the next digest would hold, or **Send Test** to email one now.',
         ],
         image: {
-          src: '/manual/settings-email-digest.png',
+          src: '/manual-pictures/settings-email-digest.png',
           alt: 'The Email Digest card with a tick box, Frequency, Send at, a list of items to include, and the Save Preferences, Preview and Send Test buttons.',
           caption: 'The Email Digest card.',
         },
@@ -2355,7 +2355,7 @@ export const sections = [
           'Choose **Create Token**. The token shows once. Copy it now with the copy button, then choose **Done**.',
         ],
         image: {
-          src: '/manual/settings-api-tokens.png',
+          src: '/manual-pictures/settings-api-tokens.png',
           alt: 'The Create API Token window with Name, Access, Expires and Areas fields.',
           caption: 'The Create API Token window. The token itself is shown once, after you create it.',
         },
@@ -2444,7 +2444,7 @@ export const sections = [
           'Open **Settings**, then **Integrations**, and find **Flight Log Import**.',
           'Choose your files. To pick several, hold Ctrl or Shift as you choose.',
           'Leave **Format** on automatic, or pick the one that matches your files.',
-          'Choose **Import**. Watch the progress line, then read the result.',
+          'Choose **Import**. When you have picked several files, the button reads **Import N files**, with the number of files. Watch the progress line, then read the result.',
         ],
         notes: [
           'Formats: Skydio (CSV or Excel), DJI .txt, Litchi CSV, Airdata CSV, Airdata JSON, Airdata ZIP (bulk), Parrot / ANAFI (GUTMA JSON) and **Flights CSV (exported from this app)**.',
@@ -2473,7 +2473,7 @@ export const sections = [
           'Choose **Export Backup**. A ZIP file downloads. While it builds, the button shows how much has arrived.',
         ],
         image: {
-          src: '/manual/backup-in-app-backup.png',
+          src: '/manual-pictures/backup-in-app-backup.png',
           alt: 'The Backup & Restore card with an Include telemetry data tick box and the Export Backup button.',
           caption: 'The Backup & Restore card.',
         },

@@ -44,7 +44,7 @@ describe('manual content', () => {
     for (const { section, topic } of topics) {
       if (!topic.image) continue
       const name = `${section.id}.${topic.id}`
-      expect(topic.image.src.startsWith('/manual/'), name).toBe(true)
+      expect(topic.image.src.startsWith('/manual-pictures/'), name).toBe(true)
       expect(existsSync(path.join(publicDir, topic.image.src)), `${name} file`).toBe(true)
       expect(topic.image.alt?.trim(), `${name} alt`).toBeTruthy()
       expect(topic.image.caption?.trim(), `${name} caption`).toBeTruthy()

@@ -6,7 +6,7 @@ import { getAdminToken } from '../e2e/helpers/seed.js'
 import { seedDemo } from './seed-demo.js'
 import { SHOTS } from './shots.js'
 
-const OUT_DIR = path.resolve(process.cwd(), 'public/manual')
+const OUT_DIR = path.resolve(process.cwd(), 'public/manual-pictures')
 
 test.describe.configure({ mode: 'serial' })
 
