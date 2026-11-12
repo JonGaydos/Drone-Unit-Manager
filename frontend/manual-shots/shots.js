@@ -383,4 +383,103 @@ export const SHOTS = [
     },
     target: (page) => page.getByRole('dialog'),
   },
+  {
+    file: 'maintenance-adding-a-maintenance-record.png',
+    route: '/maintenance',
+    prepare: async (page) => {
+      await page.setViewportSize({ width: 1280, height: 1000 })
+      await page.getByRole('button', { name: 'Add Maintenance' }).click()
+      const dialog = page.getByRole('dialog')
+      await pickContaining(dialog.locator('#entity'), 'Demo One')
+      await dialog.locator('#maintenance-type').selectOption('inspection')
+      await dialog.locator('#description').fill('Demo propeller and motor inspection')
+      await pickContaining(dialog.locator('#performed-by'), 'Avery Brooks')
+      await dialog.locator('#performed-date').fill(isoDay(0))
+      await dialog.locator('#cost').fill('25')
+      await dialog.locator('#next-due-date').fill(isoDay(90))
+      await dialog.locator('#notes').fill('Demo notes: no damage found')
+      await page.waitForTimeout(SETTLE_MS)
+    },
+    target: (page) => page.getByRole('dialog'),
+  },
+  {
+    file: 'maintenance-schedules-and-tasks.png',
+    route: '/maintenance',
+    prepare: async (page) => {
+      await page.setViewportSize({ width: 1280, height: 1000 })
+      await page.getByRole('button', { name: 'Add Schedule / Task' }).click()
+      const dialog = page.getByRole('dialog')
+      await dialog.locator('#name').fill('Demo monthly airframe check')
+      await pickContaining(dialog.locator('#entity-1'), 'Demo One')
+      await dialog.locator('#frequency').selectOption('monthly')
+      await dialog.locator('#next-due').fill(isoDay(30))
+      await dialog.locator('#description-1').fill('Demo description: check arms, props and landing gear.')
+      await page.waitForTimeout(SETTLE_MS)
+    },
+    target: (page) => page.getByRole('dialog'),
+  },
+  {
+    file: 'documents-folders-and-finding-documents.png',
+    route: '/documents',
+    prepare: async (page) => {
+      await page.getByRole('treeitem', { name: /Demo Procedures/ }).click()
+      await page.waitForTimeout(SETTLE_MS)
+    },
+    target: (page) => page.getByRole('tree', { name: 'Document folders' }).locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]'),
+  },
+  {
+    file: 'media-uploading-photos.png',
+    route: '/media',
+    prepare: async (page) => {
+      await page.setViewportSize({ width: 1280, height: 1000 })
+      await page.getByRole('button', { name: 'Upload' }).first().click()
+      const dialog = page.getByRole('dialog')
+      await dialog.getByLabel('Title').fill('Demo training field')
+      await dialog.getByLabel('Description').fill('Demo description')
+      await dialog.getByLabel('Date Taken').fill(isoDay(-3))
+      await page.waitForTimeout(SETTLE_MS)
+    },
+    target: (page) => page.getByRole('dialog'),
+  },
+  {
+    file: 'reports-building-a-report.png',
+    route: '/reports',
+    prepare: async (page) => {
+      await page.getByRole('button', { name: 'Last 90d' }).click()
+      await page.waitForTimeout(SETTLE_MS)
+    },
+    target: (page) => page.getByRole('heading', { name: 'Report Builder' }).locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]'),
+  },
+  {
+    file: 'settings-email-digest.png',
+    route: '/settings',
+    prepare: async (page) => {
+      await page.getByLabel('Send me email digests').check()
+      // The floating Save Settings bar would cover the card's lower edge.
+      await page.evaluate(() => document.querySelectorAll('.sticky.bottom-4').forEach((el) => { el.style.display = 'none' }))
+      await page.waitForTimeout(SETTLE_MS)
+    },
+    target: (page) => page.getByRole('heading', { name: 'Email Digest' }).locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]'),
+  },
+  {
+    file: 'settings-api-tokens.png',
+    route: '/settings',
+    prepare: async (page) => {
+      await page.getByRole('button', { name: 'API Tokens' }).click()
+      await page.getByRole('button', { name: 'Create Token' }).click()
+      const dialog = page.getByRole('dialog')
+      await dialog.locator('#token-name').fill('Demo dashboard')
+      await dialog.locator('#token-expiry').selectOption('90')
+      await page.waitForTimeout(SETTLE_MS)
+    },
+    target: (page) => page.getByRole('dialog'),
+  },
+  {
+    file: 'backup-in-app-backup.png',
+    route: '/settings',
+    prepare: async (page) => {
+      await page.getByRole('heading', { name: 'Backup & Restore' }).waitFor()
+    },
+    target: (page) => page.getByRole('heading', { name: 'Backup & Restore' }).locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]'),
+  },
 ]

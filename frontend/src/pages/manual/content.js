@@ -364,6 +364,45 @@ export const sections = [
     ]
   },
   {
+    id: 'locations',
+    title: 'Drone Locations',
+    topics: [
+      {
+        id: 'last-known-location',
+        title: 'Where a drone is',
+        summary: 'The Locations card on the dashboard shows the last known place of every drone that is not retired.',
+        steps: [
+          'Open the **Dashboard**.',
+          'Find the **Locations** card. Each drone shows its name and its location under it.',
+        ],
+        notes: [
+          'A location is "with" a pilot name, or a place name such as North. It shows whichever was recorded most recently: a checkout, or a location someone set by hand.',
+          'After a drone is checked in, it reads **Returned**, until someone sets a location again. The place set before it went out is out of date.',
+          '**Unknown** means no checkout or location was ever recorded.',
+          'If you have no drones, the card says **No drones**.',
+          'Everyone who can view the fleet sees the card.',
+        ],
+      },
+      {
+        id: 'setting-a-location',
+        title: 'Setting a location',
+        summary: 'Update a drone\'s location when it moves, without a full checkout.',
+        steps: [
+          'On the **Locations** card, find the drone.',
+          'Open **Set location…** beside it.',
+          'Choose a place under **Places**, or a pilot under **Pilots**.',
+          'The card updates at once.',
+        ],
+        notes: [
+          'A drone is in one spot at a time: one place or one pilot.',
+          'Supervisors and pilots can set a location by default, and so can admins. Viewers cannot. An admin can change this under **Settings**.',
+          'An admin sets the list of places under **Settings**, in **Drone Locations**. If it was never changed, the places are North, Central and South.',
+          'Each change is saved in the audit log with who made it.',
+        ],
+      },
+    ]
+  },
+  {
     id: 'analytics',
     title: 'Analytics',
     topics: [
@@ -411,60 +450,265 @@ export const sections = [
     ]
   },
   {
-    id: 'calendar',
-    title: 'Calendar',
+    id: 'weather',
+    title: 'Weather',
     topics: [
       {
-        id: 'unit-calendar',
-        title: 'The unit calendar',
-        summary: 'The calendar shows everything with a date in one place: flights, missions, training, maintenance due dates, certification expiry dates, and events and leave you add yourself.',
+        id: 'weather-briefing',
+        title: 'Getting a weather briefing',
+        summary: 'Use the Weather page before a flight to check wind, visibility, cloud height and the next 12 hours for the place you plan to fly. It ends in a single answer: GO, CAUTION or NO-GO.',
         steps: [
-          'Choose **Calendar** in the sidebar.',
-          'Use the checkboxes **Flights**, **Missions**, **Training**, **Maintenance due**, **Cert expirations**, **Events** and **Leave** above the calendar to show or hide each kind. Each has its own color.',
-          'Use **prev**, **next** and **today** to move through time.',
-          'Switch the view with **month**, **week** or **list**.',
-          'Click an item to open the page behind it.',
+          'Choose **Weather** in the sidebar. The page opens on your unit\'s default place and loads a briefing at once.',
+          'To check another place, type an address, or two numbers such as 40.7128, -74.0060, into **Coordinates or Address**.',
+          'Or click the small map to drop a pin. The address box fills in for you.',
+          'Or type numbers into **Latitude** and **Longitude**.',
+          'To use where you are now, choose **GPS** and allow your browser to share your location.',
+          'Choose **Check Weather**.',
+          'Read the colored answer at the top, then the reasons listed under it.',
         ],
         notes: [
-          'Flights show as one badge per day, such as 3 flights. Click it to open Flights.',
-          'Only the dates you are looking at are loaded, so moving to a new month can take a moment.',
-          'Missions, training, maintenance and certifications are read-only here. Change them on their own pages.',
-          'Everyone can see the calendar by default.',
+          'Everyone who can sign in can use the Weather page.',
+          'The server fetches the weather from public services, so the page needs the internet.',
+          'If an address is not found, you see No match for that address. Try a nearby town or use numbers.',
         ],
       },
       {
-        id: 'adding-events',
-        title: 'Adding events and leave',
-        summary: 'Add your own entries for things that are not flights, such as a team briefing, a range day or time off. Everyone who can see the calendar sees them.',
+        id: 'default-and-recent-places',
+        title: 'Default place and recent places',
+        summary: 'The page starts on your unit\'s default place, and remembers the places you check so you can return to them in one click.',
+        steps: [
+          'Look at **Recent Locations** under the form. It lists up to eight places you checked on this device.',
+          'Click one to load its briefing again.',
+        ],
+        notes: [
+          'The default place is the **Default Location** an admin sets in **Settings**. If none is set, the page starts on the White House in Washington, D.C.',
+          '**Recent Locations** is kept in your browser. It is not shared with other people or other devices.',
+        ],
+      },
+      {
+        id: 'go-no-go-advisory',
+        title: 'GO, CAUTION and NO-GO',
+        summary: 'The colored panel at the top gives a quick answer for flying at that place now. It is an aid for your own judgment, not an order.',
+        steps: [
+          'Read the label: green **GO**, amber **CAUTION**, red **NO-GO**, or grey **UNKNOWN** when no weather data came back.',
+          'Read the reasons listed under it. Each one names the reading that moved the answer.',
+          'Read **Current Conditions** for wind, gusts, temperature, humidity, visibility, ceiling (height of the lowest cloud layer above the ground), flight category and rain.',
+        ],
+        notes: [
+          'Out of the box, wind over 15 mph or gusts over 20 mph give CAUTION, and wind over 25 mph or gusts over 30 mph give NO-GO.',
+          'Visibility under 3 miles gives CAUTION and under 1 mile gives NO-GO. A ceiling under 500 feet gives CAUTION and under 200 feet gives NO-GO.',
+          'Temperature under 32 F or over 100 F gives CAUTION, and under 20 F gives NO-GO. Rain of more than 0.01 inch gives CAUTION.',
+          'An admin can change these limits under **Weather Thresholds** in **Settings**.',
+          'The flight category is a standard aviation label: VFR is good, MVFR is marginal, IFR is poor and LIFR is very poor.',
+        ],
+      },
+      {
+        id: 'forecast-and-reports',
+        title: 'The forecast and the airport reports',
+        summary: 'Below the answer you get a 12-hour forecast and the raw airport reports, for when you want more than the summary.',
+        steps: [
+          'Read **Nearest METAR Station** for the airport the readings come from and how far away it is. A METAR is the latest observation at that airport.',
+          'Scroll to **12-Hour Forecast** for charts of wind and gusts, and of temperature and chance of rain.',
+          'Scroll the **Hourly Detail** cards sideways to see each hour.',
+          'Open **Raw METAR** or **Raw TAF (Terminal Forecast)** to read the original text. A TAF is that airport\'s forecast.',
+        ],
+        notes: [
+          'The raw sections appear only when a station near the place has reported.',
+          'The readings are from the nearest airport, which may be some miles from your site.',
+        ],
+      },
+    ]
+  },
+  {
+    id: 'airspace',
+    title: 'Airspace (ADS-B)',
+    topics: [
+      {
+        id: 'live-aircraft-map',
+        title: 'Watching nearby aircraft',
+        summary: 'The Airspace page shows planes and helicopters flying near a place you pick. Use it to see manned traffic before and during a flight. It uses ADS-B, a signal most aircraft broadcast with their position and height.',
+        steps: [
+          'Choose **Airspace** in the sidebar. The map opens on your unit\'s default place.',
+          'Click the map where you plan to fly. A dashed circle shows the search area.',
+          'Wait for the aircraft to appear. The top bar shows how many were found and when.',
+          'Click an aircraft to see its call sign, type, registration, height, speed, heading, climb rate and squawk code. A squawk is a four-digit code the pilot sets.',
+          'If an aircraft reports an emergency, the popup says so in red.',
+        ],
+        notes: [
+          'Nothing is searched until you click the map.',
+          'The data comes from a community feed (adsb.lol) and needs the internet. It shows only aircraft that broadcast ADS-B, so some will be missing. It is not an airspace authorization.',
+          'Everyone who can sign in can use the page.',
+        ],
+      },
+      {
+        id: 'radius-and-refresh',
+        title: 'Radius, refresh and colors',
+        summary: 'Set how wide to look and how often to update, and read the colors to see which aircraft are near drone height.',
+        steps: [
+          'Pick **Radius**: 25, 50, 100, 150 or 200 miles.',
+          'Pick **Refresh**: every 5, 10, 15 or 30 seconds, or **Off**.',
+          'Choose **Refresh** (the button) to update right now.',
+          'Use the **Altitude** key at the bottom right of the map. Red is below 400 ft, orange is 400 to 1,000 ft, yellow is 1,000 to 5,000 ft, blue is 5,000 to 15,000 ft, and grey is higher or unknown.',
+        ],
+        notes: [
+          'Your radius and refresh choices are remembered on this device.',
+          'After you pick a point, a **Recent** button shows that point\'s coordinates. Choose it to jump back to your last pick.',
+          'If an automatic update fails, nothing pops up and the old aircraft stay on the map. A manual **Refresh** shows an error.',
+          '(cached) next to the count means the answer was reused from a few moments ago.',
+        ],
+      },
+    ]
+  },
+  {
+    id: 'flight-plans',
+    title: 'Flight Plans',
+    topics: [
+      {
+        id: 'overview',
+        title: 'The flight plans list',
+        summary: 'A flight plan is a request to fly, sent to a supervisor for approval before the flight. The Flight Plans page lists every plan and where it stands.',
+        steps: [
+          'Choose **Flight Plans** in the sidebar. A number on the sidebar item counts plans waiting for review.',
+          'Choose **All Plans** to see everyone\'s plans, or **My Plans** to see only those you submitted.',
+          'Use the **All Statuses** list to show only Pending, Approved, Denied, Cancelled or Completed plans.',
+          'Click a row, or the arrow at its right, to open the details: description, case number, height, length, checklist, review notes, and who submitted it.',
+          'Choose **Export CSV** to download the list as a CSV file, a plain table that opens in a spreadsheet.',
+        ],
+        notes: [
+          'A badge with a number and the word **Pending** shows how many plans wait for a decision.',
+          'Everyone can see the list. Supervisors and pilots can submit plans by default. Viewers cannot.',
+          'The **Weather Briefing** link in the details opens the National Weather Service site in a new tab. For the full briefing, use the **Weather** page.',
+        ],
+      },
+      {
+        id: 'submitting',
+        title: 'Submitting a plan',
+        summary: 'Submit a plan before you fly, so a supervisor can approve it.',
         image: {
-          src: '/manual/calendar-adding-events.png',
-          alt: 'The Add event / leave dialog with title, category, dates and notes',
-          caption: 'The Add event / leave dialog.',
+          src: '/manual/flight-plans-submitting.png',
+          alt: 'The Submit Flight Plan form with title, date, pilot, vehicle, location and other fields',
+          caption: 'The Submit Flight Plan form.',
         },
         steps: [
-          'Choose **Add event / leave** at the top right.',
-          'Type a **Title**.',
-          'Pick a **Category**: **Event** or **Leave**.',
-          'Pick the **Start date**. For more than one day, also pick an **End date (optional)**. It cannot be before the start date.',
-          'Add **Notes (optional)** if you want.',
-          'Choose **Save**.',
+          'Choose **Submit Plan** on the Flight Plans page.',
+          'Fill in the required fields marked with a star: **Title**, **Planned Date/Time** and **Pilot**.',
+          'Add what you know: **Vehicle**, **Location**, **Latitude**, **Longitude**, **Purpose**, **Case Number** and **Description**.',
+          'Enter **Max Altitude (ft)** and **Est. Duration (min)**.',
+          'Tick **Pre-flight checklist completed** if you have done the checklist.',
+          'Add **Notes** if needed, then choose **Submit Plan**.',
         ],
         notes: [
-          'Supervisors and pilots can add entries by default. Viewers cannot, and do not see the button.',
+          'The planned height must be between 0 and 400 feet above the ground. Higher is refused.',
+          'If your account is linked to a pilot, that pilot is filled in for you.',
+          'The checklist tick is only a statement. It does not look up a checklist on the **Checklists** page.',
+          'New plans start as **pending**.',
         ],
       },
       {
-        id: 'editing-events',
-        title: 'Changing or deleting an entry',
-        summary: 'Open an event or leave entry to correct it or remove it.',
+        id: 'reviewing',
+        title: 'Approving or denying a plan',
+        summary: 'A reviewer decides each pending plan. Nobody can approve or deny a plan they submitted themselves, so a second person always makes the call.',
+        image: {
+          src: '/manual/flight-plans-reviewing.png',
+          alt: 'The flight plans table with a pending plan and an approved plan and their action buttons',
+          caption: 'The plans table. A pending plan shows approve and deny buttons to a reviewer.',
+        },
         steps: [
-          'Click the entry on the calendar. The **Edit entry** dialog opens.',
-          'Change the fields and choose **Save**, or choose **Delete** and confirm to remove it.',
+          'Find a plan marked **pending**. Open its details to read it.',
+          'To approve, choose the check mark, then **Approve** in the box that opens.',
+          'To deny, choose the ban mark. In **Deny Flight Plan**, type a **Denial Reason** (required) and optional **Review Notes**, then choose **Deny Plan**.',
+          'Read the result in the details: who reviewed it, when, and the notes.',
         ],
         notes: [
-          'Supervisors and admins can change any entry by default. Pilots can change only their own.',
-          'If you may not change an entry, the dialog still opens so you can read it, but **Save** is greyed out and there is no **Delete**.',
-          'An admin can change who may edit under **Settings**.',
+          'Supervisors and admins can approve, deny and delete plans by default. Pilots and viewers cannot.',
+          'The approve and deny buttons do not show on a plan you submitted, even if you are an admin. Ask someone else.',
+          'Only a pending plan can be approved or denied.',
+          'An admin can change who may review under **Settings**.',
+        ],
+      },
+      {
+        id: 'editing-and-cancelling',
+        title: 'Editing, cancelling and reopening',
+        summary: 'Change a plan when the details change, cancel one you will not fly, or put a closed plan back in the queue.',
+        steps: [
+          'To edit, choose the pencil on the plan. **Edit Flight Plan** opens with the same fields, plus **Linked Flight ID** for the flight flown under the plan. Choose **Save Changes**.',
+          'To cancel, choose the cross mark on a pending or approved plan and confirm.',
+          'To reopen, an admin chooses the circular arrow on a denied or cancelled plan and confirms. It goes back to pending.',
+          'To delete, a reviewer chooses the cross at the end of the row and confirms.',
+        ],
+        notes: [
+          'Supervisors can edit any plan. Pilots can edit only plans they submitted. Both can edit pending and denied plans. Only an admin can edit an approved, cancelled or completed plan.',
+          'If you change a reviewed detail on an approved or denied plan, such as the date, pilot, place or height, the plan goes back to pending and the earlier decision is cleared. Changing only the notes or the linked flight does not.',
+          'Cancel needs the same permission as edit.',
+          'Delete cannot be undone. Cancel instead if you want to keep the record.',
+        ],
+      },
+    ]
+  },
+  {
+    id: 'checklists',
+    title: 'Checklists',
+    topics: [
+      {
+        id: 'completing',
+        title: 'Completing a pre-flight checklist',
+        summary: 'Run a checklist before a flight and save the result as a record. Each submitted checklist is kept for compliance.',
+        image: {
+          src: '/manual/checklists-completing.png',
+          alt: 'The Complete Pre-Flight Checklist dialog with a template chosen and some items ticked',
+          caption: 'The Complete Pre-Flight Checklist dialog with two of four items ticked. The button changes to Submit as not passed because required items are open.',
+        },
+        steps: [
+          'Choose **Checklists** in the sidebar, then **Complete Checklist**.',
+          'Pick a **Template** and a **Pilot**. Pick a **Vehicle** if the checklist is for one drone.',
+          'Tick each item as you check it. Add a short note beside an item if needed.',
+          'Add **Overall Notes** if you want.',
+          'Choose **Submit Checklist**.',
+        ],
+        notes: [
+          'A star beside an item means it is required.',
+          'If a required item is not ticked, a warning shows and the button changes to **Submit as not passed**. You can still submit, and the result is saved as not passed.',
+          'Supervisors, pilots and admins can complete checklists by default. Viewers cannot.',
+          'The **Pilot** list is not limited to you. Choose the pilot who did the check.',
+        ],
+      },
+      {
+        id: 'completions',
+        title: 'Finding past checklists',
+        summary: 'The Completions tab is the history of every submitted checklist.',
+        steps: [
+          'Choose the **Completions** tab.',
+          'Read the date, pilot, vehicle and template, and a green tick or red cross under **Passed**.',
+          'Choose the eye icon to open **Checklist Details**. It shows each item, ticked or not, with its notes. A badge says **All Passed** or **Items Failed**.',
+          'Choose **Export CSV** to download the history as a CSV file, a plain table that opens in a spreadsheet.',
+        ],
+        notes: [
+          'Supervisors and admins can delete a checklist from its details with **Delete**. This cannot be undone. Do it only for a checklist entered by mistake.',
+          'Everyone can read past checklists by default.',
+        ],
+      },
+      {
+        id: 'templates',
+        title: 'Building and managing templates',
+        summary: 'A template is the list of items a checklist asks for. Supervisors and admins build them, and everyone completes them.',
+        image: {
+          src: '/manual/checklists-templates.png',
+          alt: 'The Create Checklist Template dialog with a name, description and a list of items',
+          caption: 'The Create Checklist Template dialog.',
+        },
+        steps: [
+          'On the **Templates** tab, choose **Create Template**.',
+          'Type a **Name** and an optional **Description**.',
+          'Pick a **Vehicle Model** to label the template for one model, or leave **All models**.',
+          'Type each item under **Checklist Items**. Untick **Required** for an item that is nice to have. Use the arrows to reorder and the bin to remove.',
+          'Choose **Add Item** for more rows, then **Create Template**.',
+          'To change one later, choose the pencil on its card, then **Update Template**.',
+        ],
+        notes: [
+          'You need a name and at least one item.',
+          'The vehicle model is a label. It does not stop anyone using the template with another drone.',
+          'A template that has been used cannot be deleted, because submitted checklists keep a link to it. Edit it and untick **Active** instead. It then drops off the list and is no longer offered.',
+          'Supervisors and admins can manage templates by default. Pilots and viewers see them but have no **Create Template** button.',
         ],
       },
     ]
@@ -591,6 +835,315 @@ export const sections = [
           '**Export CSV** shows for people allowed to export, which is everyone by default.',
           'Choose the **Flights CSV (exported from this app)** format by hand. Flights that are already in the app are skipped.',
           'Only admins can import. Other flight log formats (Skydio, DJI, Litchi, Airdata and more) are covered under **Integrations**.',
+        ],
+      },
+    ]
+  },
+  {
+    id: 'missions',
+    title: 'Mission Log',
+    topics: [
+      {
+        id: 'mission-log',
+        title: 'Finding missions',
+        summary: 'The **Mission Log** records work that is not a single flight: callouts, searches, demonstrations and other operations, with who took part and for how many hours.',
+        steps: [
+          'Choose **Mission Log** in the sidebar.',
+          'Type in **Search missions...** to find a word in a mission.',
+          'Use the two date boxes to show a range of dates, and the pilot box (it starts at **All Pilots**) to show one pilot\'s missions.',
+          'Click a row to open it. You see the description, case number, start and end times, notes and each pilot with their role. Click it again to close it.',
+        ],
+        notes: [
+          'The list shows the 200 most recent matches. If it says so under the table, narrow the dates or the search to reach older missions.',
+          'Each row shows the date, title, reason, location, drone, pilots, man hours and status. Some columns are hidden on a narrow screen.',
+          'Status is **Planned**, **In Progress**, **Completed** or **Cancelled**.',
+          'Choose **Export CSV** to download a CSV file (a table you can open in a spreadsheet). It holds all missions, not only the ones you filtered to.',
+          'Everyone can see the log by default, including viewers.',
+        ],
+      },
+      {
+        id: 'adding-missions',
+        title: 'Adding and changing a mission',
+        summary: 'Add a mission after the work is done, or plan one ahead and change its status later.',
+        image: {
+          src: '/manual/missions-adding-missions.png',
+          alt: 'The Add Mission dialog with date, status, title, reason, location, hours, drone and pilots involved',
+          caption: 'The Add Mission dialog, with one pilot added.',
+        },
+        steps: [
+          'On **Mission Log**, choose **Add Mission**.',
+          'Check the **Date** (it starts as today) and set the **Status**.',
+          'Type a **Title**. The **Date** and **Title** are required.',
+          'Pick a **Reason / Purpose** from the list. Choose **Other...** to type your own.',
+          'Fill in what you know: **Location**, **Case Number**, **Man Hours**, **Start Time**, **End Time**, **Drone Used**, **Description** and **Notes**.',
+          'Under **Pilots Involved**, choose **+ Add Pilot**. Pick the pilot, pick a role (**PIC**, **Observer**, **Spotter**, **Visual Observer** or **Support**) and enter their hours. Use the X to remove a line.',
+          'Choose **Add Mission**.',
+          'To change a mission later, open its row and choose **Edit Mission**, then **Save Changes**.',
+          'To remove one, choose the trash icon at the end of its row and confirm.',
+        ],
+        notes: [
+          'Supervisors and pilots can add missions by default. Viewers cannot.',
+          'Supervisors can change or delete any mission by default. Pilots can change or delete only their own: missions they created, or missions their pilot record is on.',
+          'An admin can change who may add and edit under **Settings**.',
+          'The **Reason / Purpose** list is the same list used for flights.',
+        ],
+      },
+      {
+        id: 'importing-missions',
+        title: 'Importing missions from a file',
+        summary: 'If you kept missions in a spreadsheet, an admin can bring them in instead of typing each one.',
+        steps: [
+          'On **Mission Log**, choose **Import**.',
+          'Choose a CSV or Excel file.',
+          'The window lists each field the app uses. Next to each, pick the column from your file that holds it. The app suggests matches. Choose "don\'t map" for fields you do not have.',
+          'Fields marked required must be matched. The button stays greyed out until they are.',
+          'Choose the **Import** button that shows the row count.',
+          'Read the summary, then choose **Done**.',
+        ],
+        notes: [
+          'Only admins see **Import**.',
+          'The summary tells you how many records were created, how many were skipped for a missing date, how many were already imported, and which names or drones it could not match.',
+          'Names that are not in your pilot list are recorded as Unknown. Rows for drones that are not in your fleet are skipped. Add the missing pilots or drones first if that matters.',
+          'There is a limit on how many rows can come in at once. If the window says so, split the file and import the rest.',
+        ],
+      },
+    ]
+  },
+  {
+    id: 'training',
+    title: 'Training Log',
+    topics: [
+      {
+        id: 'training-log',
+        title: 'Finding training entries',
+        summary: 'The **Training Log** records training events: who trained, what kind of training it was, who taught it, for how long and how it went.',
+        steps: [
+          'Choose **Training Log** in the sidebar.',
+          'Type in **Search training...** to look through titles, types, locations, instructors and pilot names.',
+          'Use the two date boxes, the pilot box (**All Pilots**) and the type box (**All Types**) to narrow the list.',
+          'Click a row to open it. You see the description, drone, objectives, start and end times, notes and each pilot with their role. Click it again to close it.',
+        ],
+        notes: [
+          'Each row shows the date, title, type, instructor, location, pilots, man hours and outcome. Some columns are hidden on a narrow screen.',
+          'The types are **Initial**, **Recurrent**, **Proficiency** and **Special**. The outcome is **Completed**, **Incomplete** or **Failed**.',
+          'The log loads up to 200 entries at a time. The search looks only through the entries that are loaded, so narrow the dates first if you have many.',
+          'Choose **Export CSV** to download a CSV file (a table you can open in a spreadsheet). It holds all training entries, not only the ones you filtered to.',
+          'Everyone can see the log by default, including viewers.',
+        ],
+      },
+      {
+        id: 'adding-training',
+        title: 'Adding and changing a training entry',
+        summary: 'Add an entry after a training session so there is a record of who took part and how it went.',
+        image: {
+          src: '/manual/training-adding-training.png',
+          alt: 'The Add Training dialog with date, type, outcome, title, instructor, objectives and pilots or trainees',
+          caption: 'The Add Training dialog, with one pilot added.',
+        },
+        steps: [
+          'On **Training Log**, choose **Add Training**.',
+          'Check the **Date**. Pick the **Training Type** and the **Outcome**.',
+          'Type a **Title**. The **Date**, **Training Type** and **Title** are required.',
+          'Fill in what you know: **Location**, **Instructor**, **Man Hours**, **Start Time**, **End Time**, **Drone Used**, **Description**, **Objectives** and **Notes**.',
+          'Under **Pilots / Trainees**, choose **+ Add Pilot**. Pick the pilot, pick a role and enter their hours. Training has one more role than missions: **Student**.',
+          'Choose **Add Training**.',
+          'To change an entry later, open its row and choose **Edit Training**, then **Save Changes**.',
+          'To remove one, choose the trash icon at the end of its row and confirm.',
+        ],
+        notes: [
+          'Supervisors and pilots can add entries by default. Viewers cannot.',
+          'Supervisors can change or delete any entry by default. Pilots can change or delete only their own: entries they created, or entries their pilot record is on.',
+          'An admin can change who may add and edit under **Settings**. Missions and training share the same permissions.',
+        ],
+      },
+      {
+        id: 'importing-training',
+        title: 'Importing training from a file',
+        summary: 'If you kept training records in a spreadsheet, an admin can bring them in instead of typing each one.',
+        steps: [
+          'On **Training Log**, choose **Import**.',
+          'Choose a CSV or Excel file.',
+          'Next to each app field, pick the column from your file that holds it, or choose "don\'t map".',
+          'Match every field marked required, then choose the **Import** button that shows the row count.',
+          'Read the summary, then choose **Done**.',
+        ],
+        notes: [
+          'Only admins see **Import**.',
+          'It works the same way as the mission import. See **Importing missions from a file** for what the summary means.',
+        ],
+      },
+    ]
+  },
+  {
+    id: 'calendar',
+    title: 'Calendar',
+    topics: [
+      {
+        id: 'unit-calendar',
+        title: 'The unit calendar',
+        summary: 'The calendar shows everything with a date in one place: flights, missions, training, maintenance due dates, certification expiry dates, and events and leave you add yourself.',
+        steps: [
+          'Choose **Calendar** in the sidebar.',
+          'Use the checkboxes **Flights**, **Missions**, **Training**, **Maintenance due**, **Cert expirations**, **Events** and **Leave** above the calendar to show or hide each kind. Each has its own color.',
+          'Use **prev**, **next** and **today** to move through time.',
+          'Switch the view with **month**, **week** or **list**.',
+          'Click an item to open the page behind it.',
+        ],
+        notes: [
+          'Flights show as one badge per day, such as 3 flights. Click it to open Flights.',
+          'Only the dates you are looking at are loaded, so moving to a new month can take a moment.',
+          'Missions, training, maintenance and certifications are read-only here. Change them on their own pages.',
+          'Everyone can see the calendar by default.',
+        ],
+      },
+      {
+        id: 'adding-events',
+        title: 'Adding events and leave',
+        summary: 'Add your own entries for things that are not flights, such as a team briefing, a range day or time off. Everyone who can see the calendar sees them.',
+        image: {
+          src: '/manual/calendar-adding-events.png',
+          alt: 'The Add event / leave dialog with title, category, dates and notes',
+          caption: 'The Add event / leave dialog.',
+        },
+        steps: [
+          'Choose **Add event / leave** at the top right.',
+          'Type a **Title**.',
+          'Pick a **Category**: **Event** or **Leave**.',
+          'Pick the **Start date**. For more than one day, also pick an **End date (optional)**. It cannot be before the start date.',
+          'Add **Notes (optional)** if you want.',
+          'Choose **Save**.',
+        ],
+        notes: [
+          'Supervisors and pilots can add entries by default. Viewers cannot, and do not see the button.',
+        ],
+      },
+      {
+        id: 'editing-events',
+        title: 'Changing or deleting an entry',
+        summary: 'Open an event or leave entry to correct it or remove it.',
+        steps: [
+          'Click the entry on the calendar. The **Edit entry** dialog opens.',
+          'Change the fields and choose **Save**, or choose **Delete** and confirm to remove it.',
+        ],
+        notes: [
+          'Supervisors and admins can change any entry by default. Pilots can change only their own.',
+          'If you may not change an entry, the dialog still opens so you can read it, but **Save** is greyed out and there is no **Delete**.',
+          'An admin can change who may edit under **Settings**.',
+        ],
+      },
+    ]
+  },
+  {
+    id: 'pilots',
+    title: 'Pilots',
+    topics: [
+      {
+        id: 'pilot-list',
+        title: 'The Pilots page',
+        summary: 'Use the **Pilots** page to find a pilot, add a new one, or tidy up the list. Click a name to open that pilot\'s profile.',
+        steps: [
+          'Open **Pilots** in the sidebar.',
+          'Type in **Search pilots...** to filter by name, email or badge number.',
+          'Click a column heading (**Name**, **Email**, **Badge #** or **Status**) to sort. Click it again to reverse the order.',
+          'To add a pilot, click **Add Pilot**, fill in **First Name** and **Last Name** (the only required fields), and click **Add Pilot** in the dialog.',
+          'To change a pilot, click the pencil in the **Actions** column, change the fields and click **Update**.',
+          'To combine two records for the same person, click the merge icon, choose the record to keep under **Keep this pilot**, and click **Merge**.',
+          'To retire a pilot, click the bin icon and confirm **Deactivate**.',
+        ],
+        notes: [
+          'Everyone can see the list. **Add Pilot**, merge, deactivate and **Export CSV** are for supervisors and admins by default. **Export CSV** also needs the permission to export reports. A CSV file is a plain table that opens in Excel.',
+          'Supervisors and admins can edit any pilot. Pilots can edit only their own profile. An admin can change this under **Settings**.',
+          'Email and phone numbers are hidden from viewers by default. Without that access the **Email** column shows a dash and the email and cell fields are missing from the dialog.',
+          'Each badge number can belong to one pilot only.',
+          '**Merge** moves every flight, log, certification and record from one pilot to the other, then removes the first. It cannot be undone.',
+          '**Deactivate** does not delete anything. The pilot is marked inactive, and drops off the Certifications matrix and out of the compliance counts. Flights stay on record. Set **Status** back to **Active** in the edit dialog to bring the pilot back.',
+          '**Counts towards unit totals** (supervisors and admins only) is a separate switch. Turn it off for a vendor or guest operator: their flights stay on record but leave the unit\'s numbers.',
+        ],
+      },
+      {
+        id: 'pilot-profiles',
+        title: 'The pilot profile',
+        summary: 'A pilot\'s profile page gathers their details, flight totals, certifications and currency in one place.',
+        image: {
+          src: '/manual/pilots-pilot-profiles.png',
+          alt: 'The profile card of a demo pilot with initials, name, email, a personal cell number and an active status badge',
+          caption: 'The profile card at the top of a pilot page.',
+        },
+        steps: [
+          'On **Pilots**, click the pilot\'s name.',
+          'The card at the top shows the photo (or initials), name, email, **Personal Cell**, **Work Cell**, badge number, status and notes.',
+          'Below it you see **Total Flights**, **Flight Hours** and **Avg Duration**, then tiles for training hours, mission hours and incidents, and the **Flights by Month** and **Flights by Purpose** charts.',
+          'Further down are **Needs Attention**, **Recent Flights** (the latest 20), **Certifications**, **Currency Status** and **Documents**.',
+          'Click **Back to Pilots** to return to the list.',
+        ],
+        notes: [
+          'You only see the parts you may view. For example, someone without access to flights does not see the flight totals, charts or **Recent Flights**.',
+          'Only admins can add or replace the photo. Click the small camera on the photo and choose an image file. The photo shows on this page. The list shows initials.',
+          'Email and phone numbers are hidden from roles without contact access (viewers by default).',
+          'The **Currency Status** card appears only when at least one active currency rule exists.',
+        ],
+      },
+      {
+        id: 'editing-a-profile',
+        title: 'Editing a pilot profile',
+        summary: 'Update a pilot\'s name, contact details, badge number or notes from their profile page.',
+        steps: [
+          'Open the pilot\'s profile and click the pencil next to the name (**Edit profile**).',
+          'Change **First Name**, **Last Name**, **Email**, **Personal Cell**, **Work Cell**, **Badge Number** or **Notes**.',
+          'Click **Save**, or **Cancel** to throw the changes away.',
+        ],
+        notes: [
+          'The pencil shows only if you may edit this pilot. Supervisors and admins can edit anyone. A pilot can edit only the profile linked to their own account. Viewers cannot edit.',
+          '**Status** appears only for supervisors and admins. A pilot cannot change their own status, the unit totals setting or the photo.',
+          'The email and cell fields appear only for roles with contact access. Without it they are left out of the form and your save does not touch them.',
+          'First and last name are required.',
+        ],
+      },
+      {
+        id: 'pilot-currency',
+        title: 'Pilot currency',
+        summary: 'Currency means a pilot has flown enough recently. A currency rule sets the flight hours (and, if you want, the number of flights) a pilot must log within a number of days, for example 5 hours in 90 days.',
+        image: {
+          src: '/manual/pilots-pilot-currency.png',
+          alt: 'The New Currency Rule dialog with a name, required hours, period in days and minimum flights filled in',
+          caption: 'The New Currency Rule dialog in Settings.',
+        },
+        steps: [
+          'Open **Settings** (admins only) and scroll to **Currency Rules** on the **General** tab.',
+          'Click **New Rule**.',
+          'Enter a **Name**. Add a **Description (optional)** if you like.',
+          'Enter **Required hours** and **Period (days)**. Add **Minimum flights (optional)** if the rule also needs a number of flights.',
+          'Leave **Vehicle model (optional)** blank to count every aircraft, or type a model (for example X10) to count only flights on that model.',
+          'Leave **Active (include in pilot currency calculations)** ticked and click **Create**.',
+          'To change or remove a rule, use the pencil or bin next to it in the list. Editing saves with **Save**.',
+        ],
+        notes: [
+          'Once a rule is active, every pilot page shows a **Currency Status** card. Each row shows the hours and flights flown against the rule, **Current** or **Lapsed**, and an **Expires** date: the day the pilot would lapse if they did not fly again.',
+          'A pilot is **Lapsed** if any active rule is not met. With no active rules everyone counts as current.',
+          'Only reviewed flights count, from every source. A flight waiting for review, including one sent back to the queue after an edit, does not count until a supervisor reviews it. A pilot can show as lapsed while flights wait for review.',
+          'A rule can look back up to 3650 days.',
+          'Lapsed pilots appear in **Needs Attention** on their page and on the **Compliance** page.',
+        ],
+      },
+      {
+        id: 'needs-attention',
+        title: 'Needs Attention',
+        summary: 'The **Needs Attention** card on a pilot page lists what that pilot should fix: lapsed currency and certifications that are expired or about to expire.',
+        image: {
+          src: '/manual/pilots-needs-attention.png',
+          alt: 'The Needs Attention card of a demo pilot listing a certification that expires soon, with the number of items in the header',
+          caption: 'The Needs Attention card with one item listed.',
+        },
+        steps: [
+          'Open the pilot\'s page and find the **Needs Attention** card.',
+          'Each line is one item. Red lines are lapsed currency or an expired certification. Amber lines are certifications expiring within 30 days, with the days left.',
+          'The number in the card header is how many items there are.',
+        ],
+        notes: [
+          'When nothing is outstanding the card says **All clear**.',
+          'The card shows only for people who may view certifications.',
+          'A certification you have renewed no longer shows. Only the current record counts. Certifications marked not issued are left out too.',
+          'Certifications without an expiration date never appear.',
         ],
       },
     ]
@@ -883,361 +1436,6 @@ export const sections = [
     ]
   },
   {
-    id: 'checkouts',
-    title: 'Equipment Checkouts',
-    topics: [
-      {
-        id: 'checking-equipment-out',
-        title: 'Checking equipment out',
-        summary: 'Use a checkout to record who has a piece of equipment, so you always know where it is.',
-        image: {
-          src: '/manual/checkouts-checking-equipment-out.png',
-          alt: 'The Check Out Equipment dialog with type, item, pilot, expected return and notes',
-          caption: 'The Check Out Equipment dialog.',
-        },
-        steps: [
-          'Choose **Checkouts** in the sidebar, then **Check Out**.',
-          'Pick the **Type**: **Vehicle**, **Battery**, **Controller**, **Dock**, **Sensor**, **Attachment** or **Other**.',
-          'Pick the **Item**.',
-          'Pick the **Pilot** who is taking it. The box starts on your own pilot record, if you have one.',
-          'Optional: **Expected return (optional)** and **Notes (optional)**.',
-          'Choose **Check Out**.',
-        ],
-        notes: [
-          'You can pick any active pilot. A supervisor can record a checkout for someone else. The audit log shows who entered the record and who has the equipment.',
-          'The **Item** list shows only equipment that is not retired or damaged.',
-          'Equipment that is already out cannot be checked out again until it is checked in. The app says "This equipment is already checked out".',
-          'Supervisors and pilots can check equipment out by default, and so can admins. Viewers can see the page but not the buttons.',
-          'The page shows checkouts only to roles that can view the fleet.',
-        ],
-      },
-      {
-        id: 'checking-equipment-back-in',
-        title: 'Checking equipment back in',
-        summary: 'Check equipment in when it comes back, so the record shows it is available again.',
-        steps: [
-          'On **Checkouts**, find the item under **Currently Out**.',
-          'Choose **Check In** on its row.',
-          'Under **Returned by**, pick who is returning it. It starts on the person who took it out, or on you.',
-          'Add **Notes (optional)** if you like.',
-          'Choose **Check In**.',
-        ],
-        notes: [
-          'Anyone who can check out can check in, including equipment someone else took.',
-          'The record keeps the date it went out, who took it, the date it came back and who returned it.',
-        ],
-      },
-      {
-        id: 'active-and-returned-records',
-        title: 'Active and returned records',
-        summary: 'The Checkouts page shows what is out now and keeps a history of what has been out before.',
-        image: {
-          src: '/manual/checkouts-active-and-returned-records.png',
-          alt: 'The Checkouts page with a Currently Out table and a History table with the Show returned box',
-          caption: 'The Checkouts page: Currently Out above History.',
-        },
-        steps: [
-          '**Currently Out** lists everything that has not come back. Each row shows the equipment, its type, who holds it, when it went out and the expected return date.',
-          '**History** starts with the items still out. Tick **Show returned** to add the ones that have come back.',
-        ],
-        notes: [
-          'In **History**, an item that is still out shows **Out** in the **Returned** column.',
-          'A trash icon at the end of a **History** row deletes that record for good, after you confirm. Admins and supervisors can do this by default. Pilots and viewers cannot.',
-          'When a vehicle is checked out, its location on the dashboard changes to "with" that pilot. See **Where a drone is**.',
-        ],
-      },
-    ]
-  },
-  {
-    id: 'locations',
-    title: 'Drone Locations',
-    topics: [
-      {
-        id: 'last-known-location',
-        title: 'Where a drone is',
-        summary: 'The Locations card on the dashboard shows the last known place of every drone that is not retired.',
-        steps: [
-          'Open the **Dashboard**.',
-          'Find the **Locations** card. Each drone shows its name and its location under it.',
-        ],
-        notes: [
-          'A location is "with" a pilot name, or a place name such as North. It shows whichever was recorded most recently: a checkout, or a location someone set by hand.',
-          'After a drone is checked in, it reads **Returned**, until someone sets a location again. The place set before it went out is out of date.',
-          '**Unknown** means no checkout or location was ever recorded.',
-          'If you have no drones, the card says **No drones**.',
-          'Everyone who can view the fleet sees the card.',
-        ],
-      },
-      {
-        id: 'setting-a-location',
-        title: 'Setting a location',
-        summary: 'Update a drone\'s location when it moves, without a full checkout.',
-        steps: [
-          'On the **Locations** card, find the drone.',
-          'Open **Set location…** beside it.',
-          'Choose a place under **Places**, or a pilot under **Pilots**.',
-          'The card updates at once.',
-        ],
-        notes: [
-          'A drone is in one spot at a time: one place or one pilot.',
-          'Supervisors and pilots can set a location by default, and so can admins. Viewers cannot. An admin can change this under **Settings**.',
-          'An admin sets the list of places under **Settings**, in **Drone Locations**. If it was never changed, the places are North, Central and South.',
-          'Each change is saved in the audit log with who made it.',
-        ],
-      },
-    ]
-  },
-  {
-    id: 'missions',
-    title: 'Mission Log',
-    topics: [
-      {
-        id: 'mission-log',
-        title: 'Finding missions',
-        summary: 'The **Mission Log** records work that is not a single flight: callouts, searches, demonstrations and other operations, with who took part and for how many hours.',
-        steps: [
-          'Choose **Mission Log** in the sidebar.',
-          'Type in **Search missions...** to find a word in a mission.',
-          'Use the two date boxes to show a range of dates, and the pilot box (it starts at **All Pilots**) to show one pilot\'s missions.',
-          'Click a row to open it. You see the description, case number, start and end times, notes and each pilot with their role. Click it again to close it.',
-        ],
-        notes: [
-          'The list shows the 200 most recent matches. If it says so under the table, narrow the dates or the search to reach older missions.',
-          'Each row shows the date, title, reason, location, drone, pilots, man hours and status. Some columns are hidden on a narrow screen.',
-          'Status is **Planned**, **In Progress**, **Completed** or **Cancelled**.',
-          'Choose **Export CSV** to download a CSV file (a table you can open in a spreadsheet). It holds all missions, not only the ones you filtered to.',
-          'Everyone can see the log by default, including viewers.',
-        ],
-      },
-      {
-        id: 'adding-missions',
-        title: 'Adding and changing a mission',
-        summary: 'Add a mission after the work is done, or plan one ahead and change its status later.',
-        image: {
-          src: '/manual/missions-adding-missions.png',
-          alt: 'The Add Mission dialog with date, status, title, reason, location, hours, drone and pilots involved',
-          caption: 'The Add Mission dialog, with one pilot added.',
-        },
-        steps: [
-          'On **Mission Log**, choose **Add Mission**.',
-          'Check the **Date** (it starts as today) and set the **Status**.',
-          'Type a **Title**. The **Date** and **Title** are required.',
-          'Pick a **Reason / Purpose** from the list. Choose **Other...** to type your own.',
-          'Fill in what you know: **Location**, **Case Number**, **Man Hours**, **Start Time**, **End Time**, **Drone Used**, **Description** and **Notes**.',
-          'Under **Pilots Involved**, choose **+ Add Pilot**. Pick the pilot, pick a role (**PIC**, **Observer**, **Spotter**, **Visual Observer** or **Support**) and enter their hours. Use the X to remove a line.',
-          'Choose **Add Mission**.',
-          'To change a mission later, open its row and choose **Edit Mission**, then **Save Changes**.',
-          'To remove one, choose the trash icon at the end of its row and confirm.',
-        ],
-        notes: [
-          'Supervisors and pilots can add missions by default. Viewers cannot.',
-          'Supervisors can change or delete any mission by default. Pilots can change or delete only their own: missions they created, or missions their pilot record is on.',
-          'An admin can change who may add and edit under **Settings**.',
-          'The **Reason / Purpose** list is the same list used for flights.',
-        ],
-      },
-      {
-        id: 'importing-missions',
-        title: 'Importing missions from a file',
-        summary: 'If you kept missions in a spreadsheet, an admin can bring them in instead of typing each one.',
-        steps: [
-          'On **Mission Log**, choose **Import**.',
-          'Choose a CSV or Excel file.',
-          'The window lists each field the app uses. Next to each, pick the column from your file that holds it. The app suggests matches. Choose "don\'t map" for fields you do not have.',
-          'Fields marked required must be matched. The button stays greyed out until they are.',
-          'Choose the **Import** button that shows the row count.',
-          'Read the summary, then choose **Done**.',
-        ],
-        notes: [
-          'Only admins see **Import**.',
-          'The summary tells you how many records were created, how many were skipped for a missing date, how many were already imported, and which names or drones it could not match.',
-          'Names that are not in your pilot list are recorded as Unknown. Rows for drones that are not in your fleet are skipped. Add the missing pilots or drones first if that matters.',
-          'There is a limit on how many rows can come in at once. If the window says so, split the file and import the rest.',
-        ],
-      },
-    ]
-  },
-  {
-    id: 'training',
-    title: 'Training Log',
-    topics: [
-      {
-        id: 'training-log',
-        title: 'Finding training entries',
-        summary: 'The **Training Log** records training events: who trained, what kind of training it was, who taught it, for how long and how it went.',
-        steps: [
-          'Choose **Training Log** in the sidebar.',
-          'Type in **Search training...** to look through titles, types, locations, instructors and pilot names.',
-          'Use the two date boxes, the pilot box (**All Pilots**) and the type box (**All Types**) to narrow the list.',
-          'Click a row to open it. You see the description, drone, objectives, start and end times, notes and each pilot with their role. Click it again to close it.',
-        ],
-        notes: [
-          'Each row shows the date, title, type, instructor, location, pilots, man hours and outcome. Some columns are hidden on a narrow screen.',
-          'The types are **Initial**, **Recurrent**, **Proficiency** and **Special**. The outcome is **Completed**, **Incomplete** or **Failed**.',
-          'The log loads up to 200 entries at a time. The search looks only through the entries that are loaded, so narrow the dates first if you have many.',
-          'Choose **Export CSV** to download a CSV file (a table you can open in a spreadsheet). It holds all training entries, not only the ones you filtered to.',
-          'Everyone can see the log by default, including viewers.',
-        ],
-      },
-      {
-        id: 'adding-training',
-        title: 'Adding and changing a training entry',
-        summary: 'Add an entry after a training session so there is a record of who took part and how it went.',
-        image: {
-          src: '/manual/training-adding-training.png',
-          alt: 'The Add Training dialog with date, type, outcome, title, instructor, objectives and pilots or trainees',
-          caption: 'The Add Training dialog, with one pilot added.',
-        },
-        steps: [
-          'On **Training Log**, choose **Add Training**.',
-          'Check the **Date**. Pick the **Training Type** and the **Outcome**.',
-          'Type a **Title**. The **Date**, **Training Type** and **Title** are required.',
-          'Fill in what you know: **Location**, **Instructor**, **Man Hours**, **Start Time**, **End Time**, **Drone Used**, **Description**, **Objectives** and **Notes**.',
-          'Under **Pilots / Trainees**, choose **+ Add Pilot**. Pick the pilot, pick a role and enter their hours. Training has one more role than missions: **Student**.',
-          'Choose **Add Training**.',
-          'To change an entry later, open its row and choose **Edit Training**, then **Save Changes**.',
-          'To remove one, choose the trash icon at the end of its row and confirm.',
-        ],
-        notes: [
-          'Supervisors and pilots can add entries by default. Viewers cannot.',
-          'Supervisors can change or delete any entry by default. Pilots can change or delete only their own: entries they created, or entries their pilot record is on.',
-          'An admin can change who may add and edit under **Settings**. Missions and training share the same permissions.',
-        ],
-      },
-      {
-        id: 'importing-training',
-        title: 'Importing training from a file',
-        summary: 'If you kept training records in a spreadsheet, an admin can bring them in instead of typing each one.',
-        steps: [
-          'On **Training Log**, choose **Import**.',
-          'Choose a CSV or Excel file.',
-          'Next to each app field, pick the column from your file that holds it, or choose "don\'t map".',
-          'Match every field marked required, then choose the **Import** button that shows the row count.',
-          'Read the summary, then choose **Done**.',
-        ],
-        notes: [
-          'Only admins see **Import**.',
-          'It works the same way as the mission import. See **Importing missions from a file** for what the summary means.',
-        ],
-      },
-    ]
-  },
-  {
-    id: 'pilots',
-    title: 'Pilots',
-    topics: [
-      {
-        id: 'pilot-list',
-        title: 'The Pilots page',
-        summary: 'Use the **Pilots** page to find a pilot, add a new one, or tidy up the list. Click a name to open that pilot\'s profile.',
-        steps: [
-          'Open **Pilots** in the sidebar.',
-          'Type in **Search pilots...** to filter by name, email or badge number.',
-          'Click a column heading (**Name**, **Email**, **Badge #** or **Status**) to sort. Click it again to reverse the order.',
-          'To add a pilot, click **Add Pilot**, fill in **First Name** and **Last Name** (the only required fields), and click **Add Pilot** in the dialog.',
-          'To change a pilot, click the pencil in the **Actions** column, change the fields and click **Update**.',
-          'To combine two records for the same person, click the merge icon, choose the record to keep under **Keep this pilot**, and click **Merge**.',
-          'To retire a pilot, click the bin icon and confirm **Deactivate**.',
-        ],
-        notes: [
-          'Everyone can see the list. **Add Pilot**, merge, deactivate and **Export CSV** are for supervisors and admins by default. **Export CSV** also needs the permission to export reports. A CSV file is a plain table that opens in Excel.',
-          'Supervisors and admins can edit any pilot. Pilots can edit only their own profile. An admin can change this under **Settings**.',
-          'Email and phone numbers are hidden from viewers by default. Without that access the **Email** column shows a dash and the email and cell fields are missing from the dialog.',
-          'Each badge number can belong to one pilot only.',
-          '**Merge** moves every flight, log, certification and record from one pilot to the other, then removes the first. It cannot be undone.',
-          '**Deactivate** does not delete anything. The pilot is marked inactive, and drops off the Certifications matrix and out of the compliance counts. Flights stay on record. Set **Status** back to **Active** in the edit dialog to bring the pilot back.',
-          '**Counts towards unit totals** (supervisors and admins only) is a separate switch. Turn it off for a vendor or guest operator: their flights stay on record but leave the unit\'s numbers.',
-        ],
-      },
-      {
-        id: 'pilot-profiles',
-        title: 'The pilot profile',
-        summary: 'A pilot\'s profile page gathers their details, flight totals, certifications and currency in one place.',
-        image: {
-          src: '/manual/pilots-pilot-profiles.png',
-          alt: 'The profile card of a demo pilot with initials, name, email, a personal cell number and an active status badge',
-          caption: 'The profile card at the top of a pilot page.',
-        },
-        steps: [
-          'On **Pilots**, click the pilot\'s name.',
-          'The card at the top shows the photo (or initials), name, email, **Personal Cell**, **Work Cell**, badge number, status and notes.',
-          'Below it you see **Total Flights**, **Flight Hours** and **Avg Duration**, then tiles for training hours, mission hours and incidents, and the **Flights by Month** and **Flights by Purpose** charts.',
-          'Further down are **Needs Attention**, **Recent Flights** (the latest 20), **Certifications**, **Currency Status** and **Documents**.',
-          'Click **Back to Pilots** to return to the list.',
-        ],
-        notes: [
-          'You only see the parts you may view. For example, someone without access to flights does not see the flight totals, charts or **Recent Flights**.',
-          'Only admins can add or replace the photo. Click the small camera on the photo and choose an image file. The photo shows on this page. The list shows initials.',
-          'Email and phone numbers are hidden from roles without contact access (viewers by default).',
-          'The **Currency Status** card appears only when at least one active currency rule exists.',
-        ],
-      },
-      {
-        id: 'editing-a-profile',
-        title: 'Editing a pilot profile',
-        summary: 'Update a pilot\'s name, contact details, badge number or notes from their profile page.',
-        steps: [
-          'Open the pilot\'s profile and click the pencil next to the name (**Edit profile**).',
-          'Change **First Name**, **Last Name**, **Email**, **Personal Cell**, **Work Cell**, **Badge Number** or **Notes**.',
-          'Click **Save**, or **Cancel** to throw the changes away.',
-        ],
-        notes: [
-          'The pencil shows only if you may edit this pilot. Supervisors and admins can edit anyone. A pilot can edit only the profile linked to their own account. Viewers cannot edit.',
-          '**Status** appears only for supervisors and admins. A pilot cannot change their own status, the unit totals setting or the photo.',
-          'The email and cell fields appear only for roles with contact access. Without it they are left out of the form and your save does not touch them.',
-          'First and last name are required.',
-        ],
-      },
-      {
-        id: 'pilot-currency',
-        title: 'Pilot currency',
-        summary: 'Currency means a pilot has flown enough recently. A currency rule sets the flight hours (and, if you want, the number of flights) a pilot must log within a number of days, for example 5 hours in 90 days.',
-        image: {
-          src: '/manual/pilots-pilot-currency.png',
-          alt: 'The New Currency Rule dialog with a name, required hours, period in days and minimum flights filled in',
-          caption: 'The New Currency Rule dialog in Settings.',
-        },
-        steps: [
-          'Open **Settings** (admins only) and scroll to **Currency Rules** on the **General** tab.',
-          'Click **New Rule**.',
-          'Enter a **Name**. Add a **Description (optional)** if you like.',
-          'Enter **Required hours** and **Period (days)**. Add **Minimum flights (optional)** if the rule also needs a number of flights.',
-          'Leave **Vehicle model (optional)** blank to count every aircraft, or type a model (for example X10) to count only flights on that model.',
-          'Leave **Active (include in pilot currency calculations)** ticked and click **Create**.',
-          'To change or remove a rule, use the pencil or bin next to it in the list. Editing saves with **Save**.',
-        ],
-        notes: [
-          'Once a rule is active, every pilot page shows a **Currency Status** card. Each row shows the hours and flights flown against the rule, **Current** or **Lapsed**, and an **Expires** date: the day the pilot would lapse if they did not fly again.',
-          'A pilot is **Lapsed** if any active rule is not met. With no active rules everyone counts as current.',
-          'Only reviewed flights count, from every source. A flight waiting for review, including one sent back to the queue after an edit, does not count until a supervisor reviews it. A pilot can show as lapsed while flights wait for review.',
-          'A rule can look back up to 3650 days.',
-          'Lapsed pilots appear in **Needs Attention** on their page and on the **Compliance** page.',
-        ],
-      },
-      {
-        id: 'needs-attention',
-        title: 'Needs Attention',
-        summary: 'The **Needs Attention** card on a pilot page lists what that pilot should fix: lapsed currency and certifications that are expired or about to expire.',
-        image: {
-          src: '/manual/pilots-needs-attention.png',
-          alt: 'The Needs Attention card of a demo pilot listing a certification that expires soon, with the number of items in the header',
-          caption: 'The Needs Attention card with one item listed.',
-        },
-        steps: [
-          'Open the pilot\'s page and find the **Needs Attention** card.',
-          'Each line is one item. Red lines are lapsed currency or an expired certification. Amber lines are certifications expiring within 30 days, with the days left.',
-          'The number in the card header is how many items there are.',
-        ],
-        notes: [
-          'When nothing is outstanding the card says **All clear**.',
-          'The card shows only for people who may view certifications.',
-          'A certification you have renewed no longer shows. Only the current record counts. Certifications marked not issued are left out too.',
-          'Certifications without an expiration date never appear.',
-        ],
-      },
-    ]
-  },
-  {
     id: 'certifications',
     title: 'Certifications',
     topics: [
@@ -1398,385 +1596,180 @@ export const sections = [
     title: 'Maintenance',
     topics: [
       {
-        id: 'maintenance-records',
-        title: 'Maintenance Records',
-        summary: 'Record maintenance events for any vehicle, battery, controller, or dock, or pick "Other" for items not tied to equipment (e.g., an FAA authorization renewal). Include the date, description, technician, and notes. Use the paperclip on any history row to attach related documents.'
-      },
-      {
-        id: 'schedules-tasks',
-        title: 'Schedules & Tasks',
-        summary: 'Set up recurring maintenance schedules (monthly, quarterly, yearly, every 2 or 3 years) or one-time tasks with a specific due date via Add Schedule / Task. The system tracks when each item is next due and generates alerts when overdue. Marking a one-time task complete logs a maintenance record and closes the task; recurring schedules roll forward to the next due date.'
-      },
-    ]
-  },
-  {
-    id: 'weather',
-    title: 'Weather',
-    topics: [
-      {
-        id: 'weather-briefing',
-        title: 'Getting a weather briefing',
-        summary: 'Use the Weather page before a flight to check wind, visibility, cloud height and the next 12 hours for the place you plan to fly. It ends in a single answer: GO, CAUTION or NO-GO.',
+        id: 'reading-the-maintenance-page',
+        title: 'Reading the Maintenance page',
+        summary: 'Use Maintenance to see what work is coming up, what is scheduled, and what has already been done on your vehicles, batteries and other equipment.',
         steps: [
-          'Choose **Weather** in the sidebar. The page opens on your unit\'s default place and loads a briefing at once.',
-          'To check another place, type an address, or two numbers such as 40.7128, -74.0060, into **Coordinates or Address**.',
-          'Or click the small map to drop a pin. The address box fills in for you.',
-          'Or type numbers into **Latitude** and **Longitude**.',
-          'To use where you are now, choose **GPS** and allow your browser to share your location.',
-          'Choose **Check Weather**.',
-          'Read the colored answer at the top, then the reasons listed under it.',
+          'Choose **Maintenance** in the sidebar.',
+          '**Upcoming** shows a card for each maintenance record that has a next due date. The date is red when it is overdue, amber when it is within 7 days, and green when it is later.',
+          '**Schedules & Tasks** lists repeating schedules and one-time tasks, with who they are assigned to, when they were last done and when they are next due.',
+          '**History** lists every maintenance record, with the date, who did the work and what kind of work it was.',
+          'Type in **Search maintenance...** to filter all three lists at once.',
         ],
         notes: [
-          'Everyone who can sign in can use the Weather page.',
-          'The server fetches the weather from public services, so the page needs the internet.',
-          'If an address is not found, you see No match for that address. Try a nearby town or use numbers.',
+          '**Upcoming** shows the first 10 cards. Choose **Show all** to see the rest, and **Show less** to fold it back.',
+          'Everyone can see this page by default.',
+          '**Export CSV** downloads the maintenance records as a CSV file (a plain table you can open in a spreadsheet). It is for people who may export, which is everyone by default.',
+          'The app raises an alert when a schedule is due or overdue. See **Reading the alerts list** under Alerts.',
         ],
       },
       {
-        id: 'default-and-recent-places',
-        title: 'Default place and recent places',
-        summary: 'The page starts on your unit\'s default place, and remembers the places you check so you can return to them in one click.',
+        id: 'adding-a-maintenance-record',
+        title: 'Adding a maintenance record',
+        summary: 'Write down work that was done, or work that will be due later, for a vehicle, battery, controller, dock, sensor, attachment, other equipment, or the whole unit.',
         steps: [
-          'Look at **Recent Locations** under the form. It lists up to eight places you checked on this device.',
-          'Click one to load its briefing again.',
+          'On **Maintenance**, choose **Add Maintenance**.',
+          'Pick the **Entity Type**, such as Vehicle or Battery, then pick the item under **Entity**. For work that covers the whole unit, pick **Organization-wide**.',
+          'Pick the **Maintenance Type**: Scheduled, Unscheduled or Inspection.',
+          'Describe the work under **Description**. This is the only field you must fill in.',
+          'Pick who did the work under **Performed By**, and fill in **Performed Date** and **Cost** if you want them kept.',
+          'Set **Next Due Date** or **Next Due Hours** if the work comes round again. The record then appears under **Upcoming**.',
+          'Add anything else under **Notes**, then choose **Add Maintenance**.',
         ],
-        notes: [
-          'The default place is the **Default Location** an admin sets in **Settings**. If none is set, the page starts on the White House in Washington, D.C.',
-          '**Recent Locations** is kept in your browser. It is not shared with other people or other devices.',
-        ],
-      },
-      {
-        id: 'go-no-go-advisory',
-        title: 'GO, CAUTION and NO-GO',
-        summary: 'The colored panel at the top gives a quick answer for flying at that place now. It is an aid for your own judgment, not an order.',
-        steps: [
-          'Read the label: green **GO**, amber **CAUTION**, red **NO-GO**, or grey **UNKNOWN** when no weather data came back.',
-          'Read the reasons listed under it. Each one names the reading that moved the answer.',
-          'Read **Current Conditions** for wind, gusts, temperature, humidity, visibility, ceiling (height of the lowest cloud layer above the ground), flight category and rain.',
-        ],
-        notes: [
-          'Out of the box, wind over 15 mph or gusts over 20 mph give CAUTION, and wind over 25 mph or gusts over 30 mph give NO-GO.',
-          'Visibility under 3 miles gives CAUTION and under 1 mile gives NO-GO. A ceiling under 500 feet gives CAUTION and under 200 feet gives NO-GO.',
-          'Temperature under 32 F or over 100 F gives CAUTION, and under 20 F gives NO-GO. Rain of more than 0.01 inch gives CAUTION.',
-          'An admin can change these limits under **Weather Thresholds** in **Settings**.',
-          'The flight category is a standard aviation label: VFR is good, MVFR is marginal, IFR is poor and LIFR is very poor.',
-        ],
-      },
-      {
-        id: 'forecast-and-reports',
-        title: 'The forecast and the airport reports',
-        summary: 'Below the answer you get a 12-hour forecast and the raw airport reports, for when you want more than the summary.',
-        steps: [
-          'Read **Nearest METAR Station** for the airport the readings come from and how far away it is. A METAR is the latest observation at that airport.',
-          'Scroll to **12-Hour Forecast** for charts of wind and gusts, and of temperature and chance of rain.',
-          'Scroll the **Hourly Detail** cards sideways to see each hour.',
-          'Open **Raw METAR** or **Raw TAF (Terminal Forecast)** to read the original text. A TAF is that airport\'s forecast.',
-        ],
-        notes: [
-          'The raw sections appear only when a station near the place has reported.',
-          'The readings are from the nearest airport, which may be some miles from your site.',
-        ],
-      },
-    ]
-  },
-  {
-    id: 'airspace',
-    title: 'Airspace (ADS-B)',
-    topics: [
-      {
-        id: 'live-aircraft-map',
-        title: 'Watching nearby aircraft',
-        summary: 'The Airspace page shows planes and helicopters flying near a place you pick. Use it to see manned traffic before and during a flight. It uses ADS-B, a signal most aircraft broadcast with their position and height.',
-        steps: [
-          'Choose **Airspace** in the sidebar. The map opens on your unit\'s default place.',
-          'Click the map where you plan to fly. A dashed circle shows the search area.',
-          'Wait for the aircraft to appear. The top bar shows how many were found and when.',
-          'Click an aircraft to see its call sign, type, registration, height, speed, heading, climb rate and squawk code. A squawk is a four-digit code the pilot sets.',
-          'If an aircraft reports an emergency, the popup says so in red.',
-        ],
-        notes: [
-          'Nothing is searched until you click the map.',
-          'The data comes from a community feed (adsb.lol) and needs the internet. It shows only aircraft that broadcast ADS-B, so some will be missing. It is not an airspace authorization.',
-          'Everyone who can sign in can use the page.',
-        ],
-      },
-      {
-        id: 'radius-and-refresh',
-        title: 'Radius, refresh and colors',
-        summary: 'Set how wide to look and how often to update, and read the colors to see which aircraft are near drone height.',
-        steps: [
-          'Pick **Radius**: 25, 50, 100, 150 or 200 miles.',
-          'Pick **Refresh**: every 5, 10, 15 or 30 seconds, or **Off**.',
-          'Choose **Refresh** (the button) to update right now.',
-          'Use the **Altitude** key at the bottom right of the map. Red is below 400 ft, orange is 400 to 1,000 ft, yellow is 1,000 to 5,000 ft, blue is 5,000 to 15,000 ft, and grey is higher or unknown.',
-        ],
-        notes: [
-          'Your radius and refresh choices are remembered on this device.',
-          'After you pick a point, a **Recent** button shows that point\'s coordinates. Choose it to jump back to your last pick.',
-          'If an automatic update fails, nothing pops up and the old aircraft stay on the map. A manual **Refresh** shows an error.',
-          '(cached) next to the count means the answer was reused from a few moments ago.',
-        ],
-      },
-    ]
-  },
-  {
-    id: 'flight-plans',
-    title: 'Flight Plans',
-    topics: [
-      {
-        id: 'overview',
-        title: 'The flight plans list',
-        summary: 'A flight plan is a request to fly, sent to a supervisor for approval before the flight. The Flight Plans page lists every plan and where it stands.',
-        steps: [
-          'Choose **Flight Plans** in the sidebar. A number on the sidebar item counts plans waiting for review.',
-          'Choose **All Plans** to see everyone\'s plans, or **My Plans** to see only those you submitted.',
-          'Use the **All Statuses** list to show only Pending, Approved, Denied, Cancelled or Completed plans.',
-          'Click a row, or the arrow at its right, to open the details: description, case number, height, length, checklist, review notes, and who submitted it.',
-          'Choose **Export CSV** to download the list as a CSV file, a plain table that opens in a spreadsheet.',
-        ],
-        notes: [
-          'A badge with a number and the word **Pending** shows how many plans wait for a decision.',
-          'Everyone can see the list. Supervisors and pilots can submit plans by default. Viewers cannot.',
-          'The **Weather Briefing** link in the details opens the National Weather Service site in a new tab. For the full briefing, use the **Weather** page.',
-        ],
-      },
-      {
-        id: 'submitting',
-        title: 'Submitting a plan',
-        summary: 'Submit a plan before you fly, so a supervisor can approve it.',
         image: {
-          src: '/manual/flight-plans-submitting.png',
-          alt: 'The Submit Flight Plan form with title, date, pilot, vehicle, location and other fields',
-          caption: 'The Submit Flight Plan form.',
+          src: '/manual/maintenance-adding-a-maintenance-record.png',
+          alt: 'The Add Maintenance window with fields for Entity Type, Entity, Maintenance Type, Description, Performed By, Performed Date, Cost, Next Due Date, Next Due Hours and Notes.',
+          caption: 'The Add Maintenance window, filled in with demo data.',
+        },
+        notes: [
+          'Choose **Other** for equipment that is not a vehicle, battery, controller, dock, sensor or attachment.',
+          'Supervisors, pilots and admins can add records by default. Viewers cannot.',
+          'An admin can change who may add or edit records under **Settings**, in the **Role Permissions** card.',
+        ],
+      },
+      {
+        id: 'editing-deleting-and-attaching-documents',
+        title: 'Editing, deleting and attaching documents',
+        summary: 'Fix a record, remove one that was a mistake, or attach a receipt or inspection form to it.',
+        steps: [
+          'Find the record in **History**.',
+          'Choose the pencil icon (**Edit**), change the fields, and choose **Update**.',
+          'To remove a record, choose the bin icon (**Delete**) and confirm in **Delete Maintenance Record**.',
+          'To attach a file, choose the paperclip icon (**Documents**) on the record or on a schedule.',
+        ],
+        notes: [
+          'Supervisors and admins can edit or delete any record by default. Pilots can edit or delete only the records they added.',
+          'Deleting a record cannot be undone from this page. Check it first.',
+          'Attached files are also filed in the **Maintenance** folder under **Documents**.',
+        ],
+      },
+      {
+        id: 'schedules-and-tasks',
+        title: 'Schedules and one-time tasks',
+        summary: 'Use a schedule for work that repeats, such as a monthly inspection. Use a one-time task for a single job with a due date.',
+        steps: [
+          'On **Maintenance**, choose **Add Schedule / Task**.',
+          'Give it a **Name**.',
+          'Pick the **Entity Type** and the **Entity** it applies to.',
+          'Pick the **Frequency**: Monthly, Quarterly, Yearly, Every 2 Years, Every 3 Years, or One-time task.',
+          'Pick who it is for under **Assigned To**, or leave it on Unassigned.',
+          'Set the **Due Date**. A one-time task must have one. For a repeating schedule you can leave it empty, and the app counts one period from today.',
+          'Add a **Description** if it helps, then choose **Add Schedule**.',
+        ],
+        image: {
+          src: '/manual/maintenance-schedules-and-tasks.png',
+          alt: 'The Add Schedule / Task window with fields for Name, Entity Type, Entity, Frequency, Assigned To, Due Date and Description.',
+          caption: 'The Add Schedule / Task window, filled in with demo data.',
+        },
+        notes: [
+          'Supervisors and admins can create, edit and delete schedules by default. Pilots cannot see **Add Schedule / Task**.',
+          'The **Status** column reads Active while the schedule is running, Done for a finished one-time task, and Inactive for a schedule that has ended.',
+          'An overdue schedule raises an alert until it is completed or moved to a later date.',
+        ],
+      },
+      {
+        id: 'completing-a-schedule',
+        title: 'Marking a schedule complete',
+        summary: 'When the work is done, mark the schedule complete. The app writes the maintenance record for you.',
+        steps: [
+          'In **Schedules & Tasks**, find the schedule.',
+          'Choose the check mark icon (**Mark Complete**).',
+          'Read the message in **Complete Maintenance** and choose **Mark Complete**.',
+        ],
+        notes: [
+          'This adds a completed record to **History** and cannot be undone.',
+          'A repeating schedule moves its due date forward by one period from today. A one-time task becomes Done.',
+          'Supervisors, pilots and admins can mark a schedule complete by default. Viewers cannot.',
+        ],
+      },
+      {
+        id: 'importing-maintenance-records',
+        title: 'Importing maintenance records from a file',
+        summary: 'If you kept maintenance records in a spreadsheet, an admin can bring them in instead of typing each one.',
+        steps: [
+          'On **Maintenance**, choose **Import**.',
+          'Choose a CSV or Excel file, match its columns to the app fields, and choose the **Import** button that shows the row count.',
+        ],
+        notes: [
+          'Only admins see **Import**.',
+          'The steps and the summary work the same way as for missions. See **Importing missions from a file** under Mission Log.',
+        ],
+      },
+    ]
+  },
+  {
+    id: 'checkouts',
+    title: 'Equipment Checkouts',
+    topics: [
+      {
+        id: 'checking-equipment-out',
+        title: 'Checking equipment out',
+        summary: 'Use a checkout to record who has a piece of equipment, so you always know where it is.',
+        image: {
+          src: '/manual/checkouts-checking-equipment-out.png',
+          alt: 'The Check Out Equipment dialog with type, item, pilot, expected return and notes',
+          caption: 'The Check Out Equipment dialog.',
         },
         steps: [
-          'Choose **Submit Plan** on the Flight Plans page.',
-          'Fill in the required fields marked with a star: **Title**, **Planned Date/Time** and **Pilot**.',
-          'Add what you know: **Vehicle**, **Location**, **Latitude**, **Longitude**, **Purpose**, **Case Number** and **Description**.',
-          'Enter **Max Altitude (ft)** and **Est. Duration (min)**.',
-          'Tick **Pre-flight checklist completed** if you have done the checklist.',
-          'Add **Notes** if needed, then choose **Submit Plan**.',
+          'Choose **Checkouts** in the sidebar, then **Check Out**.',
+          'Pick the **Type**: **Vehicle**, **Battery**, **Controller**, **Dock**, **Sensor**, **Attachment** or **Other**.',
+          'Pick the **Item**.',
+          'Pick the **Pilot** who is taking it. The box starts on your own pilot record, if you have one.',
+          'Optional: **Expected return (optional)** and **Notes (optional)**.',
+          'Choose **Check Out**.',
         ],
         notes: [
-          'The planned height must be between 0 and 400 feet above the ground. Higher is refused.',
-          'If your account is linked to a pilot, that pilot is filled in for you.',
-          'The checklist tick is only a statement. It does not look up a checklist on the **Checklists** page.',
-          'New plans start as **pending**.',
+          'You can pick any active pilot. A supervisor can record a checkout for someone else. The audit log shows who entered the record and who has the equipment.',
+          'The **Item** list shows only equipment that is not retired or damaged.',
+          'Equipment that is already out cannot be checked out again until it is checked in. The app says "This equipment is already checked out".',
+          'Supervisors and pilots can check equipment out by default, and so can admins. Viewers can see the page but not the buttons.',
+          'The page shows checkouts only to roles that can view the fleet.',
         ],
       },
       {
-        id: 'reviewing',
-        title: 'Approving or denying a plan',
-        summary: 'A reviewer decides each pending plan. Nobody can approve or deny a plan they submitted themselves, so a second person always makes the call.',
+        id: 'checking-equipment-back-in',
+        title: 'Checking equipment back in',
+        summary: 'Check equipment in when it comes back, so the record shows it is available again.',
+        steps: [
+          'On **Checkouts**, find the item under **Currently Out**.',
+          'Choose **Check In** on its row.',
+          'Under **Returned by**, pick who is returning it. It starts on the person who took it out, or on you.',
+          'Add **Notes (optional)** if you like.',
+          'Choose **Check In**.',
+        ],
+        notes: [
+          'Anyone who can check out can check in, including equipment someone else took.',
+          'The record keeps the date it went out, who took it, the date it came back and who returned it.',
+        ],
+      },
+      {
+        id: 'active-and-returned-records',
+        title: 'Active and returned records',
+        summary: 'The Checkouts page shows what is out now and keeps a history of what has been out before.',
         image: {
-          src: '/manual/flight-plans-reviewing.png',
-          alt: 'The flight plans table with a pending plan and an approved plan and their action buttons',
-          caption: 'The plans table. A pending plan shows approve and deny buttons to a reviewer.',
+          src: '/manual/checkouts-active-and-returned-records.png',
+          alt: 'The Checkouts page with a Currently Out table and a History table with the Show returned box',
+          caption: 'The Checkouts page: Currently Out above History.',
         },
         steps: [
-          'Find a plan marked **pending**. Open its details to read it.',
-          'To approve, choose the check mark, then **Approve** in the box that opens.',
-          'To deny, choose the ban mark. In **Deny Flight Plan**, type a **Denial Reason** (required) and optional **Review Notes**, then choose **Deny Plan**.',
-          'Read the result in the details: who reviewed it, when, and the notes.',
+          '**Currently Out** lists everything that has not come back. Each row shows the equipment, its type, who holds it, when it went out and the expected return date.',
+          '**History** starts with the items still out. Tick **Show returned** to add the ones that have come back.',
         ],
         notes: [
-          'Supervisors and admins can approve, deny and delete plans by default. Pilots and viewers cannot.',
-          'The approve and deny buttons do not show on a plan you submitted, even if you are an admin. Ask someone else.',
-          'Only a pending plan can be approved or denied.',
-          'An admin can change who may review under **Settings**.',
+          'In **History**, an item that is still out shows **Out** in the **Returned** column.',
+          'A trash icon at the end of a **History** row deletes that record for good, after you confirm. Admins and supervisors can do this by default. Pilots and viewers cannot.',
+          'When a vehicle is checked out, its location on the dashboard changes to "with" that pilot. See **Where a drone is**.',
         ],
-      },
-      {
-        id: 'editing-and-cancelling',
-        title: 'Editing, cancelling and reopening',
-        summary: 'Change a plan when the details change, cancel one you will not fly, or put a closed plan back in the queue.',
-        steps: [
-          'To edit, choose the pencil on the plan. **Edit Flight Plan** opens with the same fields, plus **Linked Flight ID** for the flight flown under the plan. Choose **Save Changes**.',
-          'To cancel, choose the cross mark on a pending or approved plan and confirm.',
-          'To reopen, an admin chooses the circular arrow on a denied or cancelled plan and confirms. It goes back to pending.',
-          'To delete, a reviewer chooses the cross at the end of the row and confirms.',
-        ],
-        notes: [
-          'Supervisors can edit any plan. Pilots can edit only plans they submitted. Both can edit pending and denied plans. Only an admin can edit an approved, cancelled or completed plan.',
-          'If you change a reviewed detail on an approved or denied plan, such as the date, pilot, place or height, the plan goes back to pending and the earlier decision is cleared. Changing only the notes or the linked flight does not.',
-          'Cancel needs the same permission as edit.',
-          'Delete cannot be undone. Cancel instead if you want to keep the record.',
-        ],
-      },
-    ]
-  },
-  {
-    id: 'checklists',
-    title: 'Checklists',
-    topics: [
-      {
-        id: 'completing',
-        title: 'Completing a pre-flight checklist',
-        summary: 'Run a checklist before a flight and save the result as a record. Each submitted checklist is kept for compliance.',
-        image: {
-          src: '/manual/checklists-completing.png',
-          alt: 'The Complete Pre-Flight Checklist dialog with a template chosen and some items ticked',
-          caption: 'The Complete Pre-Flight Checklist dialog with two of four items ticked. The button changes to Submit as not passed because required items are open.',
-        },
-        steps: [
-          'Choose **Checklists** in the sidebar, then **Complete Checklist**.',
-          'Pick a **Template** and a **Pilot**. Pick a **Vehicle** if the checklist is for one drone.',
-          'Tick each item as you check it. Add a short note beside an item if needed.',
-          'Add **Overall Notes** if you want.',
-          'Choose **Submit Checklist**.',
-        ],
-        notes: [
-          'A star beside an item means it is required.',
-          'If a required item is not ticked, a warning shows and the button changes to **Submit as not passed**. You can still submit, and the result is saved as not passed.',
-          'Supervisors, pilots and admins can complete checklists by default. Viewers cannot.',
-          'The **Pilot** list is not limited to you. Choose the pilot who did the check.',
-        ],
-      },
-      {
-        id: 'completions',
-        title: 'Finding past checklists',
-        summary: 'The Completions tab is the history of every submitted checklist.',
-        steps: [
-          'Choose the **Completions** tab.',
-          'Read the date, pilot, vehicle and template, and a green tick or red cross under **Passed**.',
-          'Choose the eye icon to open **Checklist Details**. It shows each item, ticked or not, with its notes. A badge says **All Passed** or **Items Failed**.',
-          'Choose **Export CSV** to download the history as a CSV file, a plain table that opens in a spreadsheet.',
-        ],
-        notes: [
-          'Supervisors and admins can delete a checklist from its details with **Delete**. This cannot be undone. Do it only for a checklist entered by mistake.',
-          'Everyone can read past checklists by default.',
-        ],
-      },
-      {
-        id: 'templates',
-        title: 'Building and managing templates',
-        summary: 'A template is the list of items a checklist asks for. Supervisors and admins build them, and everyone completes them.',
-        image: {
-          src: '/manual/checklists-templates.png',
-          alt: 'The Create Checklist Template dialog with a name, description and a list of items',
-          caption: 'The Create Checklist Template dialog.',
-        },
-        steps: [
-          'On the **Templates** tab, choose **Create Template**.',
-          'Type a **Name** and an optional **Description**.',
-          'Pick a **Vehicle Model** to label the template for one model, or leave **All models**.',
-          'Type each item under **Checklist Items**. Untick **Required** for an item that is nice to have. Use the arrows to reorder and the bin to remove.',
-          'Choose **Add Item** for more rows, then **Create Template**.',
-          'To change one later, choose the pencil on its card, then **Update Template**.',
-        ],
-        notes: [
-          'You need a name and at least one item.',
-          'The vehicle model is a label. It does not stop anyone using the template with another drone.',
-          'A template that has been used cannot be deleted, because submitted checklists keep a link to it. Edit it and untick **Active** instead. It then drops off the list and is no longer offered.',
-          'Supervisors and admins can manage templates by default. Pilots and viewers see them but have no **Create Template** button.',
-        ],
-      },
-    ]
-  },
-  {
-    id: 'alerts',
-    title: 'Alerts',
-    topics: [
-      {
-        id: 'overview',
-        title: 'Reading the alerts list',
-        summary: 'Alerts are notices the app raises on its own when something needs attention. Today the app raises an alert for each maintenance schedule that is due or overdue.',
-        steps: [
-          'Choose **Alerts** in the sidebar.',
-          'Read each card: its title, a severity badge (info, warning or critical), the message and the time.',
-          'A blue dot marks an alert nobody has marked as read. Read alerts are faded.',
-          'Use the **All Severities** list to show only Info, Warning or Critical alerts.',
-          'The count at the top, such as 3 total alerts, counts everything not dismissed.',
-        ],
-        notes: [
-          'Overdue maintenance alerts are checked once a day, early in the morning. They are warnings.',
-          'When the schedule is completed or moved to a later date, its alert goes away by itself. A new alert starts if it becomes overdue again.',
-          'Each schedule has one open alert at a time.',
-          'The page shows up to 100 alerts, newest first. Everyone can read them by default.',
-          'When there is nothing to show, the page says **No alerts found**.',
-        ],
-      },
-      {
-        id: 'dismissing',
-        title: 'Marking read and dismissing',
-        summary: 'Clear alerts you have dealt with so the list shows only what is left.',
-        steps: [
-          'To mark one as read, choose the check mark on its card.',
-          'To remove one, choose the cross on its card.',
-          'To remove all of them, choose **Dismiss All**, then confirm in **Dismiss All Alerts**.',
-        ],
-        notes: [
-          'Alerts are shared. When anyone marks one read or dismisses it, it changes for everyone.',
-          'Supervisors and admins can mark read and dismiss by default. Pilots and viewers can read the list but do not see these buttons.',
-          '**Dismiss All** removes every alert, not only the ones on your screen after a severity filter. Think before you use it.',
-          'Dismissing an alert does not fix the maintenance. If it is still overdue, check **Maintenance**.',
-        ],
-      },
-    ]
-  },
-  {
-    id: 'documents',
-    title: 'Documents & Photos',
-    topics: [
-      {
-        id: 'document-storage',
-        title: 'Document Storage',
-        summary: 'Upload and organize documents in folders. Use the Upload button on the Documents page to add standalone files (FAA authorizations, forms, etc.) directly into the selected folder. System folders (General, Certifications, Insurance, Maintenance, Reports) are created automatically. Create custom folders for additional organization. Documents uploaded from pilot profiles and certifications are auto-filed.'
-      },
-      {
-        id: 'deleting-recently-deleted-and-legal-hold',
-        title: 'Deleting, Recently Deleted and Legal Hold',
-        summary: `Deleting a document or photo moves it to Recently deleted rather than removing it. Users with the restore permission (supervisors by default) can restore it from there, and admins can delete it permanently. Deleting a folder moves its documents to Unfiled.
-
-Users with the legal hold permission (supervisors by default) can place a document or photo on legal hold. A held item shows a lock and cannot be edited, deleted or permanently removed until the hold is released; a held document can still be moved to another folder. Viewing and downloading documents and photos is recorded in the audit log.`
-      },
-      {
-        id: 'photo-gallery',
-        title: 'Photo Gallery',
-        summary: 'Upload photos from flights, training, and events. Photos are organized by date with a lightbox viewer. Associate pilots with photos for easy reference.'
-      },
-      {
-        id: 'linking-photos-to-flights-and-incidents',
-        title: 'Linking Photos to Flights and Incidents',
-        summary: 'Flight and incident detail pages have a Photos section listing attached photos. Linking and unlinking photos (attaching existing gallery photos to a flight or incident, or detaching them) requires the restore and legal hold permission (files custody), which supervisors and admins hold by default. Pilots and viewers can see linked photos but cannot attach or detach them by default.'
-      },
-    ]
-  },
-  {
-    id: 'reports',
-    title: 'Reports & Analytics',
-    topics: [
-      {
-        id: 'pdf-reports',
-        title: 'PDF Reports',
-        summary: `Generate professional PDF reports with your organization's logo and branding. Available report types:
-
-• Flight Summary: All flights within a date range
-• Pilot Hours: Flight hours by pilot
-• Equipment Utilization: Usage statistics per vehicle
-• Pilot Activity Summary: Per-pilot activity report
-• Annual Unit Report: Yearly program summary
-• Per-Pilot Annual Review: A yearly review per pilot; download as one combined PDF, or use "Download PDF Pack" for a ZIP with one PDF per pilot
-• Certifications: Current certification status
-• Battery Status: Battery health and usage
-• Maintenance History: Maintenance records by date range
-
-The report builder also has date-range presets, pilot and vehicle filters (shown only for reports that use them), an "Include non-unit flights" toggle, and a logo override.`
-      },
-      {
-        id: 'csv-export',
-        title: 'CSV Export',
-        summary: 'Every list page supports CSV export. Click the "Export CSV" button to download the current view as a spreadsheet.'
-      },
-      {
-        id: 'analytics',
-        title: 'Analytics',
-        summary: 'The Analytics page provides interactive Power BI-style charts. Click any chart element (a pilot, year, purpose, or vehicle) to cross-filter all other charts. The map shows all flight locations.'
-      },
-      {
-        id: 'gpx-and-kml-export',
-        title: 'GPX and KML Export',
-        summary: 'Flight paths can be exported as GPX (for GPS devices) or KML (for Google Earth) from the flight detail page. These buttons appear when the flight has telemetry data. The exported files contain the full GPS track with altitude and speed data.'
       },
     ]
   },
@@ -1877,6 +1870,47 @@ The report builder also has date-range presets, pilot and vehicle filters (shown
     ]
   },
   {
+    id: 'alerts',
+    title: 'Alerts',
+    topics: [
+      {
+        id: 'overview',
+        title: 'Reading the alerts list',
+        summary: 'Alerts are notices the app raises on its own when something needs attention. Today the app raises an alert for each maintenance schedule that is due or overdue.',
+        steps: [
+          'Choose **Alerts** in the sidebar.',
+          'Read each card: its title, a severity badge (info, warning or critical), the message and the time.',
+          'A blue dot marks an alert nobody has marked as read. Read alerts are faded.',
+          'Use the **All Severities** list to show only Info, Warning or Critical alerts.',
+          'The count at the top, such as 3 total alerts, counts everything not dismissed.',
+        ],
+        notes: [
+          'Overdue maintenance alerts are checked once a day, early in the morning. They are warnings.',
+          'When the schedule is completed or moved to a later date, its alert goes away by itself. A new alert starts if it becomes overdue again.',
+          'Each schedule has one open alert at a time.',
+          'The page shows up to 100 alerts, newest first. Everyone can read them by default.',
+          'When there is nothing to show, the page says **No alerts found**.',
+        ],
+      },
+      {
+        id: 'dismissing',
+        title: 'Marking read and dismissing',
+        summary: 'Clear alerts you have dealt with so the list shows only what is left.',
+        steps: [
+          'To mark one as read, choose the check mark on its card.',
+          'To remove one, choose the cross on its card.',
+          'To remove all of them, choose **Dismiss All**, then confirm in **Dismiss All Alerts**.',
+        ],
+        notes: [
+          'Alerts are shared. When anyone marks one read or dismisses it, it changes for everyone.',
+          'Supervisors and admins can mark read and dismiss by default. Pilots and viewers can read the list but do not see these buttons.',
+          '**Dismiss All** removes every alert, not only the ones on your screen after a severity filter. Think before you use it.',
+          'Dismissing an alert does not fix the maintenance. If it is still overdue, check **Maintenance**.',
+        ],
+      },
+    ]
+  },
+  {
     id: 'incidents',
     title: 'Activity Reports (Incidents)',
     topics: [
@@ -1940,128 +1974,487 @@ The report builder also has date-range presets, pilot and vehicle filters (shown
     ]
   },
   {
-    id: 'integrations',
-    title: 'Integrations & Import',
+    id: 'media',
+    title: 'Photo Gallery',
     topics: [
       {
-        id: 'drone-provider-apis',
-        title: 'Drone Provider APIs',
-        summary: `The Integrations tab in Settings manages connections to drone manufacturer APIs. Skydio is fully supported; BRINC is shown as "Coming Soon". Each provider has credential fields, a Test Connection button, and three sync buttons:
-
-• **Sync Now**: imports flights added since the last sync and refreshes the fleet (drones, batteries, controllers, sensor packages, attachments), plus telemetry for up to 10 flights. Your everyday sync.
-• **Full Sync**: like Sync Now but ignores the last-sync date to re-check the recent flights the Skydio API returns (about 200), and deletes empty flights (no date or duration). Slower.
-• **Sync Telemetry (10)**: fetches only the detailed flight path (GPS, altitude, speed) for the next 10 flights that need it. Press again to backfill more.
-
-Note: the Skydio sync API only exposes recent flights (roughly the last 200), so neither Sync Now nor Full Sync can reach further back than that. To bring in older or complete history, use the flight-log import (Airdata, CSV, and the other supported formats) described below.
-
-You can also set an Auto-Sync Interval (6, 12, or 24 hours) and a separate Telemetry Auto-Sync Interval (30 minutes to 6 hours) so syncs run automatically in the background.`
+        id: 'browsing-photos',
+        title: 'Browsing the photo gallery',
+        summary: 'The gallery keeps photos from flights, training and events in one place, grouped by the date they were taken.',
+        steps: [
+          'Choose **Photo Gallery** in the sidebar.',
+          'Scroll down the date groups, or type in **Search photos...** to narrow the list.',
+          'Choose a photo to open it large. Use the left and right arrow keys to move to the next photo, and Escape to close.',
+          'Choose the info icon in the large view to see the title, description, date, file size and pilots.',
+        ],
+        notes: [
+          'Everyone can view photos by default.',
+          'A padlock on a card means the photo is on legal hold.',
+        ],
       },
       {
-        id: 'skydio-cloud-api',
-        title: 'Skydio Cloud API',
-        summary: `To connect to the Skydio Cloud API:
-
-1. Log into Skydio Cloud at cloud.skydio.com
-2. Go to Settings > Integrations > API Tokens
-3. Create a token with read access to: Flights, Flight Telemetry, Vehicles, Batteries, Controllers, Users, Attachments, Sensor Packages
-4. In Drone Unit Manager, go to Settings > Integrations tab
-5. Enter the API Token and Token ID
-6. Click "Test Connection", then "Sync Now"
-
-For automatic pilot matching, ensure each pilot's profile has their Skydio account email address.`
+        id: 'uploading-photos',
+        title: 'Uploading photos',
+        summary: 'Add one photo or several at once, and say who is in them and when they were taken.',
+        steps: [
+          'On **Photo Gallery**, choose **Upload**. If the gallery is empty, choose **Upload First Photo**.',
+          'Choose the photos. You can pick several at once.',
+          'Add a **Title**, a **Description** and the **Date Taken** if you want to. All three are optional.',
+          'Tick the pilots under **Associated Pilots** if they are in the photos.',
+          'Choose **Upload**. With several photos the button reads **Upload** and the number of photos.',
+        ],
+        image: {
+          src: '/manual/media-uploading-photos.png',
+          alt: 'The Upload Photo window with a box to choose photos, Title, Description and Date Taken fields, and a list of pilots to tick.',
+          caption: 'The Upload Photo window.',
+        },
+        notes: [
+          'Supervisors and admins can upload by default. Pilots can upload too, and can later edit or delete only their own photos.',
+          'Viewers cannot upload.',
+        ],
       },
       {
-        id: 'sync-status-and-disconnect',
-        title: 'Sync Status and Disconnect',
-        summary: `Expanding the Skydio card shows a persistent sync-status block that updates after each sync without a page reload:
-
-• **State**: Whether a sync is currently running (incremental, full, or telemetry) or idle.
-• **Last synced**: When the last sync ran, as a relative time plus the exact timestamp.
-• **Next sync**: The estimated time until the next scheduled auto-sync, when an auto-sync interval is set.
-• **Last run**: A summary of the most recent run (new flights, vehicles, batteries, controllers, and error count) with a colored status dot: green for success, amber for a partial run, and red for a failure. If there were errors, the first one is shown with a "+N more" count.
-
-The card also has a **Disconnect** button. Disconnecting clears the stored Skydio token so syncing stops; you can reconnect later by re-entering the token.`
+        id: 'editing-holding-and-deleting-photos',
+        title: 'Editing, holding and deleting photos',
+        summary: 'Fix a photo\'s details, protect it from change, or remove it.',
+        steps: [
+          'Find the photo card. The icons are under the photo.',
+          'Choose the pencil icon (**Edit**) to open **Edit Photo**, change the details and save.',
+          'Choose the padlock icon to place a photo on legal hold, or to release the hold.',
+          'Choose the bin icon (**Delete**) and confirm to remove it.',
+        ],
+        notes: [
+          'A deleted photo goes to **Recently deleted**. It is not gone for good. See **Deleting, Recently Deleted and Legal Hold** under Documents.',
+          'A photo on legal hold cannot be edited or deleted until the hold is released.',
+          'The pencil and bin show for people who may edit that photo. The padlock and **Recently deleted** show for supervisors and admins by default.',
+        ],
       },
       {
-        id: 'flight-log-import',
-        title: 'Flight Log Import',
-        summary: `Import flight data from multiple sources via Settings > Integrations tab:
-
-• **Skydio CSV**: Flight records exported from Skydio Cloud. A row whose Flight ID is already in the app is skipped, except that its Battery value fills in that flight's battery serial when the flight has none. A filled battery does not change the flight's review status
-• **Excel**: Spreadsheets with "Skydio" and "Pilot Info" sheets (up to 100,000 rows and 512 MB unpacked; a larger file is refused and nothing is imported)
-• **DJI .txt**: DJI Go 4 flight log text files
-• **Litchi CSV**: Litchi flight log exports
-• **Airdata CSV**: Rich 52-column exports with gimbal, RC inputs, battery temperature, flight mode
-• **Airdata JSON**: Single flight JSON exports from Airdata.com
-• **Airdata ZIP**: Bulk export of all flights from Airdata.com (ZIP of JSON files)
-• **Parrot / ANAFI**: GUTMA JSON flight logs
-• **Flights CSV (exported from this app)**: The Flights page's Export CSV, read back in (for example onto another install). Pick this format by hand; rows already in the app are skipped
-
-Format is auto-detected, or you can pick a specific format. Select multiple files at once using Ctrl+click or Shift+click. The app processes them sequentially with live progress tracking and automatic deduplication.`
+        id: 'linking-photos-to-flights-and-incidents',
+        title: 'Linking photos to flights and incidents',
+        summary: 'Attach photos you already uploaded to a flight or an activity report, so they show on that page.',
+        steps: [
+          'Open the flight or the activity report.',
+          'Find the **Photos** section.',
+          'Choose **Attach photos**, tick the photos, and choose **Attach**.',
+          'To remove a photo from the page, choose the **Unlink photo** icon on it. The photo stays in the gallery.',
+        ],
+        notes: [
+          'Attaching and unlinking is for supervisors and admins by default. It uses the same permission as restoring deleted files and legal hold.',
+          'Everyone who can view files sees the linked photos, but cannot attach or unlink them by default.',
+        ],
+      },
+    ]
+  },
+  {
+    id: 'documents',
+    title: 'Documents',
+    topics: [
+      {
+        id: 'folders-and-finding-documents',
+        title: 'Folders and finding documents',
+        summary: 'Documents keeps your files in folders, such as FAA authorizations, insurance papers and forms.',
+        steps: [
+          'Choose **Documents** in the sidebar.',
+          'Choose a folder in the **Folders** list on the left. The number beside it is how many documents it holds.',
+          'Choose the arrow beside a folder to open or close the folders inside it.',
+          'Use the **All folders** icon (the house) above the list to go back to the start.',
+          'Type in **Search...** to find a document by name inside the folder you are in.',
+          'Choose a document name to open it.',
+        ],
+        image: {
+          src: '/manual/documents-folders-and-finding-documents.png',
+          alt: 'The Folders list on the Documents page with the folders General, Certifications, Insurance, Maintenance and Reports, a custom folder, and Unfiled.',
+          caption: 'The Folders list. The numbers show how many documents each folder holds.',
+        },
+        notes: [
+          'The folders General, Certifications, Insurance, Maintenance and Reports are made for you and cannot be renamed or deleted.',
+          'Files uploaded from a pilot profile, a certification or a maintenance record are filed for you.',
+          '**Unfiled** holds documents that are not in any folder.',
+          'Everyone can view documents by default. Opening or downloading one is recorded in the audit log.',
+        ],
       },
       {
-        id: 'smtp-email',
-        title: 'SMTP Email',
-        summary: 'Configure SMTP settings in the Integrations tab to enable email digest notifications. Enter your SMTP host, port, username, password, from address, and TLS settings. Use the "Send Test Email" button to verify the configuration.'
+        id: 'uploading-and-organizing',
+        title: 'Uploading and organizing documents',
+        summary: 'Add a file to the folder you are in, and move or rename it later.',
+        steps: [
+          'Open the folder you want the file to go in.',
+          'Choose **Upload**. The panel says where the file will go.',
+          'Add a **Title** if you want a name other than the file name. Pick a **Type**, such as Insurance or FAA Authorization.',
+          'Choose **Choose file...**, pick the file, then choose **Save**.',
+          'To move a document, choose the folder icon (**Move to folder**) on its row and pick the folder.',
+          'To rename it, choose the pencil icon, type the new name and save.',
+        ],
+        notes: [
+          'A file can be up to 50 MB.',
+          'Supervisors and admins can upload and edit any document by default. Pilots can upload, and can edit or delete only their own.',
+          'With no folder open, the file goes to **Unfiled**.',
+        ],
       },
       {
-        id: 'email-digest-notifications',
-        title: 'Email Digest Notifications',
-        summary: 'Once SMTP is configured, each user can set up email digest preferences in the Email Digest card on Settings > General. Turn digests on or off, choose daily or weekly (and the weekday), the hour to send at, and which categories to include: pending flight plan approvals, flights needing review, expiring certifications, expiring registrations, overdue maintenance, assigned missions, overdue equipment checkouts, and recent incidents. Roles allowed to redirect the digest can send it to another address. Preview shows what the next digest would hold, Send Test emails it now (a few times per 10 minutes), and the card lists recent sends. A test send does not stand in for the scheduled digest.'
+        id: 'managing-folders',
+        title: 'Creating, renaming and deleting folders',
+        summary: 'Add your own folders to keep documents tidy. Supervisors and admins by default.',
+        steps: [
+          'Choose the plus icon (**New Folder**) at the top of the **Folders** list. The new folder goes inside the folder you have open.',
+          'Type a name under **Folder name** and choose **Create**.',
+          'To rename a folder, point at it, choose the pencil icon, type the new name and choose **Save**.',
+          'To delete a folder, point at it, choose the bin icon (**Delete folder**) and confirm in **Delete Folder**.',
+        ],
+        notes: [
+          'Deleting a folder does not delete its documents. They move to **Unfiled**.',
+          'Pilots and viewers do not see these buttons by default.',
+        ],
+      },
+      {
+        id: 'deleting-recently-deleted-and-legal-hold',
+        title: 'Deleting, Recently Deleted and Legal Hold',
+        summary: 'Deleting a document or photo does not remove it at once. It goes to Recently deleted, where it can be brought back.',
+        steps: [
+          'To delete a document, choose the bin icon (**Delete**) on its row and confirm in **Delete Document**.',
+          'To bring one back, choose **Recently deleted** at the top of the page, find the item and choose **Restore**.',
+          'To remove one for good, an admin chooses **Purge** in that window and confirms in **Delete permanently**.',
+          'To protect a file, choose the padlock icon (**Place on legal hold**). Choose it again to release the hold.',
+        ],
+        notes: [
+          'Restoring, and placing or releasing a legal hold, is for supervisors and admins by default. Only admins can purge.',
+          'A file on legal hold shows a lock. It cannot be edited, deleted or purged until the hold is released. It can still be moved to another folder.',
+          'Purging removes the file from the server and cannot be undone.',
+          'The window works the same for photos. Choose **Recently deleted** on **Photo Gallery**.',
+        ],
+      },
+    ]
+  },
+  {
+    id: 'reports',
+    title: 'Reports',
+    topics: [
+      {
+        id: 'building-a-report',
+        title: 'Building a report',
+        summary: 'Pick a report, choose the dates, pilots and vehicles it should cover, and look at it on screen or save it as a PDF (a file that prints the same everywhere).',
+        steps: [
+          'Choose **Reports** in the sidebar.',
+          'In **Report Builder**, pick a **Report Type**.',
+          'Set the **Date Range**. Use a quick button (**Last 30d**, **Last 90d**, **YTD**, **Last year** or **All time**) or pick the dates yourself.',
+          'Pick **Pilots** and **Vehicles** if you want to narrow the report. Leave a list empty to include everyone. **Select all** and **Clear** help with long lists.',
+          'Tick **Include non-unit flights** only if you want vendor and guest operators included.',
+          'Choose **Generate** to see the result under **Report Preview**, or choose **PDF** to download it.',
+        ],
+        image: {
+          src: '/manual/reports-building-a-report.png',
+          alt: 'The Report Builder card with Report Type, Date Range buttons and dates, an Include non-unit flights tick box, pilot and vehicle lists, a logo line and the Generate and PDF buttons.',
+          caption: 'The Report Builder card.',
+        },
+        notes: [
+          'Supervisors, pilots and admins can build reports by default. Viewers see only the CSV exports.',
+          'The report list holds only the reports you are allowed to see. A report needs access to the data it covers.',
+          'Some reports show the situation today and have no date range. The pilot and vehicle lists show only for reports that use them.',
+          'Your last choices are remembered in this browser.',
+          'Reports use your organization logo from **Settings**. To use another one for a single report, choose **Override with custom logo...**.',
+          'A preview is not saved anywhere. Choose **PDF** to keep a copy.',
+        ],
+      },
+      {
+        id: 'report-types',
+        title: 'What each report holds',
+        summary: 'Pick the report that answers your question.',
+        steps: [
+          '**Flight Summary**: every flight in the date range.',
+          '**Pilot Hours**: flight hours for each pilot.',
+          '**Equipment Utilization**: how much each vehicle was used.',
+          '**Pilot Certifications**: where each pilot stands on certifications today.',
+          '**Battery Status**: battery health and use today.',
+          '**Maintenance History**: maintenance records in the date range.',
+          '**Pilot Activity Summary**: a summary of each pilot\'s activity.',
+          '**Annual Unit Report**: a yearly summary of the whole program.',
+          '**Per-Pilot Annual Review**: a yearly review for each pilot. Choose **PDF** for one combined file, or **Download PDF Pack (one per pilot)** for a zip file with one PDF per pilot.',
+        ],
+        notes: [
+          'A report appears in the list only if you can see all the data it uses. The Annual Unit Report needs the most.',
+          'Annual reports default to the current year when you set no dates.',
+        ],
+      },
+      {
+        id: 'quick-csv-exports',
+        title: 'Quick CSV exports',
+        summary: 'Download a plain table of flights, pilots, vehicles, incidents or flight plans to open in a spreadsheet.',
+        steps: [
+          'On **Reports**, set a **Date Range** if you want one.',
+          'Under **Quick CSV Exports**, choose **Export Flights CSV**, **Export Pilots CSV**, **Export Vehicles CSV**, **Export Incidents CSV** or **Export Flight Plans CSV**.',
+        ],
+        notes: [
+          'Each export needs the permission to export, and access to that data. Pilots also need permission to manage pilots.',
+          'Most list pages also have their own **Export CSV** button for the list you are looking at.',
+        ],
       },
     ]
   },
   {
     id: 'settings',
-    title: 'Settings & Admin',
+    title: 'Settings',
     topics: [
       {
         id: 'settings-tabs',
-        title: 'Settings Tabs',
-        summary: 'The Settings page is organized into tabs: General (organization info, default location, weather thresholds, certification labels, mission purposes, drone locations, currency rules, sidebar config, backup and restore, automated backups), Users (change password, user management, role permissions), Integrations (provider APIs, SMTP, flight log import), and API Tokens (long-lived API keys for external access).'
-      },
-      {
-        id: 'api-tokens',
-        title: 'API Tokens',
-        summary: `The API Tokens tab (admin only) issues long-lived keys for external tools that call the Drone Unit Manager API. When creating a token, choose a name, read-only or read & write access, an optional expiry (30 days, 90 days or 1 year; without one the token lasts until revoked), and a scope: either all areas or specific ones (Fleet, Flights, Pilots & Certifications, Maintenance, Operations, Documents & Media, Reports & Dashboard, Audit Log). The Audit Log area is never part of all areas and must be chosen explicitly. The token value is shown once, so copy it immediately. Existing tokens list their prefix, access, areas, and last-used time, and can be revoked. Settings, users, backups, and sync are never reachable with an API token.`
+        title: 'What is on the Settings page',
+        summary: 'Settings holds the choices that apply to the whole unit. Everyone can open it to manage their own profile. Admins see much more.',
+        steps: [
+          'Choose **Settings** in the sidebar.',
+          'The **General** tab holds **My Profile** and **Email Digest** for everyone. For admins it also holds **Organization**, **Certification Status Labels**, **Weather Thresholds**, **Mission / Flight Purposes**, **Drone Locations**, **Default Location**, **Backup & Restore**, **Automated Backups**, **Currency Rules** and **Sidebar Configuration**.',
+          'The **Users** tab is for admins. It holds **Change Password**, **User Management** and **Role Permissions**.',
+          'The **Integrations** tab is for admins. It holds the Skydio connection, email sending and flight log import.',
+          'The **API Tokens** tab is for admins. It holds the keys for other programs.',
+        ],
+        notes: [
+          'Choose **Save Settings** at the bottom of the **General** tab to keep changes to the **Organization**, **Weather Thresholds** and similar cards. Some cards have their own save button.',
+          'A line saying **Unsaved changes** shows beside **Save Settings** until you save.',
+          'Other topics cover the cards that belong to a feature: **Certification Status Labels** under Certifications, **Weather Thresholds** under Weather, **Currency Rules** under Pilots and **Drone Locations** under Drone Locations.',
+          'Admins also find a link to the **API Documentation** at the bottom of the **General** tab. It is for people who write programs.',
+        ],
       },
       {
         id: 'organization-settings',
-        title: 'Organization Settings',
-        summary: 'Configure your organization name, logo, timezone, and idle lock from the Settings page. The idle lock (30 minutes by default, up to 12 hours) signs a browser out after that long with no input, for every role; a change reaches each browser at its next refresh or reload. Sessions still end after 12 hours. Signing out or locking in one tab signs out all open tabs.'
+        title: 'Organization name, time zone, idle lock and logo',
+        summary: 'Set the details that show on every page and on reports. Admins only.',
+        steps: [
+          'Open **Settings** and stay on the **General** tab.',
+          'In the **Organization** card, type your **Organization Name**. It shows on reports and exports.',
+          'Pick the **Time Zone**. Every date and time in the app follows it.',
+          'Set the **Idle lock**, the time with no use before a browser signs out. The default is 30 minutes. You can set up to 12 hours.',
+          'Choose a file under **Organization Logo**. It is used on reports and exports.',
+          'Choose **Save Settings**.',
+        ],
+        notes: [
+          'A new idle lock time reaches each browser the next time it refreshes or reloads. It applies to every role.',
+          'See **Staying signed in, signing out and the idle lock** under Signing In and Your Account.',
+        ],
       },
       {
         id: 'default-location',
-        title: 'Default Location',
-        summary: 'The Default Location (General tab, admin only) sets the organization\'s map center. Type an address or place name and click Search to geocode it, then save it as the default. This location pre-populates the Weather page, the Airspace map, and the dashboard weather tile. If unset, the app falls back to the White House in Washington D.C.'
+        title: 'Default location',
+        summary: 'Set the place the maps open on. Weather, Airspace and the dashboard weather tile all start there. Admins only.',
+        steps: [
+          'In **Settings**, on the **General** tab, find **Default Location**.',
+          'Type an address or place name under **Enter an address or place...** and choose **Search**.',
+          'Check the result, then choose **Save as Default Location**.',
+        ],
+        notes: [
+          'Until you set one, the app starts on the White House in Washington, D.C.',
+        ],
+      },
+      {
+        id: 'flight-purposes',
+        title: 'Mission and flight purposes',
+        summary: 'Edit the list of purposes people pick from on flights and missions. Admins only.',
+        steps: [
+          'In **Settings**, on the **General** tab, find **Mission / Flight Purposes**.',
+          'To add one, type it under **Add a purpose...** and choose **Add**.',
+          'To remove one, choose the cross beside it and confirm.',
+        ],
+        notes: [
+          'Changes apply at once. You do not need **Save Settings**.',
+          'A purpose shows how many flights and missions use it, for example "3 in use".',
+        ],
       },
       {
         id: 'sidebar-configuration',
-        title: 'Sidebar Configuration',
-        summary: `Admins can customize the left navigation from Settings (General tab):
-
-• **Visibility**: Toggle the checkbox next to any item to show or hide it in the sidebar.
-• **Reorder**: Drag items by the grip handle to reorder them, or use the up/down arrows for fine control.
-• **Group headers**: Toggle whether section group headers (Overview, Flight Ops, etc.) are shown.
-
-Click "Save Sidebar Config" to apply.`
-      },
-      {
-        id: 'drone-locations',
-        title: 'Drone Locations',
-        summary: 'The Drone Locations list (General tab, admin only) defines the named places that appear in the dashboard Locations tile\'s "Set location" dropdown (for example North, Central, South). Add, edit, or remove places and save. Pilots are always selectable as locations in addition to these places.'
+        title: 'Changing the sidebar',
+        summary: 'Hide pages nobody on your team uses, or put the busy ones first. Admins only.',
+        steps: [
+          'In **Settings**, on the **General** tab, find **Sidebar Configuration**.',
+          'Tick or untick a page to show or hide it.',
+          'Drag a page by its grip, or use the up and down arrows, to move it.',
+          'Tick or untick **Show group headers (Overview, Flight Ops, etc.)** to turn the group headings on or off.',
+          'Choose **Save Sidebar Config**.',
+        ],
+        notes: [
+          'With group headings on, a page moves only inside its own group.',
+          'The change applies to everyone.',
+        ],
       },
       {
         id: 'user-management',
-        title: 'User Management',
-        summary: 'Admins can create, edit, and deactivate user accounts from Settings > Users. Assign roles and link users to pilot profiles. Only admins can change a display name; other users can change their own email address under My Profile on the General tab, and their theme from the palette icon in the top bar. What each role can do is set in the Role Permissions card below the user list.'
+        title: 'Adding and managing users',
+        summary: 'Give each person their own sign-in, and set what they can do. Admins only.',
+        steps: [
+          'Open **Settings**, then the **Users** tab.',
+          'In **User Management**, choose **Add User**.',
+          'Fill in **Username**, **Display Name** and **Password**. The password needs at least 12 characters.',
+          'Pick the **Role**: Admin, Supervisor, Pilot or Viewer.',
+          'Under **Link to Pilot**, pick the pilot record that belongs to this person, then choose **Create User**.',
+          'To change a role later, use the menu in the **Role** column.',
+          'To switch a sign-in off without deleting it, choose **Active** in the **Status** column so it reads **Disabled**.',
+          'Use the pencil icon (**Edit user**) to change the display name, email, role or linked pilot.',
+          'Use the key icon (**Reset password**), type a new password and choose **Set**.',
+          'Use the bin icon (**Delete user**) to remove a person.',
+        ],
+        notes: [
+          'Usernames and passwords are case-sensitive.',
+          'Link a person to their pilot record so that the "own records" rules work for them. A badge on the row warns when no pilot is linked.',
+          'You cannot change your own role or status, or delete yourself. The last active admin cannot be demoted, disabled or deleted.',
+          'Resetting a password signs that person out on their other devices.',
+          'What each role can do is set in **Role Permissions**, below the user list. See **Changing what each role can do** under Signing In and Your Account.',
+          'Your own password and profile are covered under **Your profile and password**.',
+        ],
       },
       {
-        id: 'audit-log',
-        title: 'Audit Log',
-        summary: `The Audit Log (admin only by default) shows a complete history of all actions taken in the system: who did what, when, and what changed. Use it for accountability and compliance auditing.
-
-Every change to unit data is recorded automatically, including changes made by imports, syncs and scheduled jobs. Each entry shows the person's display name and login name, and the full list of fields that changed with old and new values. Bulk changes and background jobs appear as one summary entry with counts and record IDs, and name the person who started the job. Contact details such as email and phone numbers are hidden. Entries that came from a restored backup are marked Imported. Filters narrow the list by entity type, action, user and a From/To date range (days in the organization time zone). Export CSV downloads every entry matching the filters, including the login name, full changes and an Imported column.`
+        id: 'smtp-email',
+        title: 'Setting up email sending',
+        summary: 'The app sends emails, such as digests, through an email server. SMTP is the name of the standard way programs send email. You need the details from your email provider. Admins only.',
+        steps: [
+          'Open **Settings**, then the **Integrations** tab, and find **Email (SMTP)**.',
+          'Tick **Enable Email Notifications**.',
+          'Fill in **SMTP Host**, **Port**, **Username**, **Password**, **From Address** and **From Name**.',
+          'Leave **Use TLS (recommended)** ticked unless your provider says otherwise. It protects the message on its way.',
+          'Choose **Save**, then choose **Send Test Email** to check it works.',
+        ],
+        notes: [
+          'The card says **Not configured** until it is set up.',
+          'The saved password is never shown again. To change it, type a new one.',
+          'Until email is set up, **Email Digest** cannot send anything.',
+        ],
+      },
+      {
+        id: 'email-digest-notifications',
+        title: 'Email Digest',
+        summary: 'A digest is an email that lists what needs your attention, such as expiring certifications or overdue maintenance. Each person sets up their own.',
+        steps: [
+          'Open **Settings**. On the **General** tab, find **Email Digest**.',
+          'Tick **Send me email digests**.',
+          'Pick the **Frequency**: Daily, Weekly or Off. For Weekly, pick the weekday under **Send on**.',
+          'Pick the time under **Send at**.',
+          'Under **Include**, tick what you want listed: **Pending Flight Plan Approvals**, **Flights Needing Review**, **Expiring Certifications**, **Expiring FAA Registrations**, **Overdue Maintenance**, **Assigned Missions**, **Overdue Equipment Checkouts** and **Recent Incidents**.',
+          'Choose **Save Preferences**.',
+          'Choose **Preview** to see what the next digest would hold, or **Send Test** to email one now.',
+        ],
+        image: {
+          src: '/manual/settings-email-digest.png',
+          alt: 'The Email Digest card with a tick box, Frequency, Send at, a list of items to include, and the Save Preferences, Preview and Send Test buttons.',
+          caption: 'The Email Digest card.',
+        },
+        notes: [
+          'An admin must set up email sending first. See **Setting up email sending**.',
+          'The digest lists only what your role can see.',
+          'By default it goes to the email on your account or your linked pilot. Admins and supervisors can type another address under **Send to another address**.',
+          '**Preview** and **Send Test** use your saved choices, so save first. A test can be sent only a few times in ten minutes. A test does not replace the scheduled digest.',
+          'The card lists your recent sends, with the date, the status and the number of items.',
+        ],
+      },
+      {
+        id: 'api-tokens',
+        title: 'API tokens',
+        summary: 'An API token is a long secret key that lets another program, such as Home Assistant, read or change data in the app for you. Admins only.',
+        steps: [
+          'Open **Settings**, then the **API Tokens** tab.',
+          'Choose **Create Token**.',
+          'Type a **Name** that says what the token is for.',
+          'Pick the **Access**: **Read only** or **Read & write**.',
+          'Pick **Expires**: Never, In 30 days, In 90 days or In 1 year.',
+          'Under **Areas**, keep **All areas** ticked, or untick it and tick only the areas the program needs.',
+          'Choose **Create Token**. The token shows once. Copy it now with the copy button, then choose **Done**.',
+        ],
+        image: {
+          src: '/manual/settings-api-tokens.png',
+          alt: 'The Create API Token window with Name, Access, Expires and Areas fields.',
+          caption: 'The Create API Token window. The token itself is shown once, after you create it.',
+        },
+        notes: [
+          'You cannot see the token again after you close the window. If you lose it, create a new one.',
+          'Treat a token like a password. Anyone who has it can act as you, within its access and areas.',
+          'The areas are Fleet, Flights, Pilots & Certifications, Maintenance, Operations, Documents & Media, Reports & Dashboard and Audit Log. **Audit Log** is not part of **All areas**. Tick it yourself if the program needs it.',
+          'The list shows each token\'s start, access, areas, when it was last used and its status. Choose **Revoke** to switch one off.',
+          'Settings, users, backups and syncing can never be reached with a token.',
+        ],
+      },
+    ]
+  },
+  {
+    id: 'integrations',
+    title: 'Integrations & Import',
+    topics: [
+      {
+        id: 'drone-provider-apis',
+        title: 'The Integrations tab',
+        summary: 'Connect the app to your drone maker\'s cloud, so flights and equipment come in without typing. Admins only.',
+        steps: [
+          'Open **Settings**, then the **Integrations** tab.',
+          '**Drone Providers** lists the makers you can connect. **Skydio** is ready to use. **BRINC** shows **Coming Soon**.',
+          '**Services** holds **Email (SMTP)**. See **Setting up email sending** under Settings.',
+          '**Import** holds **Flight Log Import**.',
+        ],
+        notes: [
+          'A provider card says **Connected** or **Not configured**. Choose the card to open it.',
+        ],
+      },
+      {
+        id: 'skydio-cloud-api',
+        title: 'Connecting to Skydio',
+        summary: 'Give the app a key from your Skydio Cloud account, so it can read your flights, vehicles and batteries.',
+        steps: [
+          'Sign in to Skydio Cloud at cloud.skydio.com.',
+          'Go to Settings, then Integrations, then API Tokens, and create a token with read access to Flights, Flight Telemetry, Vehicles, Batteries, Controllers, Users, Attachments and Sensor Packages.',
+          'In the app, open **Settings**, then **Integrations**, and open the **Skydio** card.',
+          'Type the key under **API Token** and its number under **Token ID**.',
+          'Choose **Save Credentials**, then **Test Connection**.',
+          'When the test works, choose **Sync Now**.',
+        ],
+        notes: [
+          'The app matches Skydio people to pilots by email. Put each pilot\'s Skydio email in their profile.',
+          'The saved key is never shown again. To replace it, type a new one.',
+        ],
+      },
+      {
+        id: 'skydio-syncing',
+        title: 'Syncing with Skydio',
+        summary: 'A sync fetches new information from Skydio. There are three kinds, and the app can run them for you.',
+        steps: [
+          '**Sync Now** is your everyday sync. It brings in flights added since the last sync, refreshes your drones, batteries, controllers, sensor packages and attachments, and fetches flight paths for up to 10 flights.',
+          '**Full Sync** is slower. It ignores the last sync date and re-checks the recent flights Skydio returns, about 200. It also deletes flights that have no date or duration.',
+          '**Sync Telemetry (10)** fetches only the detailed flight path (GPS, height and speed) for the next 10 flights that do not have one. Choose it again to get more.',
+          'To sync on its own, pick a time under **Auto-Sync Interval** (every 6, 12 or 24 hours) and under **Telemetry Auto-Sync** (every 30 minutes up to every 6 hours).',
+        ],
+        notes: [
+          'Skydio shares only about the last 200 flights. For older flights, use **Flight Log Import**.',
+          'The sync buttons stay greyed out until a key is saved.',
+        ],
+      },
+      {
+        id: 'sync-status-and-disconnect',
+        title: 'Sync status and disconnecting',
+        summary: 'Check whether the last sync worked, or cut the connection.',
+        steps: [
+          'Open the **Skydio** card. The status block updates after each sync.',
+          '**State** says whether a sync is running or **Idle**.',
+          '**Last synced** shows when it last ran.',
+          '**Next sync** shows when the next automatic one is due.',
+          '**Last run** gives the counts of new flights, vehicles, batteries and controllers, and any errors.',
+          'To stop syncing, choose **Disconnect** and confirm.',
+        ],
+        notes: [
+          'A green dot beside **Last run** means it worked, amber means it partly worked, and red means it failed. If there were errors, the first one is shown, with a count of the others.',
+          'Disconnecting removes the saved key. To connect again, type the key in again.',
+        ],
+      },
+      {
+        id: 'flight-log-import',
+        title: 'Importing flight logs',
+        summary: 'Bring in flights from files, for older flights or other makers. Admins only.',
+        steps: [
+          'Open **Settings**, then **Integrations**, and find **Flight Log Import**.',
+          'Choose your files. To pick several, hold Ctrl or Shift as you choose.',
+          'Leave **Format** on automatic, or pick the one that matches your files.',
+          'Choose **Import**. Watch the progress line, then read the result.',
+        ],
+        notes: [
+          'Formats: Skydio (CSV or Excel), DJI .txt, Litchi CSV, Airdata CSV, Airdata JSON, Airdata ZIP (bulk), Parrot / ANAFI (GUTMA JSON) and **Flights CSV (exported from this app)**.',
+          'A flight that is already in the app is skipped, so you can safely import the same file twice.',
+          'A Skydio CSV row for a known flight still fills in its battery serial if the flight had none.',
+          'Excel files can hold up to 100,000 rows. A larger file is refused and nothing is imported.',
+          'The result lists anything skipped, such as drones that are not in your fleet. Add them and import again.',
+          'After importing, add email addresses to pilot profiles so syncing can match people.',
+          'For the **Flights CSV (exported from this app)** format, see **Exporting and importing flights as CSV** under Flights.',
+        ],
       },
     ]
   },
@@ -2071,37 +2464,116 @@ Every change to unit data is recorded automatically, including changes made by i
     topics: [
       {
         id: 'in-app-backup',
-        title: 'In-App Backup',
-        summary: `Admins can download a full backup from Settings → General → Backup & Restore. Click "Export Backup" to download a ZIP containing every table as JSON plus all uploaded files. The backup holds everything a restore needs, including password hashes, API tokens, and the SMTP password and Skydio token, with no encryption, so keep it as safe as the server itself. A checkbox controls whether flight telemetry (GPS, altitude, speed) is included; telemetry can be very large, so it is optional. The export is admin-only and recorded in the audit log.`
+        title: 'Making a backup',
+        summary: 'Download a copy of everything in the app, so you can recover from a lost server or move to a new one. Admins only.',
+        steps: [
+          'Open **Settings** and stay on the **General** tab.',
+          'Find **Backup & Restore**.',
+          'Leave **Include telemetry data** ticked to keep the flight paths too, or untick it for a smaller file.',
+          'Choose **Export Backup**. A ZIP file downloads. While it builds, the button shows how much has arrived.',
+        ],
+        image: {
+          src: '/manual/backup-in-app-backup.png',
+          alt: 'The Backup & Restore card with an Include telemetry data tick box and the Export Backup button.',
+          caption: 'The Backup & Restore card.',
+        },
+        notes: [
+          'A backup holds everything, including passwords and keys, and it is not locked with a password. Store backup files as carefully as you store passwords.',
+          'Flight paths can be very large. A backup with them can take minutes.',
+          'Making a backup is recorded in the audit log.',
+        ],
       },
       {
         id: 'automated-backups',
-        title: 'Automated Backups',
-        summary: 'Admins can also enable daily automated backups (Settings → General → Automated Backups). Set how many backups to keep and the hour of day to run. Backups are written under the data volume\'s backups folder; schedule changes take effect after the next app restart.'
+        title: 'Automatic daily backups',
+        summary: 'Let the app make a backup every day and keep the latest few. Admins only.',
+        steps: [
+          'In **Settings**, on the **General** tab, find **Automated Backups**.',
+          'Tick **Enable daily automated backups**.',
+          'Set **Retention (backups to keep)**.',
+          'Pick the time under **Run at hour (24h)**.',
+          'Choose **Save Backup Settings**.',
+        ],
+        notes: [
+          'A change to the on and off setting or the time starts after the app is next restarted.',
+          'The card shows how many backups are stored, when the last one ran and whether it worked.',
+          'The backups are kept on the same server as the app. Copy them somewhere else too, and store them like passwords.',
+        ],
       },
       {
         id: 'restoring-from-backup',
-        title: 'Restoring From Backup',
-        summary: `On a fresh install, open the setup screen, choose "Restore from a backup instead?", upload the backup ZIP, and enter the install token. The token is written to install_token.txt in the container's data directory (/app/data) and also printed to the container logs at first boot.
-
-A restore brings back everything: data, files, settings, users with their passwords, API tokens, and the SMTP password and Skydio token. Everyone signs in again with their usual password, and the install token is retired.
-
-Older backups, made before passwords were included, left them out. After restoring one of those, no one can sign in yet, so the setup screen reopens in recovery mode ("Restored backup detected"): enter the username of an administrator from the restored data, a new password, and the install token to reactivate that admin. The app then opens directly. Other restored users keep blank passwords until that admin resets them from Settings → Users, and API tokens, the SMTP password and the Skydio token need to be set again.
-
-Audit entries from the backup are added to this install's own and marked Imported.
-
-Restoring into an install that already has working logins is an operator task done against the backup API (POST /api/backup/import) with an admin token rather than through the app. It replaces all data, users, API tokens, settings and files and signs everyone out, so the API first refuses with 409 and changes nothing. To go ahead, send the call again with the form field confirm_restore set to the exact text REPLACE ALL DATA. If the backup would also remove or change a photo or document under legal hold, the API then refuses with a list of the held items; send the call again with confirm_holds set to the exact text RESTORE HELD ITEMS as well. Each held item that is removed or changed gets its own audit entry.`
+        title: 'Restoring a backup',
+        summary: 'Put a backup back, either on a brand new install or over an install that is already in use.',
+        steps: [
+          'On a new install, restore from the setup screen. The steps are in **Restoring a backup on a new install** under Getting Started.',
+          'On an install that is already in use, there is no restore button in the app. The person who runs the server sends the backup file to the app\'s backup restore address, signed in as an admin.',
+          'The app first refuses and changes nothing, and says what a restore would replace.',
+          'To go ahead, repeat the request with the confirmation field set to the exact text REPLACE ALL DATA.',
+          'If the restore would remove or change a photo or document on legal hold, the app lists those items and refuses again. Repeat it with a second confirmation set to the exact text RESTORE HELD ITEMS.',
+        ],
+        notes: [
+          'A restore brings back everything: data, files, settings, users with their passwords, API tokens, and the email password and Skydio key.',
+          'Restoring over a running install replaces all of its data and signs everyone out. After that, everyone signs in again with their usual password.',
+          'Each held item that is removed or changed is written to the audit log.',
+          'Entries from the backup are added to the audit log and marked **Imported**.',
+          'Backups made before passwords were included leave passwords out. See **Restoring a backup on a new install** for the **Reactivate Administrator** step.',
+          'Restoring is for admins and the people who run the server. Keep the backup file safe, because it holds passwords and keys.',
+        ],
       },
       {
         id: 'filesystem-backup-fallback',
-        title: 'Filesystem Backup (Fallback)',
-        summary: `If you prefer to snapshot the data directory directly, stop the container and copy these from the /app/data volume:
-
-• drone_unit_manager.db (main database)
-• telemetry.db (flight telemetry)
-• uploads/ (documents and photos)
-
-Restart the container when done. On startup the application runs any pending schema migrations automatically before serving.`
+        title: 'Copying the data folder by hand',
+        summary: 'A second way to back up, for the person who runs the server. It does not need the app.',
+        steps: [
+          'Stop the app.',
+          'Copy these from the app\'s data folder: drone_unit_manager.db (the main data), telemetry.db (flight paths) and the uploads folder (documents and photos).',
+          'Start the app again.',
+        ],
+        notes: [
+          'When it starts, the app brings its stored data up to the current version by itself.',
+          'These copies also hold passwords and keys. Store them like passwords.',
+        ],
+      },
+    ]
+  },
+  {
+    id: 'audit-log',
+    title: 'Audit Log',
+    topics: [
+      {
+        id: 'reading-the-audit-log',
+        title: 'Reading the audit log',
+        summary: 'The audit log is a record of who did what and when. Use it to answer "who changed this?" or to show the unit is accountable. Admins only by default.',
+        steps: [
+          'Choose **Audit Log** in the sidebar.',
+          'Each row shows the **Timestamp**, the **User**, the **Action**, the **Entity Type**, the **Entity** and the **Details**.',
+          'Choose the arrow at the end of a row to open it. **View changes** lists each field with its old and new value. Other rows show the full details.',
+          'Use the arrows at the bottom to move between pages of 50 rows.',
+        ],
+        notes: [
+          'Everything that changes unit data is recorded, including imports, syncs and scheduled jobs.',
+          'A row shows the person\'s display name and their sign-in name.',
+          'A bulk change or a background job is one row with counts and record numbers. It names the person who started it.',
+          'Email addresses and phone numbers are hidden.',
+          '**Imported** marks a row that came from a restored backup.',
+          'An admin can let others see the audit log under **Role Permissions** in **Settings**.',
+        ],
+      },
+      {
+        id: 'filtering-and-exporting-the-audit-log',
+        title: 'Filtering and exporting the audit log',
+        summary: 'Narrow the list to one kind of record, one person or one period, then save it as a file.',
+        steps: [
+          'Choose **Filters**.',
+          'Pick an **Entity Type**, an **Action** or a **User**, or set **From** and **To** dates. Pick **All** to leave one open.',
+          'Choose **Clear filters** to start again.',
+          'Choose **Export CSV** to download every row that matches, not only the page you see.',
+        ],
+        notes: [
+          'A dot on **Filters** means a filter is on.',
+          'Dates follow the organization time zone.',
+          '**Export CSV** includes the sign-in name, the full list of changes and an **Imported** column. It is for people who may export.',
+        ],
       },
     ]
   },
