@@ -135,6 +135,16 @@ export async function seedDemo(request, adminToken) {
     frequency: 'quarterly',
   }, 'schedule'), skipped)
 
+  await attempt('checklist template', () => post(request, A, '/checklists/templates', {
+    name: 'Demo Pre-Flight Checklist', description: 'Demo checklist for the manual.',
+    items: [
+      { label: 'Propellers undamaged and tight', required: true },
+      { label: 'Battery charged and seated', required: true },
+      { label: 'Camera lens clean', required: false },
+      { label: 'Controller linked to the aircraft', required: true },
+    ],
+  }, 'checklist template'), skipped)
+
   await attempt('incident', () => post(request, A, '/incidents', {
     date: day(-9), title: 'Demo hard landing', severity: 'minor', category: 'near_miss',
     description: 'Demo incident for the manual. Landing gear bumped the ground.', location: LOCATIONS[0],

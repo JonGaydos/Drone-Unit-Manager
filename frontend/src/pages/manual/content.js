@@ -272,18 +272,141 @@ export const sections = [
     topics: [
       {
         id: 'overview',
-        title: 'Overview',
-        summary: 'The dashboard is a snapshot hub of your drone program. A hero panel shows the compliance score and how many pilots are current; a weather tile shows the GO/CAUTION/NO-GO advisory for your default location; and 30-day stat tiles (flights, hours, active pilots, fleet size) show trends. Further tiles cover recent flights, currency risk, flights needing review, maintenance due, certification expirations, activity by month, drone locations, and top pilots and vehicles. Click any card to open its detail page.'
+        title: 'What the dashboard shows',
+        summary: 'The dashboard is the first page you see after you sign in. It gathers the numbers a unit checks every day: how compliant you are, what flew recently, and what needs attention. Click a card to open the page behind it.',
+        image: {
+          src: '/manual/dashboard-overview.png',
+          alt: 'The dashboard with the compliance score at the top, four 30-day cards, recent flights and the attention cards',
+          caption: 'The dashboard: compliance score, 30-day cards, recent flights and the lists that need attention.',
+        },
+        steps: [
+          'Choose **Dashboard** in the sidebar, or sign in. It is the home page.',
+          'Read the top panel for the compliance score and a one-line summary.',
+          'Read the four cards under it for the last 30 days.',
+          'Scan the lists below for anything late, lapsed or waiting for review.',
+          'Click any card, row or link to open the full page.',
+        ],
+        notes: [
+          'A card is empty when your role cannot see that kind of record. An admin can change this under **Settings**.',
+          'Everything on the page is read-only, except the location list on the **Locations** card (see "Drone locations on the dashboard").',
+        ],
       },
       {
-        id: 'recent-flights',
-        title: 'Recent Flights',
-        summary: 'The recent flights table shows the last 10 flights. Click a flight date to view its full detail page with telemetry, map, and equipment information.'
+        id: 'compliance-score',
+        title: 'The compliance score',
+        summary: 'The big number at the top is the unit\'s compliance score out of 100. It sums up how well pilots, certifications, maintenance and operating authorities are being kept up to date.',
+        steps: [
+          'Read the number. Green is 80 or more, amber is 60 to 79, red is below 60.',
+          'Read the line beside it: pilots who are current, expired certifications, overdue maintenance and the state of your operating authorities.',
+          'If a red line appears under the summary, it explains what is holding the score down.',
+          'Choose **Open compliance dashboard** to see the detail.',
+        ],
+        notes: [
+          'The score and the counts cover the whole unit. The names in the lists below them follow what your role may see.',
+          'If no currency rules exist yet, the line says **(no currency rules)**. Set rules up so the count means something.',
+        ],
       },
       {
-        id: 'certification-expirations',
-        title: 'Certification Expirations',
-        summary: 'Certifications expiring within 90 days are shown with color-coded badges: green (60+ days), amber (30-60 days), and red (under 30 days or expired).'
+        id: 'trend-cards',
+        title: 'The 30-day cards',
+        summary: 'Four cards compare the last 30 days with the 30 days before them, so you can see whether activity is rising or falling.',
+        steps: [
+          'Find **Flights (30d)**, **Hours (30d)**, **Pilots Flying (30d)** and **Vehicles Flown (30d)**.',
+          'Read the big number: the total for the last 30 days.',
+          'Read the small arrow and percentage: green and up means more than the 30 days before, amber and down means less, **flat** means about the same.',
+          'Read the line beside it for the all-time total, the active pilots or the fleet size.',
+          'Click a card to open Flights, Analytics, Pilots or Fleet.',
+        ],
+        notes: [
+          'No arrow appears when the earlier 30 days had no activity, because there is nothing to compare with.',
+        ],
+      },
+      {
+        id: 'attention-cards',
+        title: 'Cards that need attention',
+        summary: 'Four cards point at work that is late or about to be. Check them at the start of each shift.',
+        steps: [
+          '**Currency Risk** lists up to five pilots whose currency has lapsed or ends within 30 days, and shows how many are lapsed. A red **LAPSED** badge means they are not current now. A day count means days left. Click a name to open the pilot.',
+          '**Needs Review** shows how many flights are waiting for a supervisor. Choose **Open** to see them in Flights. When none are waiting it says **Queue is clear**.',
+          '**Maintenance Due** lists the most overdue items first. Red means overdue, amber means due within 7 days. Click one to open Maintenance.',
+          '**Cert Expirations** lists certifications that end within 90 days, soonest first. Amber means 30 days or less. Click one to open the pilot.',
+        ],
+        notes: [
+          'If your unit has no currency rules, **Currency Risk** says **No rules defined** and links to **Set up rules**.',
+          'A certification that is already expired is not on **Cert Expirations**. It is counted in the top panel instead.',
+        ],
+      },
+      {
+        id: 'activity-and-top-lists',
+        title: 'Recent flights, activity and top lists',
+        summary: 'These cards show what the unit has been flying: the latest flights, a chart by month, and who and what flew the most in the last 30 days.',
+        steps: [
+          '**Recent Flights** shows the latest ten. Each row has the flight number or short code, the pilot, the drone, the purpose and the duration. Click a row to open the flight. Choose **All** to see every flight.',
+          '**Activity by Month** is a bar chart of flights for up to the last 12 months. Hover a bar for its count. Choose **Analytics** for the full charts.',
+          '**Top Pilots (30d)** and **Top Vehicles (30d)** rank by flight hours. Click a name to open that pilot or vehicle.',
+        ],
+      },
+      {
+        id: 'drone-locations',
+        title: 'Drone locations on the dashboard',
+        summary: 'The **Locations** card tells you where each drone is right now, for example at a station or with a pilot. You can update it from here when a drone moves.',
+        steps: [
+          'Find the drone on the **Locations** card.',
+          'Open the **Set location…** list beside it.',
+          'Choose a place under **Places**, or a pilot under **Pilots**.',
+          'The card updates at once.',
+        ],
+        notes: [
+          'Supervisors, pilots and admins can change a location by default. Viewers see the card but not the list.',
+          'The list of places is set by an admin in **Settings**. If it was never changed, the places are North, Central and South.',
+        ],
+      },
+    ]
+  },
+  {
+    id: 'analytics',
+    title: 'Analytics',
+    topics: [
+      {
+        id: 'reading-the-charts',
+        title: 'Reading the charts',
+        summary: 'Analytics turns your flight history into charts. Use it to see when, why and by whom your drones fly, and how that has changed over the years.',
+        steps: [
+          'Choose **Analytics** in the sidebar.',
+          '**All Time Flights by Purpose** and **Flights Per Year** are bar charts of flight counts.',
+          '**Flights by Pilot** is a ring chart. Each pilot has a color and a name in the list beside it.',
+          '**Average Flight Duration by Year** is a bar chart. Hover a bar to see the average in seconds.',
+          '**Monthly Flight Trends** is a line chart of flights per month.',
+          '**Top Vehicles by Flight Hours** shows the drones that flew the most.',
+          '**Pilot Hours Leaderboard** is a table of hours and flights for each pilot.',
+        ],
+        notes: [
+          'A **Flight Locations** map appears at the bottom only when some flights have a recorded take-off point.',
+          'You need permission to view flights to open Analytics. The vehicle chart also needs permission to view the fleet. Both are on by default for every role.',
+        ],
+      },
+      {
+        id: 'filtering',
+        title: 'Filtering by clicking',
+        summary: 'Click part of one chart and every other chart narrows to match. For example, click one pilot to see only their purposes, years and hours.',
+        image: {
+          src: '/manual/analytics-filtering.png',
+          alt: 'The Analytics page with one pilot selected and the active filter shown above the charts',
+          caption: 'With a pilot selected, the Active filters bar appears and the other charts show only that pilot.',
+        },
+        steps: [
+          'Click a bar in **All Time Flights by Purpose** to filter by purpose.',
+          'Click a bar in **Flights Per Year** or **Average Flight Duration by Year** to filter by year.',
+          'Click a slice of **Flights by Pilot**, a name beside it, or a row in the leaderboard to filter by pilot.',
+          'Look at the **Active filters:** bar at the top. It shows each filter you have set.',
+          'Click a chip in that bar to remove one filter, or choose **Clear Filters** to remove them all.',
+        ],
+        notes: [
+          'You can combine one pilot, one year and one purpose.',
+          'Faded bars show the full total. Solid bars show the part that matches your filters. In the leaderboard, the number in brackets is the filtered figure.',
+          'Clicking the selected item again removes that filter.',
+          'The vehicle chart and the monthly line change with your filters, but you cannot click them to filter.',
+        ],
       },
     ]
   },
@@ -293,29 +416,56 @@ export const sections = [
     topics: [
       {
         id: 'unit-calendar',
-        title: 'Unit Calendar',
-        summary: `The Calendar page aggregates everything dated in your program into a single FullCalendar view. It pulls in:
-
-• **Flights**: A per-day count badge (e.g. "3 flights"); click it to open the Flights page.
-• **Missions**: Entries from the Mission Log on their mission date.
-• **Training**: Entries from the Training Log on their training date.
-• **Maintenance due**: The next-due date of each recurring maintenance schedule.
-• **Cert expirations**: Each pilot certification's expiration date, labeled with the pilot and certification name.
-• **Events and leave**: Manual entries you add yourself (see below).
-
-Each category has a colored checkbox above the calendar to show or hide that type. Clicking a flight, mission, training, maintenance, or certification item navigates to the relevant page.`
+        title: 'The unit calendar',
+        summary: 'The calendar shows everything with a date in one place: flights, missions, training, maintenance due dates, certification expiry dates, and events and leave you add yourself.',
+        steps: [
+          'Choose **Calendar** in the sidebar.',
+          'Use the checkboxes **Flights**, **Missions**, **Training**, **Maintenance due**, **Cert expirations**, **Events** and **Leave** above the calendar to show or hide each kind. Each has its own color.',
+          'Use **prev**, **next** and **today** to move through time.',
+          'Switch the view with **month**, **week** or **list**.',
+          'Click an item to open the page behind it.',
+        ],
+        notes: [
+          'Flights show as one badge per day, such as 3 flights. Click it to open Flights.',
+          'Only the dates you are looking at are loaded, so moving to a new month can take a moment.',
+          'Missions, training, maintenance and certifications are read-only here. Change them on their own pages.',
+          'Everyone can see the calendar by default.',
+        ],
       },
       {
-        id: 'views',
-        title: 'Views',
-        summary: 'Switch between Month, Week, and List views using the buttons in the top-right of the calendar. Use prev/next and Today to move through the date range; only items within the visible range are loaded.'
+        id: 'adding-events',
+        title: 'Adding events and leave',
+        summary: 'Add your own entries for things that are not flights, such as a team briefing, a range day or time off. Everyone who can see the calendar sees them.',
+        image: {
+          src: '/manual/calendar-adding-events.png',
+          alt: 'The Add event / leave dialog with title, category, dates and notes',
+          caption: 'The Add event / leave dialog.',
+        },
+        steps: [
+          'Choose **Add event / leave** at the top right.',
+          'Type a **Title**.',
+          'Pick a **Category**: **Event** or **Leave**.',
+          'Pick the **Start date**. For more than one day, also pick an **End date (optional)**. It cannot be before the start date.',
+          'Add **Notes (optional)** if you want.',
+          'Choose **Save**.',
+        ],
+        notes: [
+          'Supervisors and pilots can add entries by default. Viewers cannot, and do not see the button.',
+        ],
       },
       {
-        id: 'adding-events-and-leave',
-        title: 'Adding Events and Leave',
-        summary: `Click "Add event / leave" to create a manual entry. Choose a category (Event or Leave), a title, a start date, an optional end date (for multi-day entries), and optional notes.
-
-Users with the create permission (everyone except viewers by default) can add their own events and leave. You can edit or delete an entry you created; by default supervisors and admins can edit or delete any manual entry. The other aggregated items (flights, missions, training, maintenance, certifications) are read-only on the calendar and are managed from their own pages.`
+        id: 'editing-events',
+        title: 'Changing or deleting an entry',
+        summary: 'Open an event or leave entry to correct it or remove it.',
+        steps: [
+          'Click the entry on the calendar. The **Edit entry** dialog opens.',
+          'Change the fields and choose **Save**, or choose **Delete** and confirm to remove it.',
+        ],
+        notes: [
+          'Supervisors and admins can change any entry by default. Pilots can change only their own.',
+          'If you may not change an entry, the dialog still opens so you can read it, but **Save** is greyed out and there is no **Delete**.',
+          'An admin can change who may edit under **Settings**.',
+        ],
       },
     ]
   },
@@ -517,18 +667,67 @@ When nothing is outstanding, the card shows an "All clear" message. The count of
     topics: [
       {
         id: 'weather-briefing',
-        title: 'Weather Briefing',
-        summary: 'The Weather page provides a live aviation weather briefing using METAR and TAF data. Enter a location (airport code, city, or GPS coordinates) to get current conditions.'
+        title: 'Getting a weather briefing',
+        summary: 'Use the Weather page before a flight to check wind, visibility, cloud height and the next 12 hours for the place you plan to fly. It ends in a single answer: GO, CAUTION or NO-GO.',
+        steps: [
+          'Choose **Weather** in the sidebar. The page opens on your unit\'s default place and loads a briefing at once.',
+          'To check another place, type an address, or two numbers such as 40.7128, -74.0060, into **Coordinates or Address**.',
+          'Or click the small map to drop a pin. The address box fills in for you.',
+          'Or type numbers into **Latitude** and **Longitude**.',
+          'To use where you are now, choose **GPS** and allow your browser to share your location.',
+          'Choose **Check Weather**.',
+          'Read the colored answer at the top, then the reasons listed under it.',
+        ],
+        notes: [
+          'Everyone who can sign in can use the Weather page.',
+          'The server fetches the weather from public services, so the page needs the internet.',
+          'If an address is not found, you see No match for that address. Try a nearby town or use numbers.',
+        ],
       },
       {
-        id: 'default-location',
-        title: 'Default Location',
-        summary: 'On load, the Weather page pre-populates to your organization Default Location (set in Settings). If no Default Location is configured, it falls back to the White House in Washington D.C. so the page always has a sensible center. Your recently searched locations are remembered and shown as quick-pick buttons under Recent Locations.'
+        id: 'default-and-recent-places',
+        title: 'Default place and recent places',
+        summary: 'The page starts on your unit\'s default place, and remembers the places you check so you can return to them in one click.',
+        steps: [
+          'Look at **Recent Locations** under the form. It lists up to eight places you checked on this device.',
+          'Click one to load its briefing again.',
+        ],
+        notes: [
+          'The default place is the **Default Location** an admin sets in **Settings**. If none is set, the page starts on the White House in Washington, D.C.',
+          '**Recent Locations** is kept in your browser. It is not shared with other people or other devices.',
+        ],
       },
       {
         id: 'go-no-go-advisory',
-        title: 'GO/NO-GO Advisory',
-        summary: 'Based on your configured weather thresholds (wind speed, visibility, cloud ceiling), the system provides a GO, CAUTION, or NO-GO advisory. Configure thresholds from the Settings page.'
+        title: 'GO, CAUTION and NO-GO',
+        summary: 'The colored panel at the top gives a quick answer for flying at that place now. It is an aid for your own judgment, not an order.',
+        steps: [
+          'Read the label: green **GO**, amber **CAUTION**, red **NO-GO**, or grey **UNKNOWN** when no weather data came back.',
+          'Read the reasons listed under it. Each one names the reading that moved the answer.',
+          'Read **Current Conditions** for wind, gusts, temperature, humidity, visibility, ceiling (height of the lowest cloud layer above the ground), flight category and rain.',
+        ],
+        notes: [
+          'Out of the box, wind over 15 mph or gusts over 20 mph give CAUTION, and wind over 25 mph or gusts over 30 mph give NO-GO.',
+          'Visibility under 3 miles gives CAUTION and under 1 mile gives NO-GO. A ceiling under 500 feet gives CAUTION and under 200 feet gives NO-GO.',
+          'Temperature under 32 F or over 100 F gives CAUTION, and under 20 F gives NO-GO. Rain of more than 0.01 inch gives CAUTION.',
+          'An admin can change these limits under **Weather Thresholds** in **Settings**.',
+          'The flight category is a standard aviation label: VFR is good, MVFR is marginal, IFR is poor and LIFR is very poor.',
+        ],
+      },
+      {
+        id: 'forecast-and-reports',
+        title: 'The forecast and the airport reports',
+        summary: 'Below the answer you get a 12-hour forecast and the raw airport reports, for when you want more than the summary.',
+        steps: [
+          'Read **Nearest METAR Station** for the airport the readings come from and how far away it is. A METAR is the latest observation at that airport.',
+          'Scroll to **12-Hour Forecast** for charts of wind and gusts, and of temperature and chance of rain.',
+          'Scroll the **Hourly Detail** cards sideways to see each hour.',
+          'Open **Raw METAR** or **Raw TAF (Terminal Forecast)** to read the original text. A TAF is that airport\'s forecast.',
+        ],
+        notes: [
+          'The raw sections appear only when a station near the place has reported.',
+          'The readings are from the nearest airport, which may be some miles from your site.',
+        ],
       },
     ]
   },
@@ -538,34 +737,232 @@ When nothing is outstanding, the card shows an "All clear" message. The count of
     topics: [
       {
         id: 'live-aircraft-map',
-        title: 'Live Aircraft Map',
-        summary: 'The Airspace page shows a live map of nearby manned aircraft using ADS-B data from adsb.lol. Click anywhere on the map to set your search center: a blue circle shows the search radius. Aircraft markers are color-coded by altitude: red (below 400ft, drone zone), orange (400-1000ft), yellow (1000-5000ft), blue (5000-15000ft), gray (above 15000ft).'
+        title: 'Watching nearby aircraft',
+        summary: 'The Airspace page shows planes and helicopters flying near a place you pick. Use it to see manned traffic before and during a flight. It uses ADS-B, a signal most aircraft broadcast with their position and height.',
+        steps: [
+          'Choose **Airspace** in the sidebar. The map opens on your unit\'s default place.',
+          'Click the map where you plan to fly. A dashed circle shows the search area.',
+          'Wait for the aircraft to appear. The top bar shows how many were found and when.',
+          'Click an aircraft to see its call sign, type, registration, height, speed, heading, climb rate and squawk code. A squawk is a four-digit code the pilot sets.',
+          'If an aircraft reports an emergency, the popup says so in red.',
+        ],
+        notes: [
+          'Nothing is searched until you click the map.',
+          'The data comes from a community feed (adsb.lol) and needs the internet. It shows only aircraft that broadcast ADS-B, so some will be missing. It is not an airspace authorization.',
+          'Everyone who can sign in can use the page.',
+        ],
       },
       {
-        id: 'using-the-map',
-        title: 'Using the Map',
-        summary: 'Click a location on the map to start scanning. Adjust the radius (25-200 miles) and refresh interval (5-30 seconds or off) using the controls at the top. Click any aircraft marker to see its callsign, altitude, speed, heading, squawk code, and aircraft type. The aircraft count and last refresh time are shown in the top bar.'
-      },
-      {
-        id: 'default-location-and-recent-chip',
-        title: 'Default Location and Recent Chip',
-        summary: 'On load, the map centers on your organization Default Location (set in Settings), falling back to the White House if none is configured. After you click a point, a "Recent" chip appears in the control bar so you can jump straight back to your last selected location.'
+        id: 'radius-and-refresh',
+        title: 'Radius, refresh and colors',
+        summary: 'Set how wide to look and how often to update, and read the colors to see which aircraft are near drone height.',
+        steps: [
+          'Pick **Radius**: 25, 50, 100, 150 or 200 miles.',
+          'Pick **Refresh**: every 5, 10, 15 or 30 seconds, or **Off**.',
+          'Choose **Refresh** (the button) to update right now.',
+          'Use the **Altitude** key at the bottom right of the map. Red is below 400 ft, orange is 400 to 1,000 ft, yellow is 1,000 to 5,000 ft, blue is 5,000 to 15,000 ft, and grey is higher or unknown.',
+        ],
+        notes: [
+          'Your radius and refresh choices are remembered on this device.',
+          'After you pick a point, a **Recent** button shows that point\'s coordinates. Choose it to jump back to your last pick.',
+          'If an automatic update fails, nothing pops up and the old aircraft stay on the map. A manual **Refresh** shows an error.',
+          '(cached) next to the count means the answer was reused from a few moments ago.',
+        ],
       },
     ]
   },
   {
     id: 'flight-plans',
-    title: 'Flight Plans & Checklists',
+    title: 'Flight Plans',
     topics: [
       {
-        id: 'flight-plan-submission',
-        title: 'Flight Plan Submission',
-        summary: 'Pilots can submit flight plans for approval by a user with the approval permission (a supervisor by default). Nobody approves or denies a plan they submitted. Include the mission objective, location, date/time, equipment, and weather conditions. Edit (pencil) changes a pending or denied plan; editing a denied or approved plan returns it to pending review. An admin can Reopen a denied or cancelled plan, which puts it back in the review queue.'
+        id: 'overview',
+        title: 'The flight plans list',
+        summary: 'A flight plan is a request to fly, sent to a supervisor for approval before the flight. The Flight Plans page lists every plan and where it stands.',
+        steps: [
+          'Choose **Flight Plans** in the sidebar. A number on the sidebar item counts plans waiting for review.',
+          'Choose **All Plans** to see everyone\'s plans, or **My Plans** to see only those you submitted.',
+          'Use the **All Statuses** list to show only Pending, Approved, Denied, Cancelled or Completed plans.',
+          'Click a row, or the arrow at its right, to open the details: description, case number, height, length, checklist, review notes, and who submitted it.',
+          'Choose **Export CSV** to download the list as a CSV file, a plain table that opens in a spreadsheet.',
+        ],
+        notes: [
+          'A badge with a number and the word **Pending** shows how many plans wait for a decision.',
+          'Everyone can see the list. Supervisors and pilots can submit plans by default. Viewers cannot.',
+          'The **Weather Briefing** link in the details opens the National Weather Service site in a new tab. For the full briefing, use the **Weather** page.',
+        ],
       },
       {
-        id: 'pre-flight-checklists',
-        title: 'Pre-Flight Checklists',
-        summary: 'Create custom pre-flight checklist templates from the Checklists page. Pilots complete checklists before each flight, and completed checklists are stored for compliance records. A checklist submitted with required items unticked is saved as not passed; the Submit button says so. A template that has been used cannot be deleted, because submitted checklists keep a link to it: edit it and untick Active to stop offering it. By default, supervisors can delete a submitted checklist entered by mistake from its detail view.'
+        id: 'submitting',
+        title: 'Submitting a plan',
+        summary: 'Submit a plan before you fly, so a supervisor can approve it.',
+        image: {
+          src: '/manual/flight-plans-submitting.png',
+          alt: 'The Submit Flight Plan form with title, date, pilot, vehicle, location and other fields',
+          caption: 'The Submit Flight Plan form.',
+        },
+        steps: [
+          'Choose **Submit Plan** on the Flight Plans page.',
+          'Fill in the required fields marked with a star: **Title**, **Planned Date/Time** and **Pilot**.',
+          'Add what you know: **Vehicle**, **Location**, **Latitude**, **Longitude**, **Purpose**, **Case Number** and **Description**.',
+          'Enter **Max Altitude (ft)** and **Est. Duration (min)**.',
+          'Tick **Pre-flight checklist completed** if you have done the checklist.',
+          'Add **Notes** if needed, then choose **Submit Plan**.',
+        ],
+        notes: [
+          'The planned height must be between 0 and 400 feet above the ground. Higher is refused.',
+          'If your account is linked to a pilot, that pilot is filled in for you.',
+          'The checklist tick is only a statement. It does not look up a checklist on the **Checklists** page.',
+          'New plans start as **pending**.',
+        ],
+      },
+      {
+        id: 'reviewing',
+        title: 'Approving or denying a plan',
+        summary: 'A reviewer decides each pending plan. Nobody can approve or deny a plan they submitted themselves, so a second person always makes the call.',
+        image: {
+          src: '/manual/flight-plans-reviewing.png',
+          alt: 'The flight plans table with a pending plan and an approved plan and their action buttons',
+          caption: 'The plans table. A pending plan shows approve and deny buttons to a reviewer.',
+        },
+        steps: [
+          'Find a plan marked **pending**. Open its details to read it.',
+          'To approve, choose the check mark, then **Approve** in the box that opens.',
+          'To deny, choose the ban mark. In **Deny Flight Plan**, type a **Denial Reason** (required) and optional **Review Notes**, then choose **Deny Plan**.',
+          'Read the result in the details: who reviewed it, when, and the notes.',
+        ],
+        notes: [
+          'Supervisors and admins can approve, deny and delete plans by default. Pilots and viewers cannot.',
+          'The approve and deny buttons do not show on a plan you submitted, even if you are an admin. Ask someone else.',
+          'Only a pending plan can be approved or denied.',
+          'An admin can change who may review under **Settings**.',
+        ],
+      },
+      {
+        id: 'editing-and-cancelling',
+        title: 'Editing, cancelling and reopening',
+        summary: 'Change a plan when the details change, cancel one you will not fly, or put a closed plan back in the queue.',
+        steps: [
+          'To edit, choose the pencil on the plan. **Edit Flight Plan** opens with the same fields, plus **Linked Flight ID** for the flight flown under the plan. Choose **Save Changes**.',
+          'To cancel, choose the cross mark on a pending or approved plan and confirm.',
+          'To reopen, an admin chooses the circular arrow on a denied or cancelled plan and confirms. It goes back to pending.',
+          'To delete, a reviewer chooses the cross at the end of the row and confirms.',
+        ],
+        notes: [
+          'Supervisors can edit any plan. Pilots can edit only plans they submitted. Both can edit pending and denied plans. Only an admin can edit an approved, cancelled or completed plan.',
+          'If you change a reviewed detail on an approved or denied plan, such as the date, pilot, place or height, the plan goes back to pending and the earlier decision is cleared. Changing only the notes or the linked flight does not.',
+          'Cancel needs the same permission as edit.',
+          'Delete cannot be undone. Cancel instead if you want to keep the record.',
+        ],
+      },
+    ]
+  },
+  {
+    id: 'checklists',
+    title: 'Checklists',
+    topics: [
+      {
+        id: 'completing',
+        title: 'Completing a pre-flight checklist',
+        summary: 'Run a checklist before a flight and save the result as a record. Each submitted checklist is kept for compliance.',
+        image: {
+          src: '/manual/checklists-completing.png',
+          alt: 'The Complete Pre-Flight Checklist dialog with a template chosen and some items ticked',
+          caption: 'The Complete Pre-Flight Checklist dialog with two of four items ticked. The button changes to Submit as not passed because required items are open.',
+        },
+        steps: [
+          'Choose **Checklists** in the sidebar, then **Complete Checklist**.',
+          'Pick a **Template** and a **Pilot**. Pick a **Vehicle** if the checklist is for one drone.',
+          'Tick each item as you check it. Add a short note beside an item if needed.',
+          'Add **Overall Notes** if you want.',
+          'Choose **Submit Checklist**.',
+        ],
+        notes: [
+          'A star beside an item means it is required.',
+          'If a required item is not ticked, a warning shows and the button changes to **Submit as not passed**. You can still submit, and the result is saved as not passed.',
+          'Supervisors, pilots and admins can complete checklists by default. Viewers cannot.',
+          'The **Pilot** list is not limited to you. Choose the pilot who did the check.',
+        ],
+      },
+      {
+        id: 'completions',
+        title: 'Finding past checklists',
+        summary: 'The Completions tab is the history of every submitted checklist.',
+        steps: [
+          'Choose the **Completions** tab.',
+          'Read the date, pilot, vehicle and template, and a green tick or red cross under **Passed**.',
+          'Choose the eye icon to open **Checklist Details**. It shows each item, ticked or not, with its notes. A badge says **All Passed** or **Items Failed**.',
+          'Choose **Export CSV** to download the history as a CSV file, a plain table that opens in a spreadsheet.',
+        ],
+        notes: [
+          'Supervisors and admins can delete a checklist from its details with **Delete**. This cannot be undone. Do it only for a checklist entered by mistake.',
+          'Everyone can read past checklists by default.',
+        ],
+      },
+      {
+        id: 'templates',
+        title: 'Building and managing templates',
+        summary: 'A template is the list of items a checklist asks for. Supervisors and admins build them, and everyone completes them.',
+        image: {
+          src: '/manual/checklists-templates.png',
+          alt: 'The Create Checklist Template dialog with a name, description and a list of items',
+          caption: 'The Create Checklist Template dialog.',
+        },
+        steps: [
+          'On the **Templates** tab, choose **Create Template**.',
+          'Type a **Name** and an optional **Description**.',
+          'Pick a **Vehicle Model** to label the template for one model, or leave **All models**.',
+          'Type each item under **Checklist Items**. Untick **Required** for an item that is nice to have. Use the arrows to reorder and the bin to remove.',
+          'Choose **Add Item** for more rows, then **Create Template**.',
+          'To change one later, choose the pencil on its card, then **Update Template**.',
+        ],
+        notes: [
+          'You need a name and at least one item.',
+          'The vehicle model is a label. It does not stop anyone using the template with another drone.',
+          'A template that has been used cannot be deleted, because submitted checklists keep a link to it. Edit it and untick **Active** instead. It then drops off the list and is no longer offered.',
+          'Supervisors and admins can manage templates by default. Pilots and viewers see them but have no **Create Template** button.',
+        ],
+      },
+    ]
+  },
+  {
+    id: 'alerts',
+    title: 'Alerts',
+    topics: [
+      {
+        id: 'overview',
+        title: 'Reading the alerts list',
+        summary: 'Alerts are notices the app raises on its own when something needs attention. Today the app raises an alert for each maintenance schedule that is due or overdue.',
+        steps: [
+          'Choose **Alerts** in the sidebar.',
+          'Read each card: its title, a severity badge (info, warning or critical), the message and the time.',
+          'A blue dot marks an alert nobody has marked as read. Read alerts are faded.',
+          'Use the **All Severities** list to show only Info, Warning or Critical alerts.',
+          'The count at the top, such as 3 total alerts, counts everything not dismissed.',
+        ],
+        notes: [
+          'Overdue maintenance alerts are checked once a day, early in the morning. They are warnings.',
+          'When the schedule is completed or moved to a later date, its alert goes away by itself. A new alert starts if it becomes overdue again.',
+          'Each schedule has one open alert at a time.',
+          'The page shows up to 100 alerts, newest first. Everyone can read them by default.',
+          'When there is nothing to show, the page says **No alerts found**.',
+        ],
+      },
+      {
+        id: 'dismissing',
+        title: 'Marking read and dismissing',
+        summary: 'Clear alerts you have dealt with so the list shows only what is left.',
+        steps: [
+          'To mark one as read, choose the check mark on its card.',
+          'To remove one, choose the cross on its card.',
+          'To remove all of them, choose **Dismiss All**, then confirm in **Dismiss All Alerts**.',
+        ],
+        notes: [
+          'Alerts are shared. When anyone marks one read or dismisses it, it changes for everyone.',
+          'Supervisors and admins can mark read and dismiss by default. Pilots and viewers can read the list but do not see these buttons.',
+          '**Dismiss All** removes every alert, not only the ones on your screen after a severity filter. Think before you use it.',
+          'Dismissing an alert does not fix the maintenance. If it is still overdue, check **Maintenance**.',
+        ],
       },
     ]
   },
