@@ -384,9 +384,9 @@ export default function BatteryDetailPage() {
                   setSavingReading(true)
                   try {
                     const data = {}
-                    if (readingForm.health_pct) data.health_pct = Number.parseFloat(readingForm.health_pct)
-                    if (readingForm.cycle_count) data.cycle_count = Number.parseInt(readingForm.cycle_count, 10)
-                    if (readingForm.voltage) data.voltage = Number.parseFloat(readingForm.voltage)
+                    if (readingForm.health_pct !== '') data.health_pct = Number.parseFloat(readingForm.health_pct)
+                    if (readingForm.cycle_count !== '') data.cycle_count = Number.parseInt(readingForm.cycle_count, 10)
+                    if (readingForm.voltage !== '') data.voltage = Number.parseFloat(readingForm.voltage)
                     if (readingForm.notes) data.notes = readingForm.notes
                     await api.post(`/batteries/${id}/readings`, data)
                     toast.success('Health reading recorded')

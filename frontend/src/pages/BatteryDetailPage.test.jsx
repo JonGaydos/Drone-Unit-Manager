@@ -147,4 +147,24 @@ describe('BatteryDetailPage', () => {
     expect(body.decommissioned_date).toBeNull()
     expect(body.cycle_count).toBe(33)
   })
+  it('sends 0 for a typed zero reading and leaves empty boxes out', async () => {
+    let body = null
+    mockMount()
+    server.use(http.post('/api/batteries/4/readings', async ({ request }) => {
+      body = await request.json()
+      return HttpResponse.json({ id: 1 })
+    }))
+    const { user } = render()
+    await screen.findByRole('heading', { name: 'Cell A' })
+    await user.click(screen.getByRole('button', { name: /Record Reading/ }))
+    await user.type(screen.getByLabelText('Health %'), '0')
+    await user.type(screen.getByLabelText('Cycle Count'), '0')
+    await user.click(screen.getByRole('button', { name: 'Save Reading' }))
+
+    await waitFor(() => expect(body).not.toBeNull())
+    expect(body.health_pct).toBe(0)
+    expect(body.cycle_count).toBe(0)
+    expect(body).not.toHaveProperty('voltage')
+    expect(body).not.toHaveProperty('notes')
+  })
 })
