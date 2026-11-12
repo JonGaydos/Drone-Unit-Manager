@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { BookOpen, Search } from 'lucide-react'
 import { sections } from './manual/content'
@@ -47,6 +47,17 @@ export default function UserManualPage() {
   const currentKey = filteredTopics.some(e => e.key === topicParam)
     ? topicParam
     : filteredTopics[0]?.key ?? null
+
+  // Bring the top of the topic area into view whenever the shown topic changes.
+  const lastKey = useRef(currentKey)
+  useEffect(() => {
+    if (view !== 'topics' || lastKey.current === currentKey) {
+      lastKey.current = currentKey
+      return
+    }
+    lastKey.current = currentKey
+    if (typeof window.scrollTo === 'function') window.scrollTo({ top: 0 })
+  }, [currentKey, view])
 
   // When a search moves the shown topic, keep the address in step.
   const searching = search.trim() !== ''
@@ -128,7 +139,12 @@ export default function UserManualPage() {
       </div>
 
       {view === 'topics' ? (
-        <TopicsLayout sections={filtered} currentKey={currentKey} onSelect={selectTopic} />
+        <TopicsLayout
+          sections={filtered}
+          currentKey={currentKey}
+          onSelect={selectTopic}
+          searching={searching}
+        />
       ) : (
         <OnePageLayout sections={filtered} />
       )}

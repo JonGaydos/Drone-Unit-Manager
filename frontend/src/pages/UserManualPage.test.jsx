@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, vi } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { screen, within } from '@testing-library/react'
 import { renderWithProviders } from '@/test/render'
 import UserManualPage from './UserManualPage'
@@ -39,6 +39,10 @@ function wordOnlyInOneSection() {
 const searchBox = () => screen.getByPlaceholderText('Search the manual...')
 
 describe('UserManualPage', () => {
+  beforeEach(() => {
+    window.scrollTo = vi.fn()
+  })
+
   afterEach(() => {
     localStorage.clear()
     vi.restoreAllMocks()
@@ -112,6 +116,36 @@ describe('UserManualPage', () => {
     expect(screen.getByRole('button', { name: section.title })).toBeInTheDocument()
     const other = sections.find(s => s.id !== section.id)
     expect(screen.queryByRole('button', { name: other.title })).toBeNull()
+  })
+
+  it('shows matching topics from several sections open in the menu while searching', async () => {
+    const titles = sections.map(sec => sec.title.toLowerCase()).join(' ')
+    let pick = null
+    for (const entry of all) {
+      for (const word of wordsOf(topicText(entry.topic))) {
+        if (titles.includes(word)) continue
+        const hits = all.filter(e => topicText(e.topic).includes(word))
+        const secs = new Set(hits.map(e => e.section.id))
+        if (secs.size === 2 && hits.length <= 6) { pick = { word, hits }; break }
+      }
+      if (pick) break
+    }
+    expect(pick).not.toBeNull()
+    const { user } = renderWithProviders(<UserManualPage />, { route: '/manual' })
+    await user.type(searchBox(), pick.word)
+    const menu = screen.getByRole('navigation', { name: 'Manual topics' })
+    for (const e of pick.hits) {
+      expect(within(menu).getByRole('button', { name: e.topic.title })).toBeInTheDocument()
+    }
+  })
+
+  it('scrolls to the top when the topic changes', async () => {
+    const scroll = vi.fn()
+    window.scrollTo = scroll
+    const { user } = renderWithProviders(<UserManualPage />, { route: '/manual' })
+    expect(scroll).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: /^Next: / }))
+    expect(scroll).toHaveBeenCalled()
   })
 
   it('still renders in Topics view and switches when storage throws', async () => {

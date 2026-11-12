@@ -43,10 +43,11 @@ function TopicList({ sections, currentKey, openIds, onToggle, onPick }) {
   })
 }
 
-export default function TopicsLayout({ sections, currentKey, onSelect }) {
+export default function TopicsLayout({ sections, currentKey, onSelect, searching = false }) {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [openIds, setOpenIds] = useState(() => new Set())
   const pickerRef = useRef(null)
+  const pickerButtonRef = useRef(null)
 
   const all = flattenTopics(sections)
   const current = all.find(entry => entry.key === currentKey) || all[0] || null
@@ -65,21 +66,28 @@ export default function TopicsLayout({ sections, currentKey, onSelect }) {
 
   useEffect(() => {
     if (!pickerOpen) return undefined
-    const onKey = e => { if (e.key === 'Escape') setPickerOpen(false) }
+    const onKey = e => {
+      if (e.key === 'Escape') {
+        setPickerOpen(false)
+        pickerButtonRef.current?.focus()
+      }
+    }
     const onDown = e => {
       if (pickerRef.current && !pickerRef.current.contains(e.target)) setPickerOpen(false)
     }
     document.addEventListener('keydown', onKey)
-    document.addEventListener('mousedown', onDown)
+    document.addEventListener('pointerdown', onDown)
     return () => {
       document.removeEventListener('keydown', onKey)
-      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('pointerdown', onDown)
     }
   }, [pickerOpen])
 
   if (!current) {
     return <p className="text-sm text-muted-foreground">No topics match your search.</p>
   }
+
+  const openFor = searching ? new Set(sections.map(s => s.id)) : openIds
 
   const toggle = id =>
     setOpenIds(ids => {
@@ -98,13 +106,14 @@ export default function TopicsLayout({ sections, currentKey, onSelect }) {
     <div className="md:flex md:gap-6">
       <nav
         aria-label="Manual topics"
-        className="hidden md:block md:w-60 md:shrink-0 md:sticky md:top-4 md:self-start md:max-h-[calc(100vh-2rem)] md:overflow-y-auto"
+        className="hidden md:block md:w-60 md:shrink-0 md:sticky md:top-[4.5rem] lg:top-20 md:self-start md:max-h-[calc(100vh-5.5rem)] lg:max-h-[calc(100vh-6rem)] md:overflow-y-auto"
       >
-        <TopicList sections={sections} currentKey={activeKey} openIds={openIds} onToggle={toggle} onPick={onSelect} />
+        <TopicList sections={sections} currentKey={activeKey} openIds={openFor} onToggle={toggle} onPick={onSelect} />
       </nav>
 
       <div ref={pickerRef} className="relative mb-4 md:hidden">
         <button
+          ref={pickerButtonRef}
           type="button"
           onClick={() => setPickerOpen(o => !o)}
           aria-expanded={pickerOpen}
@@ -119,7 +128,7 @@ export default function TopicsLayout({ sections, currentKey, onSelect }) {
             aria-label="Choose a topic"
             className="absolute left-0 right-0 z-10 mt-1 max-h-80 overflow-y-auto rounded-lg border border-border bg-card p-2 shadow-lg"
           >
-            <TopicList sections={sections} currentKey={activeKey} openIds={openIds} onToggle={toggle} onPick={pick} />
+            <TopicList sections={sections} currentKey={activeKey} openIds={openFor} onToggle={toggle} onPick={pick} />
           </div>
         )}
       </div>
@@ -133,6 +142,7 @@ export default function TopicsLayout({ sections, currentKey, onSelect }) {
             <button
               type="button"
               onClick={() => onSelect(prev.key)}
+              aria-label={`Previous: ${prev.topic.title}`}
               className="rounded-md border border-border px-3 py-1.5 text-sm text-foreground hover:bg-accent"
             >
               ← {prev.topic.title}
@@ -142,6 +152,7 @@ export default function TopicsLayout({ sections, currentKey, onSelect }) {
             <button
               type="button"
               onClick={() => onSelect(next.key)}
+              aria-label={`Next: ${next.topic.title}`}
               className="rounded-md border border-border px-3 py-1.5 text-sm text-foreground hover:bg-accent"
             >
               {next.topic.title} →

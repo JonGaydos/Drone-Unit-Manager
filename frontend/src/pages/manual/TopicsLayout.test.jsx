@@ -20,7 +20,7 @@ const sections = [
         id: 'three',
         title: 'Three',
         summary: 'Third summary.',
-        image: { src: '/manual/three.png', alt: 'Three screen', caption: 'The three screen' },
+        image: { src: '/manual-pictures/three.png', alt: 'Three screen', caption: 'The three screen' },
       },
     ],
   },
@@ -57,14 +57,14 @@ describe('TopicsLayout', () => {
   it('offers Next but no Previous on the first topic', async () => {
     const { onSelect } = setup()
     expect(screen.queryByRole('button', { name: /^←/ })).not.toBeInTheDocument()
-    const next = screen.getByRole('button', { name: /Two →/ })
+    const next = screen.getByRole('button', { name: 'Next: Two' })
     await userEvent.click(next)
     expect(onSelect).toHaveBeenCalledWith('a.two')
   })
 
   it('offers Previous on a later topic', async () => {
     const { onSelect } = setup({ currentKey: 'b.three' })
-    await userEvent.click(screen.getByRole('button', { name: /← Two/ }))
+    await userEvent.click(screen.getByRole('button', { name: 'Previous: Two' }))
     expect(onSelect).toHaveBeenCalledWith('a.two')
     expect(screen.queryByRole('button', { name: /→$/ })).not.toBeInTheDocument()
   })
@@ -91,12 +91,26 @@ describe('TopicsLayout', () => {
       expect(picker()).toHaveAttribute('aria-expanded', 'false')
     })
 
+    it('returns focus to the picker button on Escape', async () => {
+      setup()
+      await userEvent.click(picker())
+      await userEvent.keyboard('{Escape}')
+      expect(picker()).toHaveFocus()
+    })
+
     it('closes on a click outside', async () => {
       setup()
       await userEvent.click(picker())
       await userEvent.click(document.body)
       expect(picker()).toHaveAttribute('aria-expanded', 'false')
     })
+  })
+
+  it('opens every section in the menu while searching', () => {
+    setup({ searching: true })
+    const menu = screen.getByRole('navigation', { name: 'Manual topics' })
+    expect(within(menu).getByRole('button', { name: 'Two' })).toBeInTheDocument()
+    expect(within(menu).getByRole('button', { name: 'Three' })).toBeInTheDocument()
   })
 
   it('shows an empty message with no sections', () => {
