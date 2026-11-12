@@ -72,12 +72,44 @@ export async function seedDemo(request, adminToken) {
     }))
   }
 
+  // FAA registrations: one expired and one current for the first vehicle, then
+  // one running out soon and one far off, so the list shows each colour.
+  const registrations = [
+    [0, 'FA-DEMO-01', day(-1500)], [0, 'FA-DEMO-01R', day(-1020)],
+    [1, 'FA-DEMO-02', day(-1085)], [2, 'FA-DEMO-03', day(-200)],
+  ]
+  for (const [v, registration_number, registration_date] of registrations) {
+    await attempt(`registration ${registration_number}`, () => post(
+      request, A, `/vehicles/${vehicles[v].id}/registrations`, { registration_number, registration_date }, 'registration',
+    ), skipped)
+  }
+
   // Equipment
+  const batteries = []
   for (let i = 1; i <= 3; i++) {
-    await attempt(`battery ${i}`, () => post(request, A, '/batteries', {
+    batteries.push(await attempt(`battery ${i}`, () => post(request, A, '/batteries', {
       serial_number: `DEMO-BAT-${pad(i)}`, nickname: `Demo Battery ${i}`, manufacturer: 'Skydio',
       cycle_count: 20 * i, health_pct: 100 - 8 * i,
-    }, 'battery'), skipped)
+    }, 'battery'), skipped))
+  }
+
+  // One battery still out and one returned, for the Checkouts page.
+  const outBattery = batteries[0]
+  const backBattery = batteries[1]
+  if (outBattery) {
+    await attempt('checkout', () => post(request, A, '/equipment-checkouts', {
+      entity_type: 'battery', entity_id: outBattery.id, entity_name: outBattery.nickname,
+      checked_out_by_id: pilots[1].id, expected_return: `${day(3)}T17:00:00`, notes_out: 'Demo training day',
+    }, 'checkout'), skipped)
+  }
+  if (backBattery) {
+    await attempt('returned checkout', async () => {
+      const co = await post(request, A, '/equipment-checkouts', {
+        entity_type: 'battery', entity_id: backBattery.id, entity_name: backBattery.nickname,
+        checked_out_by_id: pilots[2].id,
+      }, 'checkout')
+      await post(request, A, `/equipment-checkouts/${co.id}/checkin`, { checked_in_by_id: pilots[2].id }, 'checkin')
+    }, skipped)
   }
   await attempt('controller', () => post(request, A, '/controllers', {
     serial_number: 'DEMO-CTL-01', nickname: 'Demo Controller', manufacturer: 'Skydio', model: 'Beacon 2',

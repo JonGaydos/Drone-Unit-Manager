@@ -600,44 +600,285 @@ export const sections = [
     title: 'Fleet Management',
     topics: [
       {
-        id: 'vehicles',
-        title: 'Vehicles',
-        summary: 'The Fleet page is organized into tabs: Vehicles, Batteries, Controllers, Docks, Sensors, Attachments, and Other equipment. A status filter switches between In service, Retired & damaged, and All. Click any item to view its detail page with flight history, maintenance records, and specifications.'
+        id: 'fleet-list',
+        title: 'The Fleet page',
+        summary: 'Use the Fleet page to see every piece of equipment your unit owns, one tab per kind, and to add, edit or retire it.',
+        image: {
+          src: '/manual/fleet-fleet-list.png',
+          alt: 'The Fleet page on the Vehicles tab with the tab bar, search box, status filter, Export CSV and Add Vehicle buttons, and a table of vehicles with their FAA registration due dates',
+          caption: 'The Fleet page on the Vehicles tab, narrowed to the demo vehicles with the search box.',
+        },
+        steps: [
+          'Choose **Fleet** in the sidebar.',
+          'Pick a tab: **Vehicles**, **Batteries**, **Controllers**, **Docks**, **Sensors**, **Attachments** or **Other**.',
+          'Type in the search box to narrow the list. It searches every column of the table.',
+          'Click a column heading to sort by it. Click it again to reverse the order.',
+          'Click a name to open that item\'s own page.',
+        ],
+        notes: [
+          'The list opens on **In service**. That hides equipment that is **Retired** or **Damaged**. Use the status list to switch to **Retired & damaged** or **All statuses**. A small "N hidden" note tells you how many items the filter is holding back.',
+          'The status filter stays the same when you move between tabs.',
+          'On the **Vehicles** tab, **FAA Reg** shows the current registration number and **Next Due** shows the days left before it expires. It reads **Overdue** once the date has passed. See **FAA registrations on a vehicle** for how the current registration is chosen.',
+          '**Export CSV** saves the tab as a CSV file (a plain spreadsheet file you can open in Excel). Admins, supervisors, pilots and viewers can all export by default.',
+          'Everyone who can view the fleet sees the lists. The **Add** button and the edit, merge and retire icons show only to people who can manage the fleet: admins and supervisors by default. An admin can change this under **Settings**.',
+          'You can also open a tab directly with an address such as /fleet?tab=batteries.',
+        ],
+      },
+      {
+        id: 'adding-a-vehicle',
+        title: 'Adding and editing a vehicle',
+        summary: 'Use this when you buy or are issued a new aircraft, or when a detail of an existing one changes. The other tabs work the same way, with their own fields.',
+        image: {
+          src: '/manual/fleet-adding-a-vehicle.png',
+          alt: 'The Add Vehicle dialog with serial number, manufacturer, model, nickname, acquired date and status filled in',
+          caption: 'The Add Vehicle dialog.',
+        },
+        steps: [
+          'On **Fleet**, open the **Vehicles** tab and choose **Add Vehicle**.',
+          'Fill in **Serial Number**, **Manufacturer** and **Model**. A star marks the boxes you must fill in.',
+          'Add a **Nickname** if you want one. The nickname is what shows in lists and menus.',
+          'Optional: **API Serial**, **Acquired Date**, **Decommissioned Date**, **Status** and **Notes**.',
+          'Choose **Add Vehicle**.',
+          'To change a vehicle later, choose the pencil icon on its row in the list, change the boxes and choose **Update**. You can also edit on the vehicle\'s own page (see **The vehicle page**).',
+        ],
+        notes: [
+          'Two vehicles cannot share a **Serial Number**. The app refuses a duplicate.',
+          '**API Serial** (the full label is "API Serial (what the provider calls this aircraft)") is the serial number your drone provider, such as Skydio, uses for this aircraft. Fill it in only if it differs from your own serial number. A provider sync uses it to match the right aircraft.',
+          'The **Status** choices for a vehicle are **Active**, **Maintenance**, **Retired** and **Damaged**. Setting **Retired** or **Damaged** fills in **Decommissioned Date** with today if you left it empty. It also ends the vehicle\'s maintenance schedules, so they stop showing as overdue.',
+          '**Decommissioned Date** cannot be earlier than **Acquired Date**.',
+          'An optional box that you empty in an edit is cleared on the record. The required boxes (**Serial Number**, **Manufacturer**, **Model**) cannot be left empty.',
+          'The FAA registration is not part of this form. Add it on the vehicle\'s page, in the **FAA Registration** card.',
+        ],
+      },
+      {
+        id: 'vehicle-page',
+        title: 'The vehicle page',
+        summary: 'Open a vehicle to see its flight history, equipment, registration, components and documents in one place.',
+        steps: [
+          'On **Fleet**, click a vehicle\'s name.',
+          'The top shows the photo, the name, the serial number, the **API** serial, the **FAA** registration text, the acquired date and the status.',
+          'Four cards show **Total Flights**, **Total Hours**, **Last Flight** and **Active Batteries**.',
+          '**Equipment History** has four tabs: **Batteries**, **Controllers**, **Sensors** and **Mounted Accessories**.',
+          '**Flight History** lists the vehicle\'s 50 most recent flights. Click a date to open the flight, or a name to open the pilot.',
+          'Further down are the **FAA Registration** card, the **Components** card and **Documents**.',
+          'To change the details, choose the pencil icon beside the name. Change the boxes, then choose **Save** (or **Cancel**).',
+        ],
+        notes: [
+          '**Total Flights**, **Total Hours** and **Last Flight** count only flights that count toward your unit\'s totals. A flight marked **Not counted**, or one flown by a pilot who does not count toward unit totals (for example a vendor or guest operator), is left out. The flight list still shows it.',
+          'The flight totals and **Flight History** show only to people who can view flights.',
+          '**Active Batteries** counts the batteries whose **Vehicle Model** matches this vehicle\'s model and that are not retired.',
+          'The **Batteries** tab under **Equipment History** lists the batteries that appear in this vehicle\'s recent flights. The **Controllers**, **Sensors** and **Mounted Accessories** tabs list your fleet\'s equipment of that kind. They are not limited to this vehicle.',
+          'Admins can change the photo. Choose the small camera button on the photo\'s corner. You can use JPG, JPEG, PNG, GIF or WEBP pictures up to 50 MB. A file that is the wrong type, too large or not a real picture is refused, and the photo already there stays.',
+          'Anyone who can manage the fleet can edit the vehicle. By default that is admins and supervisors.',
+        ],
+      },
+      {
+        id: 'retiring-and-deleting',
+        title: 'Retiring and deleting equipment',
+        summary: 'Use this when equipment leaves service. A vehicle is retired, so its flight history stays. Other equipment is deleted for good.',
+        steps: [
+          'On **Fleet**, find the item and choose the trash icon on its row.',
+          'On the **Vehicles** tab the icon is called **Retire**. Confirm with **Retire**. The vehicle stays on record with its flights, marked **Retired**.',
+          'On the other tabs the icon is called **Delete**. Confirm the question to delete the item.',
+          'To bring a retired vehicle back, switch the status list to **Retired & damaged**, edit the vehicle and set **Status** back to **Active**.',
+        ],
+        notes: [
+          'A deleted battery, controller, dock, sensor, attachment or other item cannot be brought back. Setting its **Status** to **Retired** instead keeps its history and hides it from the default list.',
+          'Deleting a battery also deletes its health readings.',
+          'Retired and damaged equipment cannot be checked out.',
+          'Admins and supervisors can retire and delete by default.',
+        ],
       },
       {
         id: 'batteries',
         title: 'Batteries',
-        summary: 'Battery records track serial numbers, cycle counts, and health status. Battery assignments to flights are tracked automatically when imported from the API.'
+        summary: 'Each battery has a record with its serial number, cycle count, health and the flights it has flown.',
+        steps: [
+          'On **Fleet**, open the **Batteries** tab and choose **Add Battery**.',
+          'Fill in **Serial Number**. Optional: **Nickname**, **Manufacturer**, **Model**, **Vehicle Model**, **Cycle Count**, **Health %**, the two dates and **Status**.',
+          'Choose **Add Battery**.',
+          'To see more, click the battery\'s name. Its page shows **Cycle Count**, **Health**, **Total Flights**, **Total Hours**, its **Flight History**, the pilots who used it, its **Maintenance History** and **Documents**.',
+          'To change it, choose the pencil icon on its row in the list, or the pencil on its own page.',
+        ],
+        notes: [
+          '**Vehicle Model** says which aircraft model the battery fits. Pick one from the list or type a new one.',
+          'The **Status** choices for a battery are **Active**, **Charging**, **Maintenance**, **Retired** and **Damaged**.',
+          'A battery\'s flights are matched by its serial number. When a flight gets a battery serial the fleet does not know yet, the app adds a record for it.',
+          '**Health %** must be between 0 and 100. Emptying the box clears the health, so the battery shows no health figure instead of 0%.',
+          'The battery\'s flight and hour totals count only flights that count toward your unit\'s totals.',
+        ],
       },
       {
-        id: 'controllers',
-        title: 'Controllers',
-        summary: 'Remote controller inventory is tracked separately. Controllers can be assigned to specific vehicles or shared across the fleet.'
+        id: 'battery-readings',
+        title: 'Battery health readings',
+        summary: 'A reading is a measurement of a battery on one day. Record readings now and then, and the battery\'s Health History shows how it ages.',
+        image: {
+          src: '/manual/fleet-battery-readings.png',
+          alt: 'The Record Battery Health Reading dialog with health percent, cycle count, voltage and notes filled in',
+          caption: 'The Record Battery Health Reading dialog.',
+        },
+        steps: [
+          'On **Fleet**, open the **Batteries** tab and click the battery\'s name.',
+          'In the **Health History** card, choose **Record Reading**.',
+          'Enter at least one of **Health %**, **Cycle Count** or **Voltage**. Add **Notes** if you like.',
+          'Choose **Save Reading**.',
+          'The chart shows health and cycle count over time. It stays empty until the battery has a reading.',
+        ],
+        notes: [
+          'A saved reading also updates the battery\'s current **Health** and **Cycle Count** when you filled them in.',
+          '**Cycle Count** cannot be lower than the battery\'s current count. Cycles only go up, so a lower number is refused as a likely typing mistake.',
+          '**Health %** must be between 0 and 100.',
+          'Readings also arrive on their own during a Skydio sync.',
+          'Readings are not edited or removed one at a time. If you delete the battery, its readings go with it. If you merge a duplicate battery into another, its readings move to the battery you keep.',
+          'Admins and supervisors can record readings by default. Everyone who can view the fleet sees the chart.',
+        ],
+      },
+      {
+        id: 'other-equipment',
+        title: 'Controllers, docks, sensors, attachments and other equipment',
+        summary: 'These tabs follow the same steps as vehicles. Each item has its own page with notes, maintenance history and documents.',
+        steps: [
+          'Open the tab, then choose **Add Controller**, **Add Dock**, **Add Sensor**, **Add Attachment** or **Add Other Item**.',
+          'Fill in the boxes. Only **Serial Number** is required, except on **Other**, where **Name** is required.',
+          'Click an item\'s name to open its page. Choose the pencil icon there to edit it.',
+        ],
+        notes: [
+          '**Controllers** can have an **Assigned Pilot**. Set it on the controller\'s page. The page shows the pilot, the status and the date of the last maintenance.',
+          '**Docks** have a **Location Name**, and **Latitude** and **Longitude** if you know them. When both coordinates are set, the dock\'s page shows a **Location** map.',
+          '**Sensors** and **Attachments** have a **Type**, a **Manufacturer** and a **Model**. Their pages show **Total Flights**, **Total Hours**, **Unique Pilots** and a **Flight History**.',
+          '**Other** is for anything else you track, such as a case or a charger. It has a **Name**, a **Category** and a **Serial Number**.',
+          'The **Status** choices are **Active** and **Maintenance**, plus **Retired** and **Damaged**. Docks also offer **Online** and **Offline**.',
+          'Emptying an optional box in an edit clears the value on the record.',
+        ],
       },
       {
         id: 'components',
         title: 'Components',
-        summary: 'Component-level tracking (propellers, gimbals, cameras) lets you monitor individual parts with flight hours, installation dates, and warranty information.'
-      },
-      {
-        id: 'equipment-checkout',
-        title: 'Equipment Checkout',
-        summary: 'The equipment checkout system provides chain-of-custody tracking. Check equipment out to a pilot, and check it back in when returned.'
+        summary: 'Use components to track the parts on one aircraft, such as propellers, motors and gimbals, with their flight hours and warranty.',
+        steps: [
+          'Open the vehicle\'s page and find the **Components** card.',
+          'Choose **Add Component**.',
+          'Enter a **Name** (required) and pick a **Type**: **Propeller**, **Motor**, **Gimbal**, **Camera**, **Frame**, **Landing Gear** or **Other**.',
+          'Fill in anything else you know: **Serial Number**, **Manufacturer**, **Model**, **Status**, **Install Date**, **Flight Hours**, **Max Flight Hours**, **Warranty Expiry**, **Replacement Cost** and **Notes**.',
+          'Choose **Save Component**.',
+        ],
+        notes: [
+          'The **Status** choices are **Active**, **Needs Replacement**, **Replaced** and **Retired**.',
+          '**Flight Hours** is a number you keep up to date. The app does not add flight time to it for you.',
+          'When **Max Flight Hours** is set, the table shows hours as "used / max" and turns amber once the part reaches 90 percent of its limit.',
+          'Use the trash icon (**Delete component**) to remove a component, then confirm. A component cannot be edited, so delete it and add it again to change it.',
+          'Only people who can manage the fleet add or delete components: admins and supervisors by default. Everyone who can view the fleet can read the list.',
+        ],
       },
       {
         id: 'equipment-dropdowns',
-        title: 'Equipment Dropdowns',
-        summary: 'When adding or editing a flight, equipment fields (battery, sensor package, attachments) show a dropdown of existing Fleet inventory. You can type to search or select from the list. Typing a new serial number automatically creates a Fleet record for it.'
+        title: 'Equipment lists on flight forms',
+        summary: 'When you add or edit a flight, the equipment boxes offer your fleet records, so you pick equipment instead of typing it.',
+        steps: [
+          'In the flight form, click **Battery**, **Sensor Package** or one of the **Attachment** boxes.',
+          'Pick an item from the list, or type to narrow it down.',
+        ],
+        notes: [
+          'If you type a serial number the fleet does not have yet, saving the flight adds a fleet record for it.',
+          'Retired and damaged equipment still appears in these lists. Take care to pick the equipment you really flew.',
+        ],
       },
       {
         id: 'merging-duplicates',
-        title: 'Merging Duplicates',
-        summary: 'If duplicate equipment records exist (e.g., two entries for the same battery), use the merge button (icon) in Fleet > Batteries/Sensors/Attachments. Select the duplicate to absorb: all flight references will be updated and the duplicate deleted.'
+        title: 'Merging duplicate equipment',
+        summary: 'Use this when two records describe the same item, for example after a provider sync created a second copy of an aircraft or battery. You keep one record and absorb the other into it.',
+        steps: [
+          'On **Fleet**, open the **Vehicles**, **Batteries**, **Sensors** or **Attachments** tab.',
+          'Find the record you want to keep. Choose the merge icon (**Merge**) on its row.',
+          'In the **Merge** dialog, open **Merge from (duplicate to remove)** and pick the duplicate.',
+          'Choose **Merge**.',
+        ],
+        notes: [
+          'The duplicate is deleted. Its flights, and the records that point at it, are moved to the record you kept. A message tells you the result.',
+          'For a vehicle, this also moves flight plans, incidents, mission and training logs, documents, registrations, components, maintenance and checkouts. If the duplicate has an **API Serial** and the kept vehicle has none, the kept vehicle takes it, so the next provider sync matches it.',
+          'Batteries also move their health readings.',
+          'Merging cannot be undone. Check which record you are keeping before you choose **Merge**.',
+          'Controllers, docks and other equipment have no merge icon.',
+          'Admins and supervisors can merge by default.',
+        ],
+      },
+    ]
+  },
+  {
+    id: 'registrations',
+    title: 'FAA Registrations',
+    topics: [
+      {
+        id: 'faa-registrations',
+        title: 'FAA registrations on a vehicle',
+        summary: 'Each vehicle keeps its FAA registrations on its own page, so you can see when the current one expires and what came before it.',
+        image: {
+          src: '/manual/registrations-faa-registrations.png',
+          alt: 'The FAA Registration card of a vehicle with a Next Due banner, the days remaining, and a table of one current and one expired registration',
+          caption: 'The FAA Registration card: the Next Due banner above the list of registrations.',
+        },
+        steps: [
+          'On **Fleet**, click the vehicle\'s name and find the **FAA Registration** card.',
+          'The banner at the top shows **Next Due** (the expiry date of the current registration), the registration number and the date it was registered.',
+          'The badge at the right shows the days remaining, or **Overdue** with the number of days past.',
+          'The table lists every registration with **Reg #**, **Registered**, **Expires**, **Status** and **Notes**.',
+        ],
+        notes: [
+          'The badge is green with more than 90 days left, amber with 90 days or fewer, and red with under 30 days or overdue.',
+          'A vehicle has one **Current** registration at a time. Older ones show **Previous**. Any registration whose expiry date has passed shows **Expired**, even if it is the current one.',
+          'The same due date and number show in the **Next Due** and **FAA Reg** columns on the Fleet page.',
+          'The email digest lists current registrations that expire in the next 30 days.',
+          'Everyone who can view registrations sees the card. By default that is admins, supervisors, pilots and viewers.',
+        ],
       },
       {
-        id: 'battery-health-tracking',
-        title: 'Battery Health Tracking',
-        summary: 'Each battery has a health history chart showing health percentage and cycle count over time. Go to Fleet > click a battery > Health History section. Use "Record Reading" to manually add health data points. Health readings are also recorded automatically during Skydio API sync.'
+        id: 'adding-a-registration',
+        title: 'Adding a registration',
+        summary: 'Add a registration when a vehicle is first registered and again each time you renew it. The new one becomes the current one.',
+        steps: [
+          'Open the vehicle\'s page and find the **FAA Registration** card.',
+          'Choose **Add Registration**.',
+          'Enter the **Registration #** (it usually starts with FA) and the **Registration Date**.',
+          'Check **Expiry (auto: +3 years)**. It shows the date three years after the registration date. You cannot type in it.',
+          'Add **Notes** if you like, then choose **Save Registration**.',
+        ],
+        notes: [
+          'Give at least a registration number or a registration date. With a date, the app sets the expiry three years later. With only a number, there is no expiry date and no countdown.',
+          'Saving a new registration makes it the current one. The one before it becomes **Previous**.',
+          'A registration cannot be edited. To fix a mistake, delete it with the trash icon (**Delete registration**) and add it again. If you delete the current registration, the newest remaining one by registration date becomes current.',
+          'Adding and deleting registrations is for admins only by default. Supervisors and pilots can see registrations but not change them. An admin can change this under **Settings**.',
+          'The **FAA Registration** text box in a vehicle\'s edit form is a separate note. The card and the Fleet list use the registrations you add here, and the list falls back to that text when there are none.',
+        ],
+      },
+    ]
+  },
+  {
+    id: 'fleet-health',
+    title: 'Fleet Health',
+    topics: [
+      {
+        id: 'reading-fleet-health',
+        title: 'Reading the Fleet Health page',
+        summary: 'Fleet Health gives a quick picture of how hard each vehicle is used and how healthy your batteries are.',
+        image: {
+          src: '/manual/fleet-health-reading-fleet-health.png',
+          alt: 'The Fleet Health page with five summary cards, a Vehicle Utilization table and a Battery Health bar chart with a Good, Fair and Poor legend',
+          caption: 'The Fleet Health page: summary cards, vehicle utilization and battery health.',
+        },
+        steps: [
+          'Press Ctrl+K (Cmd+K on a Mac), type Fleet Health and press Enter. The page has no sidebar link.',
+          'Read the five cards: **Vehicles in Service**, **Batteries in Service**, **Avg Battery Health**, **Overdue Maintenance** and **Total Flight Hours**.',
+          'In **Vehicle Utilization**, click a heading (**Vehicle**, **Flights**, **Hours**, **Last Flight** or **Overdue**) to sort. Click a vehicle to open it.',
+          'In **Battery Health**, each bar is one battery. Green means above 80 percent (**Good**), amber 50 to 80 (**Fair**) and red under 50 (**Poor**).',
+        ],
+        notes: [
+          '"In service" means not retired and not damaged. A vehicle in **Maintenance** still counts.',
+          'Flights and hours count only flights that count toward your unit\'s totals.',
+          '**Avg Battery Health** averages only the batteries that have a health figure. A battery that was never measured is left out, not counted as 0 percent. It shows as an empty bar.',
+          '**Overdue Maintenance** counts every overdue maintenance schedule in the unit, for vehicles and for other equipment.',
+          'Only people who can view maintenance see each vehicle\'s own overdue count. For others the **Overdue** column reads **OK**, but the **Overdue Maintenance** card still shows the unit total.',
+          'Everyone who can view the fleet can open this page.',
+        ],
       },
     ]
   },
@@ -647,20 +888,63 @@ export const sections = [
     topics: [
       {
         id: 'checking-equipment-out',
-        title: 'Checking Equipment Out',
-        summary: `The Equipment Checkouts page provides chain-of-custody tracking. Click "Check Out" and choose the equipment type (vehicle, battery, controller, dock, sensor, or attachment), the specific item, and the pilot who is taking it. You can optionally set an expected return date and notes.
-
-The checkout defaults to the logged-in user as the holder, but you can pick any pilot (for example, a supervisor recording a checkout on someone's behalf). Equipment that is already checked out cannot be checked out again until it is returned.`
+        title: 'Checking equipment out',
+        summary: 'Use a checkout to record who has a piece of equipment, so you always know where it is.',
+        image: {
+          src: '/manual/checkouts-checking-equipment-out.png',
+          alt: 'The Check Out Equipment dialog with type, item, pilot, expected return and notes',
+          caption: 'The Check Out Equipment dialog.',
+        },
+        steps: [
+          'Choose **Checkouts** in the sidebar, then **Check Out**.',
+          'Pick the **Type**: **Vehicle**, **Battery**, **Controller**, **Dock**, **Sensor**, **Attachment** or **Other**.',
+          'Pick the **Item**.',
+          'Pick the **Pilot** who is taking it. The box starts on your own pilot record, if you have one.',
+          'Optional: **Expected return (optional)** and **Notes (optional)**.',
+          'Choose **Check Out**.',
+        ],
+        notes: [
+          'You can pick any active pilot. A supervisor can record a checkout for someone else. The audit log shows who entered the record and who has the equipment.',
+          'The **Item** list shows only equipment that is not retired or damaged.',
+          'Equipment that is already out cannot be checked out again until it is checked in. The app says "This equipment is already checked out".',
+          'Supervisors and pilots can check equipment out by default, and so can admins. Viewers can see the page but not the buttons.',
+          'The page shows checkouts only to roles that can view the fleet.',
+        ],
       },
       {
         id: 'checking-equipment-back-in',
-        title: 'Checking Equipment Back In',
-        summary: 'In the "Currently Out" list, click "Check In" on a row, confirm who returned the item, and add optional notes. The record is then marked returned with a timestamp. Both the user who entered the record and the pilot who held or returned the item are captured in the audit log.'
+        title: 'Checking equipment back in',
+        summary: 'Check equipment in when it comes back, so the record shows it is available again.',
+        steps: [
+          'On **Checkouts**, find the item under **Currently Out**.',
+          'Choose **Check In** on its row.',
+          'Under **Returned by**, pick who is returning it. It starts on the person who took it out, or on you.',
+          'Add **Notes (optional)** if you like.',
+          'Choose **Check In**.',
+        ],
+        notes: [
+          'Anyone who can check out can check in, including equipment someone else took.',
+          'The record keeps the date it went out, who took it, the date it came back and who returned it.',
+        ],
       },
       {
         id: 'active-and-returned-records',
-        title: 'Active and Returned Records',
-        summary: 'The page shows a "Currently Out" section with everything still checked out, and a History section. Toggle "Show returned" to include completed (returned) records in the History list. By default supervisors and admins can delete a checkout record.'
+        title: 'Active and returned records',
+        summary: 'The Checkouts page shows what is out now and keeps a history of what has been out before.',
+        image: {
+          src: '/manual/checkouts-active-and-returned-records.png',
+          alt: 'The Checkouts page with a Currently Out table and a History table with the Show returned box',
+          caption: 'The Checkouts page: Currently Out above History.',
+        },
+        steps: [
+          '**Currently Out** lists everything that has not come back. Each row shows the equipment, its type, who holds it, when it went out and the expected return date.',
+          '**History** starts with the items still out. Tick **Show returned** to add the ones that have come back.',
+        ],
+        notes: [
+          'In **History**, an item that is still out shows **Out** in the **Returned** column.',
+          'A trash icon at the end of a **History** row deletes that record for good, after you confirm. Admins and supervisors can do this by default. Pilots and viewers cannot.',
+          'When a vehicle is checked out, its location on the dashboard changes to "with" that pilot. See **Where a drone is**.',
+        ],
       },
     ]
   },
@@ -670,15 +954,36 @@ The checkout defaults to the logged-in user as the holder, but you can pick any 
     topics: [
       {
         id: 'last-known-location',
-        title: 'Last-Known Location',
-        summary: `The dashboard includes a Locations tile listing each active drone and its last-known location. A drone's location is the more recent of an active equipment checkout (shown as "with <pilot>") or a manually set location.`
+        title: 'Where a drone is',
+        summary: 'The Locations card on the dashboard shows the last known place of every drone that is not retired.',
+        steps: [
+          'Open the **Dashboard**.',
+          'Find the **Locations** card. Each drone shows its name and its location under it.',
+        ],
+        notes: [
+          'A location is "with" a pilot name, or a place name such as North. It shows whichever was recorded most recently: a checkout, or a location someone set by hand.',
+          'After a drone is checked in, it reads **Returned**, until someone sets a location again. The place set before it went out is out of date.',
+          '**Unknown** means no checkout or location was ever recorded.',
+          'If you have no drones, the card says **No drones**.',
+          'Everyone who can view the fleet sees the card.',
+        ],
       },
       {
         id: 'setting-a-location',
-        title: 'Setting a Location',
-        summary: `Use the "Set location…" dropdown on each drone in the dashboard Locations tile to set its location to either a named place or a specific pilot. Setting a location manually updates the last-known location immediately.
-
-The list of named places (for example North, Central, South) is configured by admins in Settings under Drone Locations. Pilots are always available as location targets in addition to the configured places.`
+        title: 'Setting a location',
+        summary: 'Update a drone\'s location when it moves, without a full checkout.',
+        steps: [
+          'On the **Locations** card, find the drone.',
+          'Open **Set location…** beside it.',
+          'Choose a place under **Places**, or a pilot under **Pilots**.',
+          'The card updates at once.',
+        ],
+        notes: [
+          'A drone is in one spot at a time: one place or one pilot.',
+          'Supervisors and pilots can set a location by default, and so can admins. Viewers cannot. An admin can change this under **Settings**.',
+          'An admin sets the list of places under **Settings**, in **Drone Locations**. If it was never changed, the places are North, Central and South.',
+          'Each change is saved in the audit log with who made it.',
+        ],
       },
     ]
   },

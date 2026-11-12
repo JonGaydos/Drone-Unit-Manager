@@ -189,4 +189,88 @@ export const SHOTS = [
     },
     target: (page) => page.getByRole('dialog'),
   },
+  {
+    file: 'fleet-fleet-list.png',
+    route: '/fleet',
+    prepare: async (page) => {
+      await page.getByPlaceholder('Search vehicles...').fill('Demo')
+      await page.getByRole('link', { name: 'Demo One', exact: true }).waitFor()
+    },
+    target: (page) => page.locator('div.space-y-4').filter({ has: page.locator('table') }).last(),
+  },
+  {
+    file: 'fleet-adding-a-vehicle.png',
+    route: '/fleet',
+    prepare: async (page) => {
+      await page.setViewportSize({ width: 1280, height: 1000 }) // tall enough to show the whole form
+      await page.getByRole('button', { name: 'Add Vehicle' }).click()
+      const dialog = page.getByRole('dialog')
+      await dialog.locator('#field-serial_number').fill('DEMO-0004')
+      await dialog.locator('#field-manufacturer').fill('Skydio')
+      await dialog.locator('#field-model').fill('X10')
+      await dialog.locator('#field-nickname').fill('Demo Four')
+      await dialog.locator('#field-acquired_date').fill(isoDay(-30))
+      await page.waitForTimeout(SETTLE_MS)
+    },
+    target: (page) => page.getByRole('dialog'),
+  },
+  {
+    file: 'fleet-battery-readings.png',
+    route: '/fleet',
+    prepare: async (page) => {
+      await page.getByRole('button', { name: 'Batteries' }).click()
+      await page.getByRole('link', { name: 'Demo Battery 1', exact: true }).click()
+      await page.getByRole('button', { name: 'Record Reading' }).click()
+      const dialog = page.getByRole('dialog')
+      await dialog.locator('#health-1').fill('91')
+      await dialog.locator('#cycle-count-1').fill('30')
+      await dialog.locator('#voltage').fill('16.4')
+      await dialog.locator('#notes-1').fill('Demo monthly check')
+      await page.waitForTimeout(SETTLE_MS)
+    },
+    target: (page) => page.getByRole('dialog'),
+  },
+  {
+    file: 'registrations-faa-registrations.png',
+    route: '/fleet',
+    prepare: async (page) => {
+      await page.getByRole('link', { name: 'Demo One', exact: true }).click()
+      await page.getByRole('heading', { name: 'FAA Registration' }).waitFor()
+    },
+    target: (page) => page.getByRole('heading', { name: 'FAA Registration' }).locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]'),
+  },
+  {
+    file: 'fleet-health-reading-fleet-health.png',
+    route: '/fleet-health',
+    prepare: async (page) => {
+      await page.getByRole('heading', { name: 'Battery Health' }).waitFor()
+      await page.waitForTimeout(1500) // let the chart animation finish
+    },
+    target: (page) => page.locator('div.space-y-6').filter({ has: page.getByRole('heading', { name: 'Fleet Health', level: 1 }) }).last(),
+  },
+  {
+    file: 'checkouts-checking-equipment-out.png',
+    route: '/checkouts',
+    prepare: async (page) => {
+      await page.getByRole('button', { name: 'Check Out', exact: true }).click()
+      const dialog = page.getByRole('dialog')
+      await dialog.locator('#checkout-type').selectOption('battery')
+      await dialog.locator('#checkout-item option', { hasText: 'Demo Battery 3' }).waitFor({ state: 'attached' })
+      await pickContaining(dialog.locator('#checkout-item'), 'Demo Battery 3')
+      await pickContaining(dialog.locator('#checkout-pilot'), 'Riley Chen')
+      await dialog.getByLabel('Expected return (optional)').fill(isoDay(2))
+      await dialog.getByLabel('Notes (optional)').fill('Demo training day')
+      await page.waitForTimeout(SETTLE_MS)
+    },
+    target: (page) => page.getByRole('dialog'),
+  },
+  {
+    file: 'checkouts-active-and-returned-records.png',
+    route: '/checkouts',
+    prepare: async (page) => {
+      await page.getByText('Show returned').click()
+      await page.getByText('Demo Battery 2').first().waitFor()
+    },
+    target: (page) => page.locator('div.space-y-6').filter({ has: page.getByRole('heading', { name: 'Equipment Checkouts' }) }).last(),
+  },
 ]
