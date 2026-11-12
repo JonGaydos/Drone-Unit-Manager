@@ -512,13 +512,15 @@ export const sections = [
         steps: [
           'On **Flights**, choose **Add Flight**.',
           'Pick the **Pilot** and the **Vehicle**. If the vehicle has a problem (overdue maintenance, an expired registration or a status other than active), a box called **Pre-flight warnings for this vehicle** appears. The warnings do not stop you from saving.',
-          'Enter the **Date** and the **Duration (seconds)**. Or enter the **Takeoff Time** and **Landing Time** and leave the date and duration empty, and the app works them out.',
+          'Enter the **Date** and the **Duration (seconds)**. Or enter the **Takeoff Time** and **Landing Time** and leave **Date** and **Duration (seconds)** empty, and the app works them out.',
           'Pick a **Purpose**.',
           'Fill in anything else you know: **Takeoff Address**, **Landing Address**, the latitude and longitude boxes, **Distance (m)**, **Operating Cost ($)**, **Case Number**, **Battery**, **Sensor Package**, the four **Attachment** boxes, **Carrier(s)** and **Notes**.',
           'Choose **Add Flight**.',
         ],
         notes: [
           'The date and times in the form are in your unit\'s time zone.',
+          '**Landing Time** must be after **Takeoff Time**, or the flight is not saved.',
+          'If you fill in **Date** or **Duration (seconds)** as well as the times, they must agree. The date must be the takeoff date, and the duration must match the time between takeoff and landing to within a minute. Otherwise the app refuses to save. Leave them empty to avoid this.',
           'A flight you add by hand always starts as **Needs Review**, whoever adds it.',
           'To log a flight that is much like an earlier one, choose the copy icon (**Duplicate**) at the end of that row. The pilot, vehicle, purpose, takeoff address and equipment are filled in. The date, times and duration are left empty.',
           'Supervisors and pilots can add flights by default. Viewers cannot, and do not see the button. An admin can change this under **Settings**.',
