@@ -334,8 +334,9 @@ export default function CertificationsPage() {
     })
   }, [canSeeFiles])
 
+  // The matrix API fills an empty pilot and type pair with a placeholder whose id is null.
   const openCertCell = (row, ct, cert) => {
-    if (cert) {
+    if (cert?.id) {
       setEditCert({
         id: cert.id,
         pilot_id: row.pilot_id,
@@ -695,12 +696,12 @@ export default function CertificationsPage() {
                     {filteredCertTypes.map(ct => {
                       const cert = row.certs?.[ct.id]
                       const status = certDisplayStatus(cert)
-                      const opensModal = canManage || (Boolean(cert) && canSeeFiles)
+                      const opensModal = canManage || (Boolean(cert?.id) && canSeeFiles)
                       return (
                         <td key={ct.id} className={`relative px-3 py-2 text-center ${opensModal ? 'cursor-pointer hover:bg-accent/40 transition-colors' : ''}`}
                           tabIndex={opensModal ? 0 : undefined} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.click() } }}
                           onClick={opensModal ? () => openCertCell(row, ct, cert) : undefined}>
-                          {canManage && cert && ct.has_expiration && (
+                          {canManage && cert?.id && ct.has_expiration && (
                             <input
                               type="checkbox"
                               checked={selectedCerts.has(cert.id)}
