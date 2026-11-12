@@ -1127,29 +1127,113 @@ export const sections = [
     title: 'Pilots',
     topics: [
       {
+        id: 'pilot-list',
+        title: 'The Pilots page',
+        summary: 'Use the **Pilots** page to find a pilot, add a new one, or tidy up the list. Click a name to open that pilot\'s profile.',
+        steps: [
+          'Open **Pilots** in the sidebar.',
+          'Type in **Search pilots...** to filter by name, email or badge number.',
+          'Click a column heading (**Name**, **Email**, **Badge #** or **Status**) to sort. Click it again to reverse the order.',
+          'To add a pilot, click **Add Pilot**, fill in **First Name** and **Last Name** (the only required fields), and click **Add Pilot** in the dialog.',
+          'To change a pilot, click the pencil in the **Actions** column, change the fields and click **Update**.',
+          'To combine two records for the same person, click the merge icon, choose the record to keep under **Keep this pilot**, and click **Merge**.',
+          'To retire a pilot, click the bin icon and confirm **Deactivate**.',
+        ],
+        notes: [
+          'Everyone can see the list. **Add Pilot**, merge, deactivate and **Export CSV** are for supervisors and admins by default. **Export CSV** also needs the permission to export reports. A CSV file is a plain table that opens in Excel.',
+          'Supervisors and admins can edit any pilot. Pilots can edit only their own profile. An admin can change this under **Settings**.',
+          'Email and phone numbers are hidden from viewers by default. Without that access the **Email** column shows a dash and the email and cell fields are missing from the dialog.',
+          'Each badge number can belong to one pilot only.',
+          '**Merge** moves every flight, log, certification and record from one pilot to the other, then removes the first. It cannot be undone.',
+          '**Deactivate** does not delete anything. The pilot is marked inactive, and drops off the Certifications matrix and out of the compliance counts. Flights stay on record. Set **Status** back to **Active** in the edit dialog to bring the pilot back.',
+          '**Counts towards unit totals** (supervisors and admins only) is a separate switch. Turn it off for a vendor or guest operator: their flights stay on record but leave the unit\'s numbers.',
+        ],
+      },
+      {
         id: 'pilot-profiles',
-        title: 'Pilot Profiles',
-        summary: 'Each pilot has a profile with contact information, badge number, photo, and status (active/inactive). Click a pilot\'s name to view their full profile with flight history, certifications, and training records. By default supervisors can edit any profile and pilots only their own; the Role Permissions grid can change this.'
+        title: 'The pilot profile',
+        summary: 'A pilot\'s profile page gathers their details, flight totals, certifications and currency in one place.',
+        image: {
+          src: '/manual/pilots-pilot-profiles.png',
+          alt: 'The profile card of a demo pilot with initials, name, email, a personal cell number and an active status badge',
+          caption: 'The profile card at the top of a pilot page.',
+        },
+        steps: [
+          'On **Pilots**, click the pilot\'s name.',
+          'The card at the top shows the photo (or initials), name, email, **Personal Cell**, **Work Cell**, badge number, status and notes.',
+          'Below it you see **Total Flights**, **Flight Hours** and **Avg Duration**, then tiles for training hours, mission hours and incidents, and the **Flights by Month** and **Flights by Purpose** charts.',
+          'Further down are **Needs Attention**, **Recent Flights** (the latest 20), **Certifications**, **Currency Status** and **Documents**.',
+          'Click **Back to Pilots** to return to the list.',
+        ],
+        notes: [
+          'You only see the parts you may view. For example, someone without access to flights does not see the flight totals, charts or **Recent Flights**.',
+          'Only admins can add or replace the photo. Click the small camera on the photo and choose an image file. The photo shows on this page. The list shows initials.',
+          'Email and phone numbers are hidden from roles without contact access (viewers by default).',
+          'The **Currency Status** card appears only when at least one active currency rule exists.',
+        ],
+      },
+      {
+        id: 'editing-a-profile',
+        title: 'Editing a pilot profile',
+        summary: 'Update a pilot\'s name, contact details, badge number or notes from their profile page.',
+        steps: [
+          'Open the pilot\'s profile and click the pencil next to the name (**Edit profile**).',
+          'Change **First Name**, **Last Name**, **Email**, **Personal Cell**, **Work Cell**, **Badge Number** or **Notes**.',
+          'Click **Save**, or **Cancel** to throw the changes away.',
+        ],
+        notes: [
+          'The pencil shows only if you may edit this pilot. Supervisors and admins can edit anyone. A pilot can edit only the profile linked to their own account. Viewers cannot edit.',
+          '**Status** appears only for supervisors and admins. A pilot cannot change their own status, the unit totals setting or the photo.',
+          'The email and cell fields appear only for roles with contact access. Without it they are left out of the form and your save does not touch them.',
+          'First and last name are required.',
+        ],
       },
       {
         id: 'pilot-currency',
-        title: 'Pilot Currency',
-        summary: `Currency rules define how many flight hours (and optionally how many flights) a pilot must log within a rolling period to stay current (e.g., 5 hours in 90 days).
-
-Admins create rules from Settings → General → Currency Rules. Changing rules needs the certifications manage permission, which supervisors hold by default, but the Settings page itself is admin-only. Rules can be scoped to a specific vehicle model or apply across all aircraft. Once at least one active rule exists, each pilot's detail page shows a Currency Status section with per-rule progress, current/lapsed badge, and the projected expiry date (the date the pilot would lapse if they don't fly again).
-
-Only reviewed flights count toward currency, from every source. A flight that still needs review, including one sent back to the queue after an edit, does not count until a supervisor reviews it, so a pilot can show as lapsed while their flights wait for review.`
+        title: 'Pilot currency',
+        summary: 'Currency means a pilot has flown enough recently. A currency rule sets the flight hours (and, if you want, the number of flights) a pilot must log within a number of days, for example 5 hours in 90 days.',
+        image: {
+          src: '/manual/pilots-pilot-currency.png',
+          alt: 'The New Currency Rule dialog with a name, required hours, period in days and minimum flights filled in',
+          caption: 'The New Currency Rule dialog in Settings.',
+        },
+        steps: [
+          'Open **Settings** (admins only) and scroll to **Currency Rules** on the **General** tab.',
+          'Click **New Rule**.',
+          'Enter a **Name**. Add a **Description (optional)** if you like.',
+          'Enter **Required hours** and **Period (days)**. Add **Minimum flights (optional)** if the rule also needs a number of flights.',
+          'Leave **Vehicle model (optional)** blank to count every aircraft, or type a model (for example X10) to count only flights on that model.',
+          'Leave **Active (include in pilot currency calculations)** ticked and click **Create**.',
+          'To change or remove a rule, use the pencil or bin next to it in the list. Editing saves with **Save**.',
+        ],
+        notes: [
+          'Once a rule is active, every pilot page shows a **Currency Status** card. Each row shows the hours and flights flown against the rule, **Current** or **Lapsed**, and an **Expires** date: the day the pilot would lapse if they did not fly again.',
+          'A pilot is **Lapsed** if any active rule is not met. With no active rules everyone counts as current.',
+          'Only reviewed flights count, from every source. A flight waiting for review, including one sent back to the queue after an edit, does not count until a supervisor reviews it. A pilot can show as lapsed while flights wait for review.',
+          'A rule can look back up to 3650 days.',
+          'Lapsed pilots appear in **Needs Attention** on their page and on the **Compliance** page.',
+        ],
       },
       {
         id: 'needs-attention',
         title: 'Needs Attention',
-        summary: `Each pilot's detail page has a Needs Attention card that aggregates the items most likely to require action for that pilot:
-
-• **Lapsed currency**: Any active currency rule the pilot is not current on, shown in red.
-• **Expired certifications**: Certifications past their expiration date, shown in red.
-• **Expiring certifications**: Certifications expiring within 30 days, shown in amber with the days remaining.
-
-When nothing is outstanding, the card shows an "All clear" message. The count of items appears in the card header.`
+        summary: 'The **Needs Attention** card on a pilot page lists what that pilot should fix: lapsed currency and certifications that are expired or about to expire.',
+        image: {
+          src: '/manual/pilots-needs-attention.png',
+          alt: 'The Needs Attention card of a demo pilot listing a certification that expires soon, with the number of items in the header',
+          caption: 'The Needs Attention card with one item listed.',
+        },
+        steps: [
+          'Open the pilot\'s page and find the **Needs Attention** card.',
+          'Each line is one item. Red lines are lapsed currency or an expired certification. Amber lines are certifications expiring within 30 days, with the days left.',
+          'The number in the card header is how many items there are.',
+        ],
+        notes: [
+          'When nothing is outstanding the card says **All clear**.',
+          'The card shows only for people who may view certifications.',
+          'A certification you have renewed no longer shows. Only the current record counts. Certifications marked not issued are left out too.',
+          'Certifications without an expiration date never appear.',
+        ],
       },
     ]
   },
@@ -1159,13 +1243,151 @@ When nothing is outstanding, the card shows an "All clear" message. The count of
     topics: [
       {
         id: 'certification-types',
-        title: 'Certification Types',
-        summary: 'Create custom certification types from the Settings page (e.g., Part 107, TRUST, Night Waiver). Each type can have custom status labels and renewal periods.'
+        title: 'Certification types',
+        summary: 'A certification type is a kind of credential you track, such as Part 107, a training course or an insurance card. Set up the types first, then assign them to pilots.',
+        steps: [
+          'Open **Certifications** and click the **Cert Types** tab.',
+          'Click **Add Type**.',
+          'Enter the **Name** and pick a **Category** (FAA, NIST, Equipment, Insurance, Training or Custom).',
+          'Leave **Has Expiration Date** ticked if the credential runs out. Enter the **Renewal Period (months)**, for example 24.',
+          'Add a **Description** if useful, then click **Add**.',
+          'Each card on the tab has an eye icon (hide or show), a pencil (**Edit**) and a bin (**Delete**).',
+        ],
+        notes: [
+          'Supervisors and admins manage types. Everyone else can look.',
+          'Hiding a type takes its column off the matrix but keeps every pilot record. Use the eye again to show it. Hidden types show a **Hidden** label.',
+          'The renewal period fills in the new expiry date when you renew.',
+          'Admins can rename the status names that show on the matrix under **Settings**, **Certification Status Labels**.',
+        ],
+      },
+      {
+        id: 'certification-matrix',
+        title: 'The certification matrix',
+        summary: 'The matrix is a grid of pilots down the side and certification types across the top. Each cell shows one pilot\'s status for one certification, so you can see gaps at a glance.',
+        image: {
+          src: '/manual/certifications-certification-matrix.png',
+          alt: 'The certification matrix with demo pilots down the side and certification types across the top, cells coloured green, amber and red with expiry dates',
+          caption: 'The matrix: green is fine, amber is expiring soon, red is expired.',
+        },
+        steps: [
+          'Open **Certifications**. The **Certification Matrix** tab is the first one.',
+          'Read each cell: a coloured status and, below it, the expiry date.',
+          'Narrow the grid with **Search pilots...**, the status list (**All Statuses**), the category list (**All Categories**) or the **Hide empty** box. The count at the right shows how many pilots and columns you see.',
+          'Click a pilot\'s name to open their profile.',
+        ],
+        notes: [
+          'Amber **expiring soon** means the expiry date is within 90 days. Red **expired** means the date has passed. Green means complete or active. Grey means not started, not issued or not eligible.',
+          'The matrix lists active pilots only. Deactivated pilots are not shown.',
+          'A renewed certification does not show. The cell shows the newer record.',
+          '**Hide empty** hides pilots who have no certification record at all.',
+          'Supervisors and admins see arrows in each column heading to move the column left or right.',
+          'The status list keeps pilots who have at least one cell with that status. All their columns still show.',
+          '**Export CSV** needs the permission to export reports.',
+        ],
+      },
+      {
+        id: 'assigning-a-certification',
+        title: 'Assigning a certification',
+        summary: 'Assign a certification to a pilot when they first hold it, or to start tracking one they are working toward.',
+        steps: [
+          'On the matrix, click the empty cell for that pilot and certification. The dialog opens with both already chosen. Or click **Assign Cert** and pick them yourself.',
+          'Choose the **Status**.',
+          'Fill in **Issue Date**, **Expiration Date** and **Certificate Number** if you have them. A **NIST Level** field shows for NIST types.',
+          'Add **Notes** if useful, then click **Assign**.',
+        ],
+        notes: [
+          'Supervisors and admins only.',
+          'A pilot can hold one current record per certification. A second one is refused with a message to edit or renew the existing one.',
+          'The expiry date cannot be before the issue date.',
+          'To attach the certificate scan, open the saved certification (see Editing a certification) and use the document box at the bottom.',
+        ],
+      },
+      {
+        id: 'editing-a-certification',
+        title: 'Editing a certification',
+        summary: 'Fix a date, a number or a note on a certification that already exists.',
+        image: {
+          src: '/manual/certifications-editing-a-certification.png',
+          alt: 'The Edit Certification dialog for a demo pilot with status, issue date, expiration date, certificate number, notes, and the Update, Renew, Remove and Cancel buttons',
+          caption: 'The Edit Certification dialog, opened from a matrix cell.',
+        },
+        steps: [
+          'On the matrix, click the cell that holds the certification.',
+          'The **Edit Certification** dialog opens with everything saved so far, including the notes.',
+          'Change **Status**, **Issue Date**, **Expiration Date**, **Certificate Number** or **Notes**.',
+          'Click **Update**.',
+          'To take the certification off the pilot, click **Remove** and confirm.',
+        ],
+        notes: [
+          'To clear a field, empty it and click **Update**. The date, certificate number or notes are then saved as empty.',
+          'The pilot and the certification type are locked when editing.',
+          '**Remove** deletes the certification together with its renewal history. Attached documents are kept. This cannot be undone.',
+          'Supervisors and admins can edit. For everyone else, clicking a filled cell opens **Certification Documents** instead, where you can view documents and upload for your own certifications if you have file access.',
+          'The dialog also holds the documents for that certification and the **Renewal History**.',
+        ],
+      },
+      {
+        id: 'renewing-a-certification',
+        title: 'Renewing a certification',
+        summary: 'Renew when a pilot gets a new certificate. The old record is kept as history and a fresh one takes its place.',
+        image: {
+          src: '/manual/certifications-renewing-a-certification.png',
+          alt: 'The renewal form inside the Edit Certification dialog with new issue date, new expiration, certificate number and notes',
+          caption: 'The renewal form: enter the new issue date and the expiry fills in.',
+        },
+        steps: [
+          'Click the pilot\'s cell on the matrix and click **Renew** in the dialog.',
+          'Enter **New Issue Date**. **New Expiration** fills in from the type\'s renewal period. You can change it.',
+          'Check **Certificate Number** (it carries over from the old record) and add **Notes** if needed.',
+          'Click **Renew Certification**. **Back** returns to the normal form.',
+        ],
+        notes: [
+          'The old record is archived with the status renewed and the new one is created as complete.',
+          'Renewed records no longer show on the matrix, in **Needs Attention**, in the compliance counts or on the **Calendar**. Only the current record does.',
+          'The **Renew** button is missing for types that do not expire.',
+          'The new issue date is required.',
+        ],
+      },
+      {
+        id: 'bulk-renewal',
+        title: 'Renewing several at once',
+        summary: 'After a training day, renew many certifications with one issue date.',
+        steps: [
+          'On the matrix, tick the small box in each cell you want to renew.',
+          'In the bar that appears (for example **3 selected**), click **Renew selected**.',
+          'Check **Issue date** (it starts as today), add **Notes (optional)**, and click **Renew All**.',
+          '**Clear** unticks everything without renewing.',
+        ],
+        notes: [
+          'Supervisors and admins only. Cells for types that never expire have no box.',
+          'Each certification gets its own new expiry date from its type\'s renewal period. A type with no renewal period gets no expiry date.',
+          'Records that are already renewed are skipped.',
+        ],
+      },
+      {
+        id: 'renewal-history',
+        title: 'Renewal history',
+        summary: 'See every earlier record behind a certification, so you know when it was renewed before.',
+        steps: [
+          'Click the cell on the matrix.',
+          'Scroll to **Renewal History** in the dialog. Each line shows the earlier issue date, expiry date and status.',
+        ],
+        notes: [
+          'The list appears only when the certification has been renewed at least once.',
+          'The pilot\'s own page shows only the current records in its **Certifications** table.',
+        ],
       },
       {
         id: 'tracking-expirations',
-        title: 'Tracking Expirations',
-        summary: 'The Certifications page shows a matrix of all pilots and their certification statuses. Color-coded badges indicate valid, expiring soon, or expired status. The system generates alerts for upcoming expirations.'
+        title: 'Where expiring certifications show up',
+        summary: 'Expiry dates feed several places, each with its own warning window.',
+        notes: [
+          'The matrix turns a cell amber 90 days before expiry and red after it.',
+          'The **Compliance** page counts pilots with an expired certification (**Expired Certs**) and lists certifications expiring within 90 days (**Expiring Soon**).',
+          'The **Needs Attention** card on a pilot page flags certifications expiring within 30 days.',
+          'The **Calendar** shows each expiry date as an event.',
+          'The matrix, compliance counts and calendar skip renewed records, certifications marked not issued, and deactivated pilots.',
+        ],
       },
     ]
   },
@@ -1562,19 +1784,93 @@ The report builder also has date-range presets, pilot and vehicle filters (shown
     topics: [
       {
         id: 'compliance-score',
-        title: 'Compliance Score',
-        summary: 'The Compliance page calculates a 0-100 score based on certification status, registration status, maintenance compliance, pilot currency, and operating authority. Each category shows what\'s compliant and what needs attention.'
+        title: 'The compliance dashboard',
+        summary: 'The **Compliance** page shows how well the unit is keeping up with its paperwork and upkeep, as one score out of 100 with the problems behind it.',
+        image: {
+          src: '/manual/compliance-compliance-score.png',
+          alt: 'The Compliance Dashboard with a score circle and coloured cards for expired certifications, registrations, maintenance and incidents',
+          caption: 'The compliance score and the cards behind it.',
+        },
+        steps: [
+          'Open **Compliance** in the sidebar.',
+          'Read the **Compliance Score**. It is green above 80, amber above 60 and red at 60 or below.',
+          'Click any card (for example **Expired Certs**, **Expired Registrations**, **Overdue Maintenance** or **Open Incidents**) to go to the page where you fix it.',
+          'The summary bar shows **Active Pilots**, **Active Vehicles**, **Cert Compliance**, **Reg Compliance** and **Currency Compliance**.',
+          'Click **Refresh** to reload the numbers.',
+        ],
+        notes: [
+          'Everyone can open this page. The names in the lists follow what you may view, so a role without certification access sees the counts but not the pilot names.',
+          'The score starts at 100 and loses points for: expired certifications (up to 25), expired FAA registrations (up to 20), overdue maintenance (5 each, up to 20), open or investigating incidents (10 each, up to 20), pilots out of currency (up to 15), and operating authorities that are expiring or expired.',
+          'Currency counts only when at least one active currency rule exists. With no rules **Currency Compliance** shows a dash.',
+          'Only active pilots and active vehicles are counted.',
+          'An expired operating authority that grounds the unit caps the score at 50, and the reason shows under the score. See **Operating Authority**.',
+          '**Export checkouts CSV** downloads the equipment checkout log (it needs report export and fleet access). **Generate Compliance Report** opens **Reports** for people who may generate reports.',
+        ],
       },
       {
+        id: 'attention-items',
+        title: 'Items requiring attention',
+        summary: 'The list at the bottom of the **Compliance** page puts every open problem in one place, worst first.',
+        steps: [
+          'Scroll to **Items Requiring Attention**. The number on the right says how many items there are.',
+          'Each line has a severity badge, a description and sometimes a count.',
+          'Click a line to open the page that deals with it.',
+        ],
+        notes: [
+          'The order is: grounding authority, critical (expired certifications, expired registrations, other expired authorities), high, medium, low.',
+          'Lines cover expiring certifications, expiring authorities, overdue maintenance, open incidents, unreviewed flights, pending flight plans and pilots out of currency or close to it.',
+          'When the list is empty the page says **All Clear**.',
+        ],
+      },
+      {
+        id: 'currency-reminders',
+        title: 'Pilot currency and reminders',
+        summary: 'The **Pilot Currency Status** section shows who is lapsed or close to lapsing, and lets a supervisor email them a reminder.',
+        steps: [
+          'Scroll to **Pilot Currency Status**. The header shows how many pilots are lapsed out of the total.',
+          'Use the list to choose **Lapsed + Expiring 30d**, **Lapsed only** or **All pilots**.',
+          'Each row has a badge: **LAPSED**, the days left (amber within 14 days, blue within 30) or **CURRENT**, plus how many hours and flights the pilot has against each rule. Click a row to open the pilot.',
+          'Click **Show all** to see more than the first eight rows.',
+          'To email lapsed pilots, click **Send Reminders**, add an optional **Message to pilots (optional)**, and click **Send**.',
+        ],
+        notes: [
+          '**Send Reminders** is for supervisors and admins by default. It emails every lapsed pilot who has an email address on file. The result message tells you how many were sent, skipped for no email, or failed. The unit needs email set up first (see **Settings**).',
+          'A row shows **no email** when the pilot has no address, or when you do not have contact access.',
+          'With no currency rules the section says **No currency rules defined** and offers **Open Settings**. See Pilot currency to add one.',
+        ],
+      },
+    ]
+  },
+  {
+    id: 'operating-authority',
+    title: 'Operating Authority',
+    topics: [
+      {
         id: 'operating-authority',
-        title: 'Operating Authority',
-        summary: `The Operating Authority page tracks the unit's own COAs and Part 107 waivers, with issue and expiry dates, a status badge, and attached documents. By default admins and supervisors can add and edit; pilots and viewers have read-only access.
-
-An authority within 90 days of expiry takes 5 points off the compliance score. An expired authority marked "Expiry grounds the unit" caps the score at 50 no matter how clean everything else is, with the reason shown under the score, because a green score while the unit is unauthorised would be misleading. Untick that box for an authority whose lapse restricts one kind of operation rather than grounding the unit (a night waiver, for example); an expired one of those takes 10 points off instead.
-
-Set a record's status to Superseded (renewed by a newer authority) or Not applicable (the unit no longer operates under it) to keep it on file for the reports without it counting against compliance. A unit with no authorities on file is scored exactly as before.
-
-Authorities appear in the Annual Unit Report (those held during the reporting period) and in the Certifications report.`
+        title: 'Operating authority',
+        summary: 'The **Operating Authority** page tracks the unit\'s own COAs (certificates of authorization) and Part 107 waivers: when they were issued, when they expire, and the paperwork behind them.',
+        image: {
+          src: '/manual/operating-authority-operating-authority.png',
+          alt: 'The Add Operating Authority dialog with type, title, number, issue and expiry dates, record status and the Expiry grounds the unit box',
+          caption: 'The Add Operating Authority dialog.',
+        },
+        steps: [
+          'Open **Operating Authority** in the sidebar. The table lists **Authority**, **Type**, **Issued**, **Expires**, **Status** and **Documents**.',
+          'To add one, click **Add Authority**.',
+          'Pick the **Type** (COA or Part 107 Waiver) and enter a **Title**. Add the **COA / waiver number**, **Issue date** and **Expiry date**.',
+          'Leave **Record status** on **Active**. Tick or untick **Expiry grounds the unit** (see below). Add **Notes** if useful.',
+          'Click **Save**.',
+          'Use the page icon on a row to attach or view documents, the pencil to edit and the bin to delete.',
+        ],
+        notes: [
+          'Everyone who may view it can read the page. Supervisors and admins can add, edit and delete by default. An admin can change this under **Settings**.',
+          'The badge shows **Active**, **Expires in** a number of days (within 90 days) or **Expired**. Records with no expiry date never expire.',
+          '**Expiry grounds the unit** should be on for an authority the unit flies under. Turn it off for one whose lapse limits one kind of operation, such as a night waiver.',
+          'An authority within 90 days of expiry takes 5 points off the compliance score. An expired one that grounds the unit caps the score at 50, with the reason under the score, because a green score while the unit is unauthorized would mislead. An expired one that does not ground the unit takes 10 points off.',
+          'Set **Record status** to **Superseded** (a newer authority replaced it) or **Not applicable** (the unit no longer uses it) to keep the record on file for reports without it counting against compliance. Deleting removes it for good.',
+          'With no authorities on file the score is unaffected.',
+          'Authorities held during the period appear in the Annual Unit Report and the Certifications report.',
+        ],
       },
     ]
   },
@@ -1584,8 +1880,60 @@ Authorities appear in the Annual Unit Report (those held during the reporting pe
     topics: [
       {
         id: 'incident-reporting',
-        title: 'Incident Reporting',
-        summary: 'Report incidents including crashes, near-misses, equipment failures, and successes (missing persons found, suspects located, evidence collected). Each report includes severity level, description, corrective actions, and can be linked to flights, pilots, and vehicles.'
+        title: 'Reporting an incident or a success',
+        summary: 'Use **Activity Reports** to record something that went wrong (a crash, near miss or equipment failure) or something that went well (a missing person found, evidence collected).',
+        image: {
+          src: '/manual/incidents-incident-reporting.png',
+          alt: 'The Report Incident dialog with the Incident and Success switch, date, severity, title, category, description, pilot and vehicle filled in with demo data',
+          caption: 'The Report Incident dialog.',
+        },
+        steps: [
+          'Open **Activity Reports** in the sidebar and click **New Report**.',
+          'Choose **Incident** or **Success** at the top of the dialog.',
+          'Fill in the **Date**, then the **Severity** (Minor, Moderate, Major or Critical). For a success, pick an **Impact Level** instead.',
+          'Enter a **Title** and a **Description**. Both are required. Pick a **Category** and add a **Location**.',
+          'Link a **Pilot**, **Vehicle** or **Linked Flight** if it applies.',
+          'For an incident, add a **Damage Description**, **Estimated Cost ($)** and tick **Equipment Grounded** if the aircraft or gear is out of service. For a success, add an **Outcome Description**.',
+          'Click **Report Incident** (or **Report Success**).',
+        ],
+        notes: [
+          'Supervisors and pilots can create reports. Viewers can only read them.',
+          'Incident categories are Crash, Near Miss, Equipment Failure, Injury, Airspace Violation and Other. Success categories are Missing Person Found, Suspect Located, Evidence Collected, Community Event, Training Success and Other Success.',
+          '**Linked Flight** lists flights only for people who may view flights.',
+          'A new report starts as **open**. Open and investigating incidents lower the compliance score.',
+        ],
+      },
+      {
+        id: 'reviewing-reports',
+        title: 'Reading and filtering reports',
+        summary: 'Find a past report, or see what is still open.',
+        steps: [
+          'At the top, the cards show **Open**, **Investigating**, **Resolved** and **Total**.',
+          'Click **All**, **Incidents** or **Successes** to choose the kind of report.',
+          'Use **All Statuses**, **All Severities** and **All Categories** to narrow the table.',
+          'Click a row, or the arrow in **Actions**, to open its details: description, location, damage, cost, resolution, corrective actions, notes, who reported it and the linked flight.',
+          'Photos linked to the report show at the bottom of its details.',
+        ],
+        notes: [
+          '**Export CSV** downloads the list. It needs the permission to export reports.',
+          'Attaching photos to a report needs file access with custody rights. Supervisors and admins have it by default.',
+        ],
+      },
+      {
+        id: 'resolving-incidents',
+        title: 'Resolving and deleting reports',
+        summary: 'Close the loop on an incident by recording what happened and what you changed.',
+        steps: [
+          'On the report\'s row, click the check mark (**Resolve**).',
+          'Choose the **Status**: **Investigating**, **Resolved** or **Closed**.',
+          'Fill in **Resolution**, **Corrective Actions** and **Resolution Date** (it starts as today).',
+          'Click **Update**.',
+        ],
+        notes: [
+          'Resolving and deleting are for supervisors and admins by default. The check mark is hidden once a report is **closed**.',
+          'Deleting asks you to confirm and cannot be undone.',
+          'An admin can change who may create, edit, resolve or delete reports under **Settings**.',
+        ],
       },
     ]
   },

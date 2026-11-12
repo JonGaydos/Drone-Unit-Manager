@@ -273,4 +273,114 @@ export const SHOTS = [
     },
     target: (page) => page.locator('div.space-y-6').filter({ has: page.getByRole('heading', { name: 'Equipment Checkouts' }) }).last(),
   },
+  {
+    file: 'pilots-pilot-profiles.png',
+    route: '/pilots',
+    prepare: async (page) => {
+      await page.getByRole('link', { name: /Avery Brooks/ }).click()
+      await page.getByRole('heading', { name: 'Avery Brooks' }).waitFor()
+    },
+    target: (page) => page.getByRole('heading', { name: 'Avery Brooks' }).locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]'),
+  },
+  {
+    file: 'pilots-needs-attention.png',
+    route: '/pilots',
+    prepare: async (page) => {
+      await page.getByRole('link', { name: /Jordan Ellis/ }).click()
+      await page.getByRole('heading', { name: 'Needs Attention' }).waitFor()
+      await page.getByText('Certification expiring').first().waitFor()
+    },
+    target: (page) => page.getByRole('heading', { name: 'Needs Attention' }).locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]'),
+  },
+  {
+    file: 'pilots-pilot-currency.png',
+    route: '/settings',
+    prepare: async (page) => {
+      await page.getByRole('button', { name: 'New Rule' }).click()
+      const dialog = page.getByRole('dialog')
+      await dialog.locator('#rule-name').fill('Demo quarterly currency')
+      await dialog.locator('#rule-desc').fill('Demo rule for the manual')
+      await dialog.locator('#rule-hours').fill('5')
+      await dialog.locator('#rule-days').fill('90')
+      await dialog.locator('#rule-flights').fill('3')
+      await page.waitForTimeout(SETTLE_MS)
+    },
+    target: (page) => page.getByRole('dialog'),
+  },
+  {
+    file: 'certifications-certification-matrix.png',
+    route: '/certifications',
+    prepare: async (page) => {
+      await page.getByLabel('Hide empty').check()
+      await page.getByRole('row', { name: /Avery Brooks/ }).waitFor()
+    },
+    target: (page) => page.locator('table').locator('xpath=ancestor::div[contains(@class,"rounded-xl")][1]'),
+  },
+  {
+    file: 'certifications-editing-a-certification.png',
+    route: '/certifications',
+    prepare: async (page) => {
+      await page.setViewportSize({ width: 1280, height: 1000 })
+      await page.getByRole('row', { name: /Jordan Ellis/ }).locator('td').filter({ hasText: 'expiring soon' }).first().click()
+      const dialog = page.getByRole('dialog')
+      await dialog.getByLabel('Notes').fill('Demo note: certificate copy filed')
+      await page.waitForTimeout(SETTLE_MS)
+    },
+    target: (page) => page.getByRole('dialog'),
+  },
+  {
+    file: 'certifications-renewing-a-certification.png',
+    route: '/certifications',
+    prepare: async (page) => {
+      await page.getByRole('row', { name: /Jordan Ellis/ }).locator('td').filter({ hasText: 'expiring soon' }).first().click()
+      const dialog = page.getByRole('dialog')
+      await dialog.getByRole('button', { name: 'Renew', exact: true }).click()
+      await dialog.getByLabel('New Issue Date').fill(isoDay(0))
+      await page.waitForTimeout(SETTLE_MS)
+    },
+    target: (page) => page.getByRole('dialog'),
+  },
+  {
+    file: 'compliance-compliance-score.png',
+    route: '/compliance',
+    prepare: async (page) => {
+      await page.getByRole('heading', { name: 'Compliance Dashboard' }).waitFor()
+      await page.waitForTimeout(1500) // let the score ring finish drawing
+    },
+    target: (page) => page.locator('div.space-y-6').filter({ has: page.getByRole('heading', { name: 'Compliance Dashboard' }) }).last().locator('xpath=./div[2]'),
+  },
+  {
+    file: 'operating-authority-operating-authority.png',
+    route: '/operating-authority',
+    prepare: async (page) => {
+      await page.getByRole('button', { name: 'Add Authority' }).click()
+      const dialog = page.getByRole('dialog')
+      await dialog.getByLabel('Title').fill('Demo blanket public safety COA')
+      await dialog.getByLabel('COA / waiver number').fill('DEMO-COA-0001')
+      await dialog.getByLabel('Issue date').fill(isoDay(-200))
+      await dialog.getByLabel('Expiry date').fill(isoDay(165))
+      await dialog.getByLabel('Notes').fill('Demo notes: altitude ceiling 400 ft')
+      await page.waitForTimeout(SETTLE_MS)
+    },
+    target: (page) => page.getByRole('dialog'),
+  },
+  {
+    file: 'incidents-incident-reporting.png',
+    route: '/incidents',
+    prepare: async (page) => {
+      await page.setViewportSize({ width: 1280, height: 1300 })
+      await page.getByRole('button', { name: 'New Report' }).click()
+      const dialog = page.getByRole('dialog')
+      await dialog.locator('#severity').selectOption('minor')
+      await dialog.locator('#title').fill('Demo rough landing')
+      await dialog.locator('#category').selectOption('near_miss')
+      await dialog.locator('#location').fill('Training Field A')
+      await dialog.locator('#description').fill('Demo description: the aircraft landed harder than planned.')
+      await pickContaining(dialog.locator('#pilot'), 'Avery Brooks')
+      await pickContaining(dialog.locator('#vehicle'), 'Demo One')
+      await dialog.locator('#damage-description').fill('None')
+      await page.waitForTimeout(SETTLE_MS)
+    },
+    target: (page) => page.getByRole('dialog'),
+  },
 ]
