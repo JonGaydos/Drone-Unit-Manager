@@ -2210,7 +2210,7 @@ export const sections = [
           'Choose **Save Settings** at the bottom of the **General** tab to keep changes to the **Organization**, **Weather Thresholds** and similar cards. Some cards have their own save button.',
           'A line saying **Unsaved changes** shows beside **Save Settings** until you save.',
           'Other topics cover the cards that belong to a feature: **Certification Status Labels** under Certifications, **Weather Thresholds** under Weather, **Currency Rules** under Pilots and **Drone Locations** under Drone Locations.',
-          'Admins also find a link to the **API Documentation** at the bottom of the **General** tab. It is for people who write programs.',
+          'If your server has it turned on, everyone sees an **API Documentation** link at the bottom of the **General** tab. It is for people who write programs.',
         ],
       },
       {
@@ -2469,7 +2469,7 @@ export const sections = [
         steps: [
           'Open **Settings** and stay on the **General** tab.',
           'Find **Backup & Restore**.',
-          'Leave **Include telemetry data** ticked to keep the flight paths too, or untick it for a smaller file.',
+          'Tick **Include telemetry data** to keep the flight paths too. Leave it unticked for a smaller file.',
           'Choose **Export Backup**. A ZIP file downloads. While it builds, the button shows how much has arrived.',
         ],
         image: {
@@ -2503,15 +2503,10 @@ export const sections = [
       {
         id: 'restoring-from-backup',
         title: 'Restoring a backup',
-        summary: 'Put a backup back, either on a brand new install or over an install that is already in use.',
-        steps: [
-          'On a new install, restore from the setup screen. The steps are in **Restoring a backup on a new install** under Getting Started.',
-          'On an install that is already in use, there is no restore button in the app. The person who runs the server sends the backup file to the app\'s backup restore address, signed in as an admin.',
-          'The app first refuses and changes nothing, and says what a restore would replace.',
-          'To go ahead, repeat the request with the confirmation field set to the exact text REPLACE ALL DATA.',
-          'If the restore would remove or change a photo or document on legal hold, the app lists those items and refuses again. Repeat it with a second confirmation set to the exact text RESTORE HELD ITEMS.',
-        ],
+        summary: 'Restoring over an install that is already in use is done by the person who runs your server, not from a button in the app. You can point them to this topic. To restore onto a brand new install, see **Restoring a backup on a new install** under Getting Started.',
         notes: [
+          'They will be asked to type the exact text REPLACE ALL DATA before the restore goes ahead. Until they do, nothing changes.',
+          'If the backup would remove or change a photo or document on legal hold, the app lists those items first. They must then type the exact text RESTORE HELD ITEMS as well.',
           'A restore brings back everything: data, files, settings, users with their passwords, API tokens, and the email password and Skydio key.',
           'Restoring over a running install replaces all of its data and signs everyone out. After that, everyone signs in again with their usual password.',
           'Each held item that is removed or changed is written to the audit log.',
