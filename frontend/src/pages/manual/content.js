@@ -8,9 +8,9 @@ export const sections = [
         title: 'First-Run Setup',
         summary: `On first launch, a three-step setup wizard runs:
 
-• **Organization** — Org name, your name, email address.
-• **Admin Account** — Username + password (12+ chars, 1 uppercase, 1 number). No default credentials exist; the first account created becomes the administrator.
-• **Optional Setup** — Upload an organization logo, configure the Skydio API integration, configure SMTP for email digests, and import existing flight logs. Each section is independently skippable — anything skipped can be set up later from Settings.
+• **Organization**: Org name, your name, email address.
+• **Admin Account**: Username + password (12+ chars, 1 uppercase, 1 number). No default credentials exist; the first account created becomes the administrator.
+• **Optional Setup**: Upload an organization logo, configure the Skydio API integration, configure SMTP for email digests, and import existing flight logs. Each section is independently skippable, anything skipped can be set up later from Settings.
 
 If you have a backup ZIP from another instance, choose "Restore from a backup instead?" on the setup screen. You'll need the install token printed to the container logs at first boot.`
       },
@@ -85,11 +85,11 @@ You stay signed in for up to 12 hours. After 30 minutes with no activity in any 
         title: 'Command Palette (Ctrl/Cmd+K)',
         summary: `Press Ctrl+K (Cmd+K on Mac) anywhere in the app to open a global search overlay. You can also open it from the search button in the top bar. Press Escape to close.
 
-• **Jump to a page** — Type part of a page name (Flights, Pilots, Settings, etc.) and press Enter to navigate there.
-• **Search records** — Type at least two characters to search across pilots, vehicles, and flights. Results show a colored type tag for each match.
-• **Type-filter chips** — When results are shown, use the All / Pilots / Vehicles / Flights chips to narrow results to one record type (page matches are always shown).
-• **Recent jumps** — When the box is empty, your last few destinations appear under "Recent" for quick re-navigation.
-• **Keyboard navigation** — Use the up/down arrows to move through results and Enter to open the highlighted item.`
+• **Jump to a page**: Type part of a page name (Flights, Pilots, Settings, etc.) and press Enter to navigate there.
+• **Search records**: Type at least two characters to search across pilots, vehicles, and flights. Results show a colored type tag for each match.
+• **Type-filter chips**: When results are shown, use the All / Pilots / Vehicles / Flights chips to narrow results to one record type (page matches are always shown).
+• **Recent jumps**: When the box is empty, your last few destinations appear under "Recent" for quick re-navigation.
+• **Keyboard navigation**: Use the up/down arrows to move through results and Enter to open the highlighted item.`
       },
       {
         id: 'cross-reference-links',
@@ -128,12 +128,12 @@ You stay signed in for up to 12 hours. After 30 minutes with no activity in any 
         title: 'Unit Calendar',
         summary: `The Calendar page aggregates everything dated in your program into a single FullCalendar view. It pulls in:
 
-• **Flights** — A per-day count badge (e.g. "3 flights"); click it to open the Flights page.
-• **Missions** — Entries from the Mission Log on their mission date.
-• **Training** — Entries from the Training Log on their training date.
-• **Maintenance due** — The next-due date of each recurring maintenance schedule.
-• **Cert expirations** — Each pilot certification's expiration date, labeled with the pilot and certification name.
-• **Events and leave** — Manual entries you add yourself (see below).
+• **Flights**: A per-day count badge (e.g. "3 flights"); click it to open the Flights page.
+• **Missions**: Entries from the Mission Log on their mission date.
+• **Training**: Entries from the Training Log on their training date.
+• **Maintenance due**: The next-due date of each recurring maintenance schedule.
+• **Cert expirations**: Each pilot certification's expiration date, labeled with the pilot and certification name.
+• **Events and leave**: Manual entries you add yourself (see below).
 
 Each category has a colored checkbox above the calendar to show or hide that type. Clicking a flight, mission, training, maintenance, or certification item navigates to the relevant page.`
       },
@@ -214,7 +214,7 @@ Users with the create permission (everyone except viewers by default) can add th
       {
         id: 'merging-duplicates',
         title: 'Merging Duplicates',
-        summary: 'If duplicate equipment records exist (e.g., two entries for the same battery), use the merge button (icon) in Fleet > Batteries/Sensors/Attachments. Select the duplicate to absorb — all flight references will be updated and the duplicate deleted.'
+        summary: 'If duplicate equipment records exist (e.g., two entries for the same battery), use the merge button (icon) in Fleet > Batteries/Sensors/Attachments. Select the duplicate to absorb: all flight references will be updated and the duplicate deleted.'
       },
       {
         id: 'battery-health-tracking',
@@ -303,9 +303,9 @@ Only reviewed flights count toward currency, from every source. A flight that st
         title: 'Needs Attention',
         summary: `Each pilot's detail page has a Needs Attention card that aggregates the items most likely to require action for that pilot:
 
-• **Lapsed currency** — Any active currency rule the pilot is not current on, shown in red.
-• **Expired certifications** — Certifications past their expiration date, shown in red.
-• **Expiring certifications** — Certifications expiring within 30 days, shown in amber with the days remaining.
+• **Lapsed currency**: Any active currency rule the pilot is not current on, shown in red.
+• **Expired certifications**: Certifications past their expiration date, shown in red.
+• **Expiring certifications**: Certifications expiring within 30 days, shown in amber with the days remaining.
 
 When nothing is outstanding, the card shows an "All clear" message. The count of items appears in the card header.`
       },
@@ -334,7 +334,7 @@ When nothing is outstanding, the card shows an "All clear" message. The count of
       {
         id: 'maintenance-records',
         title: 'Maintenance Records',
-        summary: 'Record maintenance events for any vehicle, battery, controller, or dock — or pick "Other" for items not tied to equipment (e.g., an FAA authorization renewal). Include the date, description, technician, and notes. Use the paperclip on any history row to attach related documents.'
+        summary: 'Record maintenance events for any vehicle, battery, controller, or dock, or pick "Other" for items not tied to equipment (e.g., an FAA authorization renewal). Include the date, description, technician, and notes. Use the paperclip on any history row to attach related documents.'
       },
       {
         id: 'schedules-tasks',
@@ -371,7 +371,7 @@ When nothing is outstanding, the card shows an "All clear" message. The count of
       {
         id: 'live-aircraft-map',
         title: 'Live Aircraft Map',
-        summary: 'The Airspace page shows a live map of nearby manned aircraft using ADS-B data from adsb.lol. Click anywhere on the map to set your search center — a blue circle shows the search radius. Aircraft markers are color-coded by altitude: red (below 400ft, drone zone), orange (400-1000ft), yellow (1000-5000ft), blue (5000-15000ft), gray (above 15000ft).'
+        summary: 'The Airspace page shows a live map of nearby manned aircraft using ADS-B data from adsb.lol. Click anywhere on the map to set your search center: a blue circle shows the search radius. Aircraft markers are color-coded by altitude: red (below 400ft, drone zone), orange (400-1000ft), yellow (1000-5000ft), blue (5000-15000ft), gray (above 15000ft).'
       },
       {
         id: 'using-the-map',
@@ -438,15 +438,15 @@ Users with the legal hold permission (supervisors by default) can place a docume
         title: 'PDF Reports',
         summary: `Generate professional PDF reports with your organization's logo and branding. Available report types:
 
-• Flight Summary — All flights within a date range
-• Pilot Hours — Flight hours by pilot
-• Equipment Utilization — Usage statistics per vehicle
-• Pilot Activity Summary — Per-pilot activity report
-• Annual Unit Report — Yearly program summary
-• Per-Pilot Annual Review — A yearly review per pilot; download as one combined PDF, or use "Download PDF Pack" for a ZIP with one PDF per pilot
-• Certifications — Current certification status
-• Battery Status — Battery health and usage
-• Maintenance History — Maintenance records by date range
+• Flight Summary: All flights within a date range
+• Pilot Hours: Flight hours by pilot
+• Equipment Utilization: Usage statistics per vehicle
+• Pilot Activity Summary: Per-pilot activity report
+• Annual Unit Report: Yearly program summary
+• Per-Pilot Annual Review: A yearly review per pilot; download as one combined PDF, or use "Download PDF Pack" for a ZIP with one PDF per pilot
+• Certifications: Current certification status
+• Battery Status: Battery health and usage
+• Maintenance History: Maintenance records by date range
 
 The report builder also has date-range presets, pilot and vehicle filters (shown only for reports that use them), an "Include non-unit flights" toggle, and a logo override.`
       },
@@ -509,9 +509,9 @@ Authorities appear in the Annual Unit Report (those held during the reporting pe
         title: 'Drone Provider APIs',
         summary: `The Integrations tab in Settings manages connections to drone manufacturer APIs. Skydio is fully supported; BRINC is shown as "Coming Soon". Each provider has credential fields, a Test Connection button, and three sync buttons:
 
-• **Sync Now** — imports flights added since the last sync and refreshes the fleet (drones, batteries, controllers, sensor packages, attachments), plus telemetry for up to 10 flights. Your everyday sync.
-• **Full Sync** — like Sync Now but ignores the last-sync date to re-check the recent flights the Skydio API returns (about 200), and deletes empty flights (no date or duration). Slower.
-• **Sync Telemetry (10)** — fetches only the detailed flight path (GPS, altitude, speed) for the next 10 flights that need it. Press again to backfill more.
+• **Sync Now**: imports flights added since the last sync and refreshes the fleet (drones, batteries, controllers, sensor packages, attachments), plus telemetry for up to 10 flights. Your everyday sync.
+• **Full Sync**: like Sync Now but ignores the last-sync date to re-check the recent flights the Skydio API returns (about 200), and deletes empty flights (no date or duration). Slower.
+• **Sync Telemetry (10)**: fetches only the detailed flight path (GPS, altitude, speed) for the next 10 flights that need it. Press again to backfill more.
 
 Note: the Skydio sync API only exposes recent flights (roughly the last 200), so neither Sync Now nor Full Sync can reach further back than that. To bring in older or complete history, use the flight-log import (Airdata, CSV, and the other supported formats) described below.
 
@@ -536,10 +536,10 @@ For automatic pilot matching, ensure each pilot's profile has their Skydio accou
         title: 'Sync Status and Disconnect',
         summary: `Expanding the Skydio card shows a persistent sync-status block that updates after each sync without a page reload:
 
-• **State** — Whether a sync is currently running (incremental, full, or telemetry) or idle.
-• **Last synced** — When the last sync ran, as a relative time plus the exact timestamp.
-• **Next sync** — The estimated time until the next scheduled auto-sync, when an auto-sync interval is set.
-• **Last run** — A summary of the most recent run (new flights, vehicles, batteries, controllers, and error count) with a colored status dot: green for success, amber for a partial run, and red for a failure. If there were errors, the first one is shown with a "+N more" count.
+• **State**: Whether a sync is currently running (incremental, full, or telemetry) or idle.
+• **Last synced**: When the last sync ran, as a relative time plus the exact timestamp.
+• **Next sync**: The estimated time until the next scheduled auto-sync, when an auto-sync interval is set.
+• **Last run**: A summary of the most recent run (new flights, vehicles, batteries, controllers, and error count) with a colored status dot: green for success, amber for a partial run, and red for a failure. If there were errors, the first one is shown with a "+N more" count.
 
 The card also has a **Disconnect** button. Disconnecting clears the stored Skydio token so syncing stops; you can reconnect later by re-entering the token.`
       },
@@ -548,15 +548,15 @@ The card also has a **Disconnect** button. Disconnecting clears the stored Skydi
         title: 'Flight Log Import',
         summary: `Import flight data from multiple sources via Settings > Integrations tab:
 
-• **Skydio CSV** — Flight records exported from Skydio Cloud. A row whose Flight ID is already in the app is skipped, except that its Battery value fills in that flight's battery serial when the flight has none. A filled battery does not change the flight's review status
-• **Excel** — Spreadsheets with "Skydio" and "Pilot Info" sheets (up to 100,000 rows and 512 MB unpacked; a larger file is refused and nothing is imported)
-• **DJI .txt** — DJI Go 4 flight log text files
-• **Litchi CSV** — Litchi flight log exports
-• **Airdata CSV** — Rich 52-column exports with gimbal, RC inputs, battery temperature, flight mode
-• **Airdata JSON** — Single flight JSON exports from Airdata.com
-• **Airdata ZIP** — Bulk export of all flights from Airdata.com (ZIP of JSON files)
-• **Parrot / ANAFI** — GUTMA JSON flight logs
-• **Flights CSV (exported from this app)** — The Flights page's Export CSV, read back in (for example onto another install). Pick this format by hand; rows already in the app are skipped
+• **Skydio CSV**: Flight records exported from Skydio Cloud. A row whose Flight ID is already in the app is skipped, except that its Battery value fills in that flight's battery serial when the flight has none. A filled battery does not change the flight's review status
+• **Excel**: Spreadsheets with "Skydio" and "Pilot Info" sheets (up to 100,000 rows and 512 MB unpacked; a larger file is refused and nothing is imported)
+• **DJI .txt**: DJI Go 4 flight log text files
+• **Litchi CSV**: Litchi flight log exports
+• **Airdata CSV**: Rich 52-column exports with gimbal, RC inputs, battery temperature, flight mode
+• **Airdata JSON**: Single flight JSON exports from Airdata.com
+• **Airdata ZIP**: Bulk export of all flights from Airdata.com (ZIP of JSON files)
+• **Parrot / ANAFI**: GUTMA JSON flight logs
+• **Flights CSV (exported from this app)**: The Flights page's Export CSV, read back in (for example onto another install). Pick this format by hand; rows already in the app are skipped
 
 Format is auto-detected, or you can pick a specific format. Select multiple files at once using Ctrl+click or Shift+click. The app processes them sequentially with live progress tracking and automatic deduplication.`
       },
@@ -584,7 +584,7 @@ Format is auto-detected, or you can pick a specific format. Select multiple file
       {
         id: 'api-tokens',
         title: 'API Tokens',
-        summary: `The API Tokens tab (admin only) issues long-lived keys for external tools that call the Drone Unit Manager API. When creating a token, choose a name, read-only or read & write access, an optional expiry (30 days, 90 days or 1 year; without one the token lasts until revoked), and a scope — either all areas or specific ones (Fleet, Flights, Pilots & Certifications, Maintenance, Operations, Documents & Media, Reports & Dashboard, Audit Log). The Audit Log area is never part of all areas and must be chosen explicitly. The token value is shown once, so copy it immediately. Existing tokens list their prefix, access, areas, and last-used time, and can be revoked. Settings, users, backups, and sync are never reachable with an API token.`
+        summary: `The API Tokens tab (admin only) issues long-lived keys for external tools that call the Drone Unit Manager API. When creating a token, choose a name, read-only or read & write access, an optional expiry (30 days, 90 days or 1 year; without one the token lasts until revoked), and a scope: either all areas or specific ones (Fleet, Flights, Pilots & Certifications, Maintenance, Operations, Documents & Media, Reports & Dashboard, Audit Log). The Audit Log area is never part of all areas and must be chosen explicitly. The token value is shown once, so copy it immediately. Existing tokens list their prefix, access, areas, and last-used time, and can be revoked. Settings, users, backups, and sync are never reachable with an API token.`
       },
       {
         id: 'organization-settings',
@@ -601,9 +601,9 @@ Format is auto-detected, or you can pick a specific format. Select multiple file
         title: 'Sidebar Configuration',
         summary: `Admins can customize the left navigation from Settings (General tab):
 
-• **Visibility** — Toggle the checkbox next to any item to show or hide it in the sidebar.
-• **Reorder** — Drag items by the grip handle to reorder them, or use the up/down arrows for fine control.
-• **Group headers** — Toggle whether section group headers (Overview, Flight Ops, etc.) are shown.
+• **Visibility**: Toggle the checkbox next to any item to show or hide it in the sidebar.
+• **Reorder**: Drag items by the grip handle to reorder them, or use the up/down arrows for fine control.
+• **Group headers**: Toggle whether section group headers (Overview, Flight Ops, etc.) are shown.
 
 Click "Save Sidebar Config" to apply.`
       },

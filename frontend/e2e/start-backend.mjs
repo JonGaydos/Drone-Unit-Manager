@@ -17,6 +17,8 @@ mkdirSync(dataDir, { recursive: true })
 const candidates = [
   path.join(backendDir, '.venv', 'Scripts', 'python.exe'), // Windows venv
   path.join(backendDir, '.venv', 'bin', 'python'),         // POSIX venv
+  path.join(backendDir, 'venv', 'Scripts', 'python.exe'),  // Windows venv (no dot)
+  path.join(backendDir, 'venv', 'bin', 'python'),          // POSIX venv (no dot)
 ]
 const python = candidates.find(existsSync) || 'python' // CI: uv pip install --system
 

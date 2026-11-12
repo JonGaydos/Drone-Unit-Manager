@@ -1,40 +1,117 @@
-import { useState } from 'react'
-import { BookOpen, ChevronRight, ChevronDown, Search } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { BookOpen, Search } from 'lucide-react'
 import { sections } from './manual/content'
-import ManualText from './manual/ManualText'
+import { filterSections, findTopic, flattenTopics } from './manual/topics'
+import TopicsLayout from './manual/TopicsLayout'
+import OnePageLayout from './manual/OnePageLayout'
+
+const VIEW_KEY = 'dum.manual.view'
+
+function readStoredView() {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'page' ? 'page' : 'topics'
+  } catch {
+    return 'topics'
+  }
+}
+
+function storeView(view) {
+  try {
+    localStorage.setItem(VIEW_KEY, view)
+  } catch {
+    // Storage can be blocked; the choice then lasts only for this visit.
+  }
+}
 
 export default function UserManualPage() {
-  const [expandedSections, setExpandedSections] = useState(new Set(sections.map(s => s.id)))
+  const [searchParams, setSearchParams] = useSearchParams()
+  const topicParam = searchParams.get('topic')
+  const topicParamValid = !!topicParam && !!findTopic(sections, topicParam)
+
+  const [view, setView] = useState(() => (topicParamValid ? 'topics' : readStoredView()))
   const [search, setSearch] = useState('')
 
-  const toggleSection = (id) => {
-    setExpandedSections(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
+  // A link to a topic always opens the Topics view and makes it the stored choice.
+  const [seenParam, setSeenParam] = useState(topicParam)
+  if (topicParam !== seenParam) {
+    setSeenParam(topicParam)
+    if (topicParamValid) setView('topics')
+  }
+  useEffect(() => {
+    if (topicParamValid && view === 'topics') storeView('topics')
+  }, [topicParamValid, view])
+
+  const filtered = filterSections(sections, search)
+  const filteredTopics = flattenTopics(filtered)
+  const currentKey = filteredTopics.some(e => e.key === topicParam)
+    ? topicParam
+    : filteredTopics[0]?.key ?? null
+
+  // When a search moves the shown topic, keep the address in step.
+  const searching = search.trim() !== ''
+  useEffect(() => {
+    if (view === 'topics' && searching && currentKey && topicParam !== currentKey) {
+      setSearchParams(prev => {
+        const next = new URLSearchParams(prev)
+        next.set('topic', currentKey)
+        return next
+      }, { replace: true })
+    }
+  }, [view, searching, currentKey, topicParam, setSearchParams])
+
+  const chooseView = next => {
+    setView(next)
+    storeView(next)
+    if (next === 'page' && topicParam) {
+      setSearchParams(prev => {
+        const params = new URLSearchParams(prev)
+        params.delete('topic')
+        return params
+      }, { replace: true })
+    }
+  }
+
+  const selectTopic = key => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev)
+      next.set('topic', key)
       return next
     })
   }
 
-  const filteredSections = search
-    ? sections.filter(s =>
-        s.title.toLowerCase().includes(search.toLowerCase()) ||
-        s.topics.some(c =>
-          c.title.toLowerCase().includes(search.toLowerCase()) ||
-          c.summary.toLowerCase().includes(search.toLowerCase())
-        )
-      )
-    : sections
+  const viewButton = (value, label) => (
+    <button
+      type="button"
+      onClick={() => chooseView(value)}
+      aria-pressed={view === value}
+      className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+        view === value ? 'bg-accent text-primary' : 'text-muted-foreground hover:bg-accent'
+      }`}
+    >
+      {label}
+    </button>
+  )
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <div className="flex items-center gap-3 mb-2">
-        <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center text-primary">
-          <BookOpen className="w-5 h-5" />
+    <div className="max-w-5xl mx-auto space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center text-primary">
+            <BookOpen className="w-5 h-5" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">User Manual</h1>
+            <p className="text-sm text-muted-foreground">How to use Drone Unit Manager</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">User Manual</h1>
-          <p className="text-sm text-muted-foreground">Complete guide to using Drone Unit Manager</p>
+        <div
+          role="group"
+          aria-label="Manual layout"
+          className="inline-flex overflow-hidden rounded-lg border border-border bg-card"
+        >
+          {viewButton('topics', 'Topics')}
+          {viewButton('page', 'One page')}
         </div>
       </div>
 
@@ -42,46 +119,19 @@ export default function UserManualPage() {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <input
           type="text"
-          placeholder="Search manual..."
+          placeholder="Search the manual..."
+          aria-label="Search the manual"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={e => setSearch(e.target.value)}
           className="w-full pl-9 pr-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
         />
       </div>
 
-      {filteredSections.length === 0 && (
-        <div className="text-center py-12 text-muted-foreground">
-          No sections match your search.
-        </div>
+      {view === 'topics' ? (
+        <TopicsLayout sections={filtered} currentKey={currentKey} onSelect={selectTopic} />
+      ) : (
+        <OnePageLayout sections={filtered} />
       )}
-
-      {filteredSections.map(section => (
-        <div key={section.id} className="bg-card border border-border rounded-xl overflow-hidden">
-          <button
-            onClick={() => toggleSection(section.id)}
-            className="w-full flex items-center justify-between p-5 text-left hover:bg-muted/30 transition-colors"
-          >
-            <h2 className="text-lg font-semibold text-foreground">{section.title}</h2>
-            {expandedSections.has(section.id) ? (
-              <ChevronDown className="w-5 h-5 text-muted-foreground shrink-0" />
-            ) : (
-              <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0" />
-            )}
-          </button>
-          {expandedSections.has(section.id) && (
-            <div className="px-5 pb-5 space-y-4">
-              {section.topics.map((item) => (
-                <div key={item.id}>
-                  <h3 className="text-sm font-semibold text-foreground mb-1.5">{item.title}</h3>
-                  <div className="text-sm text-muted-foreground leading-relaxed">
-                    <ManualText text={item.summary} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
     </div>
   )
 }
