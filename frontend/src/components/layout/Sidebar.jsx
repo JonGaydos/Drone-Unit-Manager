@@ -28,6 +28,7 @@ const PRELOADERS = {
   '/training': () => import('@/pages/TrainingLogPage'),
   '/pilots': () => import('@/pages/PilotsPage'),
   '/fleet': () => import('@/pages/FleetPage'),
+  '/fleet-health': () => import('@/pages/FleetHealthPage'),
   '/certifications': () => import('@/pages/CertificationsPage'),
   '/maintenance': () => import('@/pages/MaintenancePage'),
   '/compliance': () => import('@/pages/CompliancePage'),

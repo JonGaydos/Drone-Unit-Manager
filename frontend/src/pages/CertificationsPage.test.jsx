@@ -21,7 +21,11 @@ const CERT_TYPES = [
 const MATRIX = [
   {
     pilot_id: 5, pilot_name: 'Ada Lovelace',
-    certs: { 1: { id: 100, status: 'valid', issue_date: '2024-01-01', expiration_date: '2099-01-01' } },
+    certs: {
+      1: { id: 100, status: 'valid', issue_date: '2024-01-01', expiration_date: '2099-01-01' },
+      // The API fills every empty pilot and type pair with a placeholder like this one.
+      2: { id: null, status: 'not_started', issue_date: null, expiration_date: null, certificate_number: null, nist_level: null, notes: null },
+    },
   },
 ]
 
@@ -220,6 +224,7 @@ describe('CertificationsPage', () => {
     await user.click(within(screen.getByRole('table')).getByText('not started'))
     const dialog = await screen.findByRole('dialog')
 
+    expect(within(dialog).getByText('Assign Certification')).toBeInTheDocument()
     expect(within(dialog).getByLabelText('Pilot')).toHaveValue('5')
     expect(within(dialog).getByLabelText('Certification')).toHaveValue('2')
   })
@@ -235,6 +240,26 @@ describe('CertificationsPage', () => {
     for (const name of ['Update', 'Renew', 'Remove']) {
       expect(within(dialog).queryByRole('button', { name })).toBeNull()
     }
+  })
+
+  it('shows no bulk-renewal checkbox on a placeholder cell', async () => {
+    mockMount()
+    renderWithProviders(<CertificationsPage />, { role: 'admin' })
+    await screen.findByRole('link', { name: 'Ada Lovelace' })
+    const cell = within(screen.getByRole('table')).getByText('not started').closest('td')
+    expect(within(cell).queryByRole('checkbox')).toBeNull()
+  })
+
+  it('does not make a placeholder cell clickable or focusable for a pilot with file access', async () => {
+    mockMount()
+    server.use(http.get('/api/documents', () => HttpResponse.json([])))
+    const { user } = renderWithProviders(<CertificationsPage />, { role: 'pilot' })
+    await screen.findByRole('link', { name: 'Ada Lovelace' })
+    const cell = within(screen.getByRole('table')).getByText('not started').closest('td')
+    expect(cell).not.toHaveAttribute('tabindex')
+    expect(cell.className).not.toMatch(/cursor-pointer/)
+    await user.click(within(screen.getByRole('table')).getByText('not started'))
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 
   it('does not open the assign form on an empty cell without certifications.manage', async () => {

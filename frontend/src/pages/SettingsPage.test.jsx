@@ -821,4 +821,39 @@ describe('SettingsPage settings fixes', () => {
     await user.click(within(row).getByRole('button', { name: 'Set' }))
     await waitFor(() => expect(posted).toBe(true))
   })
+
+  describe('Change Password', () => {
+    for (const role of ['pilot', 'viewer']) {
+      it(`lets a ${role} change their own password from the General tab`, async () => {
+        let body = null
+        mockMount()
+        server.use(
+          http.get('/api/auth/me', () => HttpResponse.json(withPermissions({ id: 9, username: 'u', role }))),
+          http.post('/api/auth/change-password', async ({ request }) => {
+            body = await request.json()
+            return HttpResponse.json({ message: 'Password changed', token: 'fresh-token' })
+          }),
+        )
+        const { user } = renderWithProviders(<SettingsPage />, { role })
+        expect(await screen.findByRole('heading', { name: 'Change Password' })).toBeInTheDocument()
+        await user.type(screen.getByLabelText('Current Password'), 'OldPassword123')
+        await user.type(screen.getByLabelText('New Password'), 'NewPassword1234')
+        await user.type(screen.getByLabelText('Confirm New Password'), 'NewPassword1234')
+        await user.click(screen.getByRole('button', { name: 'Change Password' }))
+
+        await waitFor(() => expect(body).toEqual({ current_password: 'OldPassword123', new_password: 'NewPassword1234' }))
+        expect(localStorage.getItem('token')).toBe('fresh-token')
+      })
+    }
+
+    it('shows an admin the card once, on the General tab and not on Users', async () => {
+      mockMount()
+      server.use(http.get('/api/permissions', () => HttpResponse.json({ registry: [], values: {} })))
+      const { user } = renderWithProviders(<SettingsPage />, { role: 'admin' })
+      expect(await screen.findAllByRole('heading', { name: 'Change Password' })).toHaveLength(1)
+      await user.click(screen.getByRole('button', { name: 'Users' }))
+      await screen.findByText('Jamie Pilot')
+      expect(screen.queryByRole('heading', { name: 'Change Password' })).toBeNull()
+    })
+  })
 })

@@ -59,7 +59,7 @@ describe('Sidebar view permissions', () => {
 
     await screen.findByText('pilot')
     expect(screen.queryByRole('link', { name: /Pilots/ })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Fleet/ })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /^Fleet$/ })).toBeInTheDocument()
   })
 
   it('shows the Audit Log to a role granted audit.view', async () => {
@@ -77,6 +77,40 @@ describe('Sidebar view permissions', () => {
 
     await screen.findByText('pilot')
     expect(asked).toBe(false)
+  })
+})
+
+describe('Sidebar Fleet Health link', () => {
+  it('lists Fleet Health right after Fleet for a role that can view the fleet', async () => {
+    authAs('pilot')
+    renderWithProviders(<Sidebar mobileOpen={false} onMobileClose={() => {}} />, { role: 'pilot' })
+
+    await screen.findByRole('link', { name: /^Fleet$/ })
+    const names = screen.getAllByRole('link').map(l => l.textContent)
+    expect(names.indexOf('Fleet Health')).toBe(names.indexOf('Fleet') + 1)
+    expect(screen.getByRole('link', { name: /Fleet Health/ })).toHaveAttribute('href', '/fleet-health')
+  })
+
+  it('hides Fleet Health from a role without fleet.view', async () => {
+    authAs('pilot', { 'fleet.view': 'no' })
+    renderWithProviders(<Sidebar mobileOpen={false} onMobileClose={() => {}} />, { role: 'pilot' })
+
+    await screen.findByText('pilot')
+    expect(screen.queryByRole('link', { name: /Fleet Health/ })).not.toBeInTheDocument()
+  })
+
+  it('still shows Fleet Health when a saved sidebar config predates it', async () => {
+    authAs('admin')
+    server.use(http.get('/api/settings', () => HttpResponse.json([
+      { key: 'sidebar_config', value: JSON.stringify([
+        { to: '/', visible: true, order: 0 },
+        { to: '/fleet', visible: true, order: 1 },
+        { to: '/pilots', visible: true, order: 2 },
+      ]) },
+    ])))
+    renderWithProviders(<Sidebar mobileOpen={false} onMobileClose={() => {}} />, { role: 'admin' })
+
+    expect(await screen.findByRole('link', { name: /Fleet Health/ })).toBeInTheDocument()
   })
 })
 

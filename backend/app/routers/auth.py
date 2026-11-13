@@ -190,12 +190,16 @@ _RATE_LIMIT = 5  # max attempts per window
 _RATE_WINDOW = 60  # window size in seconds
 _last_sweep = 0.0  # last time expired buckets were swept (monotonic-ish wall clock)
 
-# Per-account lockout. The per-IP limit alone lets a distributed guesser try
-# one password per address; this caps guesses against any single account.
-_failed_by_user = defaultdict(list)  # lowercased username -> [failure timestamps]
-_USER_FAIL_LIMIT = 10  # failures allowed per window before the account locks
+# Per-account lockout, in two tiers. Failures are counted per username and
+# client address, so someone who only knows a username cannot lock the real
+# user out from the user's own address. A higher count across all addresses
+# still caps a distributed guesser who tries one password per address.
+_failed_by_user_ip = defaultdict(list)  # (lowercased username, client ip) -> [failure timestamps]
+_failed_by_account = defaultdict(list)  # lowercased username -> [failure timestamps]
+_USER_FAIL_LIMIT = 10  # failures from one address before that address is locked out of the account
+_ACCOUNT_FAIL_LIMIT = 50  # failures from all addresses before the account locks everywhere
 _USER_FAIL_WINDOW = 900  # 15 minutes, both the counting window and the lock
-_USER_FAIL_MAX_KEYS = 5000  # prune expired entries past this many usernames
+_USER_FAIL_MAX_KEYS = 5000  # prune expired entries past this many keys
 
 
 _warned_untrusted_proxy = False
@@ -316,30 +320,32 @@ def _check_rate_limit(request):
     _login_attempts[ip].append(now)
 
 
-def _recent_failures(username: str, now: float) -> list:
-    """Failure timestamps for ``username`` still inside the lockout window."""
-    return [t for t in _failed_by_user.get(username.strip().lower(), []) if now - t < _USER_FAIL_WINDOW]
+def _recent_failures(bucket: dict, key, now: float) -> list:
+    """Failure timestamps for ``key`` in ``bucket`` still inside the lockout window."""
+    return [t for t in bucket.get(key, []) if now - t < _USER_FAIL_WINDOW]
 
 
-def _check_account_lock(username: str) -> None:
-    """Refuse the attempt, before any password check, while the account is
-    locked by too many recent failures.
+def _check_account_lock(username: str, ip: str) -> None:
+    """Refuse the attempt, before any password check, while this address is
+    locked out of the account, or the account is locked everywhere.
 
     Raises:
         HTTPException: 429 while the account is locked.
     """
-    if len(_recent_failures(username, time())) >= _USER_FAIL_LIMIT:
+    name, now = username.strip().lower(), time()
+    if (len(_recent_failures(_failed_by_user_ip, (name, ip), now)) >= _USER_FAIL_LIMIT
+            or len(_recent_failures(_failed_by_account, name, now)) >= _ACCOUNT_FAIL_LIMIT):
         raise HTTPException(status_code=429, detail="Too many failed attempts for this account. Try again later.")
 
 
-def _record_failure(username: str) -> None:
-    """Count a failed login against ``username``."""
-    now = time()
-    if len(_failed_by_user) > _USER_FAIL_MAX_KEYS:
-        for key in [k for k in _failed_by_user if not _recent_failures(k, now)]:
-            del _failed_by_user[key]
-    key = username.strip().lower()
-    _failed_by_user[key] = _recent_failures(key, now) + [now]
+def _record_failure(username: str, ip: str) -> None:
+    """Count a failed login against ``username`` from ``ip`` and against the account."""
+    name, now = username.strip().lower(), time()
+    for bucket, key in ((_failed_by_user_ip, (name, ip)), (_failed_by_account, name)):
+        if len(bucket) > _USER_FAIL_MAX_KEYS:
+            for old in [k for k in bucket if not _recent_failures(bucket, k, now)]:
+                del bucket[old]
+        bucket[key] = _recent_failures(bucket, key, now) + [now]
 
 
 def _validate_password(password: str):
@@ -570,16 +576,16 @@ def login(req: LoginRequest, request: Request, db: DBSession):
         LoginResponse with JWT token and user profile.
     """
     _check_rate_limit(request)
-    _check_account_lock(req.username)
-    from app.services.audit import log_action
     client_ip = _client_ip(request)
+    _check_account_lock(req.username, client_ip)
+    from app.services.audit import log_action
     user = db.query(User).filter(User.username == req.username).first()
     if not user or not verify_password(req.password, user.password_hash):
         # On the missing-user path run a bcrypt verify against a dummy hash so
         # both branches cost one bcrypt op (mitigates username enumeration).
         if not user:
             verify_password(req.password, _DUMMY_HASH)
-        _record_failure(req.username)
+        _record_failure(req.username, client_ip)
         log_action(db, None, req.username, "login_failed", "auth",
                    ip_address=client_ip,
                    details=f"Failed login attempt for '{req.username}'")
@@ -593,7 +599,7 @@ def login(req: LoginRequest, request: Request, db: DBSession):
                    ip_address=client_ip, details="Login attempt to a disabled account")
         db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-    _failed_by_user.pop(req.username.strip().lower(), None)
+    _failed_by_user_ip.pop((req.username.strip().lower(), client_ip), None)
     token = create_token(user.id, user.token_version)
     set_actor(db, user)
     log_action(db, user.id, user.display_name, "login", "auth",
