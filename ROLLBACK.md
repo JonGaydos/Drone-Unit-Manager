@@ -22,6 +22,28 @@ pushed and the release build has finished. Check it on ghcr.io before changing
 production's Repository; an Apply to a missing tag removes the running container
 and then fails to pull.
 
+## Roll production back to 3.4.2 (after 3.5.0)
+
+3.5.0 adds two migrations. 0014 rebuilds every table with AUTOINCREMENT ids
+(rows, ids, indexes and foreign keys are copied as they are). 0015 drops the
+geofences table; its downgrade recreates the table empty, so any geofence rows
+are gone either way. An older image cannot undo them, so run the downgrade
+inside 3.5.0 before switching back:
+
+1. Copy the data folder first. A backup exported from 3.5.0 holds password
+   hashes, API tokens and integration secrets, so keep it like a password.
+2. With 3.5.0 still running, step the schema back two revisions:
+
+        docker exec -w /app <container> alembic downgrade 0013_clean_flight_battery_serials
+
+3. Check it reported `Running downgrade 0015_drop_geofences -> 0014_autoincrement_ids`
+   and `Running downgrade 0014_autoincrement_ids -> 0013_clean_flight_battery_serials`.
+4. Set the Repository to `ghcr.io/jongaydos/drone-unit-manager:3.4.2` and Apply.
+   The data folder and Extra Parameters stay as they are.
+
+After the downgrade, ids can be reused again (the 3.4.2 behaviour). To return to
+3.5.0 later, run it again; it applies both migrations on start.
+
 ## Roll production back to 3.4.1
 
 3.4.2 has no migration. Set the Repository to
