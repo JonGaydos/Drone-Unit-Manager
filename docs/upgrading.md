@@ -9,11 +9,30 @@ base image or dependency) or have the owner decide whether to accept it, and
 record that decision before re-running. Issues with no fix available do not
 block.
 
-This release adds migration 0012 (login name and imported marker on audit
-entries). It runs on start. To go back, see `ROLLBACK.md`.
-
 Behind a reverse proxy or tunnel, set `TRUSTED_PROXIES` before upgrading (see
-"Reverse Proxy" in the README).
+"Reverse Proxy" in the README). The login lock counts failures per address, so
+without it every visitor shares the proxy's address.
+
+## 3.5.0: what changes on upgrade
+
+- **Migrations run on start.** 0014 rebuilds every table so ids are never
+  reused; 0015 drops the geofences table and its rows. To go back to 3.4.2,
+  see `ROLLBACK.md`.
+- **Geofences are removed.** The feature had an API but no screen.
+- **Backups hold everything.** A backup now includes password hashes, API
+  tokens, the SMTP password and the Skydio token, so a restore brings the whole
+  install back. The file is not encrypted: store and share it like a password.
+- **Restoring over a running install needs a typed confirmation.** Send the
+  form field `confirm_restore` with the exact text `REPLACE ALL DATA` to
+  `POST /api/backup/import` (admin token). Without it the restore is refused
+  with 409. Everyone is signed out afterwards; passwords still work.
+- **`CORS_ORIGINS` defaults to empty.** The app serves its own pages, so a
+  production install needs none. Set it only for a page on another origin.
+- **Login lock per address.** 10 failed sign-ins in 15 minutes lock that
+  address out of the account; 50 across all addresses lock the account for
+  15 minutes; a successful sign-in clears that address's count.
+- **User manual rewritten.** Topics and One page views, with pictures. Every
+  user can now change their own password under Settings, General.
 
 ## Restoring a backup: held items and audit entries
 
