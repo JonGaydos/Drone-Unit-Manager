@@ -10,7 +10,10 @@ export default function TopicView({ section, topic }) {
       </div>
       {topic.image && (
         <figure className="mt-4">
+          {/* Keyed by the picture, so moving to another topic swaps in a new
+              element instead of showing the old picture while the new one loads. */}
           <img
+            key={topic.image.src}
             src={topic.image.src}
             alt={topic.image.alt}
             loading="lazy"
