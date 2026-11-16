@@ -1,28 +1,27 @@
 # Rollback reference
 
-## Production
+## Release images
 
 Production runs a pinned version tag on Unraid (port 3014), not `:latest`.
-It moved from 3.4.2 to 3.5.0 (running on production, confirmed by the owner
-2026-11-16). 3.5.0 adds migrations 0014 and 0015, so going back to 3.4.2 needs
-the downgrade steps below before the image change.
-3.4.x and 3.5.0 read `TRUSTED_PROXIES`, set to the tunnel's address
+Which version it runs is recorded in the owner's own notes, not here, so this
+file changes only when a release is cut: each release PR adds its row below and
+a "Roll production back" section for the release before it.
+3.4.x and later read `TRUSTED_PROXIES`, set to the tunnel's address
 (`172.17.0.1` on this host). 3.3.0 ignores that variable, so it can stay on a rollback.
 
-| | Current | Rollback target | Before 3.x migrations |
-| --- | --- | --- | --- |
-| Version | 3.5.0 | 3.4.2 | 3.0.17 |
-| Tag | `v3.5.0` | `v3.4.2` | `v3.0.17` |
-| Commit | 8e7b98b | 5b15043 | 42d83e9 |
-| Image | `ghcr.io/jongaydos/drone-unit-manager@sha256:1bfe877604c0f45708e4c6abce8bcb73945ad162cd5fb6e7d1e59441d18ef0bb` | `ghcr.io/jongaydos/drone-unit-manager@sha256:36c52e7b1d20c14a9cfe76e24631fada57282d8968fcc5d44a9909aed20a712b` | `ghcr.io/jongaydos/drone-unit-manager@sha256:264f129219b17672bea90b6b3f9e04182dc9979fc6c7a3e198762d97c3055eb5` |
-| Extra Parameters | `--restart unless-stopped` | `--restart unless-stopped` | `--restart unless-stopped --user 99:100` |
+| Version | Tag | Commit | Image | Extra Parameters |
+| --- | --- | --- | --- | --- |
+| 3.5.0 | `v3.5.0` | 8e7b98b | `ghcr.io/jongaydos/drone-unit-manager@sha256:1bfe877604c0f45708e4c6abce8bcb73945ad162cd5fb6e7d1e59441d18ef0bb` | `--restart unless-stopped` |
+| 3.4.2 | `v3.4.2` | 5b15043 | `ghcr.io/jongaydos/drone-unit-manager@sha256:36c52e7b1d20c14a9cfe76e24631fada57282d8968fcc5d44a9909aed20a712b` | `--restart unless-stopped` |
+| 3.4.1 | `v3.4.1` | 8b3caaf | `ghcr.io/jongaydos/drone-unit-manager@sha256:283a2bc634643221f3b2d98035cd100f82009435f8decfb6862b2e47901b76c5` | `--restart unless-stopped` |
+| 3.0.17 (before the 3.x migrations) | `v3.0.17` | 42d83e9 | `ghcr.io/jongaydos/drone-unit-manager@sha256:264f129219b17672bea90b6b3f9e04182dc9979fc6c7a3e198762d97c3055eb5` | `--restart unless-stopped --user 99:100` |
 
 A version's image tag (`:3.3.0`) exists only after its `vX.Y.Z` git tag is
 pushed and the release build has finished. Check it on ghcr.io before changing
 production's Repository; an Apply to a missing tag removes the running container
 and then fails to pull.
 
-## Roll production back to 3.4.2
+## Roll production back to 3.4.2 (from 3.5.0)
 
 3.5.0 adds two migrations. 0014 rebuilds every table with AUTOINCREMENT ids
 (rows, ids, indexes and foreign keys are copied as they are). 0015 drops the
@@ -46,8 +45,6 @@ After the downgrade, ids can be reused again (the 3.4.2 behaviour). To return to
 
 ## Roll production back to 3.4.1
 
-The 3.4.1 image is
-`ghcr.io/jongaydos/drone-unit-manager@sha256:283a2bc634643221f3b2d98035cd100f82009435f8decfb6862b2e47901b76c5`.
 Step back to 3.4.2 first (above).
 
 3.4.2 has no migration. Set the Repository to
