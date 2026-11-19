@@ -375,6 +375,34 @@ describe('DashboardPage', () => {
     expect(screen.queryByText('Set location…')).toBeNull()
   })
 
+  it('shows the This Period tile with requirements.view', async () => {
+    mockDashboard(POPULATED)
+    server.use(http.get('/api/requirements/status', () => HttpResponse.json({
+      score: null,
+      requirements: [{
+        requirement_id: 1, name: 'Monthly hour', target_minutes: 60, target_flights: null, model_mode: 'all',
+        current_period: { start: '2026-11-01', end: '2026-11-30', days_left: 12, review_until: '2026-12-14', pilots: [] },
+        pending_periods: [],
+      }],
+    })))
+    renderWithProviders(<DashboardPage />, { role: 'viewer' })
+    expect(await screen.findByRole('heading', { name: 'This Period' })).toBeInTheDocument()
+    expect(await screen.findByRole('listitem', { name: 'Monthly hour' })).toBeInTheDocument()
+  })
+
+  it('hides the This Period tile and skips its requests without requirements.view', async () => {
+    const asked = []
+    mockDashboard(POPULATED)
+    server.use(
+      http.get('/api/requirements/status', () => { asked.push('status'); return HttpResponse.json({ score: null, requirements: [] }) }),
+      http.get('/api/requirements/flags', () => { asked.push('flags'); return HttpResponse.json({}) }),
+    )
+    renderWithProviders(<DashboardPage />, { role: 'viewer', permissions: { 'requirements.view': 'no' } })
+    await screen.findByText(/6 of 7 pilots current/)
+    expect(screen.queryByRole('heading', { name: 'This Period' })).toBeNull()
+    expect(asked).toEqual([])
+  })
+
   it('names the location control after its drone', async () => {
     mockDashboard({ ...POPULATED, locations: [{ vehicle_id: 1, label: 'Falcon', location_text: 'Base' }] })
     renderWithProviders(<DashboardPage />, { role: 'pilot' })

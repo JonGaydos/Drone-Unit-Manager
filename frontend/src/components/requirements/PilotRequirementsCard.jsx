@@ -1,0 +1,249 @@
+/**
+ * Pilot detail "Flight Requirements" card: the pilot's progress in each
+ * active requirement's current period and in periods still in review, the
+ * saved history, Excuse and Un-excuse (requirements.excuse) and each
+ * requirement's results CSV (reports.export). Renders nothing without
+ * requirements.view, or until the pilot has something to show.
+ */
+import { useEffect, useId, useState } from 'react'
+import { Download, Target } from 'lucide-react'
+import { api } from '@/api/client'
+import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/contexts/ToastContext'
+import { formatDate } from '@/lib/utils'
+import { Modal } from '@/components/ui/Modal'
+import { Button } from '@/components/ui/Button'
+import { MissedBadge, RequirementStatusChip } from './RequirementBadges'
+import { useRequirementFlags } from './useRequirementFlags'
+import { countText, daysLeftText, excusalText, excuseAction, periodText, progressText } from './progress'
+
+const SMALL_BUTTON = 'px-2 py-1 text-xs rounded-md border border-border text-foreground hover:bg-accent whitespace-nowrap'
+
+/** What an excusal needs from a progress or history row. */
+function periodOf(row) {
+  if (row.period) return { requirementId: row.requirement_id, name: row.name, start: row.period.start, end: row.period.end }
+  return { requirementId: row.requirement_id, name: row.name, start: row.period_start, end: row.period_end }
+}
+
+function ExcuseButton({ row, onExcuse, onUnexcuse }) {
+  const action = excuseAction(row)
+  if (!action) return null
+  const period = periodOf(row)
+  const verb = action === 'excuse' ? 'Excuse' : 'Un-excuse'
+  const run = action === 'excuse' ? onExcuse : onUnexcuse
+  return (
+    <button type="button" onClick={() => run(period)} className={SMALL_BUTTON}
+      aria-label={`${verb} ${period.name}, ${periodText(period.start, period.end)}`}>
+      {verb}
+    </button>
+  )
+}
+
+function ProgressNotes({ row }) {
+  const notes = []
+  if (row.excluded_no_takeoff > 0) notes.push(`${countText(row.excluded_no_takeoff, 'flight')} left out: no takeoff time`)
+  if (row.unreviewed_in_period > 0) notes.push(`${countText(row.unreviewed_in_period, 'flight')} awaiting review`)
+  const excusal = excusalText(row)
+  if (excusal) notes.push(excusal)
+  return notes.map(note => <p key={note} className="text-xs text-muted-foreground">{note}</p>)
+}
+
+function ProgressRow({ row, when, target, actions }) {
+  return (
+    <li className="px-4 py-3 flex flex-wrap items-start gap-x-4 gap-y-2">
+      <div className="flex-1 min-w-[12rem] space-y-0.5">
+        <p className="text-sm font-medium text-foreground">{row.name}</p>
+        <p className="text-xs text-muted-foreground">{periodText(row.period.start, row.period.end)} · {when(row.period)}</p>
+        <p className="text-sm text-foreground tabular-nums">{progressText(row.totals, row.met_by_model, target)}</p>
+        <ProgressNotes row={row} />
+      </div>
+      <RequirementStatusChip status={row.status} />
+      {actions && <ExcuseButton row={row} {...actions} />}
+    </li>
+  )
+}
+
+function ProgressSection({ title, rows, when, targets, actions }) {
+  const id = useId()
+  if (rows.length === 0) return null
+  return (
+    <section aria-labelledby={id} className="border-b border-border">
+      <h4 id={id} className="px-4 pt-3 text-xs font-medium text-muted-foreground">{title}</h4>
+      <ul className="divide-y divide-border/50">
+        {rows.map(row => (
+          <ProgressRow key={`${row.requirement_id}-${row.period.start}`} row={row} when={when}
+            target={targets[row.requirement_id] || {}} actions={actions} />
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+function HistoryTable({ rows, actions }) {
+  if (rows.length === 0) return null
+  return (
+    <div className="overflow-x-auto">
+      <table aria-label="Requirement history" className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-border bg-muted/30">
+            <th className="text-left px-4 py-2 text-foreground font-medium">Requirement</th>
+            <th className="text-left px-4 py-2 text-foreground font-medium">Period</th>
+            <th className="text-left px-4 py-2 text-foreground font-medium">Flown</th>
+            <th className="text-left px-4 py-2 text-foreground font-medium">Result</th>
+            {actions && <th className="px-4 py-2"><span className="sr-only">Actions</span></th>}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(row => (
+            <tr key={row.result_id} className="border-b border-border/50 align-top">
+              <td className="px-4 py-2 text-foreground">{row.name}</td>
+              <td className="px-4 py-2 text-foreground whitespace-nowrap">{periodText(row.period_start, row.period_end)}</td>
+              <td className="px-4 py-2 text-foreground tabular-nums">{progressText(row.totals, null, row.target_snapshot || {})}</td>
+              <td className="px-4 py-2">
+                <RequirementStatusChip status={row.status} />
+                {row.excused && <p className="text-xs text-muted-foreground mt-1">{excusalText(row)}</p>}
+              </td>
+              {actions && <td className="px-4 py-2 text-right"><ExcuseButton row={row} {...actions} /></td>}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+/** One download per requirement in the card. The CSV holds every pilot's saved results. */
+function CsvLinks({ requirements, onDownload }) {
+  if (requirements.length === 0) return null
+  return (
+    <div className="px-4 py-3 border-t border-border flex flex-wrap items-center gap-2">
+      <span className="text-xs text-muted-foreground">Results CSV, all pilots:</span>
+      {requirements.map(req => (
+        <button key={req.id} type="button" onClick={() => onDownload(req.id)} className={`${SMALL_BUTTON} inline-flex items-center gap-1`}
+          aria-label={`Download ${req.name} results as CSV`}>
+          <Download className="w-3.5 h-3.5" aria-hidden="true" /> {req.name}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function ExcuseModal({ period, onSubmit, onClose }) {
+  const [reason, setReason] = useState('')
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const reasonId = useId()
+
+  const submit = async (e) => {
+    e.preventDefault()
+    setSaving(true)
+    setError('')
+    try {
+      await onSubmit(reason.trim())
+    } catch (err) {
+      setError(err.message)
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal open onClose={onClose} title="Excuse from requirement" className="max-w-md">
+      <form onSubmit={submit} className="space-y-3">
+        <p className="text-sm text-foreground">{period.name}, {periodText(period.start, period.end)}</p>
+        <div>
+          <label htmlFor={reasonId} className="block text-sm font-medium text-foreground mb-1">Reason (optional)</label>
+          <textarea id={reasonId} value={reason} maxLength={500} onChange={e => setReason(e.target.value)}
+            className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm h-20 resize-none focus:outline-none focus:ring-2 focus:ring-ring" />
+        </div>
+        {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button type="submit" disabled={saving}>Excuse</Button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+/** Each requirement the card mentions, once, in order of appearance. */
+function requirementsIn(data) {
+  const seen = new Map()
+  for (const row of [...data.current, ...data.pending, ...data.history]) {
+    if (!seen.has(row.requirement_id)) seen.set(row.requirement_id, { id: row.requirement_id, name: row.name })
+  }
+  return [...seen.values()]
+}
+
+function useTargets(allowed) {
+  const [targets, setTargets] = useState({})
+  useEffect(() => {
+    if (!allowed) return undefined
+    let alive = true
+    api.get('/requirements')
+      .then(list => { if (alive) setTargets(Object.fromEntries(list.map(req => [req.id, req]))) })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [allowed])
+  return targets
+}
+
+const inReview = period => `In review until ${formatDate(period.review_until)}`
+const daysLeft = period => daysLeftText(period.days_left)
+
+export default function PilotRequirementsCard({ pilotId }) {
+  const { can } = useAuth()
+  const toast = useToast()
+  const titleId = useId()
+  const [data, setData] = useState(null)
+  const [version, setVersion] = useState(0)
+  const [excusing, setExcusing] = useState(null)
+  const allowed = can('requirements.view')
+  const targets = useTargets(allowed)
+  const flags = useRequirementFlags(allowed, version)
+
+  useEffect(() => {
+    if (!allowed) return undefined
+    let alive = true
+    api.get(`/requirements/pilots/${pilotId}`)
+      .then(found => { if (alive) setData(found) })
+      .catch(() => { if (alive) setData(null) })
+    return () => { alive = false }
+  }, [allowed, pilotId, version])
+
+  if (!allowed || !data) return null
+  const requirements = requirementsIn(data)
+  if (requirements.length === 0) return null
+
+  const reload = () => setVersion(v => v + 1)
+  const send = (period, excused, reason) => api.post(`/requirements/${period.requirementId}/excuse`, {
+    pilot_id: Number(pilotId), period_start: period.start, excused, ...(reason ? { reason } : {}),
+  })
+  const excuse = async (reason) => {
+    await send(excusing, true, reason)
+    setExcusing(null)
+    toast.success('Pilot excused for this period')
+    reload()
+  }
+  const unexcuse = period => send(period, false)
+    .then(() => { toast.success('Excusal removed'); reload() })
+    .catch(err => toast.error(err.message))
+  const download = id => api.download(`/export/requirements/${id}/csv`).catch(err => toast.error(err.message))
+  const actions = can('requirements.excuse') ? { onExcuse: setExcusing, onUnexcuse: unexcuse } : null
+
+  return (
+    <section aria-labelledby={titleId} className="bg-card border border-border rounded-xl overflow-hidden">
+      <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Target className="w-4 h-4 text-primary" aria-hidden="true" />
+          <h3 id={titleId} className="font-semibold text-foreground">Flight Requirements</h3>
+        </div>
+        <MissedBadge flags={flags[pilotId]} />
+      </div>
+      <ProgressSection title="This period" rows={data.current} when={daysLeft} targets={targets} actions={actions} />
+      <ProgressSection title="In review" rows={data.pending} when={inReview} targets={targets} actions={actions} />
+      <HistoryTable rows={data.history} actions={actions} />
+      {can('reports.export') && <CsvLinks requirements={requirements} onDownload={download} />}
+      {excusing && <ExcuseModal period={excusing} onSubmit={excuse} onClose={() => setExcusing(null)} />}
+    </section>
+  )
+}

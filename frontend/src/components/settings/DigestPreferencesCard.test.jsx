@@ -12,7 +12,7 @@ import DigestPreferencesCard from './DigestPreferencesCard'
 
 const ALL = [
   'pending_approvals', 'needs_review', 'expiring_certs', 'expiring_registrations',
-  'overdue_maintenance', 'assigned_missions', 'overdue_checkouts', 'recent_incidents',
+  'overdue_maintenance', 'assigned_missions', 'overdue_checkouts', 'recent_incidents', 'requirements',
 ]
 
 const PREFS = {
@@ -74,6 +74,20 @@ describe('DigestPreferencesCard', () => {
       categories: ALL.filter(c => c !== 'recent_incidents'),
     })
     expect(await screen.findByText('Digest preferences saved')).toBeInTheDocument()
+  })
+
+  it('offers the Flight Requirements section and keeps it on when saving', async () => {
+    let sent = null
+    mockMount()
+    server.use(http.put('/api/notifications/preferences', async ({ request }) => {
+      sent = await request.json()
+      return HttpResponse.json({ ok: true })
+    }))
+    const { user } = renderWithProviders(<DigestPreferencesCard />, { role: 'pilot' })
+    expect(await screen.findByLabelText('Flight Requirements')).toBeChecked()
+    await user.click(screen.getByRole('button', { name: 'Save Preferences' }))
+    await waitFor(() => expect(sent).not.toBeNull())
+    expect(sent.categories).toContain('requirements')
   })
 
   it('offers the email override only to roles that may redirect the digest', async () => {

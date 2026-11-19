@@ -106,6 +106,7 @@ describe('ReportsPage', () => {
     { type: 'battery_status', pilots: false, vehicles: false },
     { type: 'maintenance_history', pilots: false, vehicles: false },
     { type: 'annual_unit_report', pilots: false, vehicles: false },
+    { type: 'flight_requirements', pilots: true, vehicles: false },
   ]
 
   it.each(PICKER_CASES)(
@@ -258,6 +259,20 @@ describe('ReportsPage', () => {
     expect(screen.queryByRole('option', { name: 'Maintenance History' })).toBeNull()
     expect(screen.queryByRole('option', { name: 'Annual Unit Report' })).toBeNull()
     expect(screen.getByRole('option', { name: 'Flight Summary' })).toBeInTheDocument()
+  })
+
+  it('offers Flight Requirements, with a date range, only with requirements.view', async () => {
+    mockMount()
+    const { user, unmount } = renderWithProviders(<ReportsPage />, { role: 'pilot' })
+    await screen.findByText('Report Builder')
+    await selectReportType(user, 'flight_requirements')
+    expect(screen.getByRole('option', { name: 'Flight Requirements' })).toBeInTheDocument()
+    expect(screen.getByText('Date Range')).toBeInTheDocument()
+    unmount()
+    mockMount()
+    renderWithProviders(<ReportsPage />, { role: 'pilot', permissions: { 'requirements.view': 'no' } })
+    await screen.findByText('Report Builder')
+    expect(screen.queryByRole('option', { name: 'Flight Requirements' })).toBeNull()
   })
 
   it('moves off a saved report type whose view is now off', async () => {

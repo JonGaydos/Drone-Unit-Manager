@@ -15,6 +15,7 @@ import {
   TrendingUp, TrendingDown, Minus, Target, GraduationCap, ChevronRight,
 } from 'lucide-react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
+import ThisPeriodTile from '@/components/requirements/ThisPeriodTile'
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip as RTooltip } from 'recharts'
 
 /* ───────────────────── helpers ───────────────────── */
@@ -592,6 +593,9 @@ export default function DashboardPage() {
           </li>
         )}
       />
+
+      {/* Flight requirements this period, beside the drone locations */}
+      <ThisPeriodTile className="lg:col-span-8" />
 
       {/* Drone locations */}
       <LocationsTile items={locations} pilots={pilots} places={locationPlaces} onChange={handleSetLocation} canSetLocation={canSetLocation} />

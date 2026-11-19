@@ -46,8 +46,8 @@ function mockMount(overrides = {}) {
   )
 }
 
-const render = (role = 'admin') =>
-  renderRoute(<PilotDetailPage />, { path: '/pilots/:id', route: '/pilots/7', role })
+const render = (role = 'admin', permissions) =>
+  renderRoute(<PilotDetailPage />, { path: '/pilots/:id', route: '/pilots/7', role, permissions })
 
 describe('PilotDetailPage', () => {
   it('renders without crashing', async () => {
@@ -246,5 +246,34 @@ describe('PilotDetailPage', () => {
     const img = await screen.findByRole('img', { name: 'Ada Lovelace' })
     expect(img.getAttribute('src')).toMatch(/^blob:/)
     expect(auth).toBe('Bearer test-token')
+  })
+
+  describe('Flight Requirements card', () => {
+    const PROGRESS = {
+      pilot_id: 7, current: [{
+        requirement_id: 1, name: 'Monthly hour', pilot_id: 7, pilot_name: 'Ada Lovelace', status: 'met',
+        totals: { '*': { minutes: 60, flights: 2 } }, met_by_model: { '*': true }, excluded_no_takeoff: 0,
+        unreviewed_in_period: 0, excused: false, excused_reason: null,
+        period: { start: '2026-11-01', end: '2026-11-30', days_left: 12, review_until: '2026-12-14' },
+      }], pending: [], history: [],
+    }
+
+    it('shows the card below Currency Status with requirements.view', async () => {
+      mockMount()
+      server.use(http.get('/api/requirements/pilots/:id', () => HttpResponse.json(PROGRESS)))
+      render()
+      expect(await screen.findByRole('heading', { name: 'Flight Requirements' })).toBeInTheDocument()
+      expect(screen.getByText('done')).toBeInTheDocument()
+    })
+
+    it('hides the card and skips its request without requirements.view', async () => {
+      let asked = false
+      mockMount()
+      server.use(http.get('/api/requirements/pilots/:id', () => { asked = true; return HttpResponse.json(PROGRESS) }))
+      render('viewer', { 'requirements.view': 'no' })
+      expect(await screen.findByRole('heading', { name: 'Ada Lovelace' })).toBeInTheDocument()
+      expect(screen.queryByRole('heading', { name: 'Flight Requirements' })).toBeNull()
+      expect(asked).toBe(false)
+    })
   })
 })

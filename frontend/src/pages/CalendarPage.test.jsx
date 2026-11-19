@@ -100,4 +100,25 @@ describe('CalendarPage', () => {
     expect(leave).toMatchObject({ start: '2026-11-10', end: '2026-11-13', allDay: true })
     expect(fc.props.events.find(e => e.id === 'event-2').end).toBeUndefined()
   })
+
+  it('draws requirement deadlines in their own color, toggled by their own legend entry, and links them', async () => {
+    server.use(http.get('/api/calendar', () => HttpResponse.json({
+      events: [{ id: 'requirement-1-2026-11-30', title: 'Due: Monthly hour', category: 'requirement', source: 'requirement',
+        start: '2026-11-30', end: null, all_day: true, link: '/settings?tab=requirements', editable: false }],
+      flight_counts: {},
+    })))
+    const { user } = renderWithProviders(<CalendarPage />, { role: 'admin' })
+    await screen.findByTestId('fullcalendar-stub')
+    act(() => fc.props.datesSet({ startStr: '2026-11-01T00:00:00', endStr: '2026-12-01T00:00:00' }))
+    await waitFor(() => expect(fc.props.events.some(e => e.id === 'requirement-1-2026-11-30')).toBe(true))
+    const due = fc.props.events.find(e => e.id === 'requirement-1-2026-11-30')
+    // Not the uncategorized fallback, and not another category's color.
+    const taken = ['#64748b', '#0ea5e9', '#8b5cf6', '#f59e0b', '#ef4444', '#10b981', '#6b7280', '#3b82f6']
+    expect(due.color).toMatch(/^#[0-9a-f]{6}$/)
+    expect(taken).not.toContain(due.color)
+    expect(due.extendedProps.link).toBe('/settings?tab=requirements')
+
+    await user.click(screen.getByLabelText('Requirement deadlines'))
+    await waitFor(() => expect(fc.props.events.some(e => e.id === 'requirement-1-2026-11-30')).toBe(false))
+  })
 })

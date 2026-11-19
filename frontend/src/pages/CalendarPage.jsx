@@ -18,10 +18,12 @@ import { addDays } from '@/lib/utils'
 const COLORS = {
   training_day: '#0ea5e9', mission: '#8b5cf6', maintenance_due: '#f59e0b',
   cert_expiration: '#ef4444', event: '#10b981', leave: '#6b7280', flights: '#3b82f6',
+  requirement: '#ec4899',
 }
 const LABELS = {
   training_day: 'Training', mission: 'Missions', maintenance_due: 'Maintenance due',
   cert_expiration: 'Cert expirations', event: 'Events', leave: 'Leave', flights: 'Flights',
+  requirement: 'Requirement deadlines',
 }
 const ALL_CATS = Object.keys(LABELS)
 const blankForm = () => ({ title: '', category: 'event', start_date: '', end_date: '', notes: '' })

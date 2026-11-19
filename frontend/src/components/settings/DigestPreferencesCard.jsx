@@ -15,6 +15,7 @@ const DIGEST_CATEGORIES = [
   { key: 'assigned_missions', label: 'Assigned Missions' },
   { key: 'overdue_checkouts', label: 'Overdue Equipment Checkouts' },
   { key: 'recent_incidents', label: 'Recent Incidents' },
+  { key: 'requirements', label: 'Flight Requirements' },
 ]
 
 const CATEGORY_LABEL = Object.fromEntries(DIGEST_CATEGORIES.map(c => [c.key, c.label]))
