@@ -206,13 +206,12 @@ def _amount(flight: Flight, ctx: _Context) -> tuple[float, int] | None:
 
 
 def _record(tally: _Tally, key: str, flight: Flight, reviewed: bool, ctx: _Context) -> None:
-    in_period = ctx.in_period(flight.date)
-    if not reviewed:
-        tally.unreviewed_in_period += in_period
-        return
     amount = _amount(flight, ctx)
+    if not reviewed:
+        tally.unreviewed_in_period += amount is not None and amount[1] > 0
+        return
     if amount is None:
-        tally.excluded_no_takeoff += in_period
+        tally.excluded_no_takeoff += ctx.in_period(flight.date)
         return
     total = tally.totals[key]
     total["minutes"] += amount[0]
@@ -246,7 +245,9 @@ def _joined_on(pilot: Pilot, added_at: datetime | None, zone: tzinfo) -> date | 
 def _excusals(db: Session, req: FlightRequirement, pilots: list[Pilot], period_start: date,
               zone: tzinfo) -> dict[int, tuple[bool, str | None]]:
     """Per pilot, whether excused and why: a stored override wins, else a pilot
-    who joined after the period started is excused automatically."""
+    who joined after both the period start and the requirement's creation is
+    excused automatically. Assignment rows written when the requirement was
+    created carry its creation time, so they do not excuse anyone."""
     overrides = {
         row.pilot_id: row for row in db.query(FlightRequirementResult).filter(
             FlightRequirementResult.requirement_id == req.id,
@@ -255,6 +256,8 @@ def _excusals(db: Session, req: FlightRequirement, pilots: list[Pilot], period_s
         )
     }
     added = {row.pilot_id: row.added_at for row in req.pilots}
+    created = local_flight_date(req.created_at, zone)
+    cutoff = max(period_start, created) if created is not None else period_start
     result: dict[int, tuple[bool, str | None]] = {}
     for pilot in pilots:
         row = overrides.get(pilot.id)
@@ -262,7 +265,7 @@ def _excusals(db: Session, req: FlightRequirement, pilots: list[Pilot], period_s
             result[pilot.id] = (bool(row.excused), row.excused_reason if row.excused else None)
             continue
         joined = _joined_on(pilot, added.get(pilot.id), zone)
-        late = joined is not None and joined > period_start
+        late = joined is not None and joined > cutoff
         result[pilot.id] = (late, AUTO_EXCUSE_REASON if late else None)
     return result
 
@@ -272,7 +275,8 @@ def evaluate_period(db: Session, req: FlightRequirement, period: tuple[date, dat
     """Progress of every assigned pilot on ``req`` for ``period``, keyed by pilot id.
 
     Totals are ``{"minutes": float, "flights": int}`` per model display name,
-    or under ``"*"`` for all aircraft and combined models. ``excused`` is the
+    or under ``"*"`` for all aircraft and combined models. With no models in
+    scope there is nothing to meet, so the status follows the date. ``excused`` is the
     excusal decision; it shows as the status only when the target is not met.
     """
     pilots = assigned_pilots(db, req)
@@ -292,7 +296,7 @@ def evaluate_period(db: Session, req: FlightRequirement, period: tuple[date, dat
         excused, reason = excusals[pilot_id]
         progress[pilot_id] = PilotProgress(
             pilot_id=pilot_id,
-            status=_status(all(met_by_model.values()), excused, period[1], today, grace_days),
+            status=_status(bool(met_by_model) and all(met_by_model.values()), excused, period[1], today, grace_days),
             totals=tally.totals, met_by_model=met_by_model,
             excluded_no_takeoff=tally.excluded_no_takeoff,
             unreviewed_in_period=tally.unreviewed_in_period,

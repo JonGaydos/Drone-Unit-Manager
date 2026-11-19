@@ -56,14 +56,15 @@ def _flight(db, pilot, vehicle=None, day=date(2026, 10, 10), minutes=10, **extra
     return flight
 
 
-def _req(db, models=(), purposes=(), pilots=(), **extra):
+def _req(db, models=(), purposes=(), pilots=(), added_at=LONG_AGO, **extra):
     values = {"name": "R", "period_type": "calendar_month", "start_date": date(2026, 10, 1),
-              "recurring": True, "model_mode": "all", "time_mode": "any", "target_minutes": 60}
+              "recurring": True, "model_mode": "all", "time_mode": "any", "target_minutes": 60,
+              "created_at": LONG_AGO}
     values.update(extra)
     req = FlightRequirement(
         models=[FlightRequirementModel(model=m) for m in models],
         purposes=[FlightRequirementPurpose(purpose=p) for p in purposes],
-        pilots=[FlightRequirementPilot(pilot_id=p.id, added_at=LONG_AGO) for p in pilots],
+        pilots=[FlightRequirementPilot(pilot_id=p.id, added_at=added_at) for p in pilots],
         **values)
     db.add(req)
     db.commit()
@@ -168,6 +169,15 @@ def test_each_all_active_ignores_model_added_after_period_start(db):
     assert progress.status == "met"
 
 
+def test_each_all_active_with_no_models_in_scope_is_never_met(db):
+    pilot = _pilot(db)
+    _vehicle(db, "X10", created_at=datetime(2026, 10, 5, 12, 0, tzinfo=timezone.utc))
+    req = _req(db, model_mode="each_all_active", target_minutes=15)
+    progress = _progress(db, req, pilot)
+    assert (progress.status, progress.totals, progress.met_by_model) == ("on_track", {}, {})
+    assert _progress(db, req, pilot, today=date(2026, 12, 1)).status == "missed"
+
+
 # Flight filters
 
 
@@ -199,6 +209,21 @@ def test_excluded_pilot_flights_do_not_count(db):
     req = _req(db)
     _flight(db, pilot, minutes=60)
     assert _progress(db, req, pilot).totals["*"]["minutes"] == 0
+
+
+CLOCK_0_TO_6 = {"time_mode": "clock", "window_start_time": time(0, 0), "window_end_time": time(6, 0)}
+
+
+@pytest.mark.parametrize("day,takeoff_utc,expected", [
+    (date(2026, 10, 10), datetime(2026, 10, 10, 15, 0), 0),  # 10 AM Chicago, outside the window
+    (date(2026, 10, 10), datetime(2026, 10, 10, 8, 0), 1),  # 3 AM Chicago, inside
+    (date(2026, 9, 30), datetime(2026, 10, 1, 4, 30), 1),  # Sept 30, 11:30 PM, runs into Oct 1
+])
+def test_unreviewed_follows_the_clock_window(db, day, takeoff_utc, expected):
+    pilot = _pilot(db)
+    req = _req(db, **CLOCK_0_TO_6)
+    _flight(db, pilot, day=day, minutes=60, takeoff_time=takeoff_utc, review_status="needs_review")
+    assert _progress(db, req, pilot).unreviewed_in_period == expected
 
 
 # Time of day
@@ -299,6 +324,34 @@ def test_selected_pilot_added_mid_period_is_excused(db):
     req.pilots[0].added_at = datetime(2026, 10, 20, 12, 0, tzinfo=timezone.utc)
     db.commit()
     assert _progress(db, req, pilot).status == "excused"
+
+
+def test_selected_pilots_assigned_when_the_requirement_was_created_are_not_excused(db):
+    # Created mid-October with one selected pilot: the assignment row carries the creation time.
+    created = datetime(2026, 10, 15, 12, 0, tzinfo=timezone.utc)
+    pilot = _pilot(db)
+    selected = _req(db, pilots=[pilot], added_at=created, created_at=created)
+    every = _req(db, created_at=created)
+    _flight(db, pilot, minutes=30)
+    assert _progress(db, selected, pilot, today=date(2026, 12, 1)).status == "missed"
+    assert _progress(db, every, pilot, today=date(2026, 12, 1)).status == "missed"
+
+
+@pytest.mark.parametrize("selected", [False, True])
+def test_pilot_created_after_the_requirement_and_period_start_is_excused(db, selected):
+    req_created = datetime(2026, 10, 5, 12, 0, tzinfo=timezone.utc)
+    pilot_created = datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc)
+    pilot = _pilot(db, created_at=pilot_created)
+    pilots = [pilot] if selected else []
+    req = _req(db, pilots=pilots, added_at=pilot_created, created_at=req_created)
+    assert _progress(db, req, pilot).status == "excused"
+
+
+def test_pilot_created_before_a_mid_period_requirement_is_not_excused(db):
+    pilot = _pilot(db, created_at=datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc))
+    req = _req(db, created_at=datetime(2026, 10, 15, 12, 0, tzinfo=timezone.utc))
+    progress = _progress(db, req, pilot)
+    assert (progress.status, progress.excused) == ("on_track", False)
 
 
 def test_override_false_removes_automatic_excusal(db):
