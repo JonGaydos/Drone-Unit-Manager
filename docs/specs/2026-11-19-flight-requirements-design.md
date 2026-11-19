@@ -113,7 +113,7 @@ The form shows a live plain-English summary, for example:
 
 - **Any time**: all flight time counts. This is the default and matches currency.
 - **Clock window**: a start and end time in the unit's display timezone, for example 12:00 AM to 6:00 AM, or 6:00 PM to 2:00 AM. When the end is earlier than the start, the window crosses midnight. The unit's time zone applies to every flight, including flights flown in another time zone.
-- **Night**: from the end of evening civil twilight to the start of morning civil twilight, the definition Part 107 uses. Sunset and sunrise are calculated for the flight's takeoff location and date. When a flight has no coordinates, the unit default location (`org_default_lat`, `org_default_lon`) is used. When neither is set, the form refuses the night option and says why.
+- **Night**: from the end of evening civil twilight to the start of morning civil twilight, the definition Part 107 uses. Twilight times are calculated for the unit default location (`org_default_lat`, `org_default_lon`) on each date, for every flight, whatever its takeoff coordinates. When the unit location is not set, the form refuses the night option and says why.
 - Only the minutes that fall inside the window count. A flight from 5:30 AM to 6:15 AM gives 30 minutes toward a 12 AM to 6 AM window.
 - A flight counts toward the flight-count target when at least one of its minutes falls inside the window.
 - The window applies to every day in the period. A flight that starts inside the period but runs past its end counts only up to the period's end.
@@ -244,7 +244,7 @@ All write routes are audited like currency rules.
 
 - Period math: every period type, around month, quarter, fiscal and year boundaries, February in leap and non-leap years, monthly windows that end in the following month, and end days past a short month.
 - Time windows: windows that cross midnight, flights that start before and end inside a window, flights longer than a window, flights spanning two nights, and daylight saving changes.
-- Night: twilight times checked against published values for a known location and date, the unit default location used when a flight has no coordinates, and the night option refused when neither exists.
+- Night: twilight times checked against published values for a known location and date, the unit default location used for every flight, and the night option refused when it is not set.
 - Flights with no takeoff time are left out of time-limited requirements and reported.
 - Model matching ignores case, and "each separately" fails when any one model is short.
 - Only reviewed flights count, and flights or pilots excluded from unit totals do not. Reviewed flights with an unconfirmed pilot match count.
@@ -281,4 +281,5 @@ All write routes are audited like currency rules.
 17. Flight Requirements get their own tab in Settings (2026-11-18).
 18. Clock windows always use the unit's display time zone, also for flights flown elsewhere (2026-11-18).
 19. The unit default location is set on production (owner, 2026-11-18).
+21. Night uses the unit default location for every flight, not takeoff coordinates (2026-11-18).
 20. Build order: two changes, currency model picker first (migration 0016), then Flight Requirements (migration 0017) (2026-11-18).
