@@ -306,6 +306,9 @@ def merge_pilots(target_id: int, data: PilotMergeRequest, db: DBSession, admin: 
     from app.models.document import Document
     from app.models.equipment_checkout import EquipmentCheckout
     from app.models.flight_approval import FlightPlan
+    from app.models.flight_requirement import (
+        FlightRequirementNotice, FlightRequirementPilot, FlightRequirementResult,
+    )
     from app.models.incident import Incident
     from app.models.maintenance_schedule import MaintenanceSchedule
     from app.models.photo import PhotoPilot
@@ -347,6 +350,9 @@ def merge_pilots(target_id: int, data: PilotMergeRequest, db: DBSession, admin: 
         + reassign(User, "pilot_id")
         + reassign(CalendarEvent, "pilot_id")
         + reassign(Vehicle, "manual_location_pilot_id")
+        + reassign(FlightRequirementPilot, "pilot_id", ["requirement_id"])
+        + reassign(FlightRequirementResult, "pilot_id", ["requirement_id", "period_start"])
+        + reassign(FlightRequirementNotice, "pilot_id", ["requirement_id", "period_start", "kind"])
     )
 
     if not target.email and source.email:

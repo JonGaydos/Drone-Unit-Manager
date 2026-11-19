@@ -73,7 +73,7 @@ def test_delete_requirement_deletes_children_and_results(db):
     db.delete(req)
     db.commit()
     for model in (FlightRequirementModel, FlightRequirementPilot, FlightRequirementPurpose,
-                  FlightRequirementResult):
+                  FlightRequirementResult, FlightRequirementNotice):
         assert db.query(model).count() == 0, model.__name__
 
 
@@ -102,3 +102,46 @@ def test_settings_keys_admin_writes_pilot_reads(client, admin_headers, pilot_hea
     resp = client.get(f"/api/settings/{key}", headers=pilot_headers)
     assert resp.status_code == 200
     assert resp.json()["value"] == value
+
+
+def _merge_setup(db, source_result=True, target_result=False):
+    source = Pilot(first_name="Bea", last_name="Dup")
+    target = Pilot(first_name="Ann", last_name="Keep")
+    db.add_all([source, target])
+    db.commit()
+    req = _requirement()
+    db.add(req)
+    db.commit()
+    day = date(2026, 1, 1)
+    if source_result:
+        db.add(FlightRequirementResult(requirement_id=req.id, pilot_id=source.id, period_start=day,
+                                       period_end=date(2026, 1, 31), status="met"))
+    if target_result:
+        db.add(FlightRequirementResult(requirement_id=req.id, pilot_id=target.id, period_start=day,
+                                       period_end=date(2026, 1, 31), status="missed"))
+    db.commit()
+    return source, target, req
+
+
+def test_merge_moves_requirement_history(client, db, admin_headers):
+    source, target, req = _merge_setup(db)
+    db.add(FlightRequirementPilot(requirement_id=req.id, pilot_id=source.id))
+    db.add(FlightRequirementNotice(requirement_id=req.id, pilot_id=source.id, period_start=date(2026, 1, 1),
+                                   kind="assigned", sent_at=datetime(2026, 1, 2)))
+    db.commit()
+    target_id = target.id
+    resp = client.post(f"/api/pilots/{target_id}/merge", headers=admin_headers, json={"source_id": source.id})
+    assert resp.status_code == 200
+    db.expire_all()
+    for model in (FlightRequirementPilot, FlightRequirementResult, FlightRequirementNotice):
+        assert [r.pilot_id for r in db.query(model).all()] == [target_id], model.__name__
+
+
+def test_merge_with_conflicting_result_keeps_target_row(client, db, admin_headers):
+    source, target, _req = _merge_setup(db, target_result=True)
+    target_id = target.id
+    resp = client.post(f"/api/pilots/{target_id}/merge", headers=admin_headers, json={"source_id": source.id})
+    assert resp.status_code == 200
+    db.expire_all()
+    rows = db.query(FlightRequirementResult).all()
+    assert [(r.pilot_id, r.status) for r in rows] == [(target_id, "missed")]
