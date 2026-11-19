@@ -1123,7 +1123,7 @@
           "A pilot is **Lapsed** if any active rule is not met. With no active rules everyone counts as current.",
           "Only reviewed flights count, from every source. A flight waiting for review, including one sent back to the queue after an edit, does not count until a supervisor reviews it. A pilot can show as lapsed while flights wait for review.",
           "A rule can look back up to 3650 days.",
-          "A model that is no longer in your fleet shows with a dashed outline and **Not in fleet**. The rule still counts flights on it. Click it to remove it, then pick the right model.",
+          "A model that is no longer in your fleet shows with a dashed outline and **Not in fleet**. No aircraft has that model, so it counts no flights. Click it to remove it, then pick the right model.",
           "Lapsed pilots appear in **Needs Attention** on their page and on the **Compliance** page."
         ]
       },

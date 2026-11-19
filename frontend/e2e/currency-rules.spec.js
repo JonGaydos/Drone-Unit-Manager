@@ -29,6 +29,15 @@ test('admin creates a currency rule on one fleet model from the picker', async (
   await modal.getByRole('button', { name: 'Create', exact: true }).click()
   await expect(modal).toBeHidden()
 
-  await expect(page.getByText(name)).toBeVisible({ timeout: 15_000 })
-  await expect(page.getByText('X10 only').first()).toBeVisible()
+  // Scope to the row of the new rule (its name is unique), then clean it up so
+  // an active rule does not change pilot currency for later tests and reruns.
+  const row = page.locator('div.rounded-lg').filter({ has: page.getByText(name, { exact: true }) }).last()
+  try {
+    await expect(row).toBeVisible({ timeout: 15_000 })
+    await expect(row).toContainText('X10 only')
+  } finally {
+    await row.getByTitle('Delete rule').click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click()
+    await expect(page.getByText(name, { exact: true })).toHaveCount(0)
+  }
 })
