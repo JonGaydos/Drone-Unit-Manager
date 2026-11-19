@@ -34,7 +34,7 @@ def fleet_models(db: Session) -> list[dict]:
         tally[1 if status == "retired" else 0] += n
     result = []
     for key, spelled in spellings.items():
-        name = min(spelled, key=lambda s: (-spelled[s], s))
+        name = min(spelled.items(), key=lambda item: (-item[1], item[0]))[0]
         result.append({"name": name, "aircraft": counts[key][0], "retired": counts[key][1]})
     return sorted(result, key=lambda m: m["name"].casefold())
 

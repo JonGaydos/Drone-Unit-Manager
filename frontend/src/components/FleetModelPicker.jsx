@@ -48,7 +48,7 @@ export default function FleetModelPicker({ models, value, onChange, loadError = 
 
   return (
     <div className="space-y-2">
-      <div role="group" aria-labelledby={labelledBy} className="flex flex-wrap gap-2">
+      <fieldset aria-labelledby={labelledBy} className="flex flex-wrap gap-2 min-w-0 border-0 p-0 m-0">
         <Toggle pressed={value.length === 0} onClick={() => onChange([])}>All aircraft</Toggle>
         {shown.map(m => (
           <Toggle key={m.name} pressed={selected.has(normalizeModel(m.name))} onClick={() => toggle(m.name)}>
@@ -60,7 +60,7 @@ export default function FleetModelPicker({ models, value, onChange, loadError = 
             {unknownLabel(name, loaded)}
           </Toggle>
         ))}
-      </div>
+      </fieldset>
       {loadError && <p className="text-xs text-muted-foreground">Fleet models could not be loaded</p>}
     </div>
   )

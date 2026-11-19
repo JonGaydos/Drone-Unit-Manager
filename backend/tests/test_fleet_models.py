@@ -25,6 +25,19 @@ def test_fleet_models_merges_spellings(db):
     assert fleet_models(db) == [{"name": "X10", "aircraft": 3, "retired": 0}]
 
 
+def test_fleet_models_names_model_by_most_common_spelling(db):
+    _add(db, "S1", "X10")
+    _add(db, "S2", "x10")
+    _add(db, "S3", "x10")
+    assert fleet_models(db)[0]["name"] == "x10"
+
+
+def test_fleet_models_breaks_spelling_tie_alphabetically(db):
+    _add(db, "S1", "x2e")
+    _add(db, "S2", "X2E")
+    assert fleet_models(db)[0]["name"] == "X2E"
+
+
 def test_fleet_models_counts_retired_apart(db):
     _add(db, "S1", "X2E")
     _add(db, "S2", "X2E", "maintenance")
