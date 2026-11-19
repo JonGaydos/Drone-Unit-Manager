@@ -22,7 +22,7 @@ from app.services.requirement_eval import (
     EXCUSED, MET, MISSED, PilotProgress, UnitEvalSettings, assigned_pilots, evaluate_period,
     unit_eval_settings,
 )
-from app.services.requirement_periods import Period, first_period, periods_between
+from app.services.requirement_periods import Period, periods_between
 
 SCORE_WINDOW_DAYS = 365
 
@@ -63,12 +63,20 @@ def _fill(row: FlightRequirementResult, progress: PilotProgress, period_end: dat
         row.excused_reason = progress.excused_reason
 
 
-def _last_closing_day(req: FlightRequirement, settings: UnitEvalSettings, today: date) -> date:
-    """The latest period end that can close today: past its grace time and, for
-    an inactive requirement, on or before the day it was switched off."""
-    last_end = today - timedelta(days=settings.grace_days + 1)
-    switched_off = None if req.is_active else local_flight_date(req.updated_at, settings.zone)
-    return min(last_end, switched_off) if switched_off is not None else last_end
+def _closing_ends(req: FlightRequirement, settings: UnitEvalSettings, today: date) -> tuple[date, date] | None:
+    """The earliest and latest period end that can close today, or None.
+
+    A period closes once its grace time has ended. An inactive requirement
+    closes only periods that ended by the day it was switched off, and nothing
+    if it was never on. One switched back on skips periods that ended before
+    that day."""
+    latest = today - timedelta(days=settings.grace_days + 1)
+    changed = local_flight_date(req.active_changed_at, settings.zone)
+    if req.is_active:
+        return changed or date.min, latest
+    if changed is None:
+        return None
+    return date.min, min(latest, changed)
 
 
 def _due_periods(db: Session, req: FlightRequirement, settings: UnitEvalSettings,
@@ -76,17 +84,16 @@ def _due_periods(db: Session, req: FlightRequirement, settings: UnitEvalSettings
     """The requirement's periods ready to close: due, and starting after the
     last saved period ended. Closed periods never reopen, so a pilot added or
     reactivated later, or a changed period layout, does not save past dates."""
-    spec = req.to_period_spec(settings.fiscal_start_month)
-    first = first_period(spec)
-    if first is None:
+    ends = _closing_ends(req, settings, today)
+    if ends is None:
         return []
     watermark = db.query(func.max(FlightRequirementResult.period_end)).filter(
         FlightRequirementResult.requirement_id == req.id,
         FlightRequirementResult.saved_at.isnot(None),
     ).scalar()
-    last_end = _last_closing_day(req, settings, today)
-    return [period for period in periods_between(spec, first[0], last_end)
-            if period[1] <= last_end and (watermark is None or period[0] > watermark)]
+    spec = req.to_period_spec(settings.fiscal_start_month)
+    return [period for period in periods_between(spec, *ends)
+            if period[1] <= ends[1] and (watermark is None or period[0] > watermark)]
 
 
 def _save_rows(db: Session, req: FlightRequirement, period: Period, progress: dict[int, PilotProgress],
@@ -129,7 +136,8 @@ def close_due_periods(db: Session, today: date) -> list[FlightRequirementResult]
     requirement's last saved period ended. A period is saved for every assigned
     pilot at once and is closed from then on; an open-period excusal row is
     filled in. An inactive requirement saves only periods that ended by the day
-    it was switched off. Returns the rows saved now. Safe to run again: a second
+    it was switched off, and one switched back on skips the periods that ended
+    while it was off. Returns the rows saved now. Safe to run again: a second
     run saves nothing. Commits, and records the run as one audit entry when it
     saves anything."""
     settings = unit_eval_settings(db)

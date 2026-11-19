@@ -1,9 +1,9 @@
 from datetime import date, datetime, time
 from typing import Optional
 from sqlalchemy import (
-    JSON, Boolean, Date, ForeignKey, Integer, String, Time, UniqueConstraint, func,
+    JSON, Boolean, Date, ForeignKey, Integer, String, Time, UniqueConstraint, func, inspect,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from app.database import Base
 from app.models.types import UTCDateTime
 from app.services.requirement_periods import PeriodSpec
@@ -31,6 +31,8 @@ class FlightRequirement(Base):
     window_end_time: Mapped[Optional[time]] = mapped_column(Time, nullable=True)
     reminder_days: Mapped[int] = mapped_column(Integer, default=7)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # When is_active last changed on a saved row; NULL if never switched.
+    active_changed_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
@@ -42,6 +44,13 @@ class FlightRequirement(Base):
         back_populates="requirement", cascade="all, delete-orphan", lazy="selectin")
     purposes: Mapped[list["FlightRequirementPurpose"]] = relationship(
         back_populates="requirement", cascade="all, delete-orphan", lazy="selectin")
+
+    @validates("is_active")
+    def _stamp_active_change(self, _key: str, value: bool) -> bool:
+        """Stamp ``active_changed_at`` when a saved requirement is switched on or off."""
+        if inspect(self).persistent and self.is_active is not None and bool(value) != self.is_active:
+            self.active_changed_at = datetime.utcnow()
+        return value
 
     def to_period_spec(self, fiscal_start_month: int) -> PeriodSpec:
         return PeriodSpec(

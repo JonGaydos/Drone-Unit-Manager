@@ -155,14 +155,70 @@ def test_changed_period_layout_never_saves_dates_already_closed(db):
     assert close_due_periods(db, date(2026, 12, 2)) == []
 
 
+def _switch(db, req, active, at):
+    req.is_active = active
+    req.active_changed_at = at
+    db.commit()
+
+
+MAR_10 = datetime(2026, 3, 10, 15, 0, tzinfo=timezone.utc)
+JUL_5 = datetime(2026, 7, 5, 15, 0, tzinfo=timezone.utc)
+
+
 def test_inactive_requirement_saves_only_periods_ended_before_switch_off(db):
     _pilot(db)
-    switched_off = datetime(2026, 3, 10, 15, 0, tzinfo=timezone.utc)
-    inactive = _req(db, start_date=date(2026, 1, 1), is_active=False, updated_at=switched_off)
-    active = _req(db, start_date=date(2026, 1, 1), updated_at=switched_off)
+    inactive = _req(db, start_date=date(2026, 1, 1))
+    active = _req(db, start_date=date(2026, 1, 1))
+    _switch(db, inactive, False, MAR_10)
     close_due_periods(db, DAY_AFTER_GRACE)
     assert [row.period_start for row in _rows(db, inactive)] == [date(2026, 1, 1), date(2026, 2, 1)]
     assert [row.period_start for row in _rows(db, active)] == [date(2026, m, 1) for m in range(1, 11)]
+
+
+def test_editing_an_inactive_requirement_saves_nothing_more(db):
+    _pilot(db)
+    req = _req(db, start_date=date(2026, 1, 1))
+    _switch(db, req, False, MAR_10)
+    close_due_periods(db, DAY_AFTER_GRACE)
+    req.name = "Renamed"
+    db.commit()
+    assert close_due_periods(db, DAY_AFTER_GRACE + timedelta(days=1)) == []
+    assert len(_rows(db, req)) == 2
+
+
+def test_reactivated_requirement_skips_the_months_it_was_off(db):
+    _pilot(db)
+    req = _req(db, start_date=date(2026, 1, 1))
+    _switch(db, req, False, MAR_10)
+    close_due_periods(db, date(2026, 6, 1))
+    _switch(db, req, True, JUL_5)
+    assert close_due_periods(db, date(2026, 8, 14)) == []
+    saved = close_due_periods(db, DAY_AFTER_GRACE)
+    assert [row.period_start for row in saved] == [date(2026, m, 1) for m in (7, 8, 9, 10)]
+    assert [row.period_start for row in _rows(db, req)] == [date(2026, m, 1) for m in (1, 2, 7, 8, 9, 10)]
+    assert close_due_periods(db, DAY_AFTER_GRACE) == []
+
+
+def test_requirement_created_inactive_saves_nothing(db):
+    _pilot(db)
+    req = _req(db, start_date=date(2026, 1, 1), is_active=False)
+    assert req.active_changed_at is None
+    assert close_due_periods(db, DAY_AFTER_GRACE) == []
+
+
+def test_switching_on_or_off_is_stamped_only_on_a_real_change(db):
+    req = _req(db)
+    assert req.active_changed_at is None
+    req.is_active = True
+    db.commit()
+    assert req.active_changed_at is None
+    req.is_active = False
+    db.commit()
+    stamped = req.active_changed_at
+    assert stamped is not None
+    req.is_active = False
+    db.commit()
+    assert req.active_changed_at == stamped
 
 
 def test_saved_minutes_round_down(db):
