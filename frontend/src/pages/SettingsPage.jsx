@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Modal } from '@/components/ui/Modal'
+import FleetModelPicker from '@/components/FleetModelPicker'
 import RolePermissionsGrid from '@/components/settings/RolePermissionsGrid'
 import DigestPreferencesCard from '@/components/settings/DigestPreferencesCard'
 import { useConfirm } from '@/hooks/useConfirm'
@@ -130,12 +131,14 @@ export default function SettingsPage() {
   const [draggedIdx, setDraggedIdx] = useState(null)
 
   // Currency rules state
+  const canManageCurrency = can('certifications.manage')
   const [currencyRules, setCurrencyRules] = useState([])
+  const [fleetModels, setFleetModels] = useState([])
   const [editingRule, setEditingRule] = useState(null)
   const [savingRule, setSavingRule] = useState(false)
   const ruleSubmitLabel = editingRule?.id ? 'Save' : 'Create'
   const [ruleForm, setRuleForm] = useState({
-    name: '', description: '', vehicle_model: '',
+    name: '', description: '', vehicle_models: [],
     required_hours: 5, period_days: 90,
     required_flights: '', is_active: true,
   })
@@ -392,12 +395,15 @@ export default function SettingsPage() {
     if (isAdmin) {
       api.get('/auth/users').then(setUsers).catch(console.error)
       api.get('/pilots').then(setPilots).catch(console.error)
-      api.get('/currency/rules').then(setCurrencyRules).catch(console.error)
     }
-  }, [isAdmin])
+    if (canManageCurrency) {
+      api.get('/currency/rules').then(setCurrencyRules).catch(console.error)
+      api.get('/currency/models').then(setFleetModels).catch(console.error)
+    }
+  }, [isAdmin, canManageCurrency])
 
   const openNewRule = () => {
-    setRuleForm({ name: '', description: '', vehicle_model: '', required_hours: 5, period_days: 90, required_flights: '', is_active: true })
+    setRuleForm({ name: '', description: '', vehicle_models: [], required_hours: 5, period_days: 90, required_flights: '', is_active: true })
     setEditingRule({})
   }
 
@@ -405,7 +411,7 @@ export default function SettingsPage() {
     setRuleForm({
       name: rule.name || '',
       description: rule.description || '',
-      vehicle_model: rule.vehicle_model || '',
+      vehicle_models: rule.vehicle_models || [],
       required_hours: rule.required_hours,
       period_days: rule.period_days,
       required_flights: rule.required_flights ?? '',
@@ -425,7 +431,7 @@ export default function SettingsPage() {
       const payload = {
         name: ruleForm.name.trim(),
         description: ruleForm.description?.trim() || null,
-        vehicle_model: ruleForm.vehicle_model?.trim() || null,
+        vehicle_models: ruleForm.vehicle_models,
         required_hours: hrs,
         period_days: days,
         required_flights: ruleForm.required_flights === '' || ruleForm.required_flights == null ? null : Number.parseInt(ruleForm.required_flights, 10),
@@ -1168,7 +1174,7 @@ export default function SettingsPage() {
   }
 
   const renderCurrencyRules = () => {
-    if (!isAdmin) return null
+    if (!canManageCurrency) return null
     return (
         <div className="bg-card border border-border rounded-xl p-6">
           <div className="flex items-center justify-between mb-1">
@@ -1181,7 +1187,7 @@ export default function SettingsPage() {
             </button>
           </div>
           <p className="text-sm text-muted-foreground mb-4">
-            Define how many flight hours (and optionally how many flights) pilots must log within a rolling period to stay current. Each rule appears on the pilot detail page's Currency Status section. Leave Vehicle Model blank to apply across all aircraft, or set it (e.g. "X10") to scope the rule to one type.
+            Define how many flight hours (and optionally how many flights) pilots must log within a rolling period to stay current. Each rule appears on the pilot detail page's Currency Status section. Choose the models a rule covers from your fleet. With no model selected, the rule applies to all aircraft.
           </p>
           {currencyRules.length === 0 ? (
             <p className="text-sm text-muted-foreground italic px-3 py-4 bg-muted/30 rounded-lg text-center">
@@ -1200,7 +1206,7 @@ export default function SettingsPage() {
                       {r.required_hours}h
                       {r.required_flights ? ` and ${r.required_flights} flights` : ''}
                       {' '}per {r.period_days} days
-                      {r.vehicle_model && ` · ${r.vehicle_model} only`}
+                      {r.vehicle_models?.length > 0 && ` · ${r.vehicle_models.join(', ')} only`}
                       {r.description && ` · ${r.description}`}
                     </p>
                   </div>
@@ -1546,12 +1552,11 @@ export default function SettingsPage() {
                 />
               </div>
               <div>
-                <label htmlFor="rule-vmodel" className="block text-sm font-medium text-foreground mb-1">Vehicle model (optional)</label>
-                <input
-                  id="rule-vmodel" type="text" value={ruleForm.vehicle_model}
-                  onChange={e => setRuleForm({ ...ruleForm, vehicle_model: e.target.value })}
-                  placeholder="Leave blank for all aircraft"
-                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                <span className="block text-sm font-medium text-foreground mb-1">Vehicle models</span>
+                <FleetModelPicker
+                  models={fleetModels}
+                  value={ruleForm.vehicle_models}
+                  onChange={vehicle_models => setRuleForm({ ...ruleForm, vehicle_models })}
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">

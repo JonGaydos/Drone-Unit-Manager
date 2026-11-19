@@ -514,7 +514,7 @@ export default function PilotDetailPage() {
                 {currencyStatus.rules.map(r => (
                   <tr key={r.rule_id} className="border-b border-border/50 hover:bg-accent/30">
                     <td className="px-4 py-2 text-foreground font-medium">{r.rule_name}</td>
-                    <td className="px-4 py-2 text-foreground hidden md:table-cell">{r.vehicle_model || 'All'}</td>
+                    <td className="px-4 py-2 text-foreground hidden md:table-cell">{r.vehicle_models?.length > 0 ? r.vehicle_models.join(', ') : 'All'}</td>
                     <td className="px-4 py-2 text-foreground">
                       <span className={r.actual_hours >= r.required_hours ? 'text-emerald-400' : 'text-red-400'}>
                         {r.actual_hours}

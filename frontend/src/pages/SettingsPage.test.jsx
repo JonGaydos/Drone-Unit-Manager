@@ -41,7 +41,12 @@ const PILOTS = [
 ]
 
 const RULES = [
-  { id: 5, name: 'Quarterly currency', required_hours: 5, period_days: 90, required_flights: null, is_active: true, vehicle_model: null, description: null },
+  { id: 5, name: 'Quarterly currency', required_hours: 5, period_days: 90, required_flights: null, is_active: true, vehicle_models: [], description: null },
+]
+
+const MODELS = [
+  { name: 'X10', aircraft: 4, retired: 0 },
+  { name: 'X2E', aircraft: 2, retired: 0 },
 ]
 
 const PURPOSE_ROWS = [
@@ -55,6 +60,7 @@ function mockMount(overrides = {}) {
     users: () => HttpResponse.json(USERS),
     pilots: () => HttpResponse.json(PILOTS),
     rules: () => HttpResponse.json(RULES),
+    models: () => HttpResponse.json(MODELS),
     backup: () => HttpResponse.json({ enabled: true, retention: 7, hour: 3, count: 4, last_backup_at: null }),
     purposes: () => HttpResponse.json(PURPOSE_ROWS),
     ...overrides,
@@ -64,6 +70,7 @@ function mockMount(overrides = {}) {
     http.get('/api/auth/users', base.users),
     http.get('/api/pilots', base.pilots),
     http.get('/api/currency/rules', base.rules),
+    http.get('/api/currency/models', base.models),
     http.get('/api/backup/status', base.backup),
     // The page loads the purposes table on mount too. Without this every test
     // in this file made an unhandled request, and with onUnhandledRequest set
@@ -95,6 +102,37 @@ describe('SettingsPage', () => {
     await user.click(within(dialog).getAllByRole('button').find(b => /Create|Save/.test(b.textContent)))
     expect(await screen.findByText('Period must be 1 to 3650 days')).toBeInTheDocument()
     expect(posted).toBe(false)
+  })
+
+  it('lets a supervisor create a rule with models chosen from the fleet', async () => {
+    mockMount()
+    let body = null
+    server.use(http.post('/api/currency/rules', async ({ request }) => { body = await request.json(); return HttpResponse.json({ id: 9 }) }))
+    const { user } = renderWithProviders(<SettingsPage />, { role: 'supervisor' })
+    await screen.findByText('Quarterly currency')
+    await user.click(screen.getByRole('button', { name: /New Rule/ }))
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog.querySelector('#rule-vmodel')).toBeNull()
+    fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Typed' } })
+    await user.click(await within(dialog).findByRole('button', { name: 'X10 (4)' }))
+    await user.click(within(dialog).getByRole('button', { name: 'X2E (2)' }))
+    await user.click(within(dialog).getAllByRole('button').find(b => /Create|Save/.test(b.textContent)))
+    await waitFor(() => expect(body).not.toBeNull())
+    expect(body.vehicle_models).toEqual(['X10', 'X2E'])
+    expect(body).not.toHaveProperty('vehicle_model')
+  })
+
+  it('lists a two-model rule with both models', async () => {
+    mockMount({ rules: () => HttpResponse.json([{ ...RULES[0], vehicle_models: ['X10', 'X2E'] }]) })
+    renderWithProviders(<SettingsPage />, { role: 'admin' })
+    expect(await screen.findByText(/X10, X2E only/)).toBeInTheDocument()
+  })
+
+  it('shows a viewer no Currency Rules card', async () => {
+    mockMount()
+    renderWithProviders(<SettingsPage />, { role: 'viewer' })
+    expect(await screen.findByText('Organization')).toBeInTheDocument()
+    expect(screen.queryByText('Currency Rules')).toBeNull()
   })
 
   it('loads settings into the organization field', async () => {

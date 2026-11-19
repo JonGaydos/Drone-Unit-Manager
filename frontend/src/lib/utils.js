@@ -367,3 +367,8 @@ export function showPickerSafely(el) {
     // No user gesture: leave the picker closed.
   }
 }
+
+/** Collapse whitespace, trim and lowercase a vehicle model name, as the backend does before comparing. */
+export function normalizeModel(name) {
+  return String(name ?? '').split(/\s+/).filter(Boolean).join(' ').toLowerCase()
+}
