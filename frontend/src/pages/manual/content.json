@@ -1106,15 +1106,15 @@
         "summary": "Currency means a pilot has flown enough recently. A currency rule sets the flight hours (and, if you want, the number of flights) a pilot must log within a number of days, for example 5 hours in 90 days.",
         "image": {
           "src": "/manual-pictures/pilots-pilot-currency.png",
-          "alt": "The New Currency Rule dialog with a name, required hours, period in days and minimum flights filled in",
+          "alt": "The New Currency Rule dialog with a name, one fleet model picked, required hours, period in days and minimum flights filled in",
           "caption": "The New Currency Rule dialog in Settings."
         },
         "steps": [
-          "Open **Settings** (admins only) and scroll to **Currency Rules** on the **General** tab.",
+          "Open **Settings** (supervisors and admins) and scroll to **Currency Rules** on the **General** tab.",
           "Click **New Rule**.",
           "Enter a **Name**. Add a **Description (optional)** if you like.",
           "Enter **Required hours** and **Period (days)**. Add **Minimum flights (optional)** if the rule also needs a number of flights.",
-          "Leave **Vehicle model (optional)** blank to count every aircraft, or type a model (for example X10) to count only flights on that model.",
+          "Under **Vehicle models**, leave **All aircraft** on to count every aircraft. Or click one or more models to count only flights on those. Each model comes from your fleet and shows how many active aircraft it has, for example **X10 (4)**. With several models picked, a flight on any of them counts.",
           "Leave **Active (include in pilot currency calculations)** ticked and click **Create**.",
           "To change or remove a rule, use the pencil or bin next to it in the list. Editing saves with **Save**."
         ],
@@ -1123,6 +1123,7 @@
           "A pilot is **Lapsed** if any active rule is not met. With no active rules everyone counts as current.",
           "Only reviewed flights count, from every source. A flight waiting for review, including one sent back to the queue after an edit, does not count until a supervisor reviews it. A pilot can show as lapsed while flights wait for review.",
           "A rule can look back up to 3650 days.",
+          "A model that is no longer in your fleet shows with a dashed outline and **Not in fleet**. The rule still counts flights on it. Click it to remove it, then pick the right model.",
           "Lapsed pilots appear in **Needs Attention** on their page and on the **Compliance** page."
         ]
       },
