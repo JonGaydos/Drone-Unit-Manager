@@ -1,7 +1,5 @@
 """Currency rule models: migration 0016, cascade and backups."""
 
-import json
-import zipfile
 from pathlib import Path
 
 from alembic import command
@@ -10,7 +8,7 @@ from sqlalchemy import create_engine
 
 import app.config
 from app.models.currency_rule import CurrencyRule, CurrencyRuleModel
-from app.routers.backup import DATABASE_FILE, build_backup_archive
+from app.routers.backup import build_backup_archive
 from tests.test_permissions_backup import _archive, _restore
 
 MIGRATIONS_DIR = Path(__file__).resolve().parent.parent / "migrations"
