@@ -3,8 +3,9 @@
 Pure functions, no database. A PeriodSpec describes how a requirement's periods
 are laid out; period_containing, periods_between and first_period answer which
 inclusive (start, end) periods exist. Recurring periods are generated one by
-one from an anchor, so consecutive periods tile exactly (monthly windows whose
-end day is on or after the start day leave gaps by design).
+one from an anchor, so consecutive periods never overlap. Calendar, fiscal, span
+and every-N-months periods tile with no gap; monthly windows leave gaps by design
+(19 to 5 leaves the 6th to the 18th).
 """
 
 import calendar
@@ -102,11 +103,17 @@ def _nth_window(spec: PeriodSpec, k: int) -> Period:
     index = year * 12 + month - 1 + k
     year, month = index // 12, index % 12 + 1
     first = _clamped(year, month, start_day)
-    end_index = index + (1 if end_day < start_day else 0)
-    return first, _clamped(end_index // 12, end_index % 12 + 1, end_day)
+    if end_day >= start_day:
+        return first, _clamped(year, month, end_day)
+    end_index = index + 1
+    last = _clamped(end_index // 12, end_index % 12 + 1, end_day)
+    next_start = _clamped(end_index // 12, end_index % 12 + 1, start_day)
+    if last >= next_start:
+        last = next_start - timedelta(days=1)
+    return first, last
 
 
-def _nth_custom(spec: PeriodSpec, k: int) -> Period:
+def _nth_custom(spec: PeriodSpec, _k: int) -> Period:
     return spec.start, spec.end or spec.start
 
 
@@ -138,8 +145,8 @@ def _periods(spec: PeriodSpec) -> Iterator[Period]:
         k += 1
 
 
-def first_period(spec: PeriodSpec) -> Period:
-    return next(_periods(spec))
+def first_period(spec: PeriodSpec) -> Period | None:
+    return next(_periods(spec), None)
 
 
 def period_containing(spec: PeriodSpec, day: date) -> Period | None:

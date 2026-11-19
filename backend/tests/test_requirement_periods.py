@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 
 from app.services.requirement_periods import (
     PeriodSpec,
@@ -116,3 +116,46 @@ def test_periods_between_tiles_without_gaps():
         (D(2026, 12, 1), D(2026, 12, 31)),
         (D(2027, 1, 1), D(2027, 1, 31)),
     ]
+
+
+def test_rolling_window_end_capped_before_next_start():
+    s = spec("monthly_window", D(2027, 1, 1), window_start_day=31, window_end_day=30)
+    assert periods_between(s, D(2027, 1, 1), D(2027, 6, 29)) == [
+        (D(2027, 1, 31), D(2027, 2, 27)),
+        (D(2027, 2, 28), D(2027, 3, 30)),
+        (D(2027, 3, 31), D(2027, 4, 29)),
+        (D(2027, 4, 30), D(2027, 5, 30)),
+        (D(2027, 5, 31), D(2027, 6, 29)),
+    ]
+    t = spec("monthly_window", D(2027, 1, 30), window_start_day=30, window_end_day=29)
+    assert periods_between(t, D(2027, 1, 30), D(2027, 3, 29)) == [
+        (D(2027, 1, 30), D(2027, 2, 27)),
+        (D(2027, 2, 28), D(2027, 3, 29)),
+    ]
+
+
+def test_rolling_windows_x_to_x_minus_one_never_overlap_or_gap():
+    for start_day, end_day in [(31, 30), (30, 29), (29, 28), (19, 18)]:
+        for year in (2027, 2028):
+            s = spec(
+                "monthly_window",
+                D(year, 1, 1),
+                window_start_day=start_day,
+                window_end_day=end_day,
+            )
+            got = periods_between(s, D(year, 1, 1), D(year + 2, 1, 1))[:24]
+            assert len(got) == 24
+            for (_, prev_end), (next_start, _) in zip(got, got[1:]):
+                assert next_start == prev_end + timedelta(days=1)
+
+
+def test_first_period_none_when_end_precedes_first_window():
+    s = spec(
+        "monthly_window",
+        D(2026, 11, 20),
+        end=D(2026, 12, 10),
+        window_start_day=19,
+        window_end_day=5,
+    )
+    assert first_period(s) is None
+    assert period_containing(s, D(2026, 12, 25)) is None
