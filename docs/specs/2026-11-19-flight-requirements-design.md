@@ -84,6 +84,7 @@ Shared by the currency rule form and the requirement form.
 | Target | Hours and minutes, flights, or both |
 | Aircraft | Fleet model picker, with Combined or Each separately |
 | Time of day | Any time (default), clock window, or night (civil twilight) |
+| Flight purposes | All purposes (default), or selected purposes as toggle chips. Flights with no purpose count only under All |
 | Applies to | All active pilots, or selected pilots |
 | Active | On or off |
 
@@ -144,6 +145,13 @@ The form shows a live plain-English summary, for example:
   - **Excused**: a supervisor excused the pilot for this period (leave, injury, new hire).
 - A pilot added partway through a period is excused for that period automatically. The supervisor can remove the excusal.
 
+## After a miss
+
+- A Missed result flags the pilot: an item in the pilot's Needs Attention list and on the dashboard, and a "Missed requirement" badge on the pilot list and the pilot's profile.
+- The flag clears when the pilot meets the next period of the same requirement, or when a supervisor with `requirements.excuse` excuses the miss.
+- A one-time requirement has no next period, so its flag clears only by excusal.
+- The pilot's active or inactive status is never changed.
+
 ## History
 
 - A period that has ended stays **Pending review** for a grace period, 14 days by default (unit setting `requirements_grace_days`). During it, results are worked out live, so a late-reviewed flight still counts. The pilot's progress and the dashboard list the unreviewed flights inside the period, so supervisors can review them before the grace period ends.
@@ -179,6 +187,7 @@ Admins always have all three. Anyone with view sees every pilot's progress, not 
 - **Dashboard and Compliance, Requirements score**: shown next to the compliance score. The compliance score itself does not change.
 - **Dashboard, This Period card**: for each active requirement, the days left in the period, how many pilots have met it, and each pilot's progress, for example "X10 12/15m, X2E done".
 - **Pilot detail, Requirements tab**: the current period's progress and a history table of past periods.
+- **Pilots list and pilot profile**: the "Missed requirement" badge while a miss is flagged.
 - **Settings, Currency Rules form**: the free-text model field is replaced by the fleet model picker.
 
 ## Data model
@@ -186,6 +195,7 @@ Admins always have all three. Anyone with view sees every pilot's progress, not 
 - `flight_requirements`: definition (name, description, period type, period parameters, repeats, start, end, target hours, target flights, model mode, time-of-day mode, window start time, window end time, active, timestamps, created and modified by).
 - `flight_requirement_models`: requirement id and model name. No rows means all aircraft.
 - `flight_requirement_pilots`: requirement id and pilot id. No rows means all active pilots.
+- `flight_requirement_purposes`: requirement id and purpose name. No rows means all purposes.
 - `flight_requirement_results`: requirement id, pilot id, period start, period end, status, totals per model (JSON), target snapshot (JSON), excused by and reason, saved at. Unique on requirement, pilot and period start.
 - `currency_rule_models`: rule id and model name, replacing `currency_rules.vehicle_model`.
 
@@ -209,7 +219,9 @@ All write routes are audited like currency rules.
 - Night: twilight times checked against published values for a known location and date, the unit default location used when a flight has no coordinates, and the night option refused when neither exists.
 - Flights with no takeoff time are left out of time-limited requirements and reported.
 - Model matching ignores case, and "each separately" fails when any one model is short.
-- Only reviewed flights count, and flights or pilots excluded from unit totals do not.
+- Only reviewed flights count, and flights or pilots excluded from unit totals do not. Reviewed flights with an unconfirmed pilot match count.
+- A purpose filter counts only flights with a selected purpose; flights with no purpose count only with All purposes.
+- A miss flags the pilot until the next period is met or the miss is excused; a one-time miss clears only by excusal.
 - Closed periods do not change after a requirement is edited or a flight is re-reviewed.
 - A period stays Pending review through the grace period; a flight reviewed inside it counts, and one reviewed after it does not.
 - Requirements never change the compliance score or currency results.
@@ -228,3 +240,6 @@ All write routes are audited like currency rules.
 6. Permissions: own rows `requirements.view`, `requirements.manage`, `requirements.excuse`; anyone with view sees all pilots' progress (2026-11-18).
 7. Supervisors manage both currency rules and requirements; the Currency Rules screen opens to `certifications.manage` (2026-11-18).
 8. Fleet data: the two X2 aircraft with model `E1` are corrected to `X2E` by the owner before the picker ships (2026-11-18).
+9. Flights with an unconfirmed pilot match (`pilot_confirmed = false`) count once reviewed, as for currency (2026-11-18).
+10. Flight purpose filter: optional purpose toggles on each requirement, default all purposes (2026-11-18).
+11. A miss flags the pilot (Needs Attention, dashboard, and a badge on the pilot list and profile) until the next period is met or a supervisor excuses it. Pilot status is unchanged (2026-11-18).
