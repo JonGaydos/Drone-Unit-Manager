@@ -154,6 +154,7 @@ describe('RequirementsTab', () => {
     expect(calls[0].body.settings).toMatchObject({ name: 'Quarterly models', model_mode: 'each', models: ['X10', 'X2E'] })
     expect(calls[0].body.settings).not.toHaveProperty('start_date')
     expect(calls[0].body.settings).not.toHaveProperty('pilot_ids')
+    expect(calls[0].body.settings).not.toHaveProperty('end_date')
   })
 
   it('renames and deletes a template', async () => {

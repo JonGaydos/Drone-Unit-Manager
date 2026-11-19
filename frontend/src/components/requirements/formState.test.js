@@ -51,4 +51,26 @@ describe('form state', () => {
     expect(formProblem({ ...newForm(), name: 'A', target_flights: '1', all_pilots: false })).toBe('Select at least one pilot')
     expect(formProblem({ ...newForm(), name: 'A', target_flights: '1' })).toBeNull()
   })
+
+  it('sends the end date only when the period uses it', () => {
+    const recurring = { ...newForm(), name: 'A', target_flights: '1', start_date: '2026-11-01', end_date: '2027-01-31' }
+    expect(toBody(recurring).end_date).toBe('2027-01-31')
+    expect(toBody({ ...recurring, recurring: false }).end_date).toBeNull()
+    expect(toBody({ ...recurring, recurring: false, period_type: 'custom' }).end_date).toBe('2027-01-31')
+  })
+
+  it('sends the span fields for a span period', () => {
+    const body = toBody({ ...newForm(), period_type: 'span', span_length: '2', span_unit: 'months', every_months: '4', window_start_day: '3' })
+    expect(body).toMatchObject({
+      period_type: 'span', span_length: 2, span_unit: 'months', every_months: null, window_start_day: null, window_end_day: null,
+    })
+  })
+
+  it('sends every_months for an every-N-months period', () => {
+    const body = toBody({ ...newForm(), period_type: 'every_n_months', every_months: '3', span_length: '2', span_unit: 'weeks' })
+    expect(body).toMatchObject({
+      period_type: 'every_n_months', every_months: 3, span_length: null, span_unit: null, window_start_day: null, window_end_day: null,
+    })
+  })
 })
+

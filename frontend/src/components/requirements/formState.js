@@ -89,12 +89,18 @@ export function toDefinition(form) {
   }
 }
 
+function usesEndDate(form) {
+  return form.period_type === 'custom' || form.recurring
+}
+
 /** The body for POST /api/requirements or PATCH /api/requirements/{id}. */
 export function toBody(form) {
   return {
     ...toDefinition(form),
     start_date: form.start_date,
-    end_date: form.end_date || null,
+    // The end date field shows only for a custom or recurring period; a one-time
+    // period sends none, so a date set before switching to One time is not kept.
+    end_date: usesEndDate(form) ? form.end_date || null : null,
     pilot_ids: form.all_pilots ? [] : form.pilot_ids,
   }
 }

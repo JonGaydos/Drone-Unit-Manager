@@ -135,4 +135,16 @@ describe('RequirementForm', () => {
     await user.click(screen.getByRole('button', { name: 'Save requirement' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('A clock window needs a start and an end time')
   })
+
+  it('presses a saved purpose that differs from the list only in case, once', async () => {
+    const { onSubmit, user } = setup({ initial: { ...newForm(), name: 'P', target_flights: '1', purposes: ['patrol'] } })
+    const fieldset = screen.getByRole('group', { name: 'Flight purposes' })
+    expect(within(fieldset).getByRole('button', { name: 'Patrol' })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(fieldset).queryByRole('button', { name: 'patrol' })).toBeNull()
+    await user.click(within(fieldset).getByRole('button', { name: 'Patrol' }))
+    await user.click(screen.getByRole('button', { name: 'Save requirement' }))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled())
+    expect(onSubmit.mock.calls[0][0].purposes).toEqual([])
+  })
 })
+

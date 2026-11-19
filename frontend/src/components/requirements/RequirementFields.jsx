@@ -219,22 +219,29 @@ export function TimeFields({ form, update, locationSet }) {
   )
 }
 
+// Purposes match without regard to case or surrounding spaces, as the API compares them.
+function purposeKey(name) {
+  return name.trim().toLowerCase()
+}
+
 function togglePurpose(list, name) {
-  const key = name.trim().toLowerCase()
-  const kept = list.filter(p => p.trim().toLowerCase() !== key)
+  const key = purposeKey(name)
+  const kept = list.filter(p => purposeKey(p) !== key)
   return kept.length === list.length ? [...list, name] : kept
 }
 
 export function PurposeField({ form, update, purposes }) {
-  const listed = purposes.filter(p => p.is_active !== false || form.purposes.includes(p.name)).map(p => p.name)
-  const extra = form.purposes.filter(name => !listed.includes(name))
+  const selected = new Set(form.purposes.map(purposeKey))
+  const listed = purposes.filter(p => p.is_active !== false || selected.has(purposeKey(p.name))).map(p => p.name)
+  const listedKeys = new Set(listed.map(purposeKey))
+  const extra = form.purposes.filter(name => !listedKeys.has(purposeKey(name)))
   return (
     <div>
       <span id="req-purposes-label" className={`block ${LEGEND}`}>Flight purposes</span>
       <fieldset aria-labelledby="req-purposes-label" aria-describedby="req-purposes-hint" className={`flex flex-wrap gap-2 ${FIELDSET}`}>
         <Toggle pressed={form.purposes.length === 0} onClick={() => update({ purposes: [] })}>All purposes</Toggle>
         {[...listed, ...extra].map(name => (
-          <Toggle key={name} pressed={form.purposes.includes(name)}
+          <Toggle key={name} pressed={selected.has(purposeKey(name))}
             onClick={() => update(f => ({ purposes: togglePurpose(f.purposes, name) }))}>
             {name}
           </Toggle>
