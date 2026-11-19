@@ -1151,6 +1151,205 @@
     ]
   },
   {
+    "id": "flight-requirements",
+    "title": "Flight Requirements",
+    "topics": [
+      {
+        "id": "what-requirements-are",
+        "title": "What flight requirements are",
+        "summary": "A flight requirement is an assignment for a fixed period, such as 1 hour in October or 15 minutes on each aircraft type every quarter. It is separate from currency, which asks whether a pilot is legal to fly right now.",
+        "steps": [
+          "Supervisors and admins set requirements up under **Settings**, on the **Flight Requirements** tab.",
+          "Everyone who may view requirements sees the progress. The **This Period** tile on the **Dashboard** shows it for the whole unit. The **Flight Requirements** card on each pilot page shows it for one pilot.",
+          "Each pilot has one status for each period: **On track**, **Met**, **Pending review**, **Missed** or **Excused**."
+        ],
+        "notes": [
+          "**On track** means the target is not met yet and the period is still open. **Met** means the target is reached. **Pending review** means the period ended without the target met and the grace days are still running. **Missed** means the grace days ended without the target met. **Excused** means a supervisor excused the pilot for that period.",
+          "Currency rules do not change. Requirements never change the currency of a pilot or the compliance score.",
+          "Only flights that are reviewed and that count toward unit totals count toward a requirement. A flight waiting for review does not count until a supervisor reviews it.",
+          "Seeing requirements needs **Flight requirements: View**. Creating and editing them needs **Manage**. Excusing a pilot needs **Excuse**. Supervisors have all three by default. An admin can change this under **Role Permissions**."
+        ]
+      },
+      {
+        "id": "creating-a-requirement",
+        "title": "Creating a requirement",
+        "summary": "The builder on the **Flight Requirements** tab sets the period, the target, the aircraft, the time of day, the flight purposes and the pilots. A summary at the bottom says the result in plain words before you save.",
+        "image": {
+          "src": "/manual-pictures/flight-requirements-creating-a-requirement.png",
+          "alt": "The New requirement form with a name, a calendar quarter period, 15 minutes as the target, two aircraft models set to each separately, and a summary sentence at the bottom",
+          "caption": "The requirement builder with its live summary."
+        },
+        "steps": [
+          "Open **Settings**, choose the **Flight Requirements** tab and click **New requirement**.",
+          "Enter a **Name**. Add a **Description (optional)** if you like.",
+          "Pick the **Period** (see the list below) and choose **One time** or **Recurring** under **Repeats**. Set **Starts**. For a recurring requirement, **Ends (optional)** stops it after a date.",
+          "Under **Target**, enter **Hours** and **Minutes**, **Flights**, or both. Both must be met when you set both.",
+          "Choose the aircraft, the time of day and the flight purposes. The next topics explain them.",
+          "Under **Applies to**, leave **All active pilots** on, or choose **Selected pilots** and tick the pilots.",
+          "Set **Reminder (days before the period ends)**. The default is 7. Leave **Active** ticked.",
+          "Read the **Summary**. Click **Save requirement**."
+        ],
+        "notes": [
+          "**Calendar month**, **Calendar quarter** and **Calendar year** follow the calendar. For example, 1 hour in October is a one-time **Calendar month** that starts in October.",
+          "**Fiscal quarter** and **Fiscal year** follow the fiscal year. It starts in October unless you change **Fiscal year starts in** under **Requirement Settings**.",
+          "**Monthly window (day X to day Y)** runs from a start day to an end day of the month, for example the 19th to the 5th. When the end day is earlier, the window ends in the following month. A day past the end of a short month means that month's last day. A recurring window repeats every month.",
+          "**Span from a start date** is a length in days, weeks or months from a start date, such as the next 3 months or the next two weeks. It can repeat.",
+          "**Custom date range** is one fixed range with a start and an end. It does not repeat.",
+          "**Every N months from a start date** repeats on that schedule, for example every 4 months.",
+          "For a calendar or fiscal period, **Starts** can be any day in the first period. For the other types it is the first day.",
+          "An example of each: 1 hour in the next 3 months is a **Span** of 3 months. 15 minutes on each aircraft type per quarter is a recurring **Calendar quarter** with each model set to **Each separately**.",
+          "Editing a requirement applies from the current period on. Periods that are already saved never change.",
+          "If you leave the target empty, the name empty or the dates incomplete, the form says what to fix and does not save."
+        ]
+      },
+      {
+        "id": "time-of-day-and-night",
+        "title": "Time of day and night",
+        "summary": "A requirement can count only the flight time inside a clock window, or only the time at night. By default **Any time** counts all flight time.",
+        "steps": [
+          "In the builder, find **Time of day**.",
+          "Choose **Any time** to count every flight minute. This is the default.",
+          "Choose **Clock window** and set **From** and **To**, for example 12:00 AM to 6:00 AM. An end earlier than the start crosses midnight, so 6:00 PM to 2:00 AM is one evening window.",
+          "Choose **Night (civil twilight)** to count the time between the end of evening civil twilight and the start of morning civil twilight, as Part 107 defines night."
+        ],
+        "notes": [
+          "A clock window uses the unit time zone for every flight, also for a flight flown somewhere else.",
+          "Night uses the unit's default location for every flight, not the flight's own takeoff point. Set it under **Settings**, **General**, **Default Location**. Until it is set, **Night (civil twilight)** is greyed out and the form says why.",
+          "Only the minutes inside the window count toward hours. A flight from 5:30 AM to 6:15 AM gives 30 minutes toward a 12:00 AM to 6:00 AM window. For a flights target, a flight counts when at least one minute falls inside the window.",
+          "The dates and the hours are independent. To ask for 1 hour between midnight and 6 AM from the 19th to the 5th, use a **Monthly window** period and a **Clock window**.",
+          "A flight with no takeoff time cannot be placed in a window. It does not count toward a time-limited requirement. The pilot's progress says how many flights were left out for this reason, so you can add the missing time.",
+          "To ask for two limits together, such as 1 hour at night and 2 hours in total, make two requirements."
+        ]
+      },
+      {
+        "id": "models-and-purposes",
+        "title": "Aircraft models and flight purposes",
+        "summary": "A requirement can count every aircraft or only some models, and every flight purpose or only some. You pick from your fleet and your purpose list, so a typing mistake cannot make a requirement match nothing.",
+        "steps": [
+          "In the builder, find **Aircraft**. **All aircraft** is on by default.",
+          "Click one or more models to count only flights on those. Each shows how many aircraft you have, for example **X10 (2)**. Turning on a model turns **All aircraft** off. Turning off the last model turns it back on.",
+          "With two or more models, choose **Combined** to add the time on all of them toward one target, or **Each separately** to need the target on every model.",
+          "Under **Each separately**, choose **Selected models** for the models you ticked, or **All active models** to follow the fleet.",
+          "Find **Flight purposes**. **All purposes** is on by default. Click one or more purposes to count only flights with those."
+        ],
+        "notes": [
+          "**All active models** follows the fleet. A model that joins the fleet is added from the next period, not the current one.",
+          "With **Each separately**, a pilot's period is **Met** only when every model is met. It counts as one result.",
+          "Models match without regard to capital letters, so **X10** and **x10** are one model.",
+          "Flights with no purpose count only under **All purposes**. Purposes match without regard to capital letters or surrounding spaces.",
+          "Models with only retired aircraft are not offered, unless a requirement already uses them."
+        ]
+      },
+      {
+        "id": "progress-and-the-dashboard",
+        "title": "Progress on the dashboard",
+        "summary": "The **This Period** tile on the **Dashboard** shows each active requirement with the days left, how many pilots have met it and each pilot's progress.",
+        "image": {
+          "src": "/manual-pictures/flight-requirements-progress-and-the-dashboard.png",
+          "alt": "The This Period tile with a monthly requirement, days left, how many demo pilots have met it and each pilot's minutes flown against the target",
+          "caption": "The This Period tile on the Dashboard."
+        },
+        "steps": [
+          "Open **Dashboard** and find **This Period**.",
+          "Each requirement shows the days left and a count such as **0/6 met**.",
+          "Each line shows a pilot, the time or flights flown against the target, and the status. For a requirement on each model, the line shows each model, for example **X10 12/15m**.",
+          "Click a pilot's name to open the pilot page."
+        ],
+        "notes": [
+          "The score at the top right of the tile is the **Requirements score**. See \"History and the score\".",
+          "A period that has ended but is still inside its grace days shows as **Previous period**, with the number of pilots **pending review** and the date it runs until.",
+          "**Open misses** at the bottom names the pilots flagged for a miss.",
+          "The tile shows only to people who may view requirements. It says **No active flight requirements** when none exist.",
+          "The **Calendar** shows one entry on the last day of each period, titled **Due:** and the requirement's name. Periods themselves are not drawn.",
+          "**Reports** has a **Flight Requirements** report of saved results, by period and pilot, with the unit logo. A requirement's results and one pilot's history also download as CSV."
+        ]
+      },
+      {
+        "id": "excusing-and-misses",
+        "title": "Excusing a pilot and missed requirements",
+        "summary": "A pilot who is away, injured or new to the unit can be excused for a period. A pilot who misses a period is flagged until the miss is made up or excused.",
+        "image": {
+          "src": "/manual-pictures/flight-requirements-excusing-and-misses.png",
+          "alt": "The Flight Requirements card on a demo pilot page with this period's progress, an Excuse button, a history table and download CSV buttons",
+          "caption": "The Flight Requirements card on a pilot page."
+        },
+        "steps": [
+          "Open the pilot page and find the **Flight Requirements** card.",
+          "Click **Excuse** on the period. Add a **Reason (optional)** and click **Excuse**.",
+          "To undo it, click **Un-excuse** on that period."
+        ],
+        "notes": [
+          "Excusing needs **Flight requirements: Excuse**. The buttons do not show without it.",
+          "A pilot added to the unit after a period started is excused for that period automatically. A supervisor can remove it with **Un-excuse**.",
+          "Months a requirement was switched off are saved as excused, with the reason **Requirement was switched off**.",
+          "A miss flags the pilot. The pilot page shows a line in **Needs Attention** and a **Missed requirement** badge, the **Pilots** list shows the same badge, and the **Dashboard** lists the pilot under **Open misses**.",
+          "The flag clears when the pilot meets the same requirement in a later period, or when a supervisor excuses the miss.",
+          "A one-time requirement has no later period, so its miss clears only by excusal.",
+          "A flag never changes whether the pilot is active.",
+          "The card also lists flights left out because they have no takeoff time, and flights still awaiting review in the period."
+        ]
+      },
+      {
+        "id": "history-and-the-score",
+        "title": "History and the Requirements score",
+        "summary": "Every finished period is saved for each pilot. The Requirements score is the share of those saved results that were met over the last 12 months.",
+        "steps": [
+          "Open a pilot page. Under the **Flight Requirements** card, the history table lists past periods with what was flown and the result.",
+          "Click **Download CSV** to save one pilot's history for a requirement.",
+          "Open **Compliance** to see the **Requirements Score** next to the compliance score. It also shows on the **Dashboard** tile."
+        ],
+        "notes": [
+          "A period stays **Pending review** for the grace days after it ends. The default is 14. Admins and supervisors can change it, and the **Fiscal year starts in** month, under **Requirement Settings** on the **Flight Requirements** tab.",
+          "During the grace days a flight that is reviewed late still counts. The pilot's card and the dashboard list the flights still awaiting review, so they can be reviewed in time.",
+          "When the grace days end, the result is saved with the hours and flights, the status and a copy of the target. It never changes after that, even if the requirement is edited or an old flight is reviewed again. Only an admin can recalculate one period, and that is recorded in the audit log.",
+          "The score counts saved results that are **Met** out of all saved results whose period ended in the last 12 months. **Excused** results are left out, and so are periods still open or pending review.",
+          "With no saved results in the last 12 months, the score says **No results yet**.",
+          "The score is separate from the compliance score. The compliance score does not change.",
+          "A requirement with saved results cannot be deleted. Switch it off instead by clearing **Active**."
+        ]
+      },
+      {
+        "id": "requirement-emails",
+        "title": "Requirement emails",
+        "summary": "The app emails pilots when a requirement is assigned, before a period ends and when a period is missed. It sends email only when email sending is set up.",
+        "steps": [
+          "An admin sets up email once. See \"Setting up email sending\".",
+          "Set **Reminder (days before the period ends)** on each requirement. The default is 7. Use 0 to switch the reminder off.",
+          "In **Email Digest** on the **General** tab, tick **Flight Requirements** under **Include** to get a section in your digest."
+        ],
+        "notes": [
+          "**Assignment**: each assigned pilot is emailed when a requirement is created or activated, or when they are added to it.",
+          "**Reminder**: pilots who have not met the target are emailed the set number of days before the period ends. Each pilot gets one reminder for each period.",
+          "**Miss**: when a period is saved as **Missed**, the pilot and every user who can manage requirements are emailed.",
+          "**Digest**: the **Flight Requirements** section holds progress, periods pending review and recent misses.",
+          "A person without an email address on file is skipped. Nothing is sent when email is not set up."
+        ]
+      },
+      {
+        "id": "templates-and-duplicating",
+        "title": "Templates and duplicating",
+        "summary": "Reuse a requirement's settings instead of filling the builder in again. Duplicate copies one requirement. A template keeps the settings under a name.",
+        "image": {
+          "src": "/manual-pictures/flight-requirements-requirements-tab.png",
+          "alt": "The Flight Requirements list in Settings with two demo requirements, each with edit, duplicate, save as template and delete buttons",
+          "caption": "The requirement list in Settings."
+        },
+        "steps": [
+          "On the **Flight Requirements** tab, click the **Duplicate** icon on a requirement. The builder opens filled in as a new requirement named **Copy of** and the old name. Change what you need and save.",
+          "To keep the settings, click the **Save as template** icon, enter a **Template name** and click **Save template**.",
+          "Under **Templates**, click **New from template** to open the builder filled in. Use the pencil to rename a template and the bin to delete it.",
+          "To change a requirement, click the **Edit** icon. To remove one, click the **Delete** icon and confirm."
+        ],
+        "notes": [
+          "A template keeps every setting except the start date, the end date and the selected pilots.",
+          "Changing or deleting a template never changes requirements made from it.",
+          "**Delete** is refused once a requirement has saved results. Switch it off instead.",
+          "The **Flight Requirements** tab shows only to people with **Flight requirements: Manage**. **Requirement Settings** on the tab holds **Grace days** and **Fiscal year starts in**."
+        ]
+      }
+    ]
+  },
+  {
     "id": "fleet",
     "title": "Fleet Management",
     "topics": [
@@ -1802,7 +2001,8 @@
           "Currency counts only when at least one active currency rule exists. With no rules **Currency Compliance** shows a dash.",
           "Only active pilots and active vehicles are counted.",
           "An expired operating authority that grounds the unit caps the score at 50, and the reason shows under the score. See **Operating Authority**.",
-          "**Export checkouts CSV** downloads the equipment checkout log (it needs report export and fleet access). **Generate Compliance Report** opens **Reports** for people who may generate reports."
+          "**Export checkouts CSV** downloads the equipment checkout log (it needs report export and fleet access). **Generate Compliance Report** opens **Reports** for people who may generate reports.",
+          "The **Requirements Score** shows beside the compliance score. It is separate and never changes the compliance score. See \"History and the score\"."
         ]
       },
       {
@@ -2172,6 +2372,7 @@
           "**Maintenance History**: maintenance records in the date range.",
           "**Pilot Activity Summary**: a summary of each pilot's activity.",
           "**Annual Unit Report**: a yearly summary of the whole program.",
+          "**Flight Requirements**: the saved results of each requirement, by period and pilot, for periods that ended in the date range.",
           "**Per-Pilot Annual Review**: a yearly review for each pilot. Choose **PDF** for one combined file, or **Download PDF Pack (one per pilot)** for a zip file with one PDF per pilot."
         ],
         "notes": [
@@ -2204,15 +2405,16 @@
         "summary": "Settings holds the choices that apply to the whole unit. Everyone can open it to manage their own profile. Admins see much more.",
         "steps": [
           "Choose **Settings** in the sidebar.",
-          "The **General** tab holds **My Profile**, **Change Password** and **Email Digest** for everyone. For admins it also holds **Organization**, **Certification Status Labels**, **Weather Thresholds**, **Mission / Flight Purposes**, **Drone Locations**, **Default Location**, **Backup & Restore**, **Automated Backups**, **Currency Rules** and **Sidebar Configuration**.",
+          "The **General** tab holds **My Profile**, **Change Password** and **Email Digest** for everyone. For admins it also holds **Organization**, **Certification Status Labels**, **Weather Thresholds**, **Mission / Flight Purposes**, **Drone Locations**, **Default Location**, **Backup & Restore**, **Automated Backups**, **Currency Rules** (also open to supervisors) and **Sidebar Configuration**.",
           "The **Users** tab is for admins. It holds **User Management** and **Role Permissions**.",
           "The **Integrations** tab is for admins. It holds the Skydio connection, email sending and flight log import.",
-          "The **API Tokens** tab is for admins. It holds the keys for other programs."
+          "The **API Tokens** tab is for admins. It holds the keys for other programs.",
+          "The **Flight Requirements** tab is for supervisors and admins who may manage requirements. It holds the requirement list and builder, **Templates** and **Requirement Settings**."
         ],
         "notes": [
           "Choose **Save Settings** at the bottom of the **General** tab to keep changes to the **Organization**, **Weather Thresholds** and similar cards. Some cards have their own save button.",
           "A line saying **Unsaved changes** shows beside **Save Settings** until you save.",
-          "Other topics cover the cards that belong to a feature: **Certification Status Labels** under Certifications, **Weather Thresholds** under Weather, **Currency Rules** under Pilots and **Drone Locations** under Drone Locations.",
+          "Other topics cover the cards that belong to a feature: **Certification Status Labels** under Certifications, **Weather Thresholds** under Weather, **Currency Rules** under Pilots **Drone Locations** under Drone Locations and the **Flight Requirements** tab under Flight Requirements.",
           "If your server has it turned on, everyone sees an **API Documentation** link at the bottom of the **General** tab. It is for people who write programs."
         ]
       },
@@ -2327,7 +2529,7 @@
           "Tick **Send me email digests**.",
           "Pick the **Frequency**: Daily, Weekly or Off. For Weekly, pick the weekday under **Send on**.",
           "Pick the time under **Send at**.",
-          "Under **Include**, tick what you want listed: **Pending Flight Plan Approvals**, **Flights Needing Review**, **Expiring Certifications**, **Expiring FAA Registrations**, **Overdue Maintenance**, **Assigned Missions**, **Overdue Equipment Checkouts** and **Recent Incidents**.",
+          "Under **Include**, tick what you want listed: **Pending Flight Plan Approvals**, **Flights Needing Review**, **Expiring Certifications**, **Expiring FAA Registrations**, **Overdue Maintenance**, **Assigned Missions**, **Overdue Equipment Checkouts**, **Recent Incidents** and **Flight Requirements**.",
           "Choose **Save Preferences**.",
           "Choose **Preview** to see what the next digest would hold, or **Send Test** to email one now."
         ],
