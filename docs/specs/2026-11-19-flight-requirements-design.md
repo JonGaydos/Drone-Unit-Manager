@@ -11,7 +11,8 @@ Separately, the currency rule form takes the vehicle model as free text. A typo 
 ## Goals
 
 - A new **Flight Requirements** feature for fixed-period assignments, separate from currency.
-- Requirements can use a calendar month, quarter or year, a fiscal quarter or year, a custom date range, or every N months from a start date.
+- Requirements can use a calendar month, quarter or year, a fiscal quarter or year, a monthly window between two days of the month, a span of N days, weeks or months from a start date, a custom date range, or every N months from a start date.
+- Requirements can limit which flight time counts to a time of day: a clock window (including ones that cross midnight) or night as defined by civil twilight.
 - Requirements can be one-time or recurring.
 - Targets can be hours and minutes, a number of flights, or both.
 - Aircraft scope is chosen by toggling the models in the fleet, with the option to require the target on each model separately.
@@ -75,11 +76,12 @@ Shared by the currency rule form and the requirement form.
 | Setting | Options |
 |---|---|
 | Name, description | Free text |
-| Period | Calendar month, calendar quarter, calendar year, fiscal quarter, fiscal year, custom date range, every N months from a start date |
+| Period | Calendar month, calendar quarter, calendar year, fiscal quarter, fiscal year, monthly window (day X to day Y), span from a start date (N days, weeks or months), custom date range, every N months from a start date |
 | Repeats | One time, or recurring with an optional end date |
 | Starts | The first period (for example, October 2026 or Q4 2026) |
 | Target | Hours and minutes, flights, or both |
 | Aircraft | Fleet model picker, with Combined or Each separately |
+| Time of day | Any time (default), clock window, or night (civil twilight) |
 | Applies to | All active pilots, or selected pilots |
 | Counts toward compliance | Off by default. When on, it feeds the compliance percentage and reminders |
 | Active | On or off |
@@ -90,18 +92,49 @@ The form shows a live plain-English summary, for example:
 
 > Every **quarter**, **all active pilots** must fly **15 min** on **each of: X10, X2E, LEMUR 2**, starting **Q4 2026**, no end date.
 
+> Every month from the **19th to the 5th of the following month**, **all active pilots** must fly **1 hour** on **any aircraft** between **12:00 AM and 6:00 AM**, starting **Nov 19, 2026**, no end date.
+
+### Monthly window
+
+- Set by a start day and an end day of the month, for example the 19th to the 5th.
+- When the end day is earlier than the start day, the window ends in the following month.
+- A day past the end of a short month means that month's last day (the 31st in February is the 28th or 29th).
+- Recurring monthly windows follow one another, so a 19th to 5th window repeats every month starting on the 19th.
+
+### Span from a start date
+
+- A quick way to say "the next two weeks" or "the next 3 months": a start date plus a length in days, weeks or months.
+- It can repeat, for example every two weeks.
+
+### Time of day
+
+- **Any time**: all flight time counts. This is the default and matches currency.
+- **Clock window**: a start and end time in the unit's display timezone, for example 12:00 AM to 6:00 AM, or 6:00 PM to 2:00 AM. When the end is earlier than the start, the window crosses midnight.
+- **Night**: from the end of evening civil twilight to the start of morning civil twilight, the definition Part 107 uses. Sunset and sunrise are calculated for the flight's takeoff location and date. When a flight has no coordinates, the unit default location (`org_default_lat`, `org_default_lon`) is used. When neither is set, the form refuses the night option and says why.
+- Only the minutes that fall inside the window count. A flight from 5:30 AM to 6:15 AM gives 30 minutes toward a 12 AM to 6 AM window.
+- A flight counts toward the flight-count target when at least one of its minutes falls inside the window.
+- The window applies to every day in the period. A flight that starts inside the period but runs past its end counts only up to the period's end.
+- The date window and time window are independent. "12 AM to 6 AM between the 19th and the 5th" uses a monthly window for the dates and a clock window for the hours.
+- To combine targets, such as 1 hour of night flight and 2 hours in total, create two requirements.
+
 ### Examples
 
-| Assignment | Period | Repeats | Target | Aircraft |
-|---|---|---|---|---|
-| Fly 1 hour in October | Calendar month, Oct 2026 | One time | 1h | All aircraft |
-| Fly 1 hour in the next 3 months | Custom range, today to 3 months out | One time | 1h | All aircraft |
-| Fly each drone type 15 minutes per quarter | Calendar quarter, from Q4 2026 | Recurring | 15m | All active models, each separately |
+| Assignment | Period | Repeats | Target | Aircraft | Time of day |
+|---|---|---|---|---|---|
+| Fly 1 hour in October | Calendar month, Oct 2026 | One time | 1h | All aircraft | Any time |
+| Fly 1 hour in the next 3 months | Span from today, 3 months | One time | 1h | All aircraft | Any time |
+| Fly each drone type 15 minutes per quarter | Calendar quarter, from Q4 2026 | Recurring | 15m | All active models, each separately | Any time |
+| Fly 1 hour at night over the next two weeks | Span from today, 2 weeks | One time | 1h | All aircraft | Night |
+| Fly 1 hour between 12 AM and 6 AM, from the 19th to the 5th of the following month | Monthly window, 19th to 5th | Recurring | 1h | All aircraft | Clock window, 12:00 AM to 6:00 AM |
+| Fly 1 hour between 6 PM and 2 AM in December | Calendar month, Dec 2026 | One time | 1h | All aircraft | Clock window, 6:00 PM to 2:00 AM |
 
 ## Evaluation
 
 - One pure function returns the period that contains a given date, `(start, end)` inclusive, for a requirement. It holds all calendar math and is tested on its own: month lengths, leap years, quarter and fiscal boundaries, and custom ranges.
-- Flight dates are already local dates (migration 0008), so period boundaries use `Flight.date` directly.
+- Flight dates are already local dates (migration 0008), so period boundaries use `Flight.date` directly for requirements with no time-of-day limit.
+- With a time-of-day limit, each flight becomes a local interval: takeoff time converted to the display timezone, plus `duration_seconds`. Takeoff times are stored as UTC (including manual entries, which `local_flight_date` already treats as UTC) and converted with `display_zone`. Sources stored in local wall-clock time, such as Parrot logs, are used as is. The build confirms how each import source stores time (see migrations 0008 and 0010) before relying on it. A second pure function returns the minutes of an interval inside a window, and is tested on its own.
+- A flight with no takeoff time cannot be placed in a time window, so it does not count toward a time-limited requirement. The pilot's progress shows how many flights were left out for this reason, so the pilot or a supervisor can add the missing time.
+- Civil twilight is calculated with the `astral` library (pure Python, no network access).
 - A pilot's status in the current period:
   - **Met**: the target is reached (on every model, when "each separately").
   - **On track**: not met yet, and the period is still open.
@@ -125,7 +158,7 @@ The form shows a live plain-English summary, for example:
 
 ## Data model
 
-- `flight_requirements`: definition (name, description, period type, period parameters, repeats, start, end, target hours, target flights, model mode, counts toward compliance, active, timestamps, created and modified by).
+- `flight_requirements`: definition (name, description, period type, period parameters, repeats, start, end, target hours, target flights, model mode, time-of-day mode, window start time, window end time, counts toward compliance, active, timestamps, created and modified by).
 - `flight_requirement_models`: requirement id and model name. No rows means all aircraft.
 - `flight_requirement_pilots`: requirement id and pilot id. No rows means all active pilots.
 - `flight_requirement_results`: requirement id, pilot id, period start, period end, status, totals per model (JSON), target snapshot (JSON), excused by and reason, saved at. Unique on requirement, pilot and period start.
@@ -146,7 +179,10 @@ All write routes are audited like currency rules.
 
 ## Testing
 
-- Period math: every period type, around month, quarter, fiscal and year boundaries, February in leap and non-leap years.
+- Period math: every period type, around month, quarter, fiscal and year boundaries, February in leap and non-leap years, monthly windows that end in the following month, and end days past a short month.
+- Time windows: windows that cross midnight, flights that start before and end inside a window, flights longer than a window, flights spanning two nights, and daylight saving changes.
+- Night: twilight times checked against published values for a known location and date, the unit default location used when a flight has no coordinates, and the night option refused when neither exists.
+- Flights with no takeoff time are left out of time-limited requirements and reported.
 - Model matching ignores case, and "each separately" fails when any one model is short.
 - Only reviewed flights count.
 - Closed periods do not change after a requirement is edited or a flight is re-reviewed.
