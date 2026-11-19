@@ -27,6 +27,10 @@ apscheduler==3.10.4 \
     --hash=sha256:e6df071b27d9be898e486bc7940a7be50b4af2e9da7c08f0744a96d4bd4cef4a \
     --hash=sha256:fb91e8a768632a4756a585f79ec834e0e27aad5860bac7eaa523d9ccefd87661
     # via -r requirements.txt
+astral==3.2 \
+    --hash=sha256:9b7c3b412e9e69d172cfb24be0e6addcc9f1bd01a28db8bebe66d75ccc533d88 \
+    --hash=sha256:cb7b49a3f0d4c64ae666be131276d2a3226134c598db10e672028cf8ff855f83
+    # via -r requirements.txt
 bcrypt==4.2.1 \
     --hash=sha256:041fa0155c9004eb98a232d54da05c0b41d4b8e66b6fc3cb71b4b3f6144ba837 \
     --hash=sha256:04e56e3fe8308a88b77e0afd20bec516f74aecf391cdd6e374f15cbed32783d6 \
