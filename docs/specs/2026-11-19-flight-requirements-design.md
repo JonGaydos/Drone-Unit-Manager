@@ -1,6 +1,6 @@
 # Flight Requirements and Fleet Model Picker: Design
 
-Status: draft, pending owner answers to the open questions. Date: 2026-11-19.
+Status: approved by owner. Date: 2026-11-19.
 
 ## Intent
 
@@ -23,6 +23,7 @@ Separately, the currency rule form takes the vehicle model as free text. A typo 
 - Changing how currency is evaluated (rolling window, expiry date, reminders).
 - Training hours, certification tracking, or non-flight tasks.
 - Per-tenant data separation.
+- Pilot groups or teams.
 
 ## Anti-goals
 
@@ -153,7 +154,7 @@ All write routes are audited like currency rules.
 - The currency migration keeps each existing rule's behavior exactly as before.
 - Permission coverage tests include every new route.
 
-## Open questions
+## Resolved questions
 
-1. Does one installation serve more than one agency, or does "agency to agency" mean units or squads within one agency? If either, add pilot groups so a requirement can target a group.
-2. The example "fly 1 hour in the next 3 hours" is read here as 3 months. Confirm, or correct it to the intended span.
+1. Pilot groups: not needed. Requirements target all active pilots or selected pilots.
+2. "Fly 1 hour in the next 3 months" is confirmed as 3 months, as in the examples table.
