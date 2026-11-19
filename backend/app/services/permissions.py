@@ -117,6 +117,11 @@ _DEFAULT_GRID = (
         ("certifications.view", VIEW, YES, YES, YES),
         ("certifications.manage", "Manage, send reminders", YES, NO, LOCKED),
     )),
+    ("Flight requirements", (
+        ("requirements.view", VIEW, YES, YES, YES),
+        ("requirements.manage", "Create, edit, delete, templates", YES, NO, LOCKED),
+        ("requirements.excuse", "Excuse a pilot", YES, NO, LOCKED),
+    )),
     ("Checklists", (
         ("checklists.view", VIEW, YES, YES, YES),
         ("checklists.complete", COMPLETE, YES, YES, LOCKED),

@@ -18,6 +18,10 @@ from app.models import (
     PilotEquipmentQual, SavedReport, SensorPackage, Setting, TrainingLog, TrainingLogPilot, User,
     Vehicle, VehicleRegistration,
 )
+from app.models.flight_requirement import (
+    FlightRequirement, FlightRequirementModel, FlightRequirementNotice, FlightRequirementPilot,
+    FlightRequirementPurpose, FlightRequirementResult, FlightRequirementTemplate,
+)
 from app.models.photo import PhotoFlight, PhotoIncident, PhotoPilot
 from app.models.role_permission import RolePermission
 from app.constants import SECRET_KEYS
@@ -58,8 +62,10 @@ def parents(db, admin_user):
     flight = Flight()
     incident = Incident(date=date(2026, 1, 1), title="I", severity="low", category="c", description="d")
     rule = CurrencyRule(name="Parent", required_hours=1.0, period_days=30)
+    requirement = FlightRequirement(name="Parent", period_type="calendar_month", start_date=date(2026, 1, 1),
+                                    recurring=True, model_mode="all", time_mode="any")
     rows = {
-        "pilot": pilot, "vehicle": vehicle, "battery": battery, "template": template,
+        "requirement": requirement, "pilot": pilot, "vehicle": vehicle, "battery": battery, "template": template,
         "cert_type": cert_type, "mission": mission, "training": training, "photo": photo,
         "flight": flight, "incident": incident, "rule": rule,
     }
@@ -68,6 +74,11 @@ def parents(db, admin_user):
     ids = {name: row.id for name, row in rows.items()}
     ids["user"] = admin_user.id
     return ids
+
+
+def _requirement(**extra):
+    return FlightRequirement(name="R", period_type="calendar_month", start_date=date(2026, 1, 1),
+                             recurring=True, model_mode="all", time_mode="any", **extra)
 
 
 def _fixed(cls, **fixed):
@@ -95,6 +106,19 @@ BUILDERS = {
     Flight: (_fixed(Flight), "notes", "ok"),
     FlightPlan: (lambda p: FlightPlan(title="Plan", date_planned=datetime(2026, 1, 1), pilot_id=p["pilot"], submitted_by_id=p["user"]), "title", "Plan2"),
     FlightPurpose: (_fixed(FlightPurpose, name="Purpose"), "name", "Purpose2"),
+    FlightRequirement: (lambda p: _requirement(), "name", "R2"),
+    FlightRequirementModel: (lambda p: FlightRequirementModel(requirement_id=p["requirement"], model="X10"), "model", "X2E"),
+    FlightRequirementNotice: (lambda p: FlightRequirementNotice(
+        requirement_id=p["requirement"], pilot_id=p["pilot"], period_start=date(2026, 1, 1),
+        kind="assigned", sent_at=datetime(2026, 1, 2)), "kind", "missed"),
+    FlightRequirementPilot: (lambda p: FlightRequirementPilot(requirement_id=p["requirement"], pilot_id=p["pilot"]),
+                             "pilot_id", None),
+    FlightRequirementPurpose: (lambda p: FlightRequirementPurpose(requirement_id=p["requirement"], purpose="Training"),
+                               "purpose", "Patrol"),
+    FlightRequirementResult: (lambda p: FlightRequirementResult(
+        requirement_id=p["requirement"], pilot_id=p["pilot"], period_start=date(2026, 1, 1),
+        period_end=date(2026, 1, 31)), "status", "met"),
+    FlightRequirementTemplate: (_fixed(FlightRequirementTemplate, name="T", settings={}), "name", "T2"),
     Folder: (_fixed(Folder, name="F"), "name", "F2"),
     Incident: (_fixed(Incident, date=date(2026, 1, 1), title="I", severity="low", category="c", description="d"), "title", "I2"),
     MaintenanceRecord: (lambda p: MaintenanceRecord(entity_type="vehicle", entity_id=p["vehicle"], maintenance_type="m", description="d"), "description", "d2"),
@@ -123,7 +147,7 @@ BUILDERS = {
     VehicleRegistration: (lambda p: VehicleRegistration(vehicle_id=p["vehicle"]), "notes", "ok"),
 }
 # Link rows have nothing but their foreign keys, so the update repoints one.
-REPOINT = {PhotoFlight: "flight", PhotoIncident: "incident", PhotoPilot: "pilot"}
+REPOINT = {PhotoFlight: "flight", PhotoIncident: "incident", PhotoPilot: "pilot", FlightRequirementPilot: "pilot"}
 
 
 def _second_parent(db, cls):
@@ -132,6 +156,7 @@ def _second_parent(db, cls):
         PhotoFlight: lambda: Flight(),
         PhotoIncident: lambda: Incident(date=date(2026, 1, 2), title="J", severity="low", category="c", description="d"),
         PhotoPilot: lambda: Pilot(first_name="Other", last_name="Pilot"),
+        FlightRequirementPilot: lambda: Pilot(first_name="Other", last_name="Pilot"),
     }[cls]()
     db.add(row)
     db.commit()
@@ -292,6 +317,22 @@ def test_currency_rule_models_removed_from_their_rule_record_deletes(session, db
     entries = _entries(db, entity_type="currency_rule_model")
     assert [e.action for e in entries] == ["delete", "delete"]
     assert sorted(e.changes["model"]["old"] for e in entries) == ["X10", "X2E"]
+
+
+def test_requirement_children_removed_record_deletes(session, db):
+    pilot = _pilot(session)
+    req = _requirement(models=[FlightRequirementModel(model="X10")],
+                       pilots=[FlightRequirementPilot(pilot_id=pilot.id)])
+    session.add(req)
+    session.commit()
+    _clear_audit(db)
+
+    req.models = []
+    req.pilots = []
+    session.commit()
+
+    assert [e.action for e in _entries(db, entity_type="flight_requirement_model")] == ["delete"]
+    assert [e.action for e in _entries(db, entity_type="flight_requirement_pilot")] == ["delete"]
 
 
 def test_unchanged_update_writes_nothing(session, db):

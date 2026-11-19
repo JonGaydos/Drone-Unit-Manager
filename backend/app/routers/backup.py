@@ -78,6 +78,10 @@ from app.models.audit_log import AuditLog
 from app.models.incident import Incident
 from app.models.flight_approval import FlightPlan
 from app.models.currency_rule import CurrencyRule, CurrencyRuleModel
+from app.models.flight_requirement import (
+    FlightRequirement, FlightRequirementModel, FlightRequirementNotice, FlightRequirementPilot,
+    FlightRequirementPurpose, FlightRequirementResult, FlightRequirementTemplate,
+)
 from app.models.equipment_checkout import EquipmentCheckout
 from app.models.checklist import ChecklistTemplate, ChecklistCompletion
 from app.models.component import Component
@@ -113,6 +117,13 @@ EXPORT_ORDER = [
     ("pilots", Pilot),
     ("users", User),
     ("currency_rule_models", CurrencyRuleModel),
+    ("flight_requirements", FlightRequirement),
+    ("flight_requirement_templates", FlightRequirementTemplate),
+    ("flight_requirement_models", FlightRequirementModel),
+    ("flight_requirement_purposes", FlightRequirementPurpose),
+    ("flight_requirement_pilots", FlightRequirementPilot),
+    ("flight_requirement_results", FlightRequirementResult),
+    ("flight_requirement_notices", FlightRequirementNotice),
     ("vehicles", Vehicle),
     ("batteries", Battery),
     ("controllers", Controller),

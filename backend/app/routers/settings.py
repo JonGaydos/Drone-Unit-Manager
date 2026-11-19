@@ -38,6 +38,7 @@ ALLOWED_SETTING_KEYS = {
     "backup_enabled", "backup_retention", "backup_hour",
     "idle_lock_minutes",
     "sidebar_show_groups",
+    "requirements_grace_days", "fiscal_year_start_month",
 }
 
 # Minutes of no input before a browser locks. One value for every role.
@@ -76,6 +77,7 @@ PUBLIC_KEYS = {
     "drone_location_places",
     "org_default_lat", "org_default_lon", "org_location_name",
     "idle_lock_minutes",
+    "requirements_grace_days", "fiscal_year_start_month",
 }
 
 

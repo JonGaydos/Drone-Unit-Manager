@@ -30,6 +30,10 @@ from app.models.audit_log import AuditLog
 from app.models.incident import Incident
 from app.models.flight_approval import FlightPlan
 from app.models.currency_rule import CurrencyRule, CurrencyRuleModel
+from app.models.flight_requirement import (
+    FlightRequirement, FlightRequirementModel, FlightRequirementNotice, FlightRequirementPilot,
+    FlightRequirementPurpose, FlightRequirementResult, FlightRequirementTemplate,
+)
 from app.models.equipment_checkout import EquipmentCheckout
 from app.models.checklist import ChecklistTemplate, ChecklistCompletion
 from app.models.component import Component
@@ -77,6 +81,13 @@ __all__ = [
     "FlightPlan",
     "CurrencyRule",
     "CurrencyRuleModel",
+    "FlightRequirement",
+    "FlightRequirementModel",
+    "FlightRequirementNotice",
+    "FlightRequirementPilot",
+    "FlightRequirementPurpose",
+    "FlightRequirementResult",
+    "FlightRequirementTemplate",
     "EquipmentCheckout",
     "ChecklistTemplate",
     "ChecklistCompletion",
