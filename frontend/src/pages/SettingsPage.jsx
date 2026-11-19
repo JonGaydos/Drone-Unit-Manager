@@ -133,7 +133,8 @@ export default function SettingsPage() {
   // Currency rules state
   const canManageCurrency = can('certifications.manage')
   const [currencyRules, setCurrencyRules] = useState([])
-  const [fleetModels, setFleetModels] = useState([])
+  const [fleetModels, setFleetModels] = useState(null)
+  const [fleetModelsFailed, setFleetModelsFailed] = useState(false)
   const [editingRule, setEditingRule] = useState(null)
   const [savingRule, setSavingRule] = useState(false)
   const ruleSubmitLabel = editingRule?.id ? 'Save' : 'Create'
@@ -398,7 +399,10 @@ export default function SettingsPage() {
     }
     if (canManageCurrency) {
       api.get('/currency/rules').then(setCurrencyRules).catch(console.error)
-      api.get('/currency/models').then(setFleetModels).catch(console.error)
+      api.get('/currency/models').then(setFleetModels).catch(err => {
+        console.error(err)
+        setFleetModelsFailed(true)
+      })
     }
   }, [isAdmin, canManageCurrency])
 
@@ -1552,9 +1556,11 @@ export default function SettingsPage() {
                 />
               </div>
               <div>
-                <span className="block text-sm font-medium text-foreground mb-1">Vehicle models</span>
+                <span id="rule-models-label" className="block text-sm font-medium text-foreground mb-1">Vehicle models</span>
                 <FleetModelPicker
                   models={fleetModels}
+                  loadError={fleetModelsFailed}
+                  labelledBy="rule-models-label"
                   value={ruleForm.vehicle_models}
                   onChange={vehicle_models => setRuleForm({ ...ruleForm, vehicle_models })}
                 />

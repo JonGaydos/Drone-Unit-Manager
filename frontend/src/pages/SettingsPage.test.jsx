@@ -122,6 +122,51 @@ describe('SettingsPage', () => {
     expect(body).not.toHaveProperty('vehicle_model')
   })
 
+  it('names the vehicle models group for assistive technology', async () => {
+    mockMount()
+    const { user } = renderWithProviders(<SettingsPage />, { role: 'supervisor' })
+    await screen.findByText('Quarterly currency')
+    await user.click(screen.getByRole('button', { name: /New Rule/ }))
+    const dialog = await screen.findByRole('dialog')
+    expect(await within(dialog).findByRole('group', { name: 'Vehicle models' })).toBeInTheDocument()
+  })
+
+  it('keeps a supervisor out of admin-only content', async () => {
+    mockMount()
+    renderWithProviders(<SettingsPage />, { role: 'supervisor' })
+    await screen.findByText('Quarterly currency')
+    expect(screen.queryByRole('button', { name: 'Users' })).toBeNull()
+    expect(screen.queryByText('Automated Backups')).toBeNull()
+  })
+
+  it('does not call saved models "Not in fleet" when the fleet list fails to load', async () => {
+    mockMount({
+      rules: () => HttpResponse.json([{ ...RULES[0], vehicle_models: ['X10'] }]),
+      models: () => new HttpResponse(null, { status: 500 }),
+    })
+    const { user } = renderWithProviders(<SettingsPage />, { role: 'supervisor' })
+    await screen.findByText(/X10 only/)
+    await user.click(screen.getByTitle('Edit rule'))
+    const dialog = await screen.findByRole('dialog')
+    expect(await within(dialog).findByText('Fleet models could not be loaded')).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'X10' })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(dialog).queryByText(/Not in fleet/)).toBeNull()
+  })
+
+  it('saves an untouched rule with a model outside the fleet unchanged', async () => {
+    mockMount({ rules: () => HttpResponse.json([{ ...RULES[0], vehicle_models: ['X11'] }]) })
+    let body = null
+    server.use(http.patch('/api/currency/rules/5', async ({ request }) => { body = await request.json(); return HttpResponse.json({ id: 5 }) }))
+    const { user } = renderWithProviders(<SettingsPage />, { role: 'supervisor' })
+    await screen.findByText(/X11 only/)
+    await user.click(screen.getByTitle('Edit rule'))
+    const dialog = await screen.findByRole('dialog')
+    expect(await within(dialog).findByRole('button', { name: /X11 \(Not in fleet\)/ })).toBeInTheDocument()
+    await user.click(within(dialog).getAllByRole('button').find(b => /Create|Save/.test(b.textContent)))
+    await waitFor(() => expect(body).not.toBeNull())
+    expect(body.vehicle_models).toEqual(['X11'])
+  })
+
   it('lists a two-model rule with both models', async () => {
     mockMount({ rules: () => HttpResponse.json([{ ...RULES[0], vehicle_models: ['X10', 'X2E'] }]) })
     renderWithProviders(<SettingsPage />, { role: 'admin' })

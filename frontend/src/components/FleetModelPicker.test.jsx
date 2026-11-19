@@ -70,4 +70,19 @@ describe('FleetModelPicker', () => {
     await user.click(screen.getByRole('button', { name: 'X10 (4)' }))
     expect(onChange).toHaveBeenCalledWith(['X2E'])
   })
+
+  it('shows selected names as plain removable chips while the fleet list is not loaded', async () => {
+    const onChange = vi.fn()
+    render(<FleetModelPicker models={null} value={['X11', 'X10']} onChange={onChange} />)
+    expect(screen.queryByText(/Not in fleet/)).toBeNull()
+    const chip = screen.getByRole('button', { name: 'X11' })
+    expect(chip).toHaveAttribute('aria-pressed', 'true')
+    await userEvent.setup().click(chip)
+    expect(onChange).toHaveBeenCalledWith(['X10'])
+  })
+
+  it('notes that the fleet list could not be loaded', () => {
+    render(<FleetModelPicker models={null} loadError value={[]} onChange={() => {}} />)
+    expect(screen.getByText('Fleet models could not be loaded')).toBeInTheDocument()
+  })
 })
