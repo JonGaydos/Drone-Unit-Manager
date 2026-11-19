@@ -21,6 +21,11 @@ export const handlers = [
   http.get('/api/notifications/log', () => HttpResponse.json([])),
   // The currency rule picker's fleet models.
   http.get('/api/currency/models', () => HttpResponse.json([])),
+  // Settings > Flight Requirements: definitions, fleet models, templates and settings.
+  http.get('/api/requirements', () => HttpResponse.json([])),
+  http.get('/api/requirements/models', () => HttpResponse.json([])),
+  http.get('/api/requirements/templates', () => HttpResponse.json([])),
+  http.get('/api/requirements/settings', () => HttpResponse.json({ grace_days: 14, fiscal_year_start_month: 10 })),
   // Settings reads whether the server serves /docs.
   http.get('/api/health', () => HttpResponse.json({ status: 'ok', api_docs: false })),
 ]

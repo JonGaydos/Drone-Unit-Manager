@@ -85,4 +85,43 @@ describe('FleetModelPicker', () => {
     render(<FleetModelPicker models={null} loadError value={[]} onChange={() => {}} />)
     expect(screen.getByText('Fleet models could not be loaded')).toBeInTheDocument()
   })
+
+  describe('with a mode (requirements)', () => {
+    function setupMode(value, mode) {
+      const onChange = vi.fn()
+      const onModeChange = vi.fn()
+      render(<FleetModelPicker models={MODELS} value={value} onChange={onChange} mode={mode} onModeChange={onModeChange} />)
+      return { onChange, onModeChange, user: userEvent.setup() }
+    }
+
+    it('offers no mode choice for fewer than two models', () => {
+      setupMode(['X10'], 'combined')
+      expect(screen.queryByRole('button', { name: 'Combined' })).toBeNull()
+    })
+
+    it('offers Combined or Each separately for two models', async () => {
+      const { onModeChange, user } = setupMode(['X10', 'X2E'], 'combined')
+      expect(screen.getByRole('button', { name: 'Combined' })).toHaveAttribute('aria-pressed', 'true')
+      expect(screen.queryByRole('button', { name: 'All active models' })).toBeNull()
+      await user.click(screen.getByRole('button', { name: 'Each separately' }))
+      expect(onModeChange).toHaveBeenCalledWith('each')
+    })
+
+    it('offers All active models under Each separately', async () => {
+      const { onModeChange, user } = setupMode(['X10', 'X2E'], 'each')
+      expect(screen.getByRole('button', { name: 'Selected models' })).toHaveAttribute('aria-pressed', 'true')
+      await user.click(screen.getByRole('button', { name: 'All active models' }))
+      expect(onModeChange).toHaveBeenCalledWith('each_all_active')
+    })
+
+    it('presses every active model while following the fleet', async () => {
+      const { onChange, onModeChange, user } = setupMode([], 'each_all_active')
+      expect(screen.getByRole('button', { name: 'All aircraft' })).toHaveAttribute('aria-pressed', 'false')
+      expect(screen.getByRole('button', { name: 'X10 (4)' })).toHaveAttribute('aria-pressed', 'true')
+      expect(screen.getByRole('button', { name: 'All active models' })).toHaveAttribute('aria-pressed', 'true')
+      await user.click(screen.getByRole('button', { name: 'Selected models' }))
+      expect(onModeChange).toHaveBeenCalledWith('each')
+      expect(onChange).toHaveBeenCalledWith(['X10', 'X2E'])
+    })
+  })
 })

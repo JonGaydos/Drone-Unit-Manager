@@ -940,3 +940,50 @@ describe('SettingsPage settings fixes', () => {
     })
   })
 })
+
+describe('SettingsPage Flight Requirements tab', () => {
+  function mockRequirements() {
+    server.use(
+      http.get('/api/flights/purposes/list', () => HttpResponse.json([])),
+      http.get('/api/pilots/options', () => HttpResponse.json([])),
+      http.get('/api/requirements', () => HttpResponse.json([])),
+    )
+  }
+
+  it('hides the tab without requirements.manage', async () => {
+    mockMount()
+    renderWithProviders(<SettingsPage />, { role: 'pilot' })
+    await screen.findByText('Organization')
+    expect(screen.queryByRole('button', { name: 'Flight Requirements' })).toBeNull()
+  })
+
+  it('hides the tab from a supervisor whose requirements.manage is off', async () => {
+    mockMount()
+    renderWithProviders(<SettingsPage />, { role: 'supervisor', permissions: { 'requirements.manage': 'no' } })
+    await screen.findByText('Quarterly currency')
+    expect(screen.queryByRole('button', { name: 'Flight Requirements' })).toBeNull()
+  })
+
+  it('shows the tab to a supervisor and opens it', async () => {
+    mockMount()
+    mockRequirements()
+    const { user } = renderWithProviders(<SettingsPage />, { role: 'supervisor' })
+    await user.click(await screen.findByRole('button', { name: 'Flight Requirements' }))
+    expect(await screen.findByRole('button', { name: 'New requirement' })).toBeInTheDocument()
+  })
+
+  it('opens the tab from /settings?tab=requirements', async () => {
+    mockMount()
+    mockRequirements()
+    renderWithProviders(<SettingsPage />, { role: 'admin', route: '/settings?tab=requirements' })
+    expect(await screen.findByRole('button', { name: 'New requirement' })).toBeInTheDocument()
+    expect(screen.queryByText('Organization')).toBeNull()
+  })
+
+  it('falls back to General when the linked tab is not allowed', async () => {
+    mockMount()
+    renderWithProviders(<SettingsPage />, { role: 'pilot', route: '/settings?tab=requirements' })
+    expect(await screen.findByText('Organization')).toBeInTheDocument()
+  })
+})
+

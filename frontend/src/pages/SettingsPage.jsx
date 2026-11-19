@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -17,6 +18,7 @@ import { SIDEBAR_META, GROUP_ORDER } from '@/lib/sidebarNav'
 
 const IntegrationsContent = React.lazy(() => import('@/pages/IntegrationsPage'))
 const ApiTokensSection = React.lazy(() => import('@/components/ApiTokensSection'))
+const RequirementsTab = React.lazy(() => import('@/components/requirements/RequirementsTab'))
 
 const DEFAULT_PLACES = ['North', 'Central', 'South']
 
@@ -75,7 +77,9 @@ function NoLinkedPilotBadge({ user }) {
 }
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState('general')
+  // A tab can be linked to, e.g. /settings?tab=requirements.
+  const [searchParams] = useSearchParams()
+  const [requestedTab, setActiveTab] = useState(() => searchParams.get('tab') || 'general')
   const [settings, setSettings] = useState({})
   // The General fields stay disabled until the stored values arrive, so
   // nothing typed early is wiped when the loaded value replaces it.
@@ -627,7 +631,10 @@ export default function SettingsPage() {
     ...(isAdmin ? [{ id: 'users', label: 'Users' }] : []),
     ...(isAdmin ? [{ id: 'integrations', label: 'Integrations' }] : []),
     ...(isAdmin ? [{ id: 'api-tokens', label: 'API Tokens' }] : []),
+    ...(can('requirements.manage') ? [{ id: 'requirements', label: 'Flight Requirements' }] : []),
   ]
+  // A linked or remembered tab the user cannot see falls back to General.
+  const activeTab = TABS.some(tab => tab.id === requestedTab) ? requestedTab : 'general'
 
   const renderUsersTab = () => {
     if (activeTab !== 'users' || !isAdmin) return null
@@ -1705,6 +1712,13 @@ export default function SettingsPage() {
 
       {/* Users Tab */}
       {renderUsersTab()}
+
+      {/* Flight Requirements Tab */}
+      {activeTab === 'requirements' && (
+        <React.Suspense fallback={<div className="flex items-center justify-center h-32"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}>
+          <RequirementsTab />
+        </React.Suspense>
+      )}
 
       {/* General Tab */}
       {activeTab === 'general' && (
