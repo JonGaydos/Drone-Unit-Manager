@@ -33,6 +33,7 @@ from app.models.certification import CertificationType, PilotCertification
 from app.models.currency_rule import CurrencyRule
 from app.models.flight import Flight
 from app.models.pilot import Pilot
+from app.models.vehicle import Vehicle
 
 CURRENCY_STATUS_URL = "/api/currency/status"
 TODAY = date.today()
@@ -275,3 +276,125 @@ def test_needs_attention_unknown_pilot_404(client, db, admin_headers):
 def test_needs_attention_requires_auth(client, db):
     resp = client.get("/api/pilots/1/needs-attention")
     assert resp.status_code == 401, resp.text
+
+
+# --- Model list on rules ---
+
+RULES_URL = "/api/currency/rules"
+
+
+def _vehicle(db, model, serial):
+    v = Vehicle(serial_number=serial, manufacturer="Acme", model=model)
+    db.add(v)
+    db.commit()
+    db.refresh(v)
+    return v
+
+
+def _flight_on(db, pilot, vehicle, hours, days_ago=5):
+    f = Flight(pilot_id=pilot.id, vehicle_id=vehicle.id if vehicle else None,
+               date=TODAY - timedelta(days=days_ago), duration_seconds=int(hours * 3600),
+               review_status="reviewed")
+    db.add(f)
+    db.commit()
+    return f
+
+
+def _post_rule(client, headers, **extra):
+    body = {"name": "Rule", "required_hours": 3, "period_days": 90, **extra}
+    return client.post(RULES_URL, headers=headers, json=body)
+
+
+def test_rule_with_two_models_counts_both(client, db, admin_headers):
+    assert _post_rule(client, admin_headers, vehicle_models=["X10", "X2E"]).status_code == 200
+    x10, x2e, lemur = _vehicle(db, "X10", "S1"), _vehicle(db, "X2E", "S2"), _vehicle(db, "LEMUR 2", "S3")
+    both, other = _seed_pilot(db, last="Both"), _seed_pilot(db, last="Other")
+    _flight_on(db, both, x10, 2)
+    _flight_on(db, both, x2e, 1.5)
+    _flight_on(db, other, lemur, 4)
+    payload = client.get(CURRENCY_STATUS_URL, headers=admin_headers).json()
+    assert _status_for(payload, both.id)["rules"][0]["is_current"] is True
+    assert _status_for(payload, other.id)["rules"][0]["is_current"] is False
+
+
+def test_rule_model_match_ignores_case_and_spaces(client, db, admin_headers):
+    _post_rule(client, admin_headers, required_hours=1, vehicle_models=["x10 "])
+    pilot = _seed_pilot(db)
+    _flight_on(db, pilot, _vehicle(db, "X10", "S1"), 1)
+    payload = client.get(CURRENCY_STATUS_URL, headers=admin_headers).json()
+    assert _status_for(payload, pilot.id)["rules"][0]["is_current"] is True
+
+
+def test_rule_without_models_counts_all_aircraft(client, db, admin_headers):
+    _post_rule(client, admin_headers, required_hours=3)
+    pilot = _seed_pilot(db)
+    _flight_on(db, pilot, _vehicle(db, "X10", "S1"), 1)
+    _flight_on(db, pilot, None, 2)
+    payload = client.get(CURRENCY_STATUS_URL, headers=admin_headers).json()
+    rule = _status_for(payload, pilot.id)["rules"][0]
+    assert rule["is_current"] is True
+    assert rule["actual_hours"] == 3.0
+
+
+def test_model_rule_skips_flight_without_vehicle(client, db, admin_headers):
+    _post_rule(client, admin_headers, required_hours=1, vehicle_models=["X10"])
+    pilot = _seed_pilot(db)
+    _flight_on(db, pilot, None, 2)
+    payload = client.get(CURRENCY_STATUS_URL, headers=admin_headers).json()
+    assert _status_for(payload, pilot.id)["rules"][0]["actual_hours"] == 0.0
+
+
+def test_create_dedupes_models(client, admin_headers):
+    r = _post_rule(client, admin_headers, vehicle_models=["X10", "x10", "X2E"])
+    assert r.status_code == 200, r.text
+    assert r.json()["vehicle_models"] == ["X10", "X2E"]
+
+
+def test_patch_without_models_keeps_them(client, admin_headers):
+    rule = _post_rule(client, admin_headers, vehicle_models=["X10"]).json()
+    r = client.patch(f"{RULES_URL}/{rule['id']}", headers=admin_headers, json={"name": "Renamed"})
+    assert r.status_code == 200
+    assert r.json()["vehicle_models"] == ["X10"]
+
+
+def test_patch_replaces_models(client, admin_headers):
+    rule = _post_rule(client, admin_headers, vehicle_models=["X10"]).json()
+    r = client.patch(f"{RULES_URL}/{rule['id']}", headers=admin_headers, json={"vehicle_models": ["X2E"]})
+    assert r.json()["vehicle_models"] == ["X2E"]
+
+
+def test_patch_empty_list_means_all_aircraft(client, admin_headers):
+    rule = _post_rule(client, admin_headers, vehicle_models=["X10"]).json()
+    r = client.patch(f"{RULES_URL}/{rule['id']}", headers=admin_headers, json={"vehicle_models": []})
+    assert r.status_code == 200
+    assert r.json()["vehicle_models"] == []
+
+
+def test_unknown_model_is_kept(client, admin_headers):
+    r = _post_rule(client, admin_headers, vehicle_models=["X11"])
+    assert r.json()["vehicle_models"] == ["X11"]
+    listed = client.get(RULES_URL, headers=admin_headers).json()
+    assert listed[0]["vehicle_models"] == ["X11"]
+
+
+def test_rule_validation(client, admin_headers):
+    for bad in ([" "], ["x" * 201], [f"M{i}" for i in range(51)]):
+        r = _post_rule(client, admin_headers, vehicle_models=bad)
+        assert r.status_code == 422, bad
+
+
+def test_status_lists_models(client, db, admin_headers):
+    _post_rule(client, admin_headers, vehicle_models=["X10", "X2E"])
+    pilot = _seed_pilot(db)
+    r = client.get(f"/api/currency/status/{pilot.id}", headers=admin_headers)
+    assert r.status_code == 200
+    body = r.json()
+    rules = body["rules"] if isinstance(body, dict) else body
+    assert rules[0]["vehicle_models"] == ["X10", "X2E"]
+
+
+def test_patch_resending_same_models_succeeds(client, admin_headers):
+    rule = _post_rule(client, admin_headers, vehicle_models=["X10", "X2E"]).json()
+    r = client.patch(f"{RULES_URL}/{rule['id']}", headers=admin_headers, json={"vehicle_models": ["X10", "X2E"]})
+    assert r.status_code == 200, r.text
+    assert r.json()["vehicle_models"] == ["X10", "X2E"]
