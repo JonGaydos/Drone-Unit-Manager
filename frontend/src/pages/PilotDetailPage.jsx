@@ -97,6 +97,8 @@ export default function PilotDetailPage() {
   }, [id, canSeeFlights, canSeeCerts])
 
   const canEdit = canRecord('pilots.edit', isOwnPilot)
+  // An excusal can clear a missed requirement from Needs Attention.
+  const reloadNeedsAttention = () => getSection(canSeeCerts, `/pilots/${id}/needs-attention`, null).then(setNeedsAttention)
 
   const startEditing = () => {
     setEditForm({
@@ -550,7 +552,7 @@ export default function PilotDetailPage() {
         </div>
       )}
 
-      <PilotRequirementsCard pilotId={id} />
+      <PilotRequirementsCard pilotId={id} onChange={reloadNeedsAttention} />
 
       {/* Documents */}
       <DocumentUpload entityType="pilot" entityId={id} folderId={generalFolderId} canUpload={canRecord('files.upload', isOwnPilot)} />

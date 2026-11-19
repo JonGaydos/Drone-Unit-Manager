@@ -140,6 +140,36 @@ def test_csv_needs_both_keys(client, db, supervisor_headers):
     assert client.get(f"/api/export/requirements/{req.id}/csv", headers=supervisor_headers).status_code == 403
 
 
+def test_csv_filters_to_one_pilot(client, db, admin_headers):
+    pilot = _pilot(db)
+    other = Pilot(first_name="Other", last_name="Flyer", status="active", created_at=LONG_AGO)
+    db.add(other)
+    db.commit()
+    req = _req(db)
+    _saved(db, req, pilot, SEP, "met")
+    _saved(db, req, other, SEP, "missed")
+    response = client.get(f"/api/export/requirements/{req.id}/csv?pilot_id={pilot.id}", headers=admin_headers)
+    assert response.status_code == 200
+    lines = response.text.strip().splitlines()
+    assert lines[0] == CSV_HEADER
+    assert len(lines) == 2
+    assert ",Test Pilot,met," in lines[1]
+    assert f"pilot_{pilot.id}" in response.headers["content-disposition"]
+
+
+def test_csv_for_a_pilot_without_results_has_only_the_header(client, db, admin_headers):
+    req = _req(db)
+    _saved(db, req, _pilot(db), SEP, "met")
+    response = client.get(f"/api/export/requirements/{req.id}/csv?pilot_id=999", headers=admin_headers)
+    assert response.status_code == 200
+    assert response.text.strip().splitlines() == [CSV_HEADER]
+
+
+def test_csv_refuses_a_pilot_id_that_is_not_a_number(client, db, admin_headers):
+    req = _req(db)
+    assert client.get(f"/api/export/requirements/{req.id}/csv?pilot_id=abc", headers=admin_headers).status_code == 422
+
+
 def test_csv_unknown_requirement_is_404(client, admin_headers):
     assert client.get("/api/export/requirements/999/csv", headers=admin_headers).status_code == 404
 

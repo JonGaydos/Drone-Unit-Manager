@@ -1,25 +1,43 @@
 import { describe, it, expect } from 'vitest'
-import { daysLeftText, excuseAction, excusalText, metCount, progressText } from './progress'
+import { daysLeftText, durationText, excuseAction, excusalText, metCount, progressText } from './progress'
+
+describe('durationText', () => {
+  it('writes minutes as hours and minutes', () => {
+    expect(durationText(12)).toBe('12m')
+    expect(durationText(60)).toBe('1h')
+    expect(durationText(85)).toBe('1h 25m')
+    expect(durationText(0)).toBe('0m')
+    expect(durationText(1200)).toBe('20h')
+  })
+
+  it('drops partial minutes so an unmet target never rounds up to it', () => {
+    expect(durationText(59.9)).toBe('59m')
+  })
+})
 
 describe('progressText', () => {
+  it('writes a large target in hours on both sides of the fraction', () => {
+    expect(progressText({ '*': { minutes: 430, flights: 9 } }, { '*': false }, { target_minutes: 1200 })).toBe('7h 10m/20h')
+  })
+
   it('names each model with its minutes, and "done" once met', () => {
     const totals = { X10: { minutes: 12.8, flights: 2 }, X2E: { minutes: 20, flights: 1 } }
-    expect(progressText(totals, { X10: false, X2E: true }, { target_minutes: 15 })).toBe('X10 12/15m, X2E done')
+    expect(progressText(totals, { X10: false, X2E: true }, { target_minutes: 15 })).toBe('X10 12m/15m, X2E done')
   })
 
   it('leaves out the model name for all aircraft and combined models', () => {
-    expect(progressText({ '*': { minutes: 30, flights: 1 } }, { '*': false }, { target_minutes: 60 })).toBe('30/60m')
+    expect(progressText({ '*': { minutes: 30, flights: 1 } }, { '*': false }, { target_minutes: 60 })).toBe('30m/1h')
     expect(progressText({ '*': { minutes: 60, flights: 1 } }, { '*': true }, { target_minutes: 60 })).toBe('done')
   })
 
   it('counts flights against a flight target, and both when both are set', () => {
     const totals = { '*': { minutes: 5, flights: 1 } }
     expect(progressText(totals, {}, { target_flights: 3 })).toBe('1/3 flights')
-    expect(progressText(totals, {}, { target_minutes: 15, target_flights: 1 })).toBe('5/15m 1/1 flights')
+    expect(progressText(totals, {}, { target_minutes: 15, target_flights: 1 })).toBe('5m/15m 1/1 flights')
   })
 
   it('shows the amounts without "done" when no met map is given, as for saved history', () => {
-    expect(progressText({ X10: { minutes: 18, flights: 2 } }, null, { target_minutes: 15 })).toBe('X10 18/15m')
+    expect(progressText({ X10: { minutes: 18, flights: 2 } }, null, { target_minutes: 15 })).toBe('X10 18m/15m')
   })
 
   it('gives the plain amounts when the target is not known', () => {

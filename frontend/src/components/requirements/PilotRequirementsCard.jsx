@@ -1,8 +1,8 @@
 /**
  * Pilot detail "Flight Requirements" card: the pilot's progress in each
  * active requirement's current period and in periods still in review, the
- * saved history, Excuse and Un-excuse (requirements.excuse) and each
- * requirement's results CSV (reports.export). Renders nothing without
+ * saved history, Excuse and Un-excuse (requirements.excuse) and the pilot's
+ * history of each requirement as CSV (reports.export). Renders nothing without
  * requirements.view, or until the pilot has something to show.
  */
 import { useEffect, useId, useState } from 'react'
@@ -112,19 +112,20 @@ function HistoryTable({ rows, actions }) {
   )
 }
 
-/** One download per requirement in the card. The CSV holds every pilot's saved results. */
+/** One download per requirement in the card: this pilot's saved results for it. */
 function CsvLinks({ requirements, onDownload }) {
-  if (requirements.length === 0) return null
   return (
-    <div className="px-4 py-3 border-t border-border flex flex-wrap items-center gap-2">
-      <span className="text-xs text-muted-foreground">Results CSV, all pilots:</span>
+    <ul className="px-4 py-3 border-t border-border flex flex-wrap items-center gap-x-4 gap-y-2">
       {requirements.map(req => (
-        <button key={req.id} type="button" onClick={() => onDownload(req.id)} className={`${SMALL_BUTTON} inline-flex items-center gap-1`}
-          aria-label={`Download ${req.name} results as CSV`}>
-          <Download className="w-3.5 h-3.5" aria-hidden="true" /> {req.name}
-        </button>
+        <li key={req.id} className="flex items-center gap-2 text-xs text-muted-foreground">
+          {requirements.length > 1 && <span>{req.name}</span>}
+          <button type="button" onClick={() => onDownload(req.id)} className={`${SMALL_BUTTON} inline-flex items-center gap-1`}
+            aria-label={`Download ${req.name} history as CSV`}>
+            <Download className="w-3.5 h-3.5" aria-hidden="true" /> Download CSV
+          </button>
+        </li>
       ))}
-    </div>
+    </ul>
   )
 }
 
@@ -190,7 +191,7 @@ function useTargets(allowed) {
 const inReview = period => `In review until ${formatDate(period.review_until)}`
 const daysLeft = period => daysLeftText(period.days_left)
 
-export default function PilotRequirementsCard({ pilotId }) {
+export default function PilotRequirementsCard({ pilotId, onChange }) {
   const { can } = useAuth()
   const toast = useToast()
   const titleId = useId()
@@ -214,7 +215,11 @@ export default function PilotRequirementsCard({ pilotId }) {
   const requirements = requirementsIn(data)
   if (requirements.length === 0) return null
 
-  const reload = () => setVersion(v => v + 1)
+  // Re-read the card, and let the page re-read what an excusal changes (Needs Attention).
+  const reload = () => {
+    setVersion(v => v + 1)
+    onChange?.()
+  }
   const send = (period, excused, reason) => api.post(`/requirements/${period.requirementId}/excuse`, {
     pilot_id: Number(pilotId), period_start: period.start, excused, ...(reason ? { reason } : {}),
   })
@@ -227,7 +232,8 @@ export default function PilotRequirementsCard({ pilotId }) {
   const unexcuse = period => send(period, false)
     .then(() => { toast.success('Excusal removed'); reload() })
     .catch(err => toast.error(err.message))
-  const download = id => api.download(`/export/requirements/${id}/csv`).catch(err => toast.error(err.message))
+  const download = id => api.download(`/export/requirements/${id}/csv?pilot_id=${pilotId}`)
+    .catch(err => toast.error(err.message))
   const actions = can('requirements.excuse') ? { onExcuse: setExcusing, onUnexcuse: unexcuse } : null
 
   return (

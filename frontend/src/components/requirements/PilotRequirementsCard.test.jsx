@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
@@ -48,7 +48,7 @@ describe('PilotRequirementsCard', () => {
     render()
     const current = await screen.findByRole('region', { name: 'This period' })
     expect(within(current).getByText('Monthly hour')).toBeInTheDocument()
-    expect(within(current).getByText('25/60m')).toBeInTheDocument()
+    expect(within(current).getByText('25m/1h')).toBeInTheDocument()
     expect(within(current).getByText('2 flights left out: no takeoff time')).toBeInTheDocument()
     expect(within(current).getByText('3 flights awaiting review')).toBeInTheDocument()
     expect(within(current).getByText('On track')).toBeInTheDocument()
@@ -66,7 +66,7 @@ describe('PilotRequirementsCard', () => {
     mock()
     render()
     const table = await screen.findByRole('table', { name: 'Requirement history' })
-    expect(within(table).getByText('40/60m')).toBeInTheDocument()
+    expect(within(table).getByText('40m/1h')).toBeInTheDocument()
     expect(within(table).getByText('Missed')).toBeInTheDocument()
     expect(within(table).getByText('Excused automatically: Added after the period started')).toBeInTheDocument()
     expect(within(table).getByText('Excused: On leave')).toBeInTheDocument()
@@ -78,15 +78,22 @@ describe('PilotRequirementsCard', () => {
     expect(await screen.findByText('Missed requirement')).toBeInTheDocument()
   })
 
-  it('excuses a pilot for a period with a reason and reloads', async () => {
+  it('excuses a pilot for a period with a reason, reloads and tells the page', async () => {
     let sent = null
+    let reads = 0
+    const changed = vi.fn()
     mock()
+    server.use(http.get('/api/requirements/pilots/:id', () => {
+      reads += 1
+      return HttpResponse.json({ pilot_id: 7, current: [CURRENT], pending: [], history: HISTORY })
+    }))
     server.use(http.post('/api/requirements/:id/excuse', async ({ request, params }) => {
       sent = { id: params.id, body: await request.json() }
       return HttpResponse.json({ ok: true })
     }))
-    const { user } = render()
+    const { user } = renderWithProviders(<PilotRequirementsCard pilotId="7" onChange={changed} />, { role: 'supervisor' })
     const table = await screen.findByRole('table', { name: 'Requirement history' })
+    expect(reads).toBe(1)
     await user.click(within(table).getByRole('button', { name: /^Excuse Monthly hour, Sep 1, 2026/ }))
     const dialog = await screen.findByRole('dialog')
     await user.type(within(dialog).getByLabelText('Reason (optional)'), 'Medical leave')
@@ -94,6 +101,8 @@ describe('PilotRequirementsCard', () => {
     await waitFor(() => expect(sent).not.toBeNull())
     expect(sent).toEqual({ id: '1', body: { pilot_id: 7, period_start: '2026-09-01', excused: true, reason: 'Medical leave' } })
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    await waitFor(() => expect(reads).toBe(2))
+    expect(changed).toHaveBeenCalledTimes(1)
   })
 
   it('shows the server message when an excusal is refused', async () => {
@@ -121,6 +130,16 @@ describe('PilotRequirementsCard', () => {
     await waitFor(() => expect(sent).toEqual({ pilot_id: 7, period_start: '2026-07-01', excused: false }))
   })
 
+  it('tells the page after an un-excusal too', async () => {
+    const changed = vi.fn()
+    mock()
+    server.use(http.post('/api/requirements/:id/excuse', () => HttpResponse.json({ ok: true })))
+    const { user } = renderWithProviders(<PilotRequirementsCard pilotId="7" onChange={changed} />, { role: 'supervisor' })
+    const table = await screen.findByRole('table', { name: 'Requirement history' })
+    await user.click(within(table).getByRole('button', { name: /^Un-excuse Monthly hour, Jul 1, 2026/ }))
+    await waitFor(() => expect(changed).toHaveBeenCalledTimes(1))
+  })
+
   it('hides Excuse and Un-excuse without requirements.excuse', async () => {
     mock()
     render('pilot')
@@ -128,10 +147,21 @@ describe('PilotRequirementsCard', () => {
     expect(screen.queryByRole('button', { name: /xcuse/ })).toBeNull()
   })
 
-  it('downloads a requirement CSV with reports.export and hides it without', async () => {
+  it('downloads this pilot\'s history of a requirement as CSV with reports.export, and hides it without', async () => {
+    let asked = null
     mock()
-    const { unmount } = render('supervisor')
-    expect(await screen.findByRole('button', { name: 'Download Monthly hour results as CSV' })).toBeInTheDocument()
+    server.use(http.get('/api/export/requirements/:id/csv', ({ request, params }) => {
+      asked = { id: params.id, pilot: new URL(request.url).searchParams.get('pilot_id') }
+      return new HttpResponse('Requirement\n', { headers: { 'Content-Type': 'text/csv' } })
+    }))
+    globalThis.URL.createObjectURL ??= () => 'blob:csv'
+    globalThis.URL.revokeObjectURL ??= () => {}
+    const { user, unmount } = render('supervisor')
+    const button = await screen.findByRole('button', { name: 'Download Monthly hour history as CSV' })
+    expect(button).toHaveTextContent('Download CSV')
+    expect(screen.queryByText(/all pilots/)).toBeNull()
+    await user.click(button)
+    await waitFor(() => expect(asked).toEqual({ id: '1', pilot: '7' }))
     unmount()
     mock()
     render('supervisor', { 'reports.export': 'no' })

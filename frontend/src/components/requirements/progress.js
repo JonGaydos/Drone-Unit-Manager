@@ -21,16 +21,25 @@ export function countText(count, word) {
   return `${count} ${word}${count === 1 ? '' : 's'}`
 }
 
+/** "12m", "1h", "1h 25m". Partial minutes are dropped, so an unmet target never reads as met. */
+export function durationText(minutes) {
+  const whole = Math.floor(minutes)
+  const hours = Math.floor(whole / 60)
+  const rest = whole % 60
+  if (hours === 0) return `${rest}m`
+  return rest ? `${hours}h ${rest}m` : `${hours}h`
+}
+
 function amountText(total, target) {
   const parts = []
-  if (target.target_minutes != null) parts.push(`${Math.floor(total.minutes)}/${target.target_minutes}m`)
+  if (target.target_minutes != null) parts.push(`${durationText(total.minutes)}/${durationText(target.target_minutes)}`)
   if (target.target_flights != null) parts.push(`${total.flights}/${target.target_flights} flights`)
   // With the target unknown, the plain amounts.
-  return parts.join(' ') || `${Math.floor(total.minutes)}m ${countText(total.flights, 'flight')}`
+  return parts.join(' ') || `${durationText(total.minutes)} ${countText(total.flights, 'flight')}`
 }
 
 /**
- * "X10 12/15m, X2E done": each model's amount against the target, or "done"
+ * "X10 12m/15m, X2E done": each model's amount against the target, or "done"
  * once `metByModel` says it is met. All aircraft and combined models carry no
  * model name. Without `metByModel`, amounts are always shown.
  */

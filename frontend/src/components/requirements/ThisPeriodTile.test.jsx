@@ -44,7 +44,7 @@ describe('ThisPeriodTile', () => {
     const req = await screen.findByRole('listitem', { name: 'Quarterly models' })
     expect(within(req).getByText('43 days left')).toBeInTheDocument()
     expect(within(req).getByText('1/3 met')).toBeInTheDocument()
-    expect(within(req).getByText('X10 12/15m, X2E done')).toBeInTheDocument()
+    expect(within(req).getByText('X10 12m/15m, X2E done')).toBeInTheDocument()
     expect(within(req).getByRole('link', { name: 'Pat Pilot' })).toHaveAttribute('href', '/pilots/3')
     expect(within(req).getByText('Excused')).toBeInTheDocument()
   })

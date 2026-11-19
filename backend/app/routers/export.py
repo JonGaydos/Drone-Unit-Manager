@@ -248,18 +248,25 @@ def _per_model_text(totals: dict) -> str:
 
 
 @router.get("/requirements/{requirement_id}/csv", responses=responses(401, 403, 404))
-def export_requirement_csv(requirement_id: int, db: DBSession, user: ExportUser, _view: RequirementsView):
-    """A requirement's saved results, one row per pilot and period."""
+def export_requirement_csv(requirement_id: int, db: DBSession, user: ExportUser, _view: RequirementsView,
+                           pilot_id: int | None = None):
+    """A requirement's saved results, one row per pilot and period; only one
+    pilot's with ``pilot_id``."""
     req = db.query(FlightRequirement).filter(FlightRequirement.id == requirement_id).first()
     if req is None:
         raise HTTPException(status_code=404, detail="Requirement not found")
-    results = _cap_rows(db.query(FlightRequirementResult, Pilot).join(
+    q = db.query(FlightRequirementResult, Pilot).join(
         Pilot, Pilot.id == FlightRequirementResult.pilot_id).filter(
         FlightRequirementResult.requirement_id == requirement_id,
-        FlightRequirementResult.saved_at.isnot(None)).order_by(
-        FlightRequirementResult.period_start, Pilot.last_name, Pilot.first_name).all(), "requirement results")
+        FlightRequirementResult.saved_at.isnot(None))
+    filename = f"requirement_{requirement_id}"
+    if pilot_id is not None:
+        q = q.filter(FlightRequirementResult.pilot_id == pilot_id)
+        filename += f"_pilot_{pilot_id}"
+    results = _cap_rows(q.order_by(FlightRequirementResult.period_start, Pilot.last_name, Pilot.first_name).all(),
+                        "requirement results")
     log_action(db, user.id, user.display_name, "export", "flight_requirement", requirement_id,
-               f"requirement_{requirement_id}.csv, {len(results)} rows")
+               f"{filename}.csv, {len(results)} rows")
     db.commit()
     output = io.StringIO()
     writer = csv.writer(output)
@@ -276,7 +283,7 @@ def export_requirement_csv(requirement_id: int, db: DBSession, user: ExportUser,
     return StreamingResponse(
         iter([output.getvalue()]),
         media_type=CSV_MEDIA_TYPE,
-        headers={"Content-Disposition": f"attachment; filename=requirement_{requirement_id}_export.csv"},
+        headers={"Content-Disposition": f"attachment; filename={filename}_export.csv"},
     )
 
 
