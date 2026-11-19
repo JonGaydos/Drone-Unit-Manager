@@ -252,7 +252,7 @@ describe('AuditLogPage', () => {
       expect(optionsOf('Action')).toEqual(expect.arrayContaining(['restore_held_item', 'unapprove', 'reset']))
       expect(optionsOf('Entity Type')).toEqual(expect.arrayContaining([
         'photo_pilot', 'photo_flight', 'photo_incident', 'mission_log_pilot', 'training_log_pilot',
-        'role_permissions',
+        'role_permissions', 'currency_rule_model',
       ]))
     })
 

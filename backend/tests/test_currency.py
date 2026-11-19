@@ -350,6 +350,29 @@ def test_create_dedupes_models(client, admin_headers):
     assert r.json()["vehicle_models"] == ["X10", "X2E"]
 
 
+def test_patch_dedupes_models(client, admin_headers):
+    rule = _post_rule(client, admin_headers, vehicle_models=["X2E"]).json()
+    r = client.patch(f"{RULES_URL}/{rule['id']}", headers=admin_headers, json={"vehicle_models": ["X10", "x10"]})
+    assert r.status_code == 200
+    assert r.json()["vehicle_models"] == ["X10"]
+
+
+def test_create_with_old_vehicle_model_is_refused(client, admin_headers):
+    r = _post_rule(client, admin_headers, vehicle_model="X10")
+    assert r.status_code == 422
+    assert "vehicle_models" in r.text
+    assert client.get(RULES_URL, headers=admin_headers).json() == []
+
+
+def test_patch_with_old_vehicle_model_is_refused(client, admin_headers):
+    rule = _post_rule(client, admin_headers, vehicle_models=["X10"]).json()
+    r = client.patch(f"{RULES_URL}/{rule['id']}", headers=admin_headers,
+                     json={"name": "Renamed", "vehicle_model": "X2E"})
+    assert r.status_code == 422
+    after = client.get(RULES_URL, headers=admin_headers).json()[0]
+    assert (after["name"], after["vehicle_models"]) == ("Rule", ["X10"])
+
+
 def test_patch_without_models_keeps_them(client, admin_headers):
     rule = _post_rule(client, admin_headers, vehicle_models=["X10"]).json()
     r = client.patch(f"{RULES_URL}/{rule['id']}", headers=admin_headers, json={"name": "Renamed"})
@@ -361,6 +384,18 @@ def test_patch_replaces_models(client, admin_headers):
     rule = _post_rule(client, admin_headers, vehicle_models=["X10"]).json()
     r = client.patch(f"{RULES_URL}/{rule['id']}", headers=admin_headers, json={"vehicle_models": ["X2E"]})
     assert r.json()["vehicle_models"] == ["X2E"]
+
+
+def test_patch_removing_models_audits_each_removal(client, db, admin_headers):
+    from app.models import AuditLog
+    rule = _post_rule(client, admin_headers, vehicle_models=["X10", "X2E"]).json()
+    db.query(AuditLog).delete()
+    db.commit()
+    r = client.patch(f"{RULES_URL}/{rule['id']}", headers=admin_headers, json={"vehicle_models": []})
+    assert r.status_code == 200
+    db.expire_all()
+    rows = db.query(AuditLog).filter_by(entity_type="currency_rule_model", action="delete").all()
+    assert sorted(e.changes["model"]["old"] for e in rows) == ["X10", "X2E"]
 
 
 def test_patch_empty_list_means_all_aircraft(client, admin_headers):
@@ -388,8 +423,7 @@ def test_status_lists_models(client, db, admin_headers):
     pilot = _seed_pilot(db)
     r = client.get(f"/api/currency/status/{pilot.id}", headers=admin_headers)
     assert r.status_code == 200
-    body = r.json()
-    rules = body["rules"] if isinstance(body, dict) else body
+    rules = r.json()["rules"]
     assert rules[0]["vehicle_models"] == ["X10", "X2E"]
 
 

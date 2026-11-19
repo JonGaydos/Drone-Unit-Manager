@@ -11,7 +11,7 @@ class CurrencyRule(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(300))
     description: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-    vehicle_model: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)  # null = applies to all
+    vehicle_model: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)  # legacy, unused since 0016; dropped in a later release
     required_hours: Mapped[float] = mapped_column(Float)  # hours required
     period_days: Mapped[int] = mapped_column(Integer)  # within this many days
     required_flights: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # min flights in period
@@ -19,7 +19,7 @@ class CurrencyRule(Base):
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow)
 
     models: Mapped[list["CurrencyRuleModel"]] = relationship(
-        cascade="all, delete-orphan", lazy="selectin")
+        back_populates="rule", cascade="all, delete-orphan", lazy="selectin")
 
     @property
     def model_names(self) -> list[str]:
@@ -32,3 +32,5 @@ class CurrencyRuleModel(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     rule_id: Mapped[int] = mapped_column(ForeignKey("currency_rules.id", ondelete="CASCADE"), index=True)
     model: Mapped[str] = mapped_column(String(200))
+
+    rule: Mapped["CurrencyRule"] = relationship(back_populates="models")

@@ -3,7 +3,7 @@ from html import escape
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field, StringConstraints, field_validator
+from pydantic import BaseModel, Field, StringConstraints, field_validator, model_validator
 from sqlalchemy.orm import Session, joinedload
 
 from app.deps import DBSession
@@ -39,6 +39,12 @@ def _dedupe_models(names: list[str]) -> list[str]:
     return list(seen.values())
 
 
+def _refuse_old_field(data):
+    if isinstance(data, dict) and "vehicle_model" in data:
+        raise ValueError("vehicle_model was replaced by vehicle_models (a list)")
+    return data
+
+
 class RuleCreate(BaseModel):
     name: RuleName
     description: Optional[str] = Field(None, max_length=500)
@@ -47,6 +53,8 @@ class RuleCreate(BaseModel):
     period_days: PeriodDays
     required_flights: Optional[RequiredFlights] = None
     is_active: bool = True
+
+    _old_field = model_validator(mode="before")(staticmethod(_refuse_old_field))
 
     @field_validator("vehicle_models")
     @classmethod
@@ -62,6 +70,8 @@ class RuleUpdate(BaseModel):
     period_days: Optional[PeriodDays] = None
     required_flights: Optional[RequiredFlights] = None
     is_active: Optional[bool] = None
+
+    _old_field = model_validator(mode="before")(staticmethod(_refuse_old_field))
 
     @field_validator("name", "required_hours", "period_days", "is_active")
     @classmethod
