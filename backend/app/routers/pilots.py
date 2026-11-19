@@ -24,6 +24,7 @@ from app.schemas.pilot import PilotCreate, PilotUpdate, PilotOut, PilotStats
 from app.responses import responses
 from app.services import permissions as permissions_service
 from app.services.pilot_contacts import CONTACT_FIELDS, hides_contacts, pilot_out
+from app.services.requirement_results import open_misses
 
 router = APIRouter(prefix="/api/pilots", tags=["pilots"])
 
@@ -150,7 +151,17 @@ def get_pilot_needs_attention(pilot_id: int, db: DBSession, user: ViewUser, _cer
                 "text": f"Certification expiring in {days}d: {name} ({expiration_date})",
             })
 
+    if permissions_service.can(db, user, "requirements.view"):
+        items += _requirement_items(db, pilot_id)
+
     return {"count": len(items), "items": items}
+
+
+def _requirement_items(db, pilot_id: int) -> list[dict]:
+    """One red item per saved requirement miss still open for the pilot."""
+    return [{"level": "red", "category": "requirement",
+             "text": f"Missed requirement: {miss['name']} ({miss['period_start']} to {miss['period_end']})"}
+            for miss in open_misses(db, [pilot_id]).get(pilot_id, [])]
 
 
 def _check_badge_free(db, badge: str | None, pilot_id: int | None = None) -> None:

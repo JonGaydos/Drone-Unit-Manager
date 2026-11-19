@@ -424,6 +424,7 @@ EXPECTED_ROUTE_KEYS = {
     "GET /api/export/incidents/csv": {REPORTS_EXPORT, INCIDENTS_VIEW},
     "GET /api/export/flight-plans/csv": {REPORTS_EXPORT, PLANS_VIEW},
     "GET /api/export/audit/csv": {REPORTS_EXPORT, AUDIT_VIEW},
+    "GET /api/export/requirements/{requirement_id}/csv": {REPORTS_EXPORT, REQUIREMENTS_VIEW},
     # dashboard
     "GET /api/dashboard/activity-by-month": {FLIGHTS_VIEW},
     "GET /api/dashboard/top-pilots-30d": {FLIGHTS_VIEW},
