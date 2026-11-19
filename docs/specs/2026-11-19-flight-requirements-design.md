@@ -86,6 +86,7 @@ Shared by the currency rule form and the requirement form.
 | Time of day | Any time (default), clock window, or night (civil twilight) |
 | Flight purposes | All purposes (default), or selected purposes as toggle chips. Flights with no purpose count only under All |
 | Applies to | All active pilots, or selected pilots |
+| Reminder | Days before the period ends to email pilots not yet met. Default 7 |
 | Active | On or off |
 
 The fiscal year start month is a unit setting, defaulting to October.
@@ -167,6 +168,22 @@ The form shows a live plain-English summary, for example:
 - Excused results and periods still open or pending review are left out.
 - With "each separately", a pilot's period counts as one result: Met only when every model is met.
 - With no saved results in the last 12 months, the score shows "No results yet" instead of a number.
+- Every requirement counts toward the score. There is no per-requirement switch.
+
+## Notifications
+
+All emails use the existing SMTP settings and notification log, and are skipped when SMTP is not set up or the recipient has no email.
+
+- **Assignment**: each assigned pilot is emailed when a requirement is created or activated, or when they are added to it.
+- **Reminder**: pilots who have not met the target are emailed the set number of days before the period ends (default 7). Sent once per pilot per period by the daily scheduler.
+- **Miss**: when a period is saved as Missed, the pilot and every user with `requirements.manage` are emailed.
+- **Digest**: a Requirements section in the existing daily or weekly digest (progress, periods pending review, recent misses), with its own toggle in each user's digest preferences.
+
+## Export and calendar
+
+- **CSV**: the results table of a requirement, and a pilot's history, download as CSV.
+- **PDF**: a Flight Requirements report in Reports, by period and pilot, with the unit logo, like the existing reports.
+- **Calendar**: one all-day entry on the last day of each period, for example "Due: Monthly 1 hr". Periods themselves are not drawn.
 
 ## Permissions
 
@@ -192,7 +209,7 @@ Admins always have all three. Anyone with view sees every pilot's progress, not 
 
 ## Data model
 
-- `flight_requirements`: definition (name, description, period type, period parameters, repeats, start, end, target hours, target flights, model mode, time-of-day mode, window start time, window end time, active, timestamps, created and modified by).
+- `flight_requirements`: definition (name, description, period type, period parameters, repeats, start, end, target hours, target flights, model mode, time-of-day mode, window start time, window end time, reminder days, active, timestamps, created and modified by).
 - `flight_requirement_models`: requirement id and model name. No rows means all aircraft.
 - `flight_requirement_pilots`: requirement id and pilot id. No rows means all active pilots.
 - `flight_requirement_purposes`: requirement id and purpose name. No rows means all purposes.
@@ -222,6 +239,8 @@ All write routes are audited like currency rules.
 - Only reviewed flights count, and flights or pilots excluded from unit totals do not. Reviewed flights with an unconfirmed pilot match count.
 - A purpose filter counts only flights with a selected purpose; flights with no purpose count only with All purposes.
 - A miss flags the pilot until the next period is met or the miss is excused; a one-time miss clears only by excusal.
+- Each email is sent once: reminders once per pilot per period, even if the scheduler runs twice; nothing is sent without SMTP.
+- The calendar shows one deadline entry per period, and the CSV and PDF match the saved results.
 - Closed periods do not change after a requirement is edited or a flight is re-reviewed.
 - A period stays Pending review through the grace period; a flight reviewed inside it counts, and one reviewed after it does not.
 - Requirements never change the compliance score or currency results.
@@ -243,3 +262,7 @@ All write routes are audited like currency rules.
 9. Flights with an unconfirmed pilot match (`pilot_confirmed = false`) count once reviewed, as for currency (2026-11-18).
 10. Flight purpose filter: optional purpose toggles on each requirement, default all purposes (2026-11-18).
 11. A miss flags the pilot (Needs Attention, dashboard, and a badge on the pilot list and profile) until the next period is met or a supervisor excuses it. Pilot status is unchanged (2026-11-18).
+12. Every requirement counts toward the Requirements score; no per-requirement switch (2026-11-18).
+13. Emails: assignment, reminder before the period ends, miss (pilot and requirement managers), and a digest section (2026-11-18).
+14. Export: CSV of results and a Flight Requirements PDF report (2026-11-18).
+15. Calendar: deadline entries only, on each period's last day (2026-11-18).
