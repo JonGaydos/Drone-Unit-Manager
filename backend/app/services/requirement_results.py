@@ -6,15 +6,18 @@ on their own: edits to the requirement and later reviews leave them alone until
 an admin recalculates the period on purpose with ``recalculate_period``.
 """
 
+import math
 from datetime import date, datetime, timedelta, timezone
 from itertools import groupby
 from operator import attrgetter
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.flight_requirement import FlightRequirement, FlightRequirementResult
 from app.services.audit import log_action
 from app.services.audit_capture import machine_run
+from app.services.local_time import local_flight_date
 from app.services.requirement_eval import (
     EXCUSED, MET, MISSED, PilotProgress, UnitEvalSettings, assigned_pilots, evaluate_period,
     unit_eval_settings,
@@ -47,10 +50,11 @@ def target_snapshot(req: FlightRequirement) -> dict:
 def _fill(row: FlightRequirementResult, progress: PilotProgress, period_end: date, snapshot: dict,
           now: datetime) -> None:
     """Write an evaluation into a result row. A stored excusal is kept as it is;
-    an automatic one is recorded when it decides the status."""
+    an automatic one is recorded when it decides the status. Minutes are rounded
+    down, so a saved miss never shows the target's minutes."""
     row.period_end = period_end
     row.status = progress.status
-    row.totals = {key: {"minutes": round(total["minutes"]), "flights": total["flights"]}
+    row.totals = {key: {"minutes": math.floor(total["minutes"]), "flights": total["flights"]}
                   for key, total in progress.totals.items()}
     row.target_snapshot = snapshot
     row.saved_at = now
@@ -59,35 +63,40 @@ def _fill(row: FlightRequirementResult, progress: PilotProgress, period_end: dat
         row.excused_reason = progress.excused_reason
 
 
-def _due_periods(req: FlightRequirement, settings: UnitEvalSettings, today: date) -> list[Period]:
-    """The requirement's periods whose grace time ended before ``today``."""
+def _last_closing_day(req: FlightRequirement, settings: UnitEvalSettings, today: date) -> date:
+    """The latest period end that can close today: past its grace time and, for
+    an inactive requirement, on or before the day it was switched off."""
+    last_end = today - timedelta(days=settings.grace_days + 1)
+    switched_off = None if req.is_active else local_flight_date(req.updated_at, settings.zone)
+    return min(last_end, switched_off) if switched_off is not None else last_end
+
+
+def _due_periods(db: Session, req: FlightRequirement, settings: UnitEvalSettings,
+                 today: date) -> list[Period]:
+    """The requirement's periods ready to close: due, and starting after the
+    last saved period ended. Closed periods never reopen, so a pilot added or
+    reactivated later, or a changed period layout, does not save past dates."""
     spec = req.to_period_spec(settings.fiscal_start_month)
     first = first_period(spec)
     if first is None:
         return []
-    last_end = today - timedelta(days=settings.grace_days + 1)
-    return [period for period in periods_between(spec, first[0], last_end) if period[1] <= last_end]
-
-
-def _is_saved(row: FlightRequirementResult | None) -> bool:
-    return row is not None and row.saved_at is not None
-
-
-def _all_saved(by_key: dict[tuple[int, date], FlightRequirementResult], pilot_ids: list[int],
-               period_start: date) -> bool:
-    return all(_is_saved(by_key.get((pilot_id, period_start))) for pilot_id in pilot_ids)
+    watermark = db.query(func.max(FlightRequirementResult.period_end)).filter(
+        FlightRequirementResult.requirement_id == req.id,
+        FlightRequirementResult.saved_at.isnot(None),
+    ).scalar()
+    last_end = _last_closing_day(req, settings, today)
+    return [period for period in periods_between(spec, first[0], last_end)
+            if period[1] <= last_end and (watermark is None or period[0] > watermark)]
 
 
 def _save_rows(db: Session, req: FlightRequirement, period: Period, progress: dict[int, PilotProgress],
-               by_key: dict[tuple[int, date], FlightRequirementResult],
+               overrides: dict[tuple[int, date], FlightRequirementResult],
                now: datetime) -> list[FlightRequirementResult]:
-    """Save each evaluated pilot's result for ``period`` unless already saved."""
+    """Save each evaluated pilot's result for ``period``, filling an excusal row if there is one."""
     snapshot = target_snapshot(req)
     saved: list[FlightRequirementResult] = []
     for pilot_id, pilot_progress in progress.items():
-        row = by_key.get((pilot_id, period[0]))
-        if _is_saved(row):
-            continue
+        row = overrides.get((pilot_id, period[0]))
         if row is None:
             row = FlightRequirementResult(requirement_id=req.id, pilot_id=pilot_id, period_start=period[0])
             db.add(row)
@@ -98,27 +107,31 @@ def _save_rows(db: Session, req: FlightRequirement, period: Period, progress: di
 
 def _close_requirement(db: Session, req: FlightRequirement, settings: UnitEvalSettings,
                        today: date, now: datetime) -> list[FlightRequirementResult]:
-    periods = _due_periods(req, settings, today)
-    pilot_ids = [pilot.id for pilot in assigned_pilots(db, req)] if periods else []
-    if not pilot_ids:
+    periods = _due_periods(db, req, settings, today)
+    if not periods or not assigned_pilots(db, req):
         return []
-    rows = db.query(FlightRequirementResult).filter(FlightRequirementResult.requirement_id == req.id).all()
-    by_key = {(row.pilot_id, row.period_start): row for row in rows}
+    overrides = {
+        (row.pilot_id, row.period_start): row for row in db.query(FlightRequirementResult).filter(
+            FlightRequirementResult.requirement_id == req.id,
+            FlightRequirementResult.saved_at.is_(None),
+        )
+    }
     saved: list[FlightRequirementResult] = []
     for period in periods:
-        if _all_saved(by_key, pilot_ids, period[0]):
-            continue
         progress = evaluate_period(db, req, period, today, settings.grace_days)
-        saved.extend(_save_rows(db, req, period, progress, by_key, now))
+        saved.extend(_save_rows(db, req, period, progress, overrides, now))
     return saved
 
 
 def close_due_periods(db: Session, today: date) -> list[FlightRequirementResult]:
     """Save each assigned pilot's result for every period, of every requirement,
-    whose grace time ended before ``today``. Rows already saved are left alone,
-    an open-period excusal row is filled in, and the rows saved now are
-    returned. Safe to run again: a second run saves nothing. Commits, and
-    records the run as one audit entry when it saves anything."""
+    whose grace time ended before ``today`` and which starts after the
+    requirement's last saved period ended. A period is saved for every assigned
+    pilot at once and is closed from then on; an open-period excusal row is
+    filled in. An inactive requirement saves only periods that ended by the day
+    it was switched off. Returns the rows saved now. Safe to run again: a second
+    run saves nothing. Commits, and records the run as one audit entry when it
+    saves anything."""
     settings = unit_eval_settings(db)
     now = datetime.now(timezone.utc)
     saved: list[FlightRequirementResult] = []
@@ -134,8 +147,8 @@ def recalculate_period(db: Session, req: FlightRequirement, period_start: date, 
     """Re-evaluate one saved period of ``req`` against today's flights and
     requirement, overwriting its saved rows but keeping their excusals.
 
-    Only pilots still assigned are re-evaluated. Returns how many rows changed
-    and records a ``recalculate`` audit entry on the requirement. Commits.
+    Only pilots still assigned are re-evaluated. Returns how many rows were
+    re-evaluated and records a ``recalculate`` audit entry on the requirement. Commits.
     """
     rows = db.query(FlightRequirementResult).filter(
         FlightRequirementResult.requirement_id == req.id,
@@ -162,19 +175,21 @@ def recalculate_period(db: Session, req: FlightRequirement, period_start: date, 
 
 def _open_in_group(rows: list[FlightRequirementResult]) -> list[FlightRequirementResult]:
     """One pilot's saved results on one requirement, by period start: the misses
-    not excused and not followed by a met result."""
-    return [
-        row for i, row in enumerate(rows)
-        if row.status == MISSED and not row.excused
-        and not (i + 1 < len(rows) and rows[i + 1].status == MET)
-    ]
+    not excused and not followed by any met result."""
+    found: list[FlightRequirementResult] = []
+    met_later = False
+    for row in reversed(rows):
+        met_later = met_later or row.status == MET
+        if row.status == MISSED and not row.excused and not met_later:
+            found.append(row)
+    return found[::-1]
 
 
 def open_misses(db: Session, pilot_ids: list[int] | None = None) -> dict[int, list[dict]]:
     """Per pilot, the saved misses still flagged, oldest first by requirement.
 
-    A miss clears when the pilot's next saved result on the same requirement is
-    met, or when the miss is excused. Pilots with none are left out.
+    A miss clears when any later saved result of the pilot on the same
+    requirement is met, or when the miss is excused. Pilots with none are left out.
     """
     query = (
         db.query(FlightRequirementResult, FlightRequirement.name)

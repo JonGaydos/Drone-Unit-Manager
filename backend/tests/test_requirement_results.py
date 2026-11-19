@@ -16,6 +16,7 @@ from app.services.requirement_results import (
 )
 
 LONG_AGO = datetime(2025, 1, 1, tzinfo=timezone.utc)
+AUG = (date(2026, 8, 1), date(2026, 8, 31))
 SEP = (date(2026, 9, 1), date(2026, 9, 30))
 OCT = (date(2026, 10, 1), date(2026, 10, 31))
 LAST_GRACE_DAY = date(2026, 11, 14)  # October ends on the 31st; 14 grace days
@@ -28,8 +29,8 @@ def chicago(db):
     db.commit()
 
 
-def _pilot(db):
-    pilot = Pilot(first_name="Test", last_name="Pilot", status="active", created_at=LONG_AGO)
+def _pilot(db, status="active"):
+    pilot = Pilot(first_name="Test", last_name="Pilot", status=status, created_at=LONG_AGO)
     db.add(pilot)
     db.commit()
     return pilot
@@ -113,10 +114,64 @@ def test_running_twice_saves_nothing_new(db):
 
 def test_requirement_created_for_past_months_saves_every_closed_period(db):
     pilot = _pilot(db)
-    req = _req(db, start_date=date(2026, 7, 1), is_active=False)
+    req = _req(db, start_date=date(2026, 7, 1))
     saved = close_due_periods(db, DAY_AFTER_GRACE)
     assert sorted(row.period_start for row in saved) == [date(2026, m, 1) for m in (7, 8, 9, 10)]
     assert {row.pilot_id for row in _rows(db, req)} == {pilot.id}
+
+
+def test_reactivated_pilot_gets_no_rows_for_closed_periods(db):
+    _pilot(db)
+    returning = _pilot(db, status="inactive")
+    req = _req(db, start_date=date(2026, 7, 1))
+    assert len(close_due_periods(db, DAY_AFTER_GRACE)) == 4
+    returning.status = "active"
+    db.commit()
+    assert close_due_periods(db, DAY_AFTER_GRACE + timedelta(days=1)) == []
+    assert returning.id not in {row.pilot_id for row in _rows(db, req)}
+    assert open_misses(db, [returning.id]) == {}
+
+
+def test_pilot_added_later_gets_no_rows_for_closed_periods(db):
+    _pilot(db)
+    req = _req(db, start_date=date(2026, 7, 1))
+    close_due_periods(db, DAY_AFTER_GRACE)
+    newcomer = _pilot(db)
+    assert close_due_periods(db, DAY_AFTER_GRACE + timedelta(days=1)) == []
+    assert newcomer.id not in {row.pilot_id for row in _rows(db, req)}
+
+
+def test_changed_period_layout_never_saves_dates_already_closed(db):
+    _pilot(db)
+    req = _req(db, start_date=date(2026, 7, 1))
+    close_due_periods(db, DAY_AFTER_GRACE)
+    req.period_type, req.span_length, req.span_unit = "span", 2, "weeks"
+    db.commit()
+    # Two-week spans from Jul 1: Oct 21 to Nov 3 starts before October's saved end,
+    # Nov 4 to Nov 17 is the first new one and is due after Dec 1.
+    assert close_due_periods(db, date(2026, 12, 1)) == []
+    saved = close_due_periods(db, date(2026, 12, 2))
+    assert [(row.period_start, row.period_end) for row in saved] == [(date(2026, 11, 4), date(2026, 11, 17))]
+    assert close_due_periods(db, date(2026, 12, 2)) == []
+
+
+def test_inactive_requirement_saves_only_periods_ended_before_switch_off(db):
+    _pilot(db)
+    switched_off = datetime(2026, 3, 10, 15, 0, tzinfo=timezone.utc)
+    inactive = _req(db, start_date=date(2026, 1, 1), is_active=False, updated_at=switched_off)
+    active = _req(db, start_date=date(2026, 1, 1), updated_at=switched_off)
+    close_due_periods(db, DAY_AFTER_GRACE)
+    assert [row.period_start for row in _rows(db, inactive)] == [date(2026, 1, 1), date(2026, 2, 1)]
+    assert [row.period_start for row in _rows(db, active)] == [date(2026, m, 1) for m in range(1, 11)]
+
+
+def test_saved_minutes_round_down(db):
+    pilot = _pilot(db)
+    req = _req(db)
+    _flight(db, pilot, minutes=59.6)
+    close_due_periods(db, DAY_AFTER_GRACE)
+    row = _rows(db, req)[0]
+    assert (row.status, row.totals) == ("missed", {"*": {"minutes": 59, "flights": 1}})
 
 
 def test_excusal_override_row_is_filled_in(db):
@@ -228,12 +283,30 @@ def test_miss_is_open_until_the_next_period_is_met(db):
     assert open_misses(db) == {}
 
 
-def test_miss_stays_open_when_the_next_period_is_missed_too(db):
+def test_misses_stay_open_while_every_later_result_is_missed(db):
     pilot = _pilot(db)
     req = _req(db, start_date=SEP[0])
     _saved(db, req, pilot, SEP, "missed")
     _saved(db, req, pilot, OCT, "missed")
     assert [f["period_start"] for f in open_misses(db)[pilot.id]] == [SEP[0], OCT[0]]
+
+
+def test_any_later_met_clears_earlier_misses(db):
+    pilot = _pilot(db)
+    req = _req(db, start_date=AUG[0])
+    _saved(db, req, pilot, AUG, "missed")
+    _saved(db, req, pilot, SEP, "missed")
+    _saved(db, req, pilot, OCT, "met")
+    assert open_misses(db) == {}
+
+
+def test_miss_after_the_last_met_stays_open(db):
+    pilot = _pilot(db)
+    req = _req(db, start_date=AUG[0])
+    _saved(db, req, pilot, AUG, "missed")
+    _saved(db, req, pilot, SEP, "met")
+    _saved(db, req, pilot, OCT, "missed")
+    assert [f["period_start"] for f in open_misses(db)[pilot.id]] == [OCT[0]]
 
 
 def test_miss_clears_when_excused(db):
