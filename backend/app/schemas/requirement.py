@@ -162,7 +162,7 @@ class RequirementUpdate(BaseModel):
 class CurrentPeriod(BaseModel):
     start: date
     end: date
-    days_left: int  # days from today through the period's last day, counting both
+    days_left: int  # days from today through the period's last day, counting both; 0 once ended
 
 
 class RequirementOut(BaseModel):
@@ -207,14 +207,22 @@ class PilotProgressOut(BaseModel):
     excused_reason: Optional[str] = None
 
 
+class PeriodOut(CurrentPeriod):
+    review_until: date  # last day of the grace time; the period is saved the day after
+
+
+class PeriodProgressOut(PeriodOut):
+    pilots: list[PilotProgressOut]
+
+
 class RequirementStatusOut(BaseModel):
     requirement_id: int
     name: str
     target_minutes: Optional[int] = None
     target_flights: Optional[int] = None
     model_mode: str
-    period: Optional[CurrentPeriod] = None
-    pilots: list[PilotProgressOut]
+    current_period: Optional[PeriodProgressOut] = None
+    pending_periods: list[PeriodProgressOut]  # ended, inside their grace time, oldest first
 
 
 class StatusOut(BaseModel):
@@ -222,10 +230,10 @@ class StatusOut(BaseModel):
     requirements: list[RequirementStatusOut]
 
 
-class PilotCurrentOut(PilotProgressOut):
+class PilotPeriodOut(PilotProgressOut):
     requirement_id: int
     name: str
-    period: CurrentPeriod
+    period: PeriodOut
 
 
 class HistoryRowOut(BaseModel):
@@ -245,7 +253,8 @@ class HistoryRowOut(BaseModel):
 
 class PilotRequirementsOut(BaseModel):
     pilot_id: int
-    current: list[PilotCurrentOut]
+    current: list[PilotPeriodOut]
+    pending: list[PilotPeriodOut]  # ended, inside their grace time, oldest first
     history: list[HistoryRowOut]
 
 

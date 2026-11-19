@@ -49,8 +49,8 @@ def _vehicle(db, model, status="active"):
     return vehicle
 
 
-def _flight(db, pilot, day, minutes):
-    db.add(Flight(pilot_id=pilot.id, date=day, duration_seconds=minutes * 60, review_status="reviewed",
+def _flight(db, pilot, day, minutes, review_status="reviewed"):
+    db.add(Flight(pilot_id=pilot.id, date=day, duration_seconds=minutes * 60, review_status=review_status,
                   takeoff_time=datetime.combine(day, time(15, 0))))
     db.commit()
 
@@ -68,7 +68,7 @@ def _status_row(client, headers, req_id):
 
 def _progress(client, headers, req_id, pilot_id):
     row = _status_row(client, headers, req_id)
-    return next(p for p in row["pilots"] if p["pilot_id"] == pilot_id)
+    return next(p for p in row["current_period"]["pilots"] if p["pilot_id"] == pilot_id)
 
 
 def _history(client, headers, pilot_id):
@@ -296,8 +296,11 @@ def test_status_reports_progress_and_score(client, db, viewer_headers, admin_hea
     body = client.get(f"{URL}/status", headers=viewer_headers).json()
     assert body["score"] == 0.0  # September and October saved as missed
     row = next(r for r in body["requirements"] if r["requirement_id"] == req_id)
-    assert row["period"] == {"start": NOV, "end": "2026-11-30", "days_left": 12}
-    progress = row["pilots"][0]
+    period = row["current_period"]
+    assert {key: period[key] for key in ("start", "end", "days_left", "review_until")} == {
+        "start": NOV, "end": "2026-11-30", "days_left": 12, "review_until": "2026-12-14"}
+    assert row["pending_periods"] == []
+    progress = period["pilots"][0]
     assert progress["pilot_id"] == pilot.id
     assert progress["pilot_name"] == "Test Pilot"
     assert progress["status"] == "on_track"
@@ -520,3 +523,86 @@ def test_settings_round_trip(client, admin_headers, viewer_headers):
 ])
 def test_settings_out_of_range_are_refused(client, admin_headers, body):
     assert client.put(f"{URL}/settings", headers=admin_headers, json=body).status_code == 422
+
+
+# Fix round 1
+
+
+def test_a_period_in_its_grace_time_shows_as_pending_until_saved(client, db, admin_headers, monkeypatch):
+    pilot = _pilot(db)
+    _flight(db, pilot, date(2026, 11, 10), 30, review_status="needs_review")
+    req_id = _create(client, admin_headers, period_type="span", start_date="2026-11-03", span_length=2,
+                     span_unit="weeks")["id"]
+    row = _status_row(client, admin_headers, req_id)
+    assert row["current_period"]["start"] == "2026-11-17"
+    [pending] = row["pending_periods"]
+    assert (pending["start"], pending["end"], pending["days_left"], pending["review_until"]) == (
+        "2026-11-03", "2026-11-16", 0, "2026-11-30")
+    progress = pending["pilots"][0]
+    assert (progress["status"], progress["unreviewed_in_period"], progress["excluded_no_takeoff"]) == (
+        "pending_review", 1, 0)
+    body = client.get(f"{URL}/pilots/{pilot.id}", headers=admin_headers).json()
+    assert [(r["period"]["start"], r["status"]) for r in body["pending"]] == [("2026-11-03", "pending_review")]
+    assert body["history"] == []
+
+    monkeypatch.setattr(requirements_router, "local_today", lambda _db: date(2026, 12, 1))
+    row = _status_row(client, admin_headers, req_id)
+    assert [p["start"] for p in row["pending_periods"]] == ["2026-11-17"]
+    body = client.get(f"{URL}/pilots/{pilot.id}", headers=admin_headers).json()
+    assert [r["period"]["start"] for r in body["pending"]] == ["2026-11-17"]
+    assert [(r["period_start"], r["status"]) for r in body["history"]] == [("2026-11-03", "missed")]
+
+
+def test_excuse_refuses_a_pilot_not_assigned(client, db, admin_headers):
+    assigned, other = _pilot(db), _pilot(db)
+    req_id = _create(client, admin_headers, start_date=NOV, pilot_ids=[assigned.id])["id"]
+    assert _excuse(client, admin_headers, req_id, other.id, NOV).status_code == 422
+    assert _excuse(client, admin_headers, req_id, assigned.id, NOV).status_code == 200
+
+
+def test_delete_refuses_a_requirement_with_saved_results(client, db, admin_headers):
+    _pilot(db)
+    req_id = _create(client, admin_headers)["id"]
+    client.get(f"{URL}/status", headers=admin_headers)  # saves September and October
+    response = client.delete(f"{URL}/{req_id}", headers=admin_headers)
+    assert (response.status_code, response.json()["detail"]) == (
+        409, "This requirement has saved results. Switch it off instead.")
+    unsaved = _create(client, admin_headers, start_date=NOV)["id"]
+    assert client.delete(f"{URL}/{unsaved}", headers=admin_headers).status_code == 200
+
+
+def test_narrowing_to_selected_pilots_does_not_excuse_covered_pilots(client, db, admin_headers):
+    pilot = _pilot(db)
+    req_id = _create(client, admin_headers, start_date=NOV)["id"]
+    req = db.get(FlightRequirement, req_id)
+    req.created_at = LONG_AGO
+    db.commit()
+    assert _progress(client, admin_headers, req_id, pilot.id)["status"] == "on_track"
+    response = client.patch(f"{URL}/{req_id}", headers=admin_headers, json={"pilot_ids": [pilot.id]})
+    assert response.status_code == 200, response.text
+    assert _progress(client, admin_headers, req_id, pilot.id)["status"] == "on_track"
+    late = _pilot(db)
+    response = client.patch(f"{URL}/{req_id}", headers=admin_headers, json={"pilot_ids": [pilot.id, late.id]})
+    assert response.status_code == 200, response.text
+    assert _progress(client, admin_headers, req_id, late.id)["status"] == "excused"
+
+
+def test_night_template_needs_the_unit_location(client, admin_headers):
+    body = {"name": "Night", "settings": {**BASE, "time_mode": "night"}}
+    response = client.post(f"{URL}/templates", headers=admin_headers, json=body)
+    assert (response.status_code, response.json()["detail"]) == (422, NIGHT_REFUSED)
+    template_id = client.post(f"{URL}/templates", headers=admin_headers,
+                              json={"name": "Day", "settings": BASE}).json()["id"]
+    response = client.patch(f"{URL}/templates/{template_id}", headers=admin_headers,
+                            json={"settings": {**BASE, "time_mode": "night"}})
+    assert response.status_code == 422
+
+
+def test_changing_settings_saves_due_periods_first(client, db, admin_headers):
+    _pilot(db)
+    req_id = _create(client, admin_headers)["id"]
+    response = client.put(f"{URL}/settings", headers=admin_headers,
+                          json={"grace_days": 60, "fiscal_year_start_month": 10})
+    assert response.status_code == 200, response.text
+    saved = db.query(FlightRequirementResult).filter_by(requirement_id=req_id).count()
+    assert saved == 2  # September and October closed under the old 14 grace days
