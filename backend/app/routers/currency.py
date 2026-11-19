@@ -13,6 +13,7 @@ from app.models.currency_rule import CurrencyRule
 from app.models.pilot import Pilot
 from app.models.flight import Flight
 from app.responses import responses
+from app.services.fleet_models import fleet_models
 
 router = APIRouter(prefix="/api/currency", tags=["currency"])
 
@@ -67,6 +68,11 @@ class RuleOut(BaseModel):
     is_active: bool
     created_at: datetime
     model_config = {"from_attributes": True}
+
+
+@router.get("/models", responses=responses(401))
+def list_fleet_models(db: DBSession, user: ManageUser):
+    return fleet_models(db)
 
 
 @router.get("/rules", response_model=list[RuleOut], responses=responses(401))
