@@ -164,15 +164,30 @@ def test_a_notice_written_meanwhile_does_not_raise(db, smtp, monkeypatch, _engin
 # Reminders
 
 
-def test_reminder_goes_out_exactly_reminder_days_before_the_end(db, smtp, sent):
+def test_reminder_goes_out_reminder_days_before_the_end(db, smtp, sent):
     pilot = _pilot(db)
     _req(db, pilots=[pilot])
     assert send_due_reminders(db, REMINDER_DAY - timedelta(days=1)) == 0
-    assert send_due_reminders(db, REMINDER_DAY + timedelta(days=1)) == 0
     assert send_due_reminders(db, REMINDER_DAY) == 1
     assert _to(sent) == ["pilot@example.test"]
     assert len(_notices(db, "reminder")) == 1
     assert send_due_reminders(db, REMINDER_DAY) == 0
+    assert send_due_reminders(db, REMINDER_DAY + timedelta(days=1)) == 0
+
+
+def test_a_missed_reminder_day_is_caught_up_once(db, smtp, sent):
+    pilot = _pilot(db)
+    _req(db, pilots=[pilot])
+    assert send_due_reminders(db, REMINDER_DAY + timedelta(days=1)) == 1
+    assert send_due_reminders(db, REMINDER_DAY + timedelta(days=2)) == 0
+    assert _to(sent) == ["pilot@example.test"]
+
+
+def test_no_reminder_on_the_last_day_of_the_period(db, smtp, sent):
+    _pilot(db)
+    _req(db)
+    assert send_due_reminders(db, date(2026, 11, 30)) == 0
+    assert sent == []
 
 
 def test_reminder_skips_met_and_excused_pilots(db, smtp, sent):
@@ -439,13 +454,14 @@ def test_daily_job_runs_the_three_steps_in_order(db, scheduler_db, monkeypatch):
     pilot = _pilot(db)
     req = _req(db)
     row = FlightRequirementResult(requirement_id=req.id, pilot_id=pilot.id, period_start=date(2026, 10, 1),
-                                  period_end=date(2026, 10, 31), status="missed", saved_at=LONG_AGO)
+                                  period_end=date(2026, 10, 31), status="missed",
+                                  saved_at=datetime.now(timezone.utc))
     db.add(row)
     db.commit()
     calls = []
     monkeypatch.setattr(sched, "local_today", lambda _db: TODAY)
     monkeypatch.setattr(requirement_results, "close_due_periods",
-                        lambda _db, today: calls.append(("close", today)) or [_db.get(FlightRequirementResult, row.id)])
+                        lambda _db, today: calls.append(("close", today)) or [])
     monkeypatch.setattr(requirement_notify, "notify_missed",
                         lambda _db, rows: calls.append(("missed", [r.id for r in rows])) or 0)
     monkeypatch.setattr(requirement_notify, "send_due_reminders",
@@ -498,6 +514,27 @@ def test_scheduler_registers_the_daily_job(scheduler_db, monkeypatch):
     try:
         job = sched._scheduler.get_job(sched.REQUIREMENTS_DAILY_JOB_ID)
         assert job is not None and sched.REQUIREMENTS_DAILY_JOB_ID == "requirements_daily"
-        assert str(job.trigger.fields[5]) == str(sched.MAINTENANCE_ALERT_HOUR)
+        hour = next(field for field in job.trigger.fields if field.name == "hour")
+        assert str(hour) == str(sched.MAINTENANCE_ALERT_HOUR)
     finally:
         sched.stop_scheduler()
+
+
+def test_daily_job_emails_a_miss_a_page_load_saved(client, db, admin_headers, scheduler_db, monkeypatch, smtp,
+                                                   sent, managers):
+    pilot = _pilot(db)
+    monthly = _req(db)
+    older = _req(db, name="Old quarterly", is_active=False)
+    db.add(FlightRequirementResult(requirement_id=older.id, pilot_id=pilot.id, period_start=date(2026, 7, 1),
+                                   period_end=date(2026, 9, 30), status="missed", totals={}, target_snapshot={},
+                                   saved_at=datetime.now(timezone.utc) - timedelta(days=20)))
+    db.commit()
+    assert client.get(f"{URL}/status", headers=admin_headers).status_code == 200  # saves October as missed
+    monkeypatch.setattr(sched, "local_today", lambda _db: TODAY)
+    sched._run_requirements_daily()
+    assert _to(sent) == ["admin@example.test", "pilot@example.test", "supervisor@example.test"]
+    assert all("Old quarterly" not in email["html"] for email in sent)
+    db.expire_all()
+    assert [(n.requirement_id, n.kind) for n in _notices(db)] == [(monthly.id, "missed")]
+    sched._run_requirements_daily()
+    assert len(sent) == 3

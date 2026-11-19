@@ -205,8 +205,9 @@ def _remind(db: Session, req: FlightRequirement, period: Period, today: date, gr
 
 def send_due_reminders(db: Session, today: date) -> int:
     """Remind each assigned pilot who has not met an active requirement, and is
-    not excused, when its period ends exactly ``reminder_days`` after ``today``.
-    Returns the number sent."""
+    not excused, once its period ends ``reminder_days`` or fewer days after
+    ``today`` (and not today), so a missed run is caught up the next day. The
+    reminder notice keeps it to one per pilot per period. Returns the number sent."""
     if not smtp_ready(db):
         return 0
     settings = unit_eval_settings(db)
@@ -217,7 +218,7 @@ def send_due_reminders(db: Session, today: date) -> int:
     ).order_by(FlightRequirement.id).all()
     for req in reqs:
         period = period_containing(req.to_period_spec(settings.fiscal_start_month), today)
-        if period is not None and (period[1] - today).days == req.reminder_days:
+        if period is not None and 0 < (period[1] - today).days <= req.reminder_days:
             sent += _remind(db, req, period, today, settings.grace_days, org_name)
     return sent
 
@@ -281,6 +282,8 @@ def notify_missed(db: Session, results: list[FlightRequirementResult]) -> int:
     told = [_email_missed_pilot(db, row, reqs[row.requirement_id], pilots.get(row.pilot_id), org_name)
             for row in misses]
     managers_told = _email_managers(db, misses, reqs, pilots, org_name)
+    # One "missed" notice covers both the pilot and the managers: once a
+    # manager email went out, a failed pilot send is not retried.
     for row, pilot_told in zip(misses, told):
         if pilot_told or managers_told:
             _record(db, _key(row), MISSED_NOTICE)

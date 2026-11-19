@@ -1,7 +1,7 @@
 """Background sync scheduler using APScheduler."""
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
@@ -28,6 +28,9 @@ MAINTENANCE_ALERT_JOB_ID = "maintenance_alerts"
 MAINTENANCE_ALERT_HOUR = 6
 TELEMETRY_SYNC_JOB_ID = "skydio_telemetry_sync"
 REQUIREMENTS_DAILY_JOB_ID = "requirements_daily"
+# Misses saved this many days back are emailed if not yet announced, wherever
+# they were saved (this job, or a page load or edit that closed the period).
+MISS_SWEEP_DAYS = 14
 
 
 def check_maintenance_schedules(db):
@@ -144,27 +147,30 @@ def _requirements_step(name: str, step, default):
 
 
 def _run_requirements_daily():
-    """Save the requirement periods due today, email the misses just saved,
-    then send the reminders due today (scheduled daily)."""
+    """Save the requirement periods due today, email the misses saved
+    recently and not yet announced, then send the reminders due (scheduled daily)."""
     from app.models.flight_requirement import FlightRequirementResult
     from app.services import requirement_notify, requirement_results
+    from app.services.requirement_eval import MISSED
 
     def close(db):
-        return [row.id for row in requirement_results.close_due_periods(db, local_today(db))]
+        return len(requirement_results.close_due_periods(db, local_today(db)))
 
     def remind(db):
         return requirement_notify.send_due_reminders(db, local_today(db))
 
-    saved_ids = _requirements_step("saving periods", close, [])
-
     def missed(db):
-        rows = db.query(FlightRequirementResult).filter(FlightRequirementResult.id.in_(saved_ids)).all()
+        since = datetime.now(timezone.utc) - timedelta(days=MISS_SWEEP_DAYS)
+        rows = db.query(FlightRequirementResult).filter(
+            FlightRequirementResult.status == MISSED, FlightRequirementResult.saved_at >= since,
+        ).order_by(FlightRequirementResult.id).all()
         return requirement_notify.notify_missed(db, rows) if rows else 0
 
+    saved = _requirements_step("saving periods", close, 0)
     miss_emails = _requirements_step("miss emails", missed, 0)
     reminders = _requirements_step("reminders", remind, 0)
     logger.info("Flight requirements daily job: %d results saved, %d miss emails, %d reminders",
-                len(saved_ids), miss_emails, reminders)
+                saved, miss_emails, reminders)
 
 
 def _run_scheduled_telemetry_sync():
