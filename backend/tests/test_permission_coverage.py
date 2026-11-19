@@ -308,6 +308,7 @@ EXPECTED_ROUTE_KEYS = {
     "DELETE /api/pilot-equipment-quals/{peq_id}": {CERTIFICATIONS_MANAGE},
     "GET /api/certifications/matrix": {CERTIFICATIONS_VIEW},
     # currency
+    "GET /api/currency/models": {CERTIFICATIONS_MANAGE},
     "GET /api/currency/rules": {CERTIFICATIONS_VIEW},
     "GET /api/currency/status": {CERTIFICATIONS_VIEW},
     "GET /api/currency/status/{pilot_id}": {CERTIFICATIONS_VIEW},

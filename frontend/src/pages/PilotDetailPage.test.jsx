@@ -65,6 +65,22 @@ describe('PilotDetailPage', () => {
     expect(screen.getByText('Badge: A-1')).toBeInTheDocument()
   })
 
+  it('shows each rule\'s models, or All when the list is empty', async () => {
+    const rule = { is_current: true, actual_hours: 1, required_hours: 5, period_days: 90, status: 'current' }
+    mockMount({
+      currency: () => HttpResponse.json({
+        is_current: true,
+        rules: [
+          { ...rule, rule_id: 1, rule_name: 'Typed', vehicle_models: ['X10', 'X2E'] },
+          { ...rule, rule_id: 2, rule_name: 'Open', vehicle_models: [] },
+        ],
+      }),
+    })
+    render()
+    expect(await screen.findByText('X10, X2E')).toBeInTheDocument()
+    expect(screen.getByText('All')).toBeInTheDocument()
+  })
+
   it('shows empty states for flights and certifications', async () => {
     mockMount()
     render()

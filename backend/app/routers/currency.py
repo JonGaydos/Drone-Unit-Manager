@@ -3,16 +3,17 @@ from html import escape
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field, StringConstraints, field_validator
+from pydantic import BaseModel, Field, StringConstraints, field_validator, model_validator
 from sqlalchemy.orm import Session, joinedload
 
 from app.deps import DBSession
 from app.models.user import User
 from app.routers.auth import require_permission
-from app.models.currency_rule import CurrencyRule
+from app.models.currency_rule import CurrencyRule, CurrencyRuleModel
 from app.models.pilot import Pilot
 from app.models.flight import Flight
 from app.responses import responses
+from app.services.fleet_models import fleet_models, normalize_model
 
 router = APIRouter(prefix="/api/currency", tags=["currency"])
 
@@ -26,26 +27,51 @@ PeriodDays = Annotated[int, Field(ge=1, le=MAX_PERIOD_DAYS)]
 RuleName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=300)]
 RequiredHours = Annotated[float, Field(ge=0)]
 RequiredFlights = Annotated[int, Field(ge=0)]
+ModelName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+MAX_RULE_MODELS = 50
+
+
+def _dedupe_models(names: list[str]) -> list[str]:
+    """Drop names that normalize the same, keeping the first spelling."""
+    seen: dict[str, str] = {}
+    for name in names:
+        seen.setdefault(normalize_model(name), name)
+    return list(seen.values())
+
+
+def _refuse_old_field(data):
+    if isinstance(data, dict) and "vehicle_model" in data:
+        raise ValueError("vehicle_model was replaced by vehicle_models (a list)")
+    return data
 
 
 class RuleCreate(BaseModel):
     name: RuleName
     description: Optional[str] = Field(None, max_length=500)
-    vehicle_model: Optional[str] = Field(None, max_length=200)
+    vehicle_models: list[ModelName] = Field([], max_length=MAX_RULE_MODELS)
     required_hours: RequiredHours
     period_days: PeriodDays
     required_flights: Optional[RequiredFlights] = None
     is_active: bool = True
 
+    _old_field = model_validator(mode="before")(staticmethod(_refuse_old_field))
+
+    @field_validator("vehicle_models")
+    @classmethod
+    def _dedupe(cls, v):
+        return _dedupe_models(v)
+
 
 class RuleUpdate(BaseModel):
     name: Optional[RuleName] = None
     description: Optional[str] = Field(None, max_length=500)
-    vehicle_model: Optional[str] = Field(None, max_length=200)
+    vehicle_models: Optional[list[ModelName]] = Field(None, max_length=MAX_RULE_MODELS)
     required_hours: Optional[RequiredHours] = None
     period_days: Optional[PeriodDays] = None
     required_flights: Optional[RequiredFlights] = None
     is_active: Optional[bool] = None
+
+    _old_field = model_validator(mode="before")(staticmethod(_refuse_old_field))
 
     @field_validator("name", "required_hours", "period_days", "is_active")
     @classmethod
@@ -55,18 +81,28 @@ class RuleUpdate(BaseModel):
             raise ValueError("cannot be empty")
         return v
 
+    @field_validator("vehicle_models")
+    @classmethod
+    def _dedupe(cls, v):
+        return None if v is None else _dedupe_models(v)
+
 
 class RuleOut(BaseModel):
     id: int
     name: str
     description: Optional[str] = None
-    vehicle_model: Optional[str] = None
+    vehicle_models: list[str] = Field(validation_alias="model_names")
     required_hours: float
     period_days: int
     required_flights: Optional[int] = None
     is_active: bool
     created_at: datetime
     model_config = {"from_attributes": True}
+
+
+@router.get("/models", responses=responses(401))
+def list_fleet_models(db: DBSession, user: ManageUser):
+    return fleet_models(db)
 
 
 @router.get("/rules", response_model=list[RuleOut], responses=responses(401))
@@ -76,7 +112,8 @@ def list_rules(db: DBSession, user: ViewUser):
 
 @router.post("/rules", response_model=RuleOut, responses=responses(401))
 def create_rule(data: RuleCreate, db: DBSession, user: ManageUser):
-    rule = CurrencyRule(**data.model_dump())
+    fields = data.model_dump(exclude={"vehicle_models"})
+    rule = CurrencyRule(**fields, models=[CurrencyRuleModel(model=m) for m in data.vehicle_models])
     db.add(rule)
     db.commit()
     db.refresh(rule)
@@ -88,8 +125,15 @@ def update_rule(rule_id: int, data: RuleUpdate, db: DBSession, user: ManageUser)
     rule = db.query(CurrencyRule).filter(CurrencyRule.id == rule_id).first()
     if not rule:
         raise HTTPException(status_code=404, detail="Rule not found")
-    for k, v in data.model_dump(exclude_unset=True).items():
+    fields = data.model_dump(exclude_unset=True, exclude={"vehicle_models"})
+    for k, v in fields.items():
         setattr(rule, k, v)
+    if data.vehicle_models is not None:
+        # Flush the deletes first: the unique (rule_id, model) index would reject
+        # a replacement row that repeats a name still pending removal.
+        rule.models = []
+        db.flush()
+        rule.models = [CurrencyRuleModel(model=m) for m in data.vehicle_models]
     db.commit()
     db.refresh(rule)
     return rule
@@ -132,14 +176,13 @@ def _currency_expiry(flights_in_period, rule):
 def _evaluate_rule(rule: CurrencyRule, flights: list[Flight], today):
     """Evaluate one currency rule against an already-loaded flight list."""
     cutoff = today - _period(rule)
-    model = rule.vehicle_model.lower() if rule.vehicle_model else None
-    # In-period flights, matching the prior SQL filter: date >= cutoff, and for
-    # model-specific rules an inner join on a matching vehicle model (flights
-    # with no vehicle or a different model are excluded).
+    models = {normalize_model(m) for m in rule.model_names}
+    # In-period flights: date >= cutoff, and for model-specific rules only
+    # flights on one of the rule's models (no vehicle never matches).
     flights_in_period = [
         f for f in flights
         if f.date and f.date >= cutoff
-        and (model is None or (f.vehicle is not None and (f.vehicle.model or "").lower() == model))
+        and (not models or (f.vehicle is not None and normalize_model(f.vehicle.model) in models))
     ]
     actual_flights = len(flights_in_period)
     actual_hours = sum((f.duration_seconds or 0) for f in flights_in_period) / 3600.0
@@ -150,7 +193,7 @@ def _evaluate_rule(rule: CurrencyRule, flights: list[Flight], today):
     return {
         "rule_id": rule.id,
         "rule_name": rule.name,
-        "vehicle_model": rule.vehicle_model,
+        "vehicle_models": rule.model_names,
         "required_hours": rule.required_hours,
         "actual_hours": round(actual_hours, 2),
         "required_flights": rule.required_flights,

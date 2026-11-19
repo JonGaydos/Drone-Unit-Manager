@@ -19,6 +19,8 @@ export const handlers = [
     categories: ['expiring_certs'], email_override: null,
   })),
   http.get('/api/notifications/log', () => HttpResponse.json([])),
+  // The currency rule picker's fleet models.
+  http.get('/api/currency/models', () => HttpResponse.json([])),
   // Settings reads whether the server serves /docs.
   http.get('/api/health', () => HttpResponse.json({ status: 'ok', api_docs: false })),
 ]

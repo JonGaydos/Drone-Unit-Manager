@@ -29,7 +29,7 @@ from app.models.folder import Folder
 from app.models.audit_log import AuditLog
 from app.models.incident import Incident
 from app.models.flight_approval import FlightPlan
-from app.models.currency_rule import CurrencyRule
+from app.models.currency_rule import CurrencyRule, CurrencyRuleModel
 from app.models.equipment_checkout import EquipmentCheckout
 from app.models.checklist import ChecklistTemplate, ChecklistCompletion
 from app.models.component import Component
@@ -76,6 +76,7 @@ __all__ = [
     "Incident",
     "FlightPlan",
     "CurrencyRule",
+    "CurrencyRuleModel",
     "EquipmentCheckout",
     "ChecklistTemplate",
     "ChecklistCompletion",

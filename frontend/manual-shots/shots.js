@@ -300,6 +300,7 @@ export const SHOTS = [
       '#rule-days': '90',
       '#rule-flights': '3',
     },
+    after: (dialog) => dialog.getByRole('button', { name: /^X10 \(\d+\)$/ }).click(),
   }),
   {
     file: 'certifications-certification-matrix.png',

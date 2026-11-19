@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import String, Integer, Float, Boolean, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import String, Integer, Float, Boolean, ForeignKey, UniqueConstraint, func
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 from app.models.types import UTCDateTime
 
@@ -11,9 +11,26 @@ class CurrencyRule(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(300))
     description: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-    vehicle_model: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)  # null = applies to all
+    vehicle_model: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)  # legacy, unused since 0016; dropped in a later release
     required_hours: Mapped[float] = mapped_column(Float)  # hours required
     period_days: Mapped[int] = mapped_column(Integer)  # within this many days
     required_flights: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # min flights in period
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow)
+
+    models: Mapped[list["CurrencyRuleModel"]] = relationship(
+        back_populates="rule", cascade="all, delete-orphan", lazy="selectin")
+
+    @property
+    def model_names(self) -> list[str]:
+        return sorted((m.model for m in self.models), key=str.casefold)
+
+
+class CurrencyRuleModel(Base):
+    __tablename__ = "currency_rule_models"
+    __table_args__ = (UniqueConstraint("rule_id", "model"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    rule_id: Mapped[int] = mapped_column(ForeignKey("currency_rules.id", ondelete="CASCADE"), index=True)
+    model: Mapped[str] = mapped_column(String(200))
+
+    rule: Mapped["CurrencyRule"] = relationship(back_populates="models")

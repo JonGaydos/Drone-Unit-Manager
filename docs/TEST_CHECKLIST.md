@@ -356,6 +356,7 @@ Setup: create one login each for Supervisor, Pilot and Viewer (for example `<sup
 | 35. Backup & Restore | | |
 | 36. Role Permissions | | |
 | 37. Release Staging Pass | | |
+| 38. Currency Rules | | |
 
 ---
 
@@ -375,3 +376,37 @@ Run on the staging instance with `TRUSTED_PROXIES` set to the proxy's address, b
 - [ ] Spreadsheet export cells starting with a space then `=` open as text
 - [ ] Restore of a backup with held items needs the confirmation text
 - [ ] The image scan step passes (or is understood, see the release notes)
+
+---
+
+## 38. Currency Rules
+
+Setup: an admin, a supervisor and a viewer login. Fleet with at least two models (for example X10 and Matrice 30), one of them with a retired aircraft only. Two pilots with reviewed flights on each model.
+
+### 38.1 Access
+- [ ] Supervisor sees Currency Rules on the Settings General tab and can create, edit and delete a rule
+- [ ] Supervisor does not see user management, backups or other admin-only cards
+- [ ] Viewer cannot open Currency Rules and direct rule writes are refused
+
+### 38.2 Model picker
+- [ ] A new rule starts on All aircraft, and no model chip is pressed
+- [ ] There is one chip per fleet model, labelled with its active aircraft count, for example X10 (4)
+- [ ] Picking a model turns All aircraft off; turning every model off turns All aircraft back on
+- [ ] A model with no active aircraft is not offered, unless an existing rule already uses it
+- [ ] A rule model that is not in the fleet shows as a dashed chip marked Not in fleet; clicking it removes it
+- [ ] Saved rule appears in the list with its models, or no model note for All aircraft
+
+### 38.3 Rule with two models
+- [ ] Create a rule with both models; a pilot's flights on either model count toward hours and flights
+- [ ] A flight on a third model does not count
+- [ ] A flight waiting for review does not count until it is reviewed
+- [ ] Editing the rule to one model drops the other model's flights from the count
+
+### 38.4 Existing rule after upgrade
+- [ ] A rule that had one typed model before the upgrade shows that model pressed in the picker
+- [ ] A rule that had no model shows All aircraft
+- [ ] Pilot currency status is the same as before the upgrade
+
+### 38.5 Backup and restore
+- [ ] Export a backup with a two-model rule, change the rule, then restore; both models are back
+- [ ] Restore a backup taken before this feature; its rules keep their models and pilot currency is unchanged
