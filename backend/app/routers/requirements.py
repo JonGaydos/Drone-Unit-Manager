@@ -4,6 +4,7 @@ Read routes that show results save the periods whose grace time has ended
 first, so a page never shows a period as pending once it should be saved.
 """
 
+import logging
 from datetime import date, datetime, timedelta
 from operator import attrgetter
 from typing import Annotated
@@ -11,7 +12,6 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
-from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -31,15 +31,19 @@ from app.schemas.requirement import (
     TemplateOut, TemplateUpdate,
 )
 from app.services.fleet_models import fleet_models
-from app.services.local_time import display_zone
+from app.services.local_time import local_today
 from app.services.requirement_eval import (
     EXCUSED, MET, MISSED, PilotProgress, UnitEvalSettings, assigned_pilots, evaluate_period,
     unit_eval_settings,
 )
-from app.services.requirement_periods import Period, period_containing, periods_between
+from app.services.requirement_notify import notify_assigned
+from app.services.requirement_periods import Period, period_containing
 from app.services.requirement_results import (
-    OFF_REASON, close_due_periods, open_misses, recalculate_period, requirements_score,
+    OFF_REASON, close_due_periods, open_misses, pending_periods, recalculate_period, requirements_score,
+    saved_through,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/requirements", tags=["requirements"])
 
@@ -57,11 +61,6 @@ GRACE_KEY = "requirements_grace_days"
 FISCAL_KEY = "fiscal_year_start_month"
 
 
-def local_today(db: Session) -> date:
-    """Today in the unit's display time zone."""
-    return datetime.now(display_zone(db)).date()
-
-
 def _close_safely(db: Session, today: date) -> None:
     """Save due periods. When the scheduler saves the same period at the same
     moment, the unique index refuses the second writer; its rows are already
@@ -70,6 +69,20 @@ def _close_safely(db: Session, today: date) -> None:
         close_due_periods(db, today)
     except IntegrityError:
         db.rollback()
+
+
+def _notify_safely(db: Session, req: FlightRequirement, pilot_ids: list[int]) -> None:
+    """Email newly assigned pilots. A failure is logged, never raised: the edit is already saved."""
+    try:
+        notify_assigned(db, req, pilot_ids)
+    except Exception:
+        logger.exception("Assignment emails for requirement %s failed", req.id)
+        db.rollback()
+
+
+def _assigned_ids(db: Session, req: FlightRequirement) -> list[int]:
+    """Ids of the pilots ``req`` applies to now; none while it is off."""
+    return [pilot.id for pilot in assigned_pilots(db, req)] if req.is_active else []
 
 
 def _get_requirement(db: Session, requirement_id: int) -> FlightRequirement:
@@ -87,22 +100,6 @@ def _period_out(period: Period | None, today: date) -> dict | None:
     if period is None:
         return None
     return {"start": period[0], "end": period[1], "days_left": max((period[1] - today).days + 1, 0)}
-
-
-def _watermark(db: Session, requirement_id: int) -> date | None:
-    """The end of the requirement's latest saved period; periods up to it are closed."""
-    return db.query(func.max(FlightRequirementResult.period_end)).filter(
-        FlightRequirementResult.requirement_id == requirement_id, FlightRequirementResult.saved_at.isnot(None),
-    ).scalar()
-
-
-def _pending(db: Session, req: FlightRequirement, settings: UnitEvalSettings, today: date) -> list[Period]:
-    """Periods that have ended and are still inside their grace time, not saved, oldest first."""
-    first = today - timedelta(days=settings.grace_days)
-    watermark = _watermark(db, req.id)
-    spec = req.to_period_spec(settings.fiscal_start_month)
-    return [period for period in periods_between(spec, first, today - timedelta(days=1))
-            if first <= period[1] < today and (watermark is None or period[0] > watermark)]
 
 
 def _ordered(rows, field: str) -> list:
@@ -209,6 +206,7 @@ def create_requirement(data: RequirementIn, db: DBSession, user: ManageUser):
     db.add(req)
     db.commit()
     db.refresh(req)
+    _notify_safely(db, req, _assigned_ids(db, req))
     return _out(req, unit_eval_settings(db).fiscal_start_month, local_today(db))
 
 
@@ -225,12 +223,14 @@ def update_requirement(requirement_id: int, data: RequirementUpdate, db: DBSessi
     switching = edited.is_active != req.is_active
     if switching:
         _close_safely(db, today)
+    before = set(_assigned_ids(db, req))
     _apply(db, req, edited)
     req.modified_by_id = user.id
     db.commit()
     if switching and edited.is_active:
         _close_safely(db, today)
     db.refresh(req)
+    _notify_safely(db, req, [pilot_id for pilot_id in _assigned_ids(db, req) if pilot_id not in before])
     return _out(req, unit_eval_settings(db).fiscal_start_month, today)
 
 
@@ -238,7 +238,7 @@ def update_requirement(requirement_id: int, data: RequirementUpdate, db: DBSessi
 def delete_requirement(requirement_id: int, db: DBSession, user: ManageUser):
     """Delete a requirement with no saved results; one with history is switched off instead."""
     req = _get_requirement(db, requirement_id)
-    if _watermark(db, req.id) is not None:
+    if saved_through(db, req.id) is not None:
         raise HTTPException(409, "This requirement has saved results. Switch it off instead.")
     db.delete(req)
     db.commit()
@@ -280,7 +280,7 @@ def _requirement_status(db: Session, req: FlightRequirement, settings: UnitEvalS
         "target_flights": req.target_flights, "model_mode": req.model_mode,
         "current_period": _period_progress(db, req, current, settings, today, names) if current else None,
         "pending_periods": [_period_progress(db, req, period, settings, today, names)
-                            for period in _pending(db, req, settings, today)],
+                            for period in pending_periods(db, req, settings, today)],
     }
 
 
@@ -315,7 +315,8 @@ def _pilot_progress(db: Session, pilot: Pilot, settings: UnitEvalSettings, today
         period = _current(req, settings.fiscal_start_month, today)
         if period is not None:
             current.append(_pilot_period(db, req, pilot, period, settings, today))
-        pending.extend(_pilot_period(db, req, pilot, p, settings, today) for p in _pending(db, req, settings, today))
+        pending.extend(_pilot_period(db, req, pilot, p, settings, today)
+                       for p in pending_periods(db, req, settings, today))
     pending = [row for row in pending if row is not None]
     pending.sort(key=lambda row: (row["period"]["start"], row["name"]))
     return [row for row in current if row is not None], pending
@@ -388,7 +389,7 @@ def _excuse_saved(row: FlightRequirementResult, data: ExcuseIn, user: User) -> N
 
 def _excuse_open(db: Session, req: FlightRequirement, data: ExcuseIn, user: User) -> None:
     """Store an excusal for a period not saved yet; saving the period fills it in."""
-    watermark = _watermark(db, req.id)
+    watermark = saved_through(db, req.id)
     if watermark is not None and data.period_start <= watermark:
         raise HTTPException(422, "That period is closed and has no saved result for this pilot")
     period = _current(req, unit_eval_settings(db).fiscal_start_month, data.period_start)

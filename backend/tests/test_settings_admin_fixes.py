@@ -305,7 +305,7 @@ def test_preferences_null_clears_or_resets(client, db, supervisor_headers):
     assert got["send_day"] is None
     assert got["send_time"] == "07:00"
     assert got["email_override"] is None
-    assert len(got["categories"]) == 8
+    assert len(got["categories"]) == 9
     assert got["frequency"] == "weekly"
 
 

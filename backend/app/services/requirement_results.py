@@ -88,6 +88,23 @@ def _on_since(req: FlightRequirement, settings: UnitEvalSettings) -> date | None
     return local_flight_date(req.active_changed_at, settings.zone) if req.is_active else None
 
 
+def saved_through(db: Session, requirement_id: int) -> date | None:
+    """The end of the requirement's latest saved period; periods up to it are closed."""
+    return db.query(func.max(FlightRequirementResult.period_end)).filter(
+        FlightRequirementResult.requirement_id == requirement_id, FlightRequirementResult.saved_at.isnot(None),
+    ).scalar()
+
+
+def pending_periods(db: Session, req: FlightRequirement, settings: UnitEvalSettings,
+                    today: date) -> list[Period]:
+    """Periods that have ended and are still inside their grace time, not saved, oldest first."""
+    first = today - timedelta(days=settings.grace_days)
+    watermark = saved_through(db, req.id)
+    spec = req.to_period_spec(settings.fiscal_start_month)
+    return [period for period in periods_between(spec, first, today - timedelta(days=1))
+            if first <= period[1] < today and (watermark is None or period[0] > watermark)]
+
+
 def _due_periods(db: Session, req: FlightRequirement, settings: UnitEvalSettings,
                  today: date) -> list[Period]:
     """The requirement's periods ready to close: due, and starting after the
@@ -96,10 +113,7 @@ def _due_periods(db: Session, req: FlightRequirement, settings: UnitEvalSettings
     ends = _closing_ends(req, settings, today)
     if ends is None:
         return []
-    watermark = db.query(func.max(FlightRequirementResult.period_end)).filter(
-        FlightRequirementResult.requirement_id == req.id,
-        FlightRequirementResult.saved_at.isnot(None),
-    ).scalar()
+    watermark = saved_through(db, req.id)
     spec = req.to_period_spec(settings.fiscal_start_month)
     return [period for period in periods_between(spec, *ends)
             if period[1] <= ends[1] and (watermark is None or period[0] > watermark)]

@@ -156,6 +156,75 @@ def _build_recent_incidents(db: Session, pref) -> list[dict] | None:
     ]
 
 
+# Open periods ending this many days from today or sooner are listed; misses
+# saved this many days back are too.
+REQUIREMENTS_LOOKAHEAD_DAYS = 7
+
+
+def _plural(count: int, word: str) -> str:
+    return f"{count} {word}{'' if count == 1 else 's'}"
+
+
+def _not_met(db: Session, req, period, settings, today: date) -> tuple[str, int, int]:
+    """'N of M pilots not met' for a period, N, and the period's unreviewed flight count."""
+    from app.services.requirement_eval import EXCUSED, MET, evaluate_period
+    progress = evaluate_period(db, req, period, today, settings.grace_days).values()
+    behind = sum(p.status not in (MET, EXCUSED) for p in progress)
+    return f"{behind} of {len(progress)} pilots not met", behind, sum(p.unreviewed_in_period for p in progress)
+
+
+def _requirement_items(db: Session, req, settings, today: date) -> list[dict]:
+    """A requirement's open period ending soon, and its periods pending review
+    with their unreviewed flight count, when some pilot has not met it."""
+    from app.services.requirement_periods import period_containing
+    from app.services.requirement_results import pending_periods
+    items = []
+    current = period_containing(req.to_period_spec(settings.fiscal_start_month), today)
+    if current and (current[1] - today).days <= REQUIREMENTS_LOOKAHEAD_DAYS:
+        text, behind, _ = _not_met(db, req, current, settings, today)
+        if behind:
+            items.append({"requirement": req.name, "status": f"Period ends {current[1]}: {text}"})
+    for period in pending_periods(db, req, settings, today):
+        text, behind, unreviewed = _not_met(db, req, period, settings, today)
+        if behind:
+            items.append({"requirement": req.name,
+                          "status": f"Pending review for {period[0]} to {period[1]}: {text}, "
+                                    f"{_plural(unreviewed, 'unreviewed flight')}"})
+    return items
+
+
+def _recent_requirement_misses(db: Session) -> list[dict]:
+    from app.models.flight_requirement import FlightRequirement, FlightRequirementResult
+    from app.services.requirement_eval import MISSED
+    since = datetime.now(timezone.utc) - timedelta(days=REQUIREMENTS_LOOKAHEAD_DAYS)
+    rows = (
+        db.query(FlightRequirementResult, FlightRequirement.name, Pilot)
+        .join(FlightRequirement, FlightRequirement.id == FlightRequirementResult.requirement_id)
+        .join(Pilot, Pilot.id == FlightRequirementResult.pilot_id)
+        .filter(FlightRequirementResult.status == MISSED, FlightRequirementResult.saved_at >= since)
+        .order_by(FlightRequirement.name, FlightRequirementResult.period_start, Pilot.id)
+        .all()
+    )
+    return [{"requirement": name, "pilot": pilot.full_name,
+             "status": f"Missed {row.period_start} to {row.period_end}"} for row, name, pilot in rows]
+
+
+def _build_requirements(db: Session) -> list[dict] | None:
+    """Flight requirements: open periods ending within a week with pilots not
+    met, periods pending review, and misses saved in the last week."""
+    from app.models.flight_requirement import FlightRequirement
+    from app.services.local_time import local_today
+    from app.services.requirement_eval import unit_eval_settings
+    today = local_today(db)
+    settings = unit_eval_settings(db)
+    items = []
+    for req in (db.query(FlightRequirement).filter(FlightRequirement.is_active.is_(True))
+                .order_by(FlightRequirement.name, FlightRequirement.id)):
+        items.extend(_requirement_items(db, req, settings, today))
+    items.extend(_recent_requirement_misses(db))
+    return items or None
+
+
 def build_digest(db: Session, user: User) -> dict | None:
     """Build a digest of actionable items, each section following a permission.
 
@@ -189,6 +258,7 @@ def build_digest(db: Session, user: User) -> dict | None:
         ("overdue_maintenance", "maintenance.view", lambda: _build_overdue_maintenance(db, today)),
         ("overdue_checkouts", "fleet.view", lambda: _build_overdue_checkouts(db)),
         ("recent_incidents", "incidents.view", lambda: _build_recent_incidents(db, pref)),
+        ("requirements", "requirements.view", lambda: _build_requirements(db)),
     ]
 
     for key, permission, builder in section_defs:
@@ -233,6 +303,7 @@ def render_digest_html(sections: dict, user: User, org_name: str) -> str:
         "assigned_missions": "Assigned Missions",
         "overdue_checkouts": "Overdue Equipment Checkouts",
         "recent_incidents": "Recent Incidents",
+        "requirements": "Flight Requirements",
     }
 
     sections_html = ""

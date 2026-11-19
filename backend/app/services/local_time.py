@@ -24,6 +24,11 @@ def display_zone(db) -> ZoneInfo:
         return ZoneInfo(DEFAULT_TIMEZONE)
 
 
+def local_today(db) -> date:
+    """Today in the unit's display time zone."""
+    return datetime.now(display_zone(db)).date()
+
+
 def local_flight_date(takeoff: datetime | None, zone: ZoneInfo) -> date | None:
     """The calendar date of ``takeoff`` in ``zone``. A naive value is UTC."""
     if takeoff is None:
