@@ -112,7 +112,7 @@ The form shows a live plain-English summary, for example:
 ### Time of day
 
 - **Any time**: all flight time counts. This is the default and matches currency.
-- **Clock window**: a start and end time in the unit's display timezone, for example 12:00 AM to 6:00 AM, or 6:00 PM to 2:00 AM. When the end is earlier than the start, the window crosses midnight.
+- **Clock window**: a start and end time in the unit's display timezone, for example 12:00 AM to 6:00 AM, or 6:00 PM to 2:00 AM. When the end is earlier than the start, the window crosses midnight. The unit's time zone applies to every flight, including flights flown in another time zone.
 - **Night**: from the end of evening civil twilight to the start of morning civil twilight, the definition Part 107 uses. Sunset and sunrise are calculated for the flight's takeoff location and date. When a flight has no coordinates, the unit default location (`org_default_lat`, `org_default_lon`) is used. When neither is set, the form refuses the night option and says why.
 - Only the minutes that fall inside the window count. A flight from 5:30 AM to 6:15 AM gives 30 minutes toward a 12 AM to 6 AM window.
 - A flight counts toward the flight-count target when at least one of its minutes falls inside the window.
@@ -192,14 +192,16 @@ New rows in the role permissions grid, in their own "Flight requirements" group:
 | Key | Meaning | Supervisor | Pilot | Viewer |
 |---|---|---|---|---|
 | `requirements.view` | See requirements, every pilot's progress and history, and the Requirements score | Yes | Yes | Yes |
-| `requirements.manage` | Create, edit, delete requirements; recalculate a closed period | Yes | No | Locked off |
+| `requirements.manage` | Create, edit, duplicate, delete requirements and templates; recalculate a closed period | Yes | No | Locked off |
 | `requirements.excuse` | Excuse or un-excuse a pilot for a period | Yes | No | Locked off |
 
 Admins always have all three. Anyone with view sees every pilot's progress, not only their own. Currency stays on the existing `certifications.view` and `certifications.manage` rows.
 
 ## Screens
 
-- **Settings, Flight Requirements**: a list of requirements and the builder form above. It sits next to Currency Rules and needs `requirements.manage`.
+- **Settings, Flight Requirements tab**: its own tab in Settings, shown to users with `requirements.manage`. It holds the list of requirements, the builder form above, the templates list, and the requirement settings (grace days, fiscal year start month). Currency Rules stay where they are.
+- **Duplicate**: each requirement has a Duplicate action that opens the form filled from it as a new requirement named "Copy of ...".
+- **Templates**: a requirement can be saved as a named template, and a new requirement can start from one. A template holds every setting except the start, end and selected pilots. Templates can be renamed and deleted; changing or deleting one never changes requirements made from it.
 - **Settings, Currency Rules**: shown to anyone with `certifications.manage`, not only admins, so supervisors can manage currency. The API already allows this; today only the screen is admin-only.
 - **Dashboard and Compliance, Requirements score**: shown next to the compliance score. The compliance score itself does not change.
 - **Dashboard, This Period card**: for each active requirement, the days left in the period, how many pilots have met it, and each pilot's progress, for example "X10 12/15m, X2E done".
@@ -215,8 +217,16 @@ Admins always have all three. Anyone with view sees every pilot's progress, not 
 - `flight_requirement_purposes`: requirement id and purpose name. No rows means all purposes.
 - `flight_requirement_results`: requirement id, pilot id, period start, period end, status, totals per model (JSON), target snapshot (JSON), excused by and reason, saved at. Unique on requirement, pilot and period start.
 - `currency_rule_models`: rule id and model name, replacing `currency_rules.vehicle_model`.
+- `flight_requirement_templates`: name, the requirement settings (JSON), timestamps, created and modified by.
 
-One additive migration, 0016. The old `vehicle_model` column is kept for one release after its values are copied, then dropped in a later migration.
+Two additive migrations, one per change (see Build order): 0016 adds `currency_rule_models` and copies each rule's `vehicle_model` into it; 0017 adds the requirement tables. The old `vehicle_model` column is kept for one release after its values are copied, then dropped in a later migration. Every new table joins the backup export, and restoring a backup from before 0016 fills `currency_rule_models` from `vehicle_model`.
+
+## Build order
+
+Two changes, each its own branch, PR, staging test and release:
+
+1. **Currency model picker**: supervisors get the Currency Rules screen, `GET /api/currency/models`, the fleet model picker on the currency rule form, and migration 0016.
+2. **Flight Requirements**: everything else in this spec, with migration 0017.
 
 ## API
 
@@ -226,6 +236,7 @@ One additive migration, 0016. The old `vehicle_model` column is kept for one rel
 - `GET /api/requirements/pilots/{pilot_id}`: current period and history for one pilot
 - `POST /api/requirements/{id}/excuse`: excuse or un-excuse a pilot for a period
 - `POST /api/requirements/{id}/recalculate`: recalculate one closed period (audited)
+- `GET, POST /api/requirements/templates`, `PATCH, DELETE /api/requirements/templates/{id}`
 
 All write routes are audited like currency rules.
 
@@ -266,3 +277,8 @@ All write routes are audited like currency rules.
 13. Emails: assignment, reminder before the period ends, miss (pilot and requirement managers), and a digest section (2026-11-18).
 14. Export: CSV of results and a Flight Requirements PDF report (2026-11-18).
 15. Calendar: deadline entries only, on each period's last day (2026-11-18).
+16. Reuse: both a Duplicate action and saved templates (2026-11-18).
+17. Flight Requirements get their own tab in Settings (2026-11-18).
+18. Clock windows always use the unit's display time zone, also for flights flown elsewhere (2026-11-18).
+19. The unit default location is set on production (owner, 2026-11-18).
+20. Build order: two changes, currency model picker first (migration 0016), then Flight Requirements (migration 0017) (2026-11-18).
