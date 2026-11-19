@@ -186,17 +186,47 @@ def test_editing_an_inactive_requirement_saves_nothing_more(db):
     assert len(_rows(db, req)) == 2
 
 
-def test_reactivated_requirement_skips_the_months_it_was_off(db):
-    _pilot(db)
+OFF_TOTALS = {"*": {"minutes": 0, "flights": 0}}
+
+
+def _summary(rows):
+    return [(row.period_start.month, row.status, row.excused, row.excused_by_id, row.excused_reason)
+            for row in rows]
+
+
+def test_reactivated_requirement_saves_the_months_it_was_off_as_excused(db):
+    pilot = _pilot(db)
+    req = _req(db, start_date=date(2026, 1, 1))
+    _switch(db, req, False, MAR_10)
+    close_due_periods(db, date(2026, 6, 1))
+    _flight(db, pilot, day=date(2026, 4, 10), minutes=90)
+    _switch(db, req, True, JUL_5)
+    off_rows = close_due_periods(db, date(2026, 7, 5))
+    assert _summary(off_rows) == [(m, "excused", True, None, "Requirement was switched off") for m in (3, 4, 5, 6)]
+    assert all(row.totals == OFF_TOTALS and row.target_snapshot["name"] == "Monthly 1 hr" for row in off_rows)
+    assert close_due_periods(db, date(2026, 8, 14)) == []
+    saved = close_due_periods(db, DAY_AFTER_GRACE)
+    assert [row.period_start.month for row in saved] == [7, 8, 9, 10]
+    assert close_due_periods(db, DAY_AFTER_GRACE) == []
+
+
+def test_switching_off_again_does_not_reopen_the_first_off_months(db):
+    pilot = _pilot(db)
     req = _req(db, start_date=date(2026, 1, 1))
     _switch(db, req, False, MAR_10)
     close_due_periods(db, date(2026, 6, 1))
     _switch(db, req, True, JUL_5)
-    assert close_due_periods(db, date(2026, 8, 14)) == []
-    saved = close_due_periods(db, DAY_AFTER_GRACE)
-    assert [row.period_start for row in saved] == [date(2026, m, 1) for m in (7, 8, 9, 10)]
-    assert [row.period_start for row in _rows(db, req)] == [date(2026, m, 1) for m in (1, 2, 7, 8, 9, 10)]
-    assert close_due_periods(db, DAY_AFTER_GRACE) == []
+    close_due_periods(db, date(2026, 7, 6))  # the daily run while it is on
+    _switch(db, req, False, datetime(2026, 7, 20, 15, 0, tzinfo=timezone.utc))
+    close_due_periods(db, date(2026, 8, 20))
+    off = (True, None, "Requirement was switched off")
+    assert _summary(_rows(db, req)) == [
+        (1, "missed", None, None, None), (2, "missed", None, None, None),
+        *[(m, "excused", *off) for m in (3, 4, 5, 6)],
+    ]
+    assert [f["period_start"].month for f in open_misses(db)[pilot.id]] == [1, 2]
+    assert requirements_score(db, date(2026, 8, 20)) == 0.0
+    assert close_due_periods(db, date(2026, 8, 21)) == []
 
 
 def test_requirement_created_inactive_saves_nothing(db):

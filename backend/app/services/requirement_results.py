@@ -7,6 +7,7 @@ an admin recalculates the period on purpose with ``recalculate_period``.
 """
 
 import math
+from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
 from itertools import groupby
 from operator import attrgetter
@@ -25,6 +26,7 @@ from app.services.requirement_eval import (
 from app.services.requirement_periods import Period, periods_between
 
 SCORE_WINDOW_DAYS = 365
+OFF_REASON = "Requirement was switched off"
 
 
 def _clock(value) -> str | None:
@@ -66,17 +68,24 @@ def _fill(row: FlightRequirementResult, progress: PilotProgress, period_end: dat
 def _closing_ends(req: FlightRequirement, settings: UnitEvalSettings, today: date) -> tuple[date, date] | None:
     """The earliest and latest period end that can close today, or None.
 
-    A period closes once its grace time has ended. An inactive requirement
+    A period closes once its grace time has ended. For a requirement switched
+    back on, periods that ended while it was off close at once (they are saved
+    as excused, so there is nothing to wait for). An inactive requirement
     closes only periods that ended by the day it was switched off, and nothing
-    if it was never on. One switched back on skips periods that ended before
-    that day."""
+    if it was never on."""
     latest = today - timedelta(days=settings.grace_days + 1)
     changed = local_flight_date(req.active_changed_at, settings.zone)
     if req.is_active:
-        return changed or date.min, latest
+        return date.min, latest if changed is None else max(latest, changed - timedelta(days=1))
     if changed is None:
         return None
     return date.min, min(latest, changed)
+
+
+def _on_since(req: FlightRequirement, settings: UnitEvalSettings) -> date | None:
+    """For a requirement switched back on, the local day it was; periods that
+    ended before it fell while it was off."""
+    return local_flight_date(req.active_changed_at, settings.zone) if req.is_active else None
 
 
 def _due_periods(db: Session, req: FlightRequirement, settings: UnitEvalSettings,
@@ -96,10 +105,18 @@ def _due_periods(db: Session, req: FlightRequirement, settings: UnitEvalSettings
             if period[1] <= ends[1] and (watermark is None or period[0] > watermark)]
 
 
+def _switched_off(progress: PilotProgress) -> PilotProgress:
+    """A pilot's result for a period that ended while the requirement was off."""
+    zeros = {key: {"minutes": 0, "flights": 0} for key in progress.totals}
+    return replace(progress, status=EXCUSED, totals=zeros, excused=True, excused_reason=OFF_REASON)
+
+
 def _save_rows(db: Session, req: FlightRequirement, period: Period, progress: dict[int, PilotProgress],
-               overrides: dict[tuple[int, date], FlightRequirementResult],
-               now: datetime) -> list[FlightRequirementResult]:
-    """Save each evaluated pilot's result for ``period``, filling an excusal row if there is one."""
+               overrides: dict[tuple[int, date], FlightRequirementResult], now: datetime,
+               off: bool) -> list[FlightRequirementResult]:
+    """Save each evaluated pilot's result for ``period``, filling an excusal row
+    if there is one. A period that ended while the requirement was off is saved
+    as excused for that reason, whatever any excusal row said."""
     snapshot = target_snapshot(req)
     saved: list[FlightRequirementResult] = []
     for pilot_id, pilot_progress in progress.items():
@@ -107,7 +124,9 @@ def _save_rows(db: Session, req: FlightRequirement, period: Period, progress: di
         if row is None:
             row = FlightRequirementResult(requirement_id=req.id, pilot_id=pilot_id, period_start=period[0])
             db.add(row)
-        _fill(row, pilot_progress, period[1], snapshot, now)
+        if off:
+            row.excused, row.excused_by_id, row.excused_reason = True, None, OFF_REASON
+        _fill(row, _switched_off(pilot_progress) if off else pilot_progress, period[1], snapshot, now)
         saved.append(row)
     return saved
 
@@ -123,10 +142,12 @@ def _close_requirement(db: Session, req: FlightRequirement, settings: UnitEvalSe
             FlightRequirementResult.saved_at.is_(None),
         )
     }
+    on_since = _on_since(req, settings)
     saved: list[FlightRequirementResult] = []
     for period in periods:
         progress = evaluate_period(db, req, period, today, settings.grace_days)
-        saved.extend(_save_rows(db, req, period, progress, overrides, now))
+        off = on_since is not None and period[1] < on_since
+        saved.extend(_save_rows(db, req, period, progress, overrides, now, off))
     return saved
 
 
@@ -136,8 +157,9 @@ def close_due_periods(db: Session, today: date) -> list[FlightRequirementResult]
     requirement's last saved period ended. A period is saved for every assigned
     pilot at once and is closed from then on; an open-period excusal row is
     filled in. An inactive requirement saves only periods that ended by the day
-    it was switched off, and one switched back on skips the periods that ended
-    while it was off. Returns the rows saved now. Safe to run again: a second
+    it was switched off. One switched back on saves the periods that ended
+    while it was off as excused, so a later switch-off cannot reopen them.
+    Returns the rows saved now. Safe to run again: a second
     run saves nothing. Commits, and records the run as one audit entry when it
     saves anything."""
     settings = unit_eval_settings(db)
