@@ -51,6 +51,7 @@ from app.routers import operating_authorities
 from app.routers import api_tokens as api_tokens_router
 from app.routers import permissions as permissions_router
 from app.routers import import_router
+from app.routers import requirements as requirements_router
 from app.services.scheduler import start_scheduler, stop_scheduler
 from app.models.user import User
 from app.models.flight import FlightPurpose
@@ -255,6 +256,7 @@ app.include_router(incidents.router)
 app.include_router(flight_plans.router)
 app.include_router(weather.router)
 app.include_router(currency.router)
+app.include_router(requirements_router.router)
 app.include_router(equipment_checkouts.router)
 app.include_router(checklists.router)
 app.include_router(components.router)
