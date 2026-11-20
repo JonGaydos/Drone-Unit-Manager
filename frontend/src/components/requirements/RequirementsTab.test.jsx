@@ -97,6 +97,18 @@ describe('RequirementsTab', () => {
     expect(calls[0].body).toMatchObject({ model_mode: 'each', models: ['X10', 'X2E'], pilot_ids: [1] })
   })
 
+  it('warns about a past start only on a new requirement, not when editing one', async () => {
+    mock({ requirements: [{ ...REQ, start_date: '2020-01-01' }] })
+    const { user } = renderTab()
+    await user.click(await screen.findByRole('button', { name: 'Edit Quarterly models' }))
+    expect(screen.getByLabelText('Starts')).toHaveValue('2020-01-01')
+    expect(screen.queryByText(/starts in the past/)).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    await user.click(screen.getByRole('button', { name: 'New requirement' }))
+    fireEvent.change(screen.getByLabelText('Starts'), { target: { value: '2020-01-01' } })
+    expect(screen.getByText(/starts in the past/)).toBeInTheDocument()
+  })
+
   it('duplicates into a prefilled form named "Copy of ..." without saving', async () => {
     const calls = mock()
     const { user } = renderTab()

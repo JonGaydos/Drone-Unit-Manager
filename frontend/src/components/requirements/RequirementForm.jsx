@@ -14,10 +14,13 @@ function Section({ children }) {
  * The requirement builder. `initial` is form state (see formState.js);
  * `onSubmit(body)` saves it and rejects with an Error whose message the form
  * shows. `models` is null until the fleet list loads; `locationSet` says
- * whether the unit default location is set, which Night needs.
+ * whether the unit default location is set, which Night needs. `isNew` is
+ * false when editing a saved requirement, whose closed periods never reopen,
+ * so the past-start warning shows only for a new one.
  */
 export default function RequirementForm({
-  title, initial, models, modelsError = false, purposes, pilots, locationSet, fiscalStartMonth, onSubmit, onCancel,
+  title, initial, isNew = true, models, modelsError = false, purposes, pilots, locationSet, fiscalStartMonth, onSubmit,
+  onCancel,
 }) {
   const [form, setForm] = useState(initial)
   const [error, setError] = useState(null)
@@ -52,7 +55,7 @@ export default function RequirementForm({
       <Section><BasicsFields form={form} update={update} /></Section>
       <Section>
         <PeriodFields form={form} update={update} />
-        {startsInPast(form, fiscalStartMonth) && (
+        {isNew && startsInPast(form, fiscalStartMonth) && (
           <p className="mt-3 rounded-lg bg-warning-bg px-3 py-2 text-sm text-warning">
             This requirement starts in the past. Periods that already ended will be counted, flagged and emailed.
           </p>

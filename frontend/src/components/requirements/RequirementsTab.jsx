@@ -182,6 +182,7 @@ export default function RequirementsTab() {
           key={editing.key}
           title={editing.title}
           initial={editing.initial}
+          isNew={!editing.id}
           models={data.models}
           modelsError={data.modelsError}
           purposes={data.purposes}
