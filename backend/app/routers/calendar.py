@@ -78,7 +78,7 @@ def _cert_events(db, start, end) -> list[dict]:
             for pc, ct, pilot in cert_rows]
 
 
-def _requirement_events(db, start, end) -> list[dict]:
+def _requirement_events(db, start, end, link: str) -> list[dict]:
     """The last day of each period of an active requirement that falls in the range."""
     fiscal_start = unit_eval_settings(db).fiscal_start_month
     events = []
@@ -88,7 +88,7 @@ def _requirement_events(db, start, end) -> list[dict]:
                 events.append({"id": f"requirement-{req.id}-{period_end.isoformat()}", "title": f"Due: {req.name}",
                                "start": _iso(period_end), "end": None, "all_day": True,
                                "category": "requirement", "source": "requirement",
-                               "link": "/settings?tab=requirements", "editable": False})
+                               "link": link, "editable": False})
     return events
 
 
@@ -107,7 +107,9 @@ def get_calendar(db: DBSession, user: ViewUser, start: date, end: date):
     if permissions_service.can(db, user, "certifications.view"):
         events += _cert_events(db, start, end)
     if permissions_service.can(db, user, "requirements.view"):
-        events += _requirement_events(db, start, end)
+        # Managers open the requirements tab; everyone else the dashboard's This Period tile.
+        manage = permissions_service.can(db, user, "requirements.manage")
+        events += _requirement_events(db, start, end, "/settings?tab=requirements" if manage else "/")
     # Manual events + leave (overlap the range)
     manual = db.query(CalendarEvent).filter(
         CalendarEvent.start_date <= end,

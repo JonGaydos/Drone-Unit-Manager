@@ -93,6 +93,16 @@ def test_calendar_has_one_deadline_per_period_end_in_range(client, db, admin_hea
     assert events[0]["link"] == "/settings?tab=requirements"
 
 
+def test_calendar_links_to_the_dashboard_without_requirements_manage(client, db, viewer_headers, supervisor_headers):
+    _req(db)
+    events = [e for e in _calendar(client, viewer_headers, "2026-10-01", "2026-10-31") if e["source"] == "requirement"]
+    assert [e["link"] for e in events] == ["/"]
+    _deny(db, "supervisor", "requirements.manage")
+    events = [e for e in _calendar(client, supervisor_headers, "2026-10-01", "2026-10-31")
+              if e["source"] == "requirement"]
+    assert [e["link"] for e in events] == ["/"]
+
+
 def test_calendar_skips_inactive_requirements(client, db, admin_headers):
     _req(db, is_active=False)
     events = _calendar(client, admin_headers, "2026-10-01", "2026-11-30")

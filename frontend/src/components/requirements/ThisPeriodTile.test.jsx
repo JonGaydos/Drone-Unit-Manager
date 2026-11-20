@@ -66,16 +66,17 @@ describe('ThisPeriodTile', () => {
   })
 
   it('names the pilots with an open miss', async () => {
-    mock({ flags: { 3: [{ result_id: 9, requirement_id: 1, name: 'Quarterly models', period_start: '2026-04-01', period_end: '2026-06-30' }] } })
+    mock({ flags: { 3: [{ result_id: 9, requirement_id: 1, name: 'Quarterly models', period_start: '2026-04-01', period_end: '2026-06-30', pilot_name: 'Pat Pilot' }] } })
     renderWithProviders(<ThisPeriodTile />, { role: 'pilot' })
     const line = await screen.findByText(/Open misses/)
     expect(within(line.closest('p')).getByRole('link', { name: 'Pat Pilot' })).toHaveAttribute('href', '/pilots/3')
   })
 
-  it('names a flagged pilot who is no longer assigned by number', async () => {
-    mock({ flags: { 12: [{ result_id: 9, requirement_id: 1, name: 'Old', period_start: '2026-04-01', period_end: '2026-06-30' }] } })
+  it('names a flagged pilot who is no longer assigned by the name the flags carry', async () => {
+    mock({ flags: { 12: [{ result_id: 9, requirement_id: 1, name: 'Old', period_start: '2026-04-01', period_end: '2026-06-30', pilot_name: 'Lee Former' }] } })
     renderWithProviders(<ThisPeriodTile />, { role: 'pilot' })
-    expect(await screen.findByRole('link', { name: 'Pilot 12' })).toHaveAttribute('href', '/pilots/12')
+    expect(await screen.findByRole('link', { name: 'Lee Former' })).toHaveAttribute('href', '/pilots/12')
+    expect(screen.queryByText('Pilot 12')).toBeNull()
   })
 
   it('shows an empty state when there are no active requirements', async () => {

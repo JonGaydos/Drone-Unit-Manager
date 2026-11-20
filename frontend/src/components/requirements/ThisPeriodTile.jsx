@@ -65,8 +65,8 @@ function RequirementBlock({ req }) {
   )
 }
 
-/** The pilots with an open miss, named from the status where they appear. */
-function OpenMisses({ flags, names }) {
+/** The pilots with an open miss, by the name the flags carry. */
+function OpenMisses({ flags }) {
   const ids = Object.keys(flags)
   if (ids.length === 0) return null
   return (
@@ -76,23 +76,12 @@ function OpenMisses({ flags, names }) {
         <span key={id}>
           {i > 0 && ', '}
           <Link to={`/pilots/${id}`} title={flags[id].map(f => f.name).join(', ')} className="text-foreground hover:underline">
-            {names[id] || `Pilot ${id}`}
+            {flags[id][0].pilot_name}
           </Link>
         </span>
       ))}
     </p>
   )
-}
-
-function pilotNames(requirements) {
-  const names = {}
-  for (const req of requirements) {
-    const periods = [req.current_period, ...req.pending_periods].filter(Boolean)
-    for (const period of periods) {
-      for (const p of period.pilots) names[p.pilot_id] = p.pilot_name
-    }
-  }
-  return names
 }
 
 function TileBody({ status, failed }) {
@@ -140,7 +129,7 @@ export default function ThisPeriodTile({ className = '' }) {
         )}
       </div>
       <TileBody status={status} failed={failed} />
-      {status && <OpenMisses flags={flags} names={pilotNames(status.requirements)} />}
+      {status && <OpenMisses flags={flags} />}
     </section>
   )
 }

@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { renderWithProviders } from '@/test/render'
 import RequirementsTab from './RequirementsTab'
+import { todayLocal } from '@/lib/utils'
 
 const REQ = {
   id: 4, name: 'Quarterly models', description: null, period_type: 'calendar_quarter', recurring: true,
@@ -108,6 +109,26 @@ describe('RequirementsTab', () => {
     await waitFor(() => expect(calls).toHaveLength(1))
     expect(calls[0]).toMatchObject({ method: 'POST', url: '/api/requirements' })
     expect(calls[0].body.name).toBe('Copy of Quarterly models')
+    expect(calls[0].body.start_date).toBe(todayLocal())
+  })
+
+  it('downloads a requirement\'s results as CSV with reports.export, and hides it without', async () => {
+    let asked = null
+    mock()
+    server.use(http.get('/api/export/requirements/:id/csv', ({ request, params }) => {
+      asked = { id: params.id, pilot: new URL(request.url).searchParams.get('pilot_id') }
+      return new HttpResponse('Requirement\n', { headers: { 'Content-Type': 'text/csv' } })
+    }))
+    globalThis.URL.createObjectURL ??= () => 'blob:csv'
+    globalThis.URL.revokeObjectURL ??= () => {}
+    const { user, unmount } = renderTab()
+    await user.click(await screen.findByRole('button', { name: 'Download Quarterly models results as CSV' }))
+    await waitFor(() => expect(asked).toEqual({ id: '4', pilot: null }))
+    unmount()
+    mock()
+    renderWithProviders(<RequirementsTab />, { role: 'supervisor', permissions: { 'reports.export': 'no' } })
+    await screen.findByText('Quarterly models')
+    expect(screen.queryByRole('button', { name: /as CSV/ })).toBeNull()
   })
 
   it('shows why a requirement with history cannot be deleted', async () => {

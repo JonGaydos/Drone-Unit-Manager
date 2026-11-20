@@ -1,9 +1,10 @@
 /**
  * Pilot detail "Flight Requirements" card: the pilot's progress in each
  * active requirement's current period and in periods still in review, the
- * saved history, Excuse and Un-excuse (requirements.excuse) and the pilot's
- * history of each requirement as CSV (reports.export). Renders nothing without
- * requirements.view, or until the pilot has something to show.
+ * saved history, Excuse and Un-excuse (requirements.excuse), Recalculate on a
+ * saved period (admins) and the pilot's history of each requirement as CSV
+ * (reports.export). Renders nothing without requirements.view, or until the
+ * pilot has something to show.
  */
 import { useEffect, useId, useState } from 'react'
 import { Download, Target } from 'lucide-react'
@@ -11,8 +12,10 @@ import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { formatDate } from '@/lib/utils'
+import { useConfirm } from '@/hooks/useConfirm'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { MissedBadge, RequirementStatusChip } from './RequirementBadges'
 import { useRequirementFlags } from './useRequirementFlags'
 import { countText, daysLeftText, excusalText, excuseAction, periodText, progressText } from './progress'
@@ -79,8 +82,29 @@ function ProgressSection({ title, rows, when, targets, actions }) {
   )
 }
 
-function HistoryTable({ rows, actions }) {
+function RecalculateButton({ row, onRecalculate }) {
+  const period = periodOf(row)
+  return (
+    <button type="button" onClick={() => onRecalculate(period)} className={SMALL_BUTTON}
+      aria-label={`Recalculate ${period.name}, ${periodText(period.start, period.end)}`}>
+      Recalculate
+    </button>
+  )
+}
+
+function HistoryActions({ row, actions, recalculable, onRecalculate }) {
+  return (
+    <div className="flex justify-end gap-2">
+      {actions && <ExcuseButton row={row} {...actions} />}
+      {recalculable && <RecalculateButton row={row} onRecalculate={onRecalculate} />}
+    </div>
+  )
+}
+
+/** Saved periods; `recalculable` adds Recalculate (admins). */
+function HistoryTable({ rows, actions, recalculable, onRecalculate }) {
   if (rows.length === 0) return null
+  const withActions = Boolean(actions || recalculable)
   return (
     <div className="overflow-x-auto">
       <table aria-label="Requirement history" className="w-full text-sm">
@@ -90,7 +114,7 @@ function HistoryTable({ rows, actions }) {
             <th className="text-left px-4 py-2 text-foreground font-medium">Period</th>
             <th className="text-left px-4 py-2 text-foreground font-medium">Flown</th>
             <th className="text-left px-4 py-2 text-foreground font-medium">Result</th>
-            {actions && <th className="px-4 py-2"><span className="sr-only">Actions</span></th>}
+            {withActions && <th className="px-4 py-2"><span className="sr-only">Actions</span></th>}
           </tr>
         </thead>
         <tbody>
@@ -103,7 +127,11 @@ function HistoryTable({ rows, actions }) {
                 <RequirementStatusChip status={row.status} />
                 {row.excused && <p className="text-xs text-muted-foreground mt-1">{excusalText(row)}</p>}
               </td>
-              {actions && <td className="px-4 py-2 text-right"><ExcuseButton row={row} {...actions} /></td>}
+              {withActions && (
+                <td className="px-4 py-2">
+                  <HistoryActions row={row} actions={actions} recalculable={recalculable} onRecalculate={onRecalculate} />
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
@@ -192,8 +220,9 @@ const inReview = period => `In review until ${formatDate(period.review_until)}`
 const daysLeft = period => daysLeftText(period.days_left)
 
 export default function PilotRequirementsCard({ pilotId, onChange }) {
-  const { can } = useAuth()
+  const { can, isAdmin } = useAuth()
   const toast = useToast()
+  const [confirmProps, requestConfirm] = useConfirm()
   const titleId = useId()
   const [data, setData] = useState(null)
   const [version, setVersion] = useState(0)
@@ -235,6 +264,14 @@ export default function PilotRequirementsCard({ pilotId, onChange }) {
   const download = id => api.download(`/export/requirements/${id}/csv?pilot_id=${pilotId}`)
     .catch(err => toast.error(err.message))
   const actions = can('requirements.excuse') ? { onExcuse: setExcusing, onUnexcuse: unexcuse } : null
+  const recalculate = period => requestConfirm({
+    title: 'Recalculate period',
+    message: `Recalculate ${period.name}, ${periodText(period.start, period.end)}, for every pilot from today's flights and target? Excusals are kept.`,
+    confirmLabel: 'Recalculate',
+    onConfirm: () => api.post(`/requirements/${period.requirementId}/recalculate`, { period_start: period.start })
+      .then(() => { toast.success('Period recalculated'); reload() })
+      .catch(err => toast.error(err.message)),
+  })
 
   return (
     <section aria-labelledby={titleId} className="bg-card border border-border rounded-xl overflow-hidden">
@@ -247,9 +284,10 @@ export default function PilotRequirementsCard({ pilotId, onChange }) {
       </div>
       <ProgressSection title="This period" rows={data.current} when={daysLeft} targets={targets} actions={actions} />
       <ProgressSection title="In review" rows={data.pending} when={inReview} targets={targets} actions={actions} />
-      <HistoryTable rows={data.history} actions={actions} />
+      <HistoryTable rows={data.history} actions={actions} recalculable={isAdmin} onRecalculate={recalculate} />
       {can('reports.export') && <CsvLinks requirements={requirements} onDownload={download} />}
       {excusing && <ExcuseModal period={excusing} onSubmit={excuse} onClose={() => setExcusing(null)} />}
+      <ConfirmDialog {...confirmProps} />
     </section>
   )
 }

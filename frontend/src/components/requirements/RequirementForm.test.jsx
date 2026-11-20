@@ -37,7 +37,18 @@ function setup(props = {}) {
   return { onSubmit, onCancel, user: userEvent.setup() }
 }
 
+const PAST_WARNING = 'This requirement starts in the past. Periods that already ended will be counted, flagged and emailed.'
+
 describe('RequirementForm', () => {
+  it('warns, without blocking, when the first period has already ended', async () => {
+    const { onSubmit, user } = setup({ initial: { ...newForm(), name: 'Old', target_mins: '30', start_date: '2020-01-01' } })
+    expect(screen.getByText(PAST_WARNING)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save requirement' }))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled())
+    fireEvent.change(screen.getByLabelText('Starts'), { target: { value: '2099-01-01' } })
+    expect(screen.queryByText(PAST_WARNING)).not.toBeInTheDocument()
+  })
+
   it('sends the body the API takes', async () => {
     const { onSubmit, user } = setup()
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Quarterly models' } })

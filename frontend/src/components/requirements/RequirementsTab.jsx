@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import { BookmarkPlus, Copy, Edit2, Plus, Trash2 } from 'lucide-react'
+import { BookmarkPlus, Copy, Download, Edit2, Plus, Trash2 } from 'lucide-react'
 import { api } from '@/api/client'
+import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { useConfirm } from '@/hooks/useConfirm'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
@@ -31,7 +32,7 @@ function StatusChip({ active }) {
   return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${tone}`}>{active ? 'Active' : 'Inactive'}</span>
 }
 
-function RequirementRow({ req, onEdit, onDuplicate, onTemplate, onDelete }) {
+function RequirementRow({ req, onEdit, onDuplicate, onTemplate, onDownload, onDelete }) {
   return (
     <li className="flex items-center gap-3 px-3 py-2 bg-muted/30 rounded-lg">
       <div className="flex-1 min-w-0">
@@ -53,6 +54,11 @@ function RequirementRow({ req, onEdit, onDuplicate, onTemplate, onDelete }) {
       <button type="button" onClick={() => onTemplate(req)} aria-label={`Save ${req.name} as a template`} title="Save as template" className={ICON_BUTTON}>
         <BookmarkPlus className="w-4 h-4" />
       </button>
+      {onDownload && (
+        <button type="button" onClick={() => onDownload(req)} aria-label={`Download ${req.name} results as CSV`} title="Download CSV" className={ICON_BUTTON}>
+          <Download className="w-4 h-4" />
+        </button>
+      )}
       <button type="button" onClick={() => onDelete(req)} aria-label={`Delete ${req.name}`} title="Delete"
         className="p-1.5 text-danger rounded hover:bg-danger-bg">
         <Trash2 className="w-4 h-4" />
@@ -102,6 +108,7 @@ function useBuilderData() {
 
 /** Settings, Flight Requirements: the requirement list and builder, templates and settings. */
 export default function RequirementsTab() {
+  const { can } = useAuth()
   const toast = useToast()
   const [confirmProps, requestConfirm] = useConfirm()
   const [requirements, setRequirements] = useState([])
@@ -142,6 +149,9 @@ export default function RequirementsTab() {
       .then(() => { toast.success('Requirement deleted'); loadRequirements() })
       .catch(err => toast.error(err.message)),
   })
+
+  const download = (req) => api.download(`/export/requirements/${req.id}/csv`)
+    .catch(err => toast.error(err.message))
 
   const saveTemplate = (name) => api.post('/requirements/templates', {
     name, settings: toDefinition(fromRequirement(templateSource)),
@@ -189,6 +199,7 @@ export default function RequirementsTab() {
         onEdit={req => open(`Edit ${req.name}`, fromRequirement(req), req.id)}
         onDuplicate={req => open('New requirement', duplicateOf(req))}
         onTemplate={setTemplateSource}
+        onDownload={can('reports.export') ? download : null}
         onDelete={remove}
       />
       <TemplatesCard

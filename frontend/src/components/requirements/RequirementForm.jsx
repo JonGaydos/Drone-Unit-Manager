@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { describeRequirement } from './RequirementSummary'
-import { formProblem, toBody } from './formState'
+import { formProblem, startsInPast, toBody } from './formState'
 import {
   AircraftField, BasicsFields, PeriodFields, PilotField, PurposeField, ReminderFields, TargetFields, TimeFields,
 } from './RequirementFields'
@@ -50,7 +50,14 @@ export default function RequirementForm({
       className="bg-card border border-border rounded-xl p-6 space-y-5">
       <h3 id="req-form-title" className="text-lg font-semibold text-foreground">{title}</h3>
       <Section><BasicsFields form={form} update={update} /></Section>
-      <Section><PeriodFields form={form} update={update} /></Section>
+      <Section>
+        <PeriodFields form={form} update={update} />
+        {startsInPast(form, fiscalStartMonth) && (
+          <p className="mt-3 rounded-lg bg-warning-bg px-3 py-2 text-sm text-warning">
+            This requirement starts in the past. Periods that already ended will be counted, flagged and emailed.
+          </p>
+        )}
+      </Section>
       <Section><TargetFields form={form} update={update} /></Section>
       <Section>
         <div className="space-y-5">

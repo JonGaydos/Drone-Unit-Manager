@@ -75,6 +75,10 @@ describe('excuseAction', () => {
     expect(excuseAction({ excused: false, status: 'on_track' })).toBe('excuse')
     expect(excuseAction({ excused: false, status: 'met' })).toBeNull()
   })
+
+  it('offers nothing on a row saved while the requirement was switched off', () => {
+    expect(excuseAction({ excused: true, status: 'excused', switched_off: true })).toBeNull()
+  })
 })
 
 describe('daysLeftText and metCount', () => {

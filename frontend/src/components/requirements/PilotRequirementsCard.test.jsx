@@ -169,6 +169,47 @@ describe('PilotRequirementsCard', () => {
     expect(screen.queryByRole('button', { name: /as CSV/ })).toBeNull()
   })
 
+  it('hides Un-excuse on a period saved while the requirement was switched off', async () => {
+    const off = {
+      ...HISTORY[1], result_id: 18, period_start: '2026-06-01', period_end: '2026-06-30',
+      excused_reason: 'Requirement was switched off', switched_off: true,
+    }
+    mock({ history: [...HISTORY, off] })
+    render()
+    const table = await screen.findByRole('table', { name: 'Requirement history' })
+    expect(within(table).getByRole('button', { name: /^Un-excuse Monthly hour, Jul 1, 2026/ })).toBeInTheDocument()
+    expect(within(table).queryByRole('button', { name: /^Un-excuse Monthly hour, Jun 1, 2026/ })).toBeNull()
+  })
+
+  it('lets an admin recalculate a saved period after confirming, then reloads', async () => {
+    let sent = null
+    let reads = 0
+    mock()
+    server.use(http.get('/api/requirements/pilots/:id', () => {
+      reads += 1
+      return HttpResponse.json({ pilot_id: 7, current: [CURRENT], pending: [], history: HISTORY })
+    }))
+    server.use(http.post('/api/requirements/:id/recalculate', async ({ request, params }) => {
+      sent = { id: params.id, body: await request.json() }
+      return HttpResponse.json({ recalculated: 3 })
+    }))
+    const { user } = render('admin')
+    const table = await screen.findByRole('table', { name: 'Requirement history' })
+    await user.click(within(table).getByRole('button', { name: 'Recalculate Monthly hour, Sep 1, 2026 to Sep 30, 2026' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(sent).toBeNull()
+    await user.click(within(dialog).getByRole('button', { name: 'Recalculate' }))
+    await waitFor(() => expect(sent).toEqual({ id: '1', body: { period_start: '2026-09-01' } }))
+    await waitFor(() => expect(reads).toBe(2))
+  })
+
+  it('hides Recalculate from everyone but admins', async () => {
+    mock()
+    render('supervisor')
+    await screen.findByRole('table', { name: 'Requirement history' })
+    expect(screen.queryByRole('button', { name: /^Recalculate/ })).toBeNull()
+  })
+
   it('renders nothing when the pilot has no requirements and no history', async () => {
     let asked = false
     mock({ current: [], history: [] })

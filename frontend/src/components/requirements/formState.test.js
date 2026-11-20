@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { duplicateOf, formProblem, fromRequirement, fromTemplate, newForm, toBody, toDefinition, withModels } from './formState'
+import {
+  duplicateOf, firstPeriodEnd, formProblem, fromRequirement, fromTemplate, newForm, startsInPast, toBody, toDefinition,
+  withModels,
+} from './formState'
+import { todayLocal } from '@/lib/utils'
 
 const REQ = {
   id: 4, name: 'Night currency', description: null, period_type: 'monthly_window', recurring: true,
@@ -20,8 +24,36 @@ describe('form state', () => {
     })
   })
 
-  it('names a duplicate "Copy of ..."', () => {
-    expect(duplicateOf(REQ).name).toBe('Copy of Night currency')
+  it('names a duplicate "Copy of ..." and starts it today', () => {
+    const copy = duplicateOf({ ...REQ, start_date: '2026-01-01' })
+    expect(copy.name).toBe('Copy of Night currency')
+    expect(copy.start_date).toBe(todayLocal())
+  })
+
+  it('finds the end of the first period for each period type', () => {
+    const form = (patch) => ({ ...newForm(), start_date: '2026-05-20', ...patch })
+    expect(firstPeriodEnd(form({}), 10)).toBe('2026-05-31')
+    expect(firstPeriodEnd(form({ period_type: 'calendar_quarter' }), 10)).toBe('2026-06-30')
+    expect(firstPeriodEnd(form({ period_type: 'calendar_year' }), 10)).toBe('2026-12-31')
+    expect(firstPeriodEnd(form({ period_type: 'fiscal_quarter' }), 10)).toBe('2026-06-30')
+    expect(firstPeriodEnd(form({ period_type: 'fiscal_year' }), 10)).toBe('2026-09-30')
+    expect(firstPeriodEnd(form({ period_type: 'fiscal_year' }), 4)).toBe('2027-03-31')
+    expect(firstPeriodEnd(form({ period_type: 'every_n_months', every_months: '2' }), 10)).toBe('2026-07-19')
+    expect(firstPeriodEnd(form({ period_type: 'span', span_length: '2', span_unit: 'weeks' }), 10)).toBe('2026-06-02')
+    expect(firstPeriodEnd(form({ period_type: 'span', span_length: '1', span_unit: 'months' }), 10)).toBe('2026-06-19')
+    expect(firstPeriodEnd(form({ period_type: 'monthly_window', window_start_day: '19', window_end_day: '5' }), 10))
+      .toBe('2026-07-05')
+    expect(firstPeriodEnd(form({ period_type: 'monthly_window', window_start_day: '21', window_end_day: '28' }), 10))
+      .toBe('2026-05-28')
+    expect(firstPeriodEnd(form({ period_type: 'custom', end_date: '2026-08-01' }), 10)).toBe('2026-08-01')
+    expect(firstPeriodEnd(form({ start_date: '' }), 10)).toBeNull()
+  })
+
+  it('says a requirement starts in the past only when its first period has ended', () => {
+    const form = { ...newForm(), start_date: '2026-10-15' }
+    expect(startsInPast(form, 10, '2026-10-31')).toBe(false)
+    expect(startsInPast(form, 10, '2026-11-01')).toBe(true)
+    expect(startsInPast({ ...form, start_date: '' }, 10, '2026-11-01')).toBe(false)
   })
 
   it('fills from a template without dates or pilots', () => {

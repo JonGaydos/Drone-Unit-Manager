@@ -65,8 +65,12 @@ export function excusalText(row) {
   return row.excused_reason ? `${label}: ${row.excused_reason}` : label
 }
 
-/** Which excusal action a row offers: un-excuse an excused one, excuse one not met. */
+/**
+ * Which excusal action a row offers: un-excuse an excused one, excuse one not
+ * met, and nothing on a row saved while the requirement was switched off.
+ */
 export function excuseAction(row) {
+  if (row.switched_off) return null
   if (row.excused) return 'unexcuse'
   return row.status === 'met' ? null : 'excuse'
 }
