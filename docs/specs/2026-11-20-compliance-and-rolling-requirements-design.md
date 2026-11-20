@@ -20,7 +20,7 @@ Flight Requirements turned out to be the better model for "is the unit flying en
 | Page | One **Compliance** page with three tabs: Overview, Flight Requirements, Setup |
 | Sidebar | One Compliance entry; no separate Flight Requirements entry |
 | Currency API | Removed outright; nothing outside the app uses it |
-| Release | 3.6.1 (owner's choice) |
+| Release | 3.7.0 (owner's choice) |
 
 ## Rolling requirements
 

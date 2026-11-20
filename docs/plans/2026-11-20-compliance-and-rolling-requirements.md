@@ -26,7 +26,7 @@
 1. **A rolling window across a month end or a DST change.** The window covers exactly N days (or weeks, or calendar months back) and the lapse date is the day the oldest needed flight ages out. Pinned in Task 3.
 2. **A pilot who is both lapsed on a rolling requirement and missed a periodic one.** They cost points once, not twice. Pinned in Task 5.
 3. **The daily job and a page load both seeing a lapse.** One lapse row, closed once. Pinned in Task 4.
-4. **A backup made on 3.6.0 restored on 3.6.1.** It restores, skipping the currency tables, and requirements come back intact. Pinned in Task 2.
+4. **A backup made on 3.6.0 restored on 3.7.0.** It restores, skipping the currency tables, and requirements come back intact. Pinned in Task 2.
 5. **A viewer opening Compliance.** Overview and Flight Requirements read-only; no Setup tab; no manage-only requests. Pinned in Task 6.
 
 ---
@@ -126,13 +126,13 @@
 
 ### Task 7: Docs, release notes, end-to-end, review
 
-**Files:** `frontend/src/pages/manual/content.json` (remove currency topics; requirements topics point at Compliance; rolling requirements; score), manual pictures (regenerate flight requirements and compliance pictures; remove the currency picture and shot), `docs/TEST_CHECKLIST.md` (replace section 38 with a rolling and score section; update 39 for the page), `docs/upgrading.md` (3.6.1 section: currency removed, API removed, migration 0018, rolling requirements, score change, page move), `ROLLBACK.md` (3.6.1 row; roll back to 3.6.0 by downgrading to `0017_flight_requirements`; currency tables come back empty), `backend/app/constants.py` (`APP_VERSION = "3.6.1"`), e2e.
+**Files:** `frontend/src/pages/manual/content.json` (remove currency topics; requirements topics point at Compliance; rolling requirements; score), manual pictures (regenerate flight requirements and compliance pictures; remove the currency picture and shot), `docs/TEST_CHECKLIST.md` (replace section 38 with a rolling and score section; update 39 for the page), `docs/upgrading.md` (3.7.0 section: currency removed, API removed, migration 0018, rolling requirements, score change, page move), `ROLLBACK.md` (3.7.0 row; roll back to 3.6.0 by downgrading to `0017_flight_requirements`; currency tables come back empty), `backend/app/constants.py` (`APP_VERSION = "3.7.0"`), e2e.
 
 - [ ] **Step 1:** E2E: create a rolling requirement from the Compliance page and see it on Overview and the dashboard tile, then delete it; remove the currency journey. Run twice.
 - [ ] **Step 2:** Update the manual, pictures (demo data only, checked by eye), checklist, upgrading notes, rollback steps and version.
 - [ ] **Step 3:** Run the full backend, frontend and e2e suites; migration 0018 up, down, up on a temp database copied from a 0017 schema.
 - [ ] **Step 4:** Whole-branch review by a fresh reviewer on the most capable model; one fix wave.
-- [ ] **Step 5:** Report to the owner and ask for the go to push. Then PR, merge on green CI and zero new SonarCloud issues, and ask before tagging `v3.6.1`.
+- [ ] **Step 5:** Report to the owner and ask for the go to push. Then PR, merge on green CI and zero new SonarCloud issues, and ask before tagging `v3.7.0`.
 
 ---
 
