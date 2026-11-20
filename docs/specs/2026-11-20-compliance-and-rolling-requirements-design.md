@@ -72,7 +72,7 @@ The top bar (page title, search, theme) stays in place on desktop while the cont
 - Storage: two JSON columns on `users` (`dashboard_layout`, `analytics_layout`, nullable = use the default), written through `PATCH /api/auth/me`; the unit defaults are two settings keys written by admins. Added to migration 0018.
 
 ### Flights selection bar
-The bar that appears when flights are selected (count, reassign pilot, set purpose, delete) floats at the bottom of the screen instead of pushing the table down. Nothing shifts when a row is ticked.
+The selection bar (count, reassign pilot, set purpose, delete) is always shown above the table for users who can review flights. With nothing selected it reads "0 selected" and its controls are disabled; ticking a row only updates it, so nothing shifts. It stays visible just under the fixed header while a long list scrolls.
 
 ### Certifications views
 A view switch at the top of the Certifications page, remembered per device:

@@ -153,11 +153,11 @@ Run after Task 6 and before Task 7, so Task 7's docs, pictures and review cover 
 - Tests: backend validation and own-account only (a user cannot set another user's layout); frontend reorder by keyboard, hide and show, save body, reset, admin default, unknown and new ids, permission-hidden tile stays hidden.
 - Commit: `Let users arrange their dashboard and analytics`.
 
-### Task 6c: Floating flights selection bar
+### Task 6c: Always-present flights selection bar
 - Files: `frontend/src/pages/FlightsPage.jsx`, tests.
-- The selection bar is fixed to the bottom of the viewport (inside the content column on desktop, full width on phones), slides up when the first row is ticked, and leaves room so the last table row is not hidden under it. Same controls as today.
-- Tests: ticking a row does not insert anything above the table; the bar shows the count and controls; clearing the selection hides it.
-- Commit: `Float the flights selection bar instead of shifting the table`.
+- The selection bar is always rendered above the table for users with `flights.review`: "0 selected" with every control disabled (and an accessible reason) when nothing is selected; ticking rows only updates the count and enables the controls. It is sticky just below the fixed page header (Task 6a) while the list scrolls. Same controls as today.
+- Tests: the bar is present with nothing selected and its controls are disabled; ticking a row enables them and does not insert anything above the table; clearing the selection disables them again; users without review never see the bar.
+- Commit: `Keep the flights selection bar in place`.
 
 ### Task 6d: Certifications views
 - Files: `frontend/src/pages/CertificationsPage.jsx` (split into view components under `frontend/src/components/certifications/`), tests.
