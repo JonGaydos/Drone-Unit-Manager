@@ -80,3 +80,9 @@ A view switch at the top of the Certifications page, remembered per device:
 - **By pilot:** one card per pilot with their certifications as status chips. Default on phones.
 - **By urgency:** Expired, Expiring within 30, 60 and 90 days, then Current, each a list of pilot and certification with the date.
 Filters (status, pilot search, hide empty) and actions (assign, edit, renew, bulk renew) work in every view where they apply.
+
+### Flight distance and landing location (owner, 2026-11-20)
+On staging data no flight had a distance or a landing location, and none had an operating cost. Distance and landing location are now worked out from GPS telemetry: distance is the length of the track (bad fixes and impossible jumps skipped), landing coordinates are the last good fix, and the landing address is looked up the same way takeoff addresses are. This runs when telemetry syncs or imports, and once in the background for existing flights. A value someone typed in is never overwritten. Flights without telemetry stay blank. A flight with a takeoff time and duration but no landing time gets landing time = takeoff + duration.
+
+### Operating cost (owner, 2026-11-20)
+Each aircraft gets an hourly operating cost (fleet record, optional). A flight's cost is its hours times its aircraft's rate, shown as an estimate, unless a cost was entered on the flight, which wins. Reports total the costs. The cost is worked out when shown, so a changed rate also changes past flights' estimates. Stored as `vehicles.hourly_operating_cost` (Float, nullable), added to migration 0018.

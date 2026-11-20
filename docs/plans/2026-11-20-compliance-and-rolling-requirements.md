@@ -138,7 +138,7 @@
 
 ## Interface improvements (added 2026-11-20; spec section "Interface improvements in the same release")
 
-Run after Task 6 and before Task 7, so Task 7's docs, pictures and review cover them. Migration 0018 (Task 2) also adds `users.dashboard_layout` and `users.analytics_layout` (JSON, nullable).
+Run after Task 6 and before Task 7, so Task 7's docs, pictures and review cover them. Migration 0018 (Task 2) also adds `users.dashboard_layout` and `users.analytics_layout` (JSON, nullable) and `vehicles.hourly_operating_cost` (Float, nullable).
 
 ### Task 6a: Fixed page header
 - Files: `frontend/src/components/layout/Layout.jsx`, `TopBar.jsx`, tests.
@@ -165,3 +165,15 @@ Run after Task 6 and before Task 7, so Task 7's docs, pictures and review cover 
 - Keep each component under complexity 15; this is also the chance to bring the page's large functions down without changing behavior.
 - Tests: each view renders the same data; filters apply in each view; the stored view is restored; actions open the right modals.
 - Commit: `Add pilot and urgency views to certifications`.
+
+### Task 6e: Distance and landing location from telemetry
+- Files: create `backend/app/services/flight_track.py` (+ tests); modify the telemetry sync and log import paths (`services/sync_manager.py`, `services/flight_log_import.py`, `services/parrot_import.py`) to call it after telemetry is stored; `services/jobs.py` or the scheduler for a one-time, resumable background backfill (batches, newest first, progress logged, safe to rerun); reverse geocoding through the existing `_reverse_geocode` helper with its rate limit.
+- Interfaces: `track_summary(points) -> {distance_m: float | None, landing_lat, landing_lon}` over ordered telemetry points; skip points with missing or out-of-range coordinates, and segments implying more than 60 m/s; `fill_track_fields(db, flight) -> bool` fills only fields that are empty; landing time = takeoff + duration when missing.
+- Tests: a known square path gives the expected distance within 1%; a GPS jump is skipped; no valid points gives None; typed values are not overwritten; backfill is idempotent and resumes.
+- Commit: `Work out flight distance and landing location from telemetry`.
+
+### Task 6f: Operating cost per flight hour
+- Files: `backend/app/models/vehicle.py` (column in migration 0018), vehicle schemas and routes, `routers/flights.py` (response field `operating_cost_estimate` when no manual cost), `routers/reports.py` (cost totals where reports already show hours), frontend Fleet vehicle form and vehicle detail (rate field), FlightDetailPage (shows the cost, marked "estimated" when calculated), tests.
+- Rules: rate optional, 0 to 100000; estimate = round(duration hours x rate, 2); manual `operating_cost` wins; no rate and no manual cost shows nothing.
+- Tests: estimate math; manual wins; no rate means no value; report totals; permissions follow `fleet.manage` for the rate.
+- Commit: `Estimate flight operating cost from an hourly rate`.
