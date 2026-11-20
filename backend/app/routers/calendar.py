@@ -19,6 +19,9 @@ from app.models.maintenance_schedule import MaintenanceSchedule
 from app.models.certification import PilotCertification, CertificationType
 from app.models.pilot import Pilot
 from app.models.flight import Flight
+from app.models.flight_requirement import FlightRequirement
+from app.services.requirement_eval import unit_eval_settings
+from app.services.requirement_periods import periods_between
 from app.schemas.calendar import CalendarEventCreate, CalendarEventUpdate, CalendarEventOut, END_BEFORE_START
 
 router = APIRouter(prefix="/api/calendar", tags=["calendar"])
@@ -75,6 +78,20 @@ def _cert_events(db, start, end) -> list[dict]:
             for pc, ct, pilot in cert_rows]
 
 
+def _requirement_events(db, start, end, link: str) -> list[dict]:
+    """The last day of each period of an active requirement that falls in the range."""
+    fiscal_start = unit_eval_settings(db).fiscal_start_month
+    events = []
+    for req in db.query(FlightRequirement).filter(FlightRequirement.is_active.is_(True)).all():
+        for _, period_end in periods_between(req.to_period_spec(fiscal_start), start, end):
+            if start <= period_end <= end:
+                events.append({"id": f"requirement-{req.id}-{period_end.isoformat()}", "title": f"Due: {req.name}",
+                               "start": _iso(period_end), "end": None, "all_day": True,
+                               "category": "requirement", "source": "requirement",
+                               "link": link, "editable": False})
+    return events
+
+
 @router.get("", responses=responses(401))
 def get_calendar(db: DBSession, user: ViewUser, start: date, end: date):
     """Aggregate calendar items in [start, end]. Returns {events: [...], flight_counts: {date: n}}.
@@ -89,6 +106,10 @@ def get_calendar(db: DBSession, user: ViewUser, start: date, end: date):
         events += _maintenance_events(db, start, end)
     if permissions_service.can(db, user, "certifications.view"):
         events += _cert_events(db, start, end)
+    if permissions_service.can(db, user, "requirements.view"):
+        # Managers open the requirements tab; everyone else the dashboard's This Period tile.
+        manage = permissions_service.can(db, user, "requirements.manage")
+        events += _requirement_events(db, start, end, "/settings?tab=requirements" if manage else "/")
     # Manual events + leave (overlap the range)
     manual = db.query(CalendarEvent).filter(
         CalendarEvent.start_date <= end,

@@ -16,8 +16,10 @@ from starlette.datastructures import UploadFile
 from sqlalchemy.orm import joinedload
 
 from app.models.flight import Flight
+from app.models.flight_requirement import FlightRequirement, FlightRequirementResult
 from app.services.local_time import display_zone, stamped_on_or_after, stamped_on_or_before
 from app.services.pilot_contacts import hides_contacts, redact_audit_changes, redact_audit_details
+from app.services.requirement_results import overall_totals, per_model_text
 from app.models.pilot import Pilot
 from app.models.vehicle import Vehicle
 from app.models.vehicle_registration import VehicleRegistration
@@ -61,6 +63,7 @@ CertificationsView = Annotated[User, Depends(require_permission("certifications.
 IncidentsView = Annotated[User, Depends(require_permission("incidents.view"))]
 FlightPlansView = Annotated[User, Depends(require_permission("flight_plans.view"))]
 AuditView = Annotated[User, Depends(require_permission("audit.view"))]
+RequirementsView = Annotated[User, Depends(require_permission("requirements.view"))]
 
 CSV_MEDIA_TYPE = "text/csv"
 
@@ -236,6 +239,45 @@ def export_pilots_csv(db: DBSession, user: ExportUser, _manage: PilotsManage):
         iter([output.getvalue()]),
         media_type=CSV_MEDIA_TYPE,
         headers={"Content-Disposition": "attachment; filename=pilots_export.csv"},
+    )
+
+
+@router.get("/requirements/{requirement_id}/csv", responses=responses(401, 403, 404))
+def export_requirement_csv(requirement_id: int, db: DBSession, user: ExportUser, _view: RequirementsView,
+                           pilot_id: int | None = None):
+    """A requirement's saved results, one row per pilot and period; only one
+    pilot's with ``pilot_id``."""
+    req = db.query(FlightRequirement).filter(FlightRequirement.id == requirement_id).first()
+    if req is None:
+        raise HTTPException(status_code=404, detail="Requirement not found")
+    q = db.query(FlightRequirementResult, Pilot).join(
+        Pilot, Pilot.id == FlightRequirementResult.pilot_id).filter(
+        FlightRequirementResult.requirement_id == requirement_id,
+        FlightRequirementResult.saved_at.isnot(None))
+    filename = f"requirement_{requirement_id}"
+    if pilot_id is not None:
+        q = q.filter(FlightRequirementResult.pilot_id == pilot_id)
+        filename += f"_pilot_{pilot_id}"
+    results = _cap_rows(q.order_by(FlightRequirementResult.period_start, Pilot.last_name, Pilot.first_name).all(),
+                        "requirement results")
+    log_action(db, user.id, user.display_name, "export", "flight_requirement", requirement_id,
+               f"{filename}.csv, {len(results)} rows")
+    db.commit()
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Requirement", "Period start", "Period end", "Pilot", "Status", "Minutes", "Flights",
+                     "Per model", "Excused reason"])
+    for row, pilot in results:
+        overall = overall_totals(row.totals)
+        writer.writerow([
+            _csv_safe(req.name), row.period_start, row.period_end, _csv_safe(pilot.full_name), row.status,
+            overall["minutes"], overall["flights"], _csv_safe(per_model_text(row.totals)),
+            _csv_safe(row.excused_reason or ""),
+        ])
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type=CSV_MEDIA_TYPE,
+        headers={"Content-Disposition": f"attachment; filename={filename}_export.csv"},
     )
 
 

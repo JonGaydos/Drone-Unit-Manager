@@ -26,7 +26,7 @@ router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 DEFAULT_CATEGORIES = [
     "pending_approvals", "needs_review", "expiring_certs",
     "expiring_registrations", "overdue_maintenance",
-    "assigned_missions", "overdue_checkouts", "recent_incidents",
+    "assigned_missions", "overdue_checkouts", "recent_incidents", "requirements",
 ]
 
 # Single-line address with no whitespace/control chars (header-injection guard).

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { renderRoute } from '@/test/render'
@@ -46,8 +46,8 @@ function mockMount(overrides = {}) {
   )
 }
 
-const render = (role = 'admin') =>
-  renderRoute(<PilotDetailPage />, { path: '/pilots/:id', route: '/pilots/7', role })
+const render = (role = 'admin', permissions) =>
+  renderRoute(<PilotDetailPage />, { path: '/pilots/:id', route: '/pilots/7', role, permissions })
 
 describe('PilotDetailPage', () => {
   it('renders without crashing', async () => {
@@ -246,5 +246,61 @@ describe('PilotDetailPage', () => {
     const img = await screen.findByRole('img', { name: 'Ada Lovelace' })
     expect(img.getAttribute('src')).toMatch(/^blob:/)
     expect(auth).toBe('Bearer test-token')
+  })
+
+  describe('Flight Requirements card', () => {
+    const PROGRESS = {
+      pilot_id: 7, current: [{
+        requirement_id: 1, name: 'Monthly hour', pilot_id: 7, pilot_name: 'Ada Lovelace', status: 'met',
+        totals: { '*': { minutes: 60, flights: 2 } }, met_by_model: { '*': true }, excluded_no_takeoff: 0,
+        unreviewed_in_period: 0, excused: false, excused_reason: null,
+        period: { start: '2026-11-01', end: '2026-11-30', days_left: 12, review_until: '2026-12-14' },
+      }], pending: [], history: [],
+    }
+
+    it('shows the card below Currency Status with requirements.view', async () => {
+      mockMount()
+      server.use(http.get('/api/requirements/pilots/:id', () => HttpResponse.json(PROGRESS)))
+      render()
+      expect(await screen.findByRole('heading', { name: 'Flight Requirements' })).toBeInTheDocument()
+      expect(screen.getByText('done')).toBeInTheDocument()
+    })
+
+    it('reads Needs Attention again after an excusal, so a cleared miss leaves the list', async () => {
+      let attentionReads = 0
+      const missed = {
+        result_id: 21, requirement_id: 1, name: 'Monthly hour', period_start: '2026-09-01', period_end: '2026-09-30',
+        status: 'missed', totals: { '*': { minutes: 40, flights: 3 } }, target_snapshot: { target_minutes: 60 },
+        excused: false, excused_by_id: null, excused_reason: null, saved_at: '2026-10-15T06:00:00',
+      }
+      mockMount({
+        needsAttention: () => {
+          attentionReads += 1
+          const items = attentionReads === 1 ? [{ level: 'red', text: 'Missed requirement: Monthly hour' }] : []
+          return HttpResponse.json({ items })
+        },
+      })
+      server.use(
+        http.get('/api/requirements/pilots/:id', () => HttpResponse.json({ ...PROGRESS, history: [missed] })),
+        http.post('/api/requirements/:id/excuse', () => HttpResponse.json({ ok: true })),
+      )
+      const { user } = render('supervisor')
+      expect(await screen.findByText('Missed requirement: Monthly hour')).toBeInTheDocument()
+      const table = await screen.findByRole('table', { name: 'Requirement history' })
+      await user.click(within(table).getByRole('button', { name: /^Excuse Monthly hour, Sep 1, 2026/ }))
+      await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Excuse' }))
+      await waitFor(() => expect(screen.queryByText('Missed requirement: Monthly hour')).toBeNull())
+      expect(attentionReads).toBe(2)
+    })
+
+    it('hides the card and skips its request without requirements.view', async () => {
+      let asked = false
+      mockMount()
+      server.use(http.get('/api/requirements/pilots/:id', () => { asked = true; return HttpResponse.json(PROGRESS) }))
+      render('viewer', { 'requirements.view': 'no' })
+      expect(await screen.findByRole('heading', { name: 'Ada Lovelace' })).toBeInTheDocument()
+      expect(screen.queryByRole('heading', { name: 'Flight Requirements' })).toBeNull()
+      expect(asked).toBe(false)
+    })
   })
 })

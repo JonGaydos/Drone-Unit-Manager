@@ -56,6 +56,9 @@ const GRID = [
   ['registrations.manage', 'no', 'no', 'no'],
   ['audit.view', 'no', 'no', 'no'],
   ['digest.redirect', 'yes', 'no', 'no'],
+  ['requirements.view', 'yes', 'yes', 'yes'],
+  ['requirements.manage', 'yes', 'no', 'no'],
+  ['requirements.excuse', 'yes', 'no', 'no'],
 ]
 
 const LEVEL_VALUES = new Set(['none', 'own', 'all'])

@@ -1,7 +1,7 @@
 """Background sync scheduler using APScheduler."""
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
@@ -13,6 +13,7 @@ from app.database import SessionLocal
 from app.models.notification_log import NotificationLog
 from app.models.setting import Setting
 from app.services.audit_capture import machine_run
+from app.services.local_time import local_today
 from app.services.sync_lock import SyncBusy, sync_guard
 from app.services.sync_manager import SyncManager
 
@@ -26,6 +27,10 @@ MAINTENANCE_ALERT_JOB_ID = "maintenance_alerts"
 # Local hour the daily overdue-maintenance alerts are raised.
 MAINTENANCE_ALERT_HOUR = 6
 TELEMETRY_SYNC_JOB_ID = "skydio_telemetry_sync"
+REQUIREMENTS_DAILY_JOB_ID = "requirements_daily"
+# Misses saved this many days back are emailed if not yet announced, wherever
+# they were saved (this job, or a page load or edit that closed the period).
+MISS_SWEEP_DAYS = 14
 
 
 def check_maintenance_schedules(db):
@@ -126,6 +131,50 @@ def _run_maintenance_alerts():
         logger.exception("Maintenance alert check failed")
     finally:
         db.close()
+
+
+def _requirements_step(name: str, step, default):
+    """Run one step of the daily requirements job in its own session; a
+    failure is logged and gives ``default``, so the next step still runs."""
+    db = SessionLocal()
+    try:
+        return step(db)
+    except Exception:
+        logger.exception("Flight requirements daily job: %s failed", name)
+        return default
+    finally:
+        db.close()
+
+
+def _run_requirements_daily():
+    """Save the requirement periods due today, email the misses saved
+    recently and not yet announced, then send the reminders due (scheduled daily)."""
+    from app.models.flight_requirement import FlightRequirementResult
+    from app.services import requirement_notify, requirement_results
+    from app.services.requirement_eval import MISSED
+
+    def close(db):
+        return len(requirement_results.close_due_periods(db, local_today(db)))
+
+    def remind(db):
+        with requirement_notify.notice_run(db, "Flight requirement reminders"):
+            return requirement_notify.send_due_reminders(db, local_today(db))
+
+    def missed(db):
+        since = datetime.now(timezone.utc) - timedelta(days=MISS_SWEEP_DAYS)
+        rows = db.query(FlightRequirementResult).filter(
+            FlightRequirementResult.status == MISSED, FlightRequirementResult.saved_at >= since,
+        ).order_by(FlightRequirementResult.id).all()
+        if not rows:
+            return 0
+        with requirement_notify.notice_run(db, "Flight requirement miss emails"):
+            return requirement_notify.notify_missed(db, rows)
+
+    saved = _requirements_step("saving periods", close, 0)
+    miss_emails = _requirements_step("miss emails", missed, 0)
+    reminders = _requirements_step("reminders", remind, 0)
+    logger.info("Flight requirements daily job: %d results saved, %d miss emails, %d reminders",
+                saved, miss_emails, reminders)
 
 
 def _run_scheduled_telemetry_sync():
@@ -361,6 +410,16 @@ def start_scheduler():
         max_instances=1,
         # Also shortly after boot, so a restart does not wait until tomorrow.
         next_run_time=datetime.now() + timedelta(minutes=2),
+    )
+
+    _scheduler.add_job(
+        _run_requirements_daily,
+        trigger=CronTrigger(hour=MAINTENANCE_ALERT_HOUR, minute=0),
+        id=REQUIREMENTS_DAILY_JOB_ID,
+        replace_existing=True,
+        max_instances=1,
+        # Also shortly after boot; each email goes out once, so a rerun is safe.
+        next_run_time=datetime.now() + timedelta(minutes=3),
     )
 
     if interval_minutes:

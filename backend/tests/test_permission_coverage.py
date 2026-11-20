@@ -125,6 +125,8 @@ PILOTS_VIEW = "pilots.view"
 PILOTS_MANAGE = "pilots.manage"
 CERTIFICATIONS_VIEW = "certifications.view"
 CERTIFICATIONS_MANAGE = "certifications.manage"
+REQUIREMENTS_VIEW = "requirements.view"
+REQUIREMENTS_MANAGE = "requirements.manage"
 CHECKLISTS_VIEW = "checklists.view"
 CHECKLISTS_MANAGE = "checklists.manage"
 CALENDAR_EDIT = "calendar.edit"
@@ -318,6 +320,23 @@ EXPECTED_ROUTE_KEYS = {
     "POST /api/currency/send-reminders": {CERTIFICATIONS_MANAGE},
     "POST /api/currency/send-reminders/start": {CERTIFICATIONS_MANAGE},
     "GET /api/currency/jobs/{job_id}": {CERTIFICATIONS_MANAGE},
+    # flight requirements; recalculate also checks for an admin inside the handler
+    "GET /api/requirements": {REQUIREMENTS_VIEW},
+    "POST /api/requirements": {REQUIREMENTS_MANAGE},
+    "PATCH /api/requirements/{requirement_id}": {REQUIREMENTS_MANAGE},
+    "DELETE /api/requirements/{requirement_id}": {REQUIREMENTS_MANAGE},
+    "GET /api/requirements/status": {REQUIREMENTS_VIEW},
+    "GET /api/requirements/pilots/{pilot_id}": {REQUIREMENTS_VIEW},
+    "GET /api/requirements/flags": {REQUIREMENTS_VIEW},
+    "POST /api/requirements/{requirement_id}/excuse": {"requirements.excuse"},
+    "POST /api/requirements/{requirement_id}/recalculate": {REQUIREMENTS_MANAGE},
+    "GET /api/requirements/models": {REQUIREMENTS_MANAGE},
+    "GET /api/requirements/settings": {REQUIREMENTS_VIEW},
+    "PUT /api/requirements/settings": {REQUIREMENTS_MANAGE},
+    "GET /api/requirements/templates": {REQUIREMENTS_MANAGE},
+    "POST /api/requirements/templates": {REQUIREMENTS_MANAGE},
+    "PATCH /api/requirements/templates/{template_id}": {REQUIREMENTS_MANAGE},
+    "DELETE /api/requirements/templates/{template_id}": {REQUIREMENTS_MANAGE},
     # checklists
     "GET /api/checklists/templates": {CHECKLISTS_VIEW},
     "GET /api/checklists/templates/{template_id}": {CHECKLISTS_VIEW},
@@ -405,6 +424,7 @@ EXPECTED_ROUTE_KEYS = {
     "GET /api/export/incidents/csv": {REPORTS_EXPORT, INCIDENTS_VIEW},
     "GET /api/export/flight-plans/csv": {REPORTS_EXPORT, PLANS_VIEW},
     "GET /api/export/audit/csv": {REPORTS_EXPORT, AUDIT_VIEW},
+    "GET /api/export/requirements/{requirement_id}/csv": {REPORTS_EXPORT, REQUIREMENTS_VIEW},
     # dashboard
     "GET /api/dashboard/activity-by-month": {FLIGHTS_VIEW},
     "GET /api/dashboard/top-pilots-30d": {FLIGHTS_VIEW},

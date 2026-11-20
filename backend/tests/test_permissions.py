@@ -88,6 +88,9 @@ pilots.edit all own locked-none
 pilots.manage yes no locked-no
 certifications.view yes yes yes
 certifications.manage yes no locked-no
+requirements.view yes yes yes
+requirements.manage yes no locked-no
+requirements.excuse yes no locked-no
 checklists.view yes yes yes
 checklists.complete yes yes locked-no
 checklists.manage yes no locked-no
@@ -111,7 +114,7 @@ audit.view no no no
 digest.redirect yes no locked-no
 """
 GRID_ROWS = [line.split() for line in DEFAULT_GRID.strip().splitlines()]
-KEY_COUNT = 54
+KEY_COUNT = 57
 
 
 def _change(role, key, value):

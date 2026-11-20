@@ -305,7 +305,7 @@ def test_preferences_null_clears_or_resets(client, db, supervisor_headers):
     assert got["send_day"] is None
     assert got["send_time"] == "07:00"
     assert got["email_override"] is None
-    assert len(got["categories"]) == 8
+    assert len(got["categories"]) == 9
     assert got["frequency"] == "weekly"
 
 
@@ -476,3 +476,27 @@ def test_notification_log_mine_limits_an_admin_to_own_sends(client, db, admin_us
     assert {r["subject"] for r in everyone} == {"Admin digest", "Pilot digest"}
     mine = client.get("/api/notifications/log?mine=true", headers=admin_headers).json()
     assert [r["subject"] for r in mine] == ["Admin digest"]
+
+
+# --- Flight requirement settings through the general settings API ---------------
+
+@pytest.mark.parametrize("key, value", [
+    ("requirements_grace_days", "-5"), ("requirements_grace_days", "61"), ("requirements_grace_days", "abc"),
+    ("fiscal_year_start_month", "0"), ("fiscal_year_start_month", "13"), ("fiscal_year_start_month", ""),
+])
+def test_requirement_settings_refuse_out_of_range(client, db, admin_headers, key, value):
+    resp = client.put(BULK_URL, headers=admin_headers, json=[{"key": key, "value": value}])
+    assert resp.status_code == 422, resp.text
+    resp = client.put("/api/settings", headers=admin_headers, json={"key": key, "value": value})
+    assert resp.status_code == 422, resp.text
+    assert _stored(db, key) is None
+
+
+@pytest.mark.parametrize("key, value", [
+    ("requirements_grace_days", "0"), ("requirements_grace_days", "60"),
+    ("fiscal_year_start_month", "1"), ("fiscal_year_start_month", "12"),
+])
+def test_requirement_settings_accept_in_range(client, db, admin_headers, key, value):
+    resp = client.put(BULK_URL, headers=admin_headers, json=[{"key": key, "value": value}])
+    assert resp.status_code == 200, resp.text
+    assert _stored(db, key) == value

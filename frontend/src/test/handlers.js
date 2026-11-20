@@ -21,6 +21,16 @@ export const handlers = [
   http.get('/api/notifications/log', () => HttpResponse.json([])),
   // The currency rule picker's fleet models.
   http.get('/api/currency/models', () => HttpResponse.json([])),
+  // Settings > Flight Requirements: definitions, fleet models, templates and settings.
+  http.get('/api/requirements', () => HttpResponse.json([])),
+  http.get('/api/requirements/models', () => HttpResponse.json([])),
+  http.get('/api/requirements/templates', () => HttpResponse.json([])),
+  http.get('/api/requirements/settings', () => HttpResponse.json({ grace_days: 14, fiscal_year_start_month: 10 })),
+  // Requirement progress on the dashboard, Compliance, Pilots and pilot pages.
+  http.get('/api/requirements/status', () => HttpResponse.json({ score: null, requirements: [] })),
+  http.get('/api/requirements/flags', () => HttpResponse.json({})),
+  http.get('/api/requirements/pilots/:id', ({ params }) =>
+    HttpResponse.json({ pilot_id: Number(params.id), current: [], pending: [], history: [] })),
   // Settings reads whether the server serves /docs.
   http.get('/api/health', () => HttpResponse.json({ status: 'ok', api_docs: false })),
 ]

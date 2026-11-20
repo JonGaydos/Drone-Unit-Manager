@@ -162,4 +162,30 @@ describe('PilotsPage', () => {
       expect(body).not.toHaveProperty(field)
     }
   })
+
+  describe('Missed requirement badge', () => {
+    const FLAGS = { 1: [{ result_id: 4, requirement_id: 2, name: 'Monthly hour', period_start: '2026-09-01', period_end: '2026-09-30' }] }
+
+    it('marks a pilot with an open miss', async () => {
+      mockMount()
+      server.use(http.get('/api/requirements/flags', () => HttpResponse.json(FLAGS)))
+      renderWithProviders(<PilotsPage />, { role: 'viewer' })
+      const row = (await screen.findByRole('link', { name: /Ada Lovelace/ })).closest('tr')
+      const badge = await within(row).findByText('Missed requirement')
+      expect(badge).toHaveClass('text-danger')
+      expect(badge).toHaveAttribute('title', 'Monthly hour, Sep 1, 2026 to Sep 30, 2026')
+      const other = screen.getByRole('link', { name: /Grace Hopper/ }).closest('tr')
+      expect(within(other).queryByText('Missed requirement')).toBeNull()
+    })
+
+    it('shows no badge and skips the request without requirements.view', async () => {
+      let asked = false
+      mockMount()
+      server.use(http.get('/api/requirements/flags', () => { asked = true; return HttpResponse.json(FLAGS) }))
+      renderWithProviders(<PilotsPage />, { role: 'viewer', permissions: { 'requirements.view': 'no' } })
+      await screen.findByRole('link', { name: /Ada Lovelace/ })
+      expect(screen.queryByText('Missed requirement')).toBeNull()
+      expect(asked).toBe(false)
+    })
+  })
 })

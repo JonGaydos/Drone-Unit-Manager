@@ -10,7 +10,9 @@ const ENTITY_TYPES = [
   '', 'alert', 'api_token', 'attachment', 'audit_log', 'auth', 'backup', 'battery', 'battery_reading',
   'calendar_event', 'certification_type', 'checklist_completion', 'checklist_template',
   'component', 'controller', 'currency', 'currency_rule', 'currency_rule_model', 'dock', 'document', 'equipment',
-  'flight', 'flight_plan', 'flight_purpose', 'folder', 'incident', 'maintenance',
+  'flight', 'flight_plan', 'flight_purpose', 'flight_requirement', 'flight_requirement_model',
+  'flight_requirement_notice', 'flight_requirement_pilot', 'flight_requirement_purpose',
+  'flight_requirement_result', 'flight_requirement_template', 'folder', 'incident', 'maintenance',
   'maintenance_schedule', 'media_file', 'mission_log', 'mission_log_pilot', 'notification',
   'notification_log', 'notification_preference', 'operating_authority', 'other_equipment', 'photo',
   'photo_flight', 'photo_incident', 'photo_pilot', 'pilot', 'pilot_certification',
@@ -21,11 +23,11 @@ const ENTITY_TYPES = [
 
 const ACTIONS = [
   '', 'alert_check', 'approve', 'backup', 'battery_repair', 'bulk_approve', 'bulk_delete',
-  'bulk_update', 'cancel', 'checkin', 'checkout', 'cleanup', 'complete', 'create', 'deactivate',
+  'bulk_update', 'cancel', 'checkin', 'checkout', 'cleanup', 'close_periods', 'complete', 'create', 'deactivate',
   'delete', 'deny', 'digest', 'disconnect', 'dismiss', 'dismiss_all', 'enrich_flights',
   'enrich_run', 'export', 'hold', 'import', 'link', 'login', 'login_blocked', 'login_failed',
-  'logout', 'merge', 'password_change', 'password_reset', 'purge', 'reactivate', 'read',
-  'release_hold', 'reset', 'restore', 'restore_held_item', 'retire', 'send_reminders', 'send_test',
+  'logout', 'merge', 'password_change', 'password_reset', 'purge', 'reactivate', 'read', 'recalculate',
+  'release_hold', 'reset', 'restore', 'restore_held_item', 'retire', 'send_notices', 'send_reminders', 'send_test',
   'setup', 'sync', 'sync_deep', 'sync_run', 'telemetry_sync', 'unapprove', 'unlink', 'update',
   'upload', 'view',
 ]

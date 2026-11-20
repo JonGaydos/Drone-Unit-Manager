@@ -22,6 +22,7 @@ const REPORT_FILTERS = {
   pilot_activity_summary: { pilots: true, vehicles: true, dates: true },
   annual_unit_report: { pilots: false, vehicles: false, dates: true },
   per_pilot_annual_review: { pilots: true, vehicles: false, dates: true },
+  flight_requirements: { pilots: true, vehicles: false, dates: true },
 }
 
 /** Unknown types keep every control rather than silently hiding one. */
@@ -44,6 +45,7 @@ const REPORT_TYPES = [
   { value: 'pilot_activity_summary', label: 'Pilot Activity Summary', needs: [FLIGHTS, LOGS] },
   { value: 'annual_unit_report', label: 'Annual Unit Report', needs: [FLIGHTS, LOGS, FLEET, CERTS, 'authority.view', MAINTENANCE, 'incidents.view'] },
   { value: 'per_pilot_annual_review', label: 'Per-Pilot Annual Review', needs: [FLIGHTS, LOGS, CERTS] },
+  { value: 'flight_requirements', label: 'Flight Requirements', needs: ['requirements.view', FLIGHTS] },
 ]
 
 // Each quick export needs reports.export plus the permission for its content.

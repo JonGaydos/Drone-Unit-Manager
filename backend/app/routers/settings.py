@@ -38,6 +38,7 @@ ALLOWED_SETTING_KEYS = {
     "backup_enabled", "backup_retention", "backup_hour",
     "idle_lock_minutes",
     "sidebar_show_groups",
+    "requirements_grace_days", "fiscal_year_start_month",
 }
 
 # Minutes of no input before a browser locks. One value for every role.
@@ -76,6 +77,7 @@ PUBLIC_KEYS = {
     "drone_location_places",
     "org_default_lat", "org_default_lon", "org_location_name",
     "idle_lock_minutes",
+    "requirements_grace_days", "fiscal_year_start_month",
 }
 
 
@@ -137,9 +139,30 @@ def _check_weather_thresholds(value: str) -> None:
             raise HTTPException(422, f"{label} GO ({t[go]}) must not be {relation} CAUTION ({t[caution]})")
 
 
+# Whole-number settings and their allowed range, as the requirements settings route checks them.
+INTEGER_RANGES = {
+    "requirements_grace_days": (0, 60, "Grace days must be a whole number from 0 to 60"),
+    "fiscal_year_start_month": (1, 12, "Fiscal year start month must be a whole number from 1 to 12"),
+}
+
+
+def _check_integer_range(key: str, value: str) -> None:
+    """Refuse a whole-number setting outside its range."""
+    if key not in INTEGER_RANGES:
+        return
+    low, high, message = INTEGER_RANGES[key]
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        raise HTTPException(422, message) from None
+    if not low <= number <= high:
+        raise HTTPException(422, message)
+
+
 def _check_value(key: str, value: str) -> None:
     """Refuse a value the key cannot hold (422)."""
     _check_idle_lock(key, value)
+    _check_integer_range(key, value)
     if key in BOOLEAN_KEYS and value not in ("true", "false"):
         raise HTTPException(422, f"{key} must be true or false")
     if key == "weather_thresholds":

@@ -21,6 +21,7 @@ from app.services.permissions import can
 from app.models.flight import Flight
 from app.models.pilot import Pilot
 from app.services.flight_scope import counted_flight_clause, counted_only
+from app.services.requirement_results import overall_totals, per_model_text
 from app.models.vehicle import Vehicle
 from app.models.certification import CertificationType, PilotCertification
 from app.models.operating_authority import (
@@ -28,6 +29,7 @@ from app.models.operating_authority import (
     OperatingAuthority, authority_status,
 )
 from app.models.battery import Battery
+from app.models.flight_requirement import FlightRequirement, FlightRequirementResult
 from app.models.maintenance import MaintenanceRecord
 from app.models.setting import Setting
 from app.models.user import User
@@ -58,6 +60,7 @@ CERTIFICATIONS_VIEW = "certifications.view"
 AUTHORITY_VIEW = "authority.view"
 MAINTENANCE_VIEW = "maintenance.view"
 INCIDENTS_VIEW = "incidents.view"
+REQUIREMENTS_VIEW = "requirements.view"
 
 # Hard cap on the number of per-pilot PDFs rendered into a single ZIP. Generous
 # so normal batches are unaffected; bounds an otherwise unbounded render loop.
@@ -102,6 +105,7 @@ def _dispatch_report(config: ReportConfig, db: Session) -> dict:
         "pilot_activity_summary": _pilot_activity_summary,
         "annual_unit_report": _annual_unit_report,
         "per_pilot_annual_review": _per_pilot_annual_review,
+        "flight_requirements": _flight_requirements,
     }
     return generators[config.report_type](config, db)
 
@@ -121,6 +125,7 @@ REPORT_VIEW_KEYS: dict[str, tuple[str, ...]] = {
         MAINTENANCE_VIEW, INCIDENTS_VIEW,
     ),
     "per_pilot_annual_review": (FLIGHTS_VIEW, LOGS_VIEW, CERTIFICATIONS_VIEW),
+    "flight_requirements": (REQUIREMENTS_VIEW, FLIGHTS_VIEW),
 }
 
 
@@ -953,6 +958,51 @@ def _pilot_certifications(config: ReportConfig, db: Session):
         # Kept at the top level for the chart and any consumer reading the flat
         # shape; the section renderers use "sections" in preference.
         "columns": cert_columns,
+        "rows": rows,
+    }
+
+
+def _flight_requirements(config: ReportConfig, db: Session):
+    """Saved requirement results whose period ended in the date range."""
+    query = db.query(FlightRequirementResult, FlightRequirement.name, Pilot).join(
+        FlightRequirement, FlightRequirement.id == FlightRequirementResult.requirement_id).join(
+        Pilot, Pilot.id == FlightRequirementResult.pilot_id).filter(
+        FlightRequirementResult.saved_at.isnot(None))
+    if config.date_from:
+        query = query.filter(FlightRequirementResult.period_end >= config.date_from)
+    if config.date_to:
+        query = query.filter(FlightRequirementResult.period_end <= config.date_to)
+    if config.pilot_ids:
+        query = query.filter(FlightRequirementResult.pilot_id.in_(config.pilot_ids))
+    found = query.order_by(FlightRequirementResult.period_end, FlightRequirement.name,
+                           Pilot.last_name, Pilot.first_name).all()
+
+    rows = []
+    for result, name, pilot in found:
+        overall = overall_totals(result.totals)
+        rows.append({
+            "requirement": name,
+            "period": f"{result.period_start} to {result.period_end}",
+            "pilot": pilot.full_name,
+            "status": result.status,
+            "minutes": overall["minutes"],
+            "flights": overall["flights"],
+            "per_model": per_model_text(result.totals),
+        })
+    statuses = [result.status for result, _, _ in found]
+    met, missed = statuses.count("met"), statuses.count("missed")
+    return {
+        "report_type": "flight_requirements",
+        "title": "Flight Requirements Report",
+        "summary": {
+            "requirements": len({result.requirement_id for result, _, _ in found}),
+            "results": len(found),
+            "met": met,
+            "missed": missed,
+            "excused": statuses.count("excused"),
+            "score": f"{round(100 * met / (met + missed))}%" if met + missed else "-",
+        },
+        "columns": ["Requirement", "Period", "Pilot", "Status", "Minutes", "Flights", "Per model"],
         "rows": rows,
     }
 

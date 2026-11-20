@@ -357,6 +357,7 @@ Setup: create one login each for Supervisor, Pilot and Viewer (for example `<sup
 | 36. Role Permissions | | |
 | 37. Release Staging Pass | | |
 | 38. Currency Rules | | |
+| 39. Flight Requirements | | |
 
 ---
 
@@ -410,3 +411,75 @@ Setup: an admin, a supervisor and a viewer login. Fleet with at least two models
 ### 38.5 Backup and restore
 - [ ] Export a backup with a two-model rule, change the rule, then restore; both models are back
 - [ ] Restore a backup taken before this feature; its rules keep their models and pilot currency is unchanged
+
+---
+
+## 39. Flight Requirements
+
+Setup: an admin, a supervisor, a pilot and a viewer login. Fleet with at least two models (for example X10 and Matrice 30). Unit default location and display time zone set. Three pilots with reviewed flights, one of them added after the test period starts. SMTP pointed at a test inbox for 39.9.
+
+### 39.1 Access and permissions
+- [ ] Supervisor sees the Flight Requirements tab in Settings and can create, edit, duplicate, save as template and delete a requirement
+- [ ] Pilot and viewer do not see the tab; direct writes to the requirement routes are refused
+- [ ] Pilot and viewer see the dashboard This Period tile, the Compliance Requirements Score and every pilot's Flight Requirements card (view is on)
+- [ ] Pilot and viewer see no Excuse or Un-excuse buttons; a direct excuse call is refused
+- [ ] Turning Flight requirements: View off for a role hides the tile, the score, the card, the badge and the report option for that role
+- [ ] Admin recalculation of a closed period works for an admin only and is in the audit log
+
+### 39.2 Builder and summary
+- [ ] Each period type saves and shows its own fields: calendar month, quarter, year, fiscal quarter, fiscal year, monthly window, span, custom range, every N months
+- [ ] The summary sentence matches the settings as they change
+- [ ] Saving with no name, no target, no end date on a custom range, or no pilot ticked under Selected pilots shows what to fix
+- [ ] The model picker offers one chip per fleet model; Combined and Each separately appear with two or more models
+- [ ] Night is greyed out with a reason until the unit default location is set
+- [ ] Duplicate opens a filled form named Copy of the original; a template keeps everything except dates and pilots
+
+### 39.3 Period edges (review focus 1 and 2)
+- [ ] A flight that crosses midnight counts only its minutes inside a clock window (5:30 AM to 6:15 AM gives 30 minutes toward 12 AM to 6 AM)
+- [ ] A flight that runs past the period end counts only up to the end
+- [ ] On a daylight saving night, the repeated or missing hour counts as real elapsed time
+- [ ] A 19th to 5th monthly window rolls into the next month; the 31st in a short month means the last day; periods leave no gap and no overlap
+- [ ] A flight with no takeoff time is left out of a time-limited requirement and the pilot's progress says so
+- [ ] Night counts by the unit default location for a flight flown elsewhere
+
+### 39.4 Late review (review focus 3)
+- [ ] A period that ended unmet shows Pending review for the grace days, and the unreviewed flights in it are listed
+- [ ] A flight reviewed inside the grace days counts
+- [ ] After the grace days the result is saved; reviewing another flight afterwards does not change it
+- [ ] Only the admin recalculation changes a saved result
+
+### 39.5 Pilots joining, leaving, excused (review focus 4)
+- [ ] A pilot added after the period started is excused automatically; Un-excuse removes it
+- [ ] An inactive pilot drops out of open periods and keeps saved history
+- [ ] A requirement's only selected pilot set inactive for some months, then active again, gets no results for the months away
+- [ ] Excuse with a reason shows the reason in the card; Un-excuse brings the status back
+- [ ] A requirement switched off for a month is saved as excused with Requirement was switched off
+
+### 39.6 Editing an open requirement (review focus 5)
+- [ ] After editing the target, the open period uses the new target on the dashboard tile and on the pilot card
+- [ ] Saved periods keep their old target in the history table
+- [ ] Delete is refused for a requirement with saved results; switching it off works
+
+### 39.7 Misses and the score
+- [ ] A miss shows in Needs Attention, as a Missed requirement badge on the pilots list and profile, and under Open misses on the dashboard
+- [ ] Meeting the same requirement in a later period clears the flag; excusing the miss clears it; a one-time miss clears only by excusal
+- [ ] The Requirements Score is the share of saved results met in the last 12 months, leaves out excused results, and shows No results yet with none
+- [ ] The compliance score and pilot currency are unchanged by requirements
+
+### 39.8 Calendar, report and export
+- [ ] The Calendar shows one Due entry on the last day of each period
+- [ ] The Flight Requirements report matches the saved results; the requirement and pilot CSV downloads match too
+
+### 39.9 Emails (SMTP pointed at a test inbox)
+- [ ] An assignment email reaches each assigned pilot on create, activation and when a pilot is added
+- [ ] A reminder arrives the set number of days before the period ends, once per pilot per period, also if the scheduler runs twice
+- [ ] A miss email reaches the pilot and each user who can manage requirements
+- [ ] The digest holds a Flight Requirements section only for users who ticked it
+- [ ] Nothing is sent with SMTP off or for a pilot with no email
+
+### 39.10 Manual and pictures
+- [ ] Every topic in the Flight Requirements section opens, and its picture matches the screen
+
+### 39.11 Backup and restore
+- [ ] Export a backup with a clock-window requirement, a clock-window template, an excusal and a saved result; delete them; restore; all are back with the same window times
+- [ ] Restore a backup taken before this feature; the app starts and the Flight Requirements tab is empty

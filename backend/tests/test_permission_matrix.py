@@ -23,6 +23,7 @@ from app.models.document import Document
 from app.models.equipment_checkout import EquipmentCheckout
 from app.models.flight import Flight
 from app.models.flight_approval import FlightPlan
+from app.models.flight_requirement import FlightRequirement
 from app.models.incident import Incident
 from app.models.maintenance import MaintenanceRecord
 from app.models.maintenance_schedule import MaintenanceSchedule
@@ -72,6 +73,7 @@ DOCUMENTS_URL = "/api/documents"
 PHOTOS_URL = "/api/photos"
 ALERTS_URL = "/api/alerts"
 AUTHORITIES_URL = "/api/operating-authorities"
+REQUIREMENTS_URL = "/api/requirements"
 
 DAY = "2026-03-01"
 TITLE = "Changed"
@@ -233,6 +235,11 @@ def _alert(env):
     return env.add(Alert(type="x", severity="info", title="T", message="M"))
 
 
+def _requirement(env):
+    return env.add(FlightRequirement(name="Monthly 1 hr", period_type="calendar_month", start_date=date(2026, 3, 1),
+                                     recurring=False, model_mode="all", time_mode="any", target_minutes=60))
+
+
 def _authority(env):
     return env.add(OperatingAuthority(authority_type="coa", title="County COA", record_status="active",
                                       grounds_unit=False))
@@ -282,6 +289,14 @@ BOOL_CASES: dict[str, Builder] = {
     "pilots.manage": lambda env, role: _post(PILOTS_URL, {"first_name": "New", "last_name": "Pilot"}),
     "certifications.view": lambda env, role: _get("/api/certification-types"),
     "certifications.manage": lambda env, role: _post("/api/certification-types", {"name": "Part 107"}),
+    "requirements.view": lambda env, role: _get(REQUIREMENTS_URL),
+    "requirements.manage": lambda env, role: _post(REQUIREMENTS_URL, {"name": "Monthly 1 hr",
+                                                                      "period_type": "calendar_month",
+                                                                      "start_date": DAY, "target_minutes": 60},
+                                                   ok=CREATED),
+    "requirements.excuse": lambda env, role: _post(f"{REQUIREMENTS_URL}/{_requirement(env).id}/excuse",
+                                                   {"pilot_id": _pilot(env).id, "period_start": DAY,
+                                                    "excused": True}),
     "checklists.view": lambda env, role: _get(f"{CHECKLISTS_URL}/templates/{_template(env).id}"),
     "checklists.complete": lambda env, role: _post(f"{CHECKLISTS_URL}/complete", {"template_id": _template(env).id,
                                                                                   "pilot_id": _pilot(env).id,

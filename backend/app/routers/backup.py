@@ -16,7 +16,7 @@ import secrets
 import tempfile
 import threading
 import zipfile
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timezone
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -24,7 +24,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile as StarletteUploadFile
 from sqlalchemy import func, inspect as sa_inspect, text
 from sqlalchemy.orm import Session
-from sqlalchemy.types import Date, DateTime
+from sqlalchemy.types import Date, DateTime, Time
 
 from app.config import settings as app_settings
 from app.constants import APP_VERSION
@@ -78,6 +78,10 @@ from app.models.audit_log import AuditLog
 from app.models.incident import Incident
 from app.models.flight_approval import FlightPlan
 from app.models.currency_rule import CurrencyRule, CurrencyRuleModel
+from app.models.flight_requirement import (
+    FlightRequirement, FlightRequirementModel, FlightRequirementNotice, FlightRequirementPilot,
+    FlightRequirementPurpose, FlightRequirementResult, FlightRequirementTemplate,
+)
 from app.models.equipment_checkout import EquipmentCheckout
 from app.models.checklist import ChecklistTemplate, ChecklistCompletion
 from app.models.component import Component
@@ -113,6 +117,13 @@ EXPORT_ORDER = [
     ("pilots", Pilot),
     ("users", User),
     ("currency_rule_models", CurrencyRuleModel),
+    ("flight_requirements", FlightRequirement),
+    ("flight_requirement_templates", FlightRequirementTemplate),
+    ("flight_requirement_models", FlightRequirementModel),
+    ("flight_requirement_purposes", FlightRequirementPurpose),
+    ("flight_requirement_pilots", FlightRequirementPilot),
+    ("flight_requirement_results", FlightRequirementResult),
+    ("flight_requirement_notices", FlightRequirementNotice),
     ("vehicles", Vehicle),
     ("batteries", Battery),
     ("controllers", Controller),
@@ -321,12 +332,10 @@ def stream_backup_archive(include_telemetry: bool = False):
 
 
 class _BackupEncoder(json.JSONEncoder):
-    """JSON encoder that handles datetime and date objects."""
+    """JSON encoder that handles datetime, date and time objects."""
 
     def default(self, obj):
-        if isinstance(obj, datetime):
-            return obj.isoformat()
-        if isinstance(obj, date):
+        if isinstance(obj, (datetime, date, time)):
             return obj.isoformat()
         return super().default(obj)
 
@@ -393,7 +402,7 @@ def _serialize_table(db: Session, model_class) -> list[dict]:
         row_dict = {}
         for col in columns:
             val = getattr(row, col)
-            if isinstance(val, (datetime, date)):
+            if isinstance(val, (datetime, date, time)):
                 val = val.isoformat()
             row_dict[col] = val
         result.append(row_dict)
@@ -412,6 +421,8 @@ def _get_column_types(model_class) -> dict:
             types[col_attr.key] = "datetime"
         elif isinstance(col_type, Date):
             types[col_attr.key] = "date"
+        elif isinstance(col_type, Time):
+            types[col_attr.key] = "time"
     return types
 
 
@@ -421,9 +432,12 @@ LEGACY_COLUMN_RENAMES = {
 }
 
 
+_PARSERS = {"datetime": datetime.fromisoformat, "date": date.fromisoformat, "time": time.fromisoformat}
+
+
 def _parse_row(row: dict, col_types: dict, renames: dict) -> dict:
     """Parse one exported row for insert: apply any legacy column renames and
-    revive ISO datetime/date strings. A malformed temporal value falls back to
+    revive ISO datetime/date/time strings. A malformed temporal value falls back to
     the raw string so one bad cell cannot abort a whole restore.
 
     Takes col_types and renames precomputed so a streaming caller resolves them
@@ -438,7 +452,7 @@ def _parse_row(row: dict, col_types: dict, renames: dict) -> dict:
             parsed[key] = val
             continue
         try:
-            parsed[key] = datetime.fromisoformat(val) if kind == "datetime" else date.fromisoformat(val)
+            parsed[key] = _PARSERS[kind](val)
         except (ValueError, TypeError):
             parsed[key] = val
     return parsed

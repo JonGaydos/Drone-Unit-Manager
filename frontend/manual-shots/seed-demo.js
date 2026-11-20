@@ -127,8 +127,9 @@ export async function seedDemo(request, adminToken) {
 
   // 20 flights over the last 60 days, text locations only.
   const purposes = ['Training', 'Patrol', 'Search']
-  for (let i = 0; i < 20; i++) {
-    await createFlight(request, A, {
+  // All but the three newest are reviewed, so requirements have flights to count
+  // and the review queue still has some.
+  const flights = await Promise.all(Array.from({ length: 20 }, (_, i) => createFlight(request, A, {
       pilot_id: pilots[i % pilots.length].id,
       vehicle_id: vehicles[i % vehicles.length].id,
       date: day(-3 * (i + 1)),
@@ -137,8 +138,27 @@ export async function seedDemo(request, adminToken) {
       takeoff_address: LOCATIONS[i % 2],
       landing_address: LOCATIONS[i % 2],
       max_altitude_m: 60 + (i % 5) * 10,
-    })
+  })))
+  await Promise.all(flights.slice(3).map(flight => attempt('review flight', () => api(request, A).patch(
+    `/flights/${flight.id}/review-status`, { review_status: 'reviewed' },
+  ), skipped)))
+
+  // Flight requirements: one this month that is still open, and one custom
+  // range that ended after the 14 grace days, so a pilot has saved history.
+  const requirementBase = {
+    description: null, recurring: false, window_start_day: null, window_end_day: null, span_length: null,
+    span_unit: null, every_months: null, target_minutes: null, target_flights: null, model_mode: 'all',
+    models: [], time_mode: 'any', window_start_time: null, window_end_time: null, purposes: [],
+    reminder_days: 7, is_active: true, pilot_ids: pilots.map((p) => p.id), end_date: null,
   }
+  await attempt('monthly requirement', () => post(request, A, '/requirements', {
+    ...requirementBase, name: 'Demo monthly flight time', period_type: 'calendar_month', recurring: true,
+    start_date: day(0), target_minutes: 30,
+  }, 'requirement'), skipped)
+  await attempt('past requirement', () => post(request, A, '/requirements', {
+    ...requirementBase, name: 'Demo proficiency flight', period_type: 'custom',
+    start_date: day(-70), end_date: day(-45), target_flights: 1,
+  }, 'requirement'), skipped)
 
   // Certifications: current, expiring and expired.
   const part107 = await createCertType(request, A, {

@@ -10,6 +10,7 @@ import {
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 import { Modal } from '@/components/ui/Modal'
 import { daysUntil } from '@/lib/utils'
+import RequirementsScore from '@/components/requirements/RequirementsScore'
 
 // How often a running reminder job is checked on.
 const REMINDER_POLL_MS = 1000
@@ -450,6 +451,7 @@ export default function CompliancePage() {
             </span>
           )}
         </div>
+        <RequirementsScore />
 
         {/* Stat Cards */}
         <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">

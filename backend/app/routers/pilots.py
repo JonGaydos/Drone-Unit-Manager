@@ -1,5 +1,6 @@
 """Pilot CRUD endpoints with flight statistics and profile photo management."""
 
+import logging
 from datetime import date
 from pathlib import Path
 from typing import Annotated
@@ -9,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import func
+from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.constants import PILOT_NOT_FOUND, ACCESS_DENIED, FILE_TYPE_NOT_ALLOWED, FILE_TOO_LARGE
@@ -24,8 +26,11 @@ from app.schemas.pilot import PilotCreate, PilotUpdate, PilotOut, PilotStats
 from app.responses import responses
 from app.services import permissions as permissions_service
 from app.services.pilot_contacts import CONTACT_FIELDS, hides_contacts, pilot_out
+from app.services.requirement_notify import notify_joined
+from app.services.requirement_results import open_misses
 
 router = APIRouter(prefix="/api/pilots", tags=["pilots"])
+logger = logging.getLogger(__name__)
 
 EDIT_KEY = "pilots.edit"
 MANAGE_KEY = "pilots.manage"
@@ -150,7 +155,17 @@ def get_pilot_needs_attention(pilot_id: int, db: DBSession, user: ViewUser, _cer
                 "text": f"Certification expiring in {days}d: {name} ({expiration_date})",
             })
 
+    if permissions_service.can(db, user, "requirements.view"):
+        items += _requirement_items(db, pilot_id)
+
     return {"count": len(items), "items": items}
+
+
+def _requirement_items(db, pilot_id: int) -> list[dict]:
+    """One red item per saved requirement miss still open for the pilot."""
+    return [{"level": "red", "category": "requirement",
+             "text": f"Missed requirement: {miss['name']} ({miss['period_start']} to {miss['period_end']})"}
+            for miss in open_misses(db, [pilot_id]).get(pilot_id, [])]
 
 
 def _check_badge_free(db, badge: str | None, pilot_id: int | None = None) -> None:
@@ -165,6 +180,18 @@ def _check_badge_free(db, badge: str | None, pilot_id: int | None = None) -> Non
         raise HTTPException(status_code=400, detail=f"Badge number {badge.strip()} is already used by {holder.full_name}")
 
 
+def _notify_joined_safely(db: Session, pilot: Pilot) -> None:
+    """Email an active pilot about the requirements every active pilot has. A
+    failure is logged, never raised: the pilot is already saved."""
+    if pilot.status != "active":
+        return
+    try:
+        notify_joined(db, pilot.id)
+    except Exception:
+        logger.exception("Requirement assignment emails for pilot %s failed", pilot.id)
+        db.rollback()
+
+
 @router.post("", response_model=PilotOut, responses=responses(400, 401))
 def create_pilot(data: PilotCreate, db: DBSession, admin: ManageUser):
     """Create a new pilot record. Needs the pilots.manage permission."""
@@ -176,6 +203,7 @@ def create_pilot(data: PilotCreate, db: DBSession, admin: ManageUser):
     log_action(db, admin.id, admin.display_name, "create", "pilot", pilot.id, f"{pilot.first_name} {pilot.last_name}")
     db.commit()
     db.refresh(pilot)
+    _notify_joined_safely(db, pilot)
     return pilot_out(db, pilot, admin)
 
 
@@ -211,12 +239,15 @@ def update_pilot(pilot_id: int, data: PilotUpdate, db: DBSession, user: EditUser
     if "badge_number" in update_data:
         _check_badge_free(db, update_data["badge_number"], pilot_id)
     changes = compute_changes(pilot, update_data, list(update_data.keys()))
+    was_active = pilot.status == "active"
     for key, value in update_data.items():
         setattr(pilot, key, value)
     if changes:
         log_action(db, user.id, user.display_name, "update", "pilot", pilot.id, f"{pilot.first_name} {pilot.last_name}", changes=changes)
     db.commit()
     db.refresh(pilot)
+    if not was_active:
+        _notify_joined_safely(db, pilot)
     return pilot_out(db, pilot, user)
 
 
@@ -306,6 +337,9 @@ def merge_pilots(target_id: int, data: PilotMergeRequest, db: DBSession, admin: 
     from app.models.document import Document
     from app.models.equipment_checkout import EquipmentCheckout
     from app.models.flight_approval import FlightPlan
+    from app.models.flight_requirement import (
+        FlightRequirementNotice, FlightRequirementPilot, FlightRequirementResult,
+    )
     from app.models.incident import Incident
     from app.models.maintenance_schedule import MaintenanceSchedule
     from app.models.photo import PhotoPilot
@@ -347,6 +381,9 @@ def merge_pilots(target_id: int, data: PilotMergeRequest, db: DBSession, admin: 
         + reassign(User, "pilot_id")
         + reassign(CalendarEvent, "pilot_id")
         + reassign(Vehicle, "manual_location_pilot_id")
+        + reassign(FlightRequirementPilot, "pilot_id", ["requirement_id"])
+        + reassign(FlightRequirementResult, "pilot_id", ["requirement_id", "period_start"])
+        + reassign(FlightRequirementNotice, "pilot_id", ["requirement_id", "period_start", "kind"])
     )
 
     if not target.email and source.email:

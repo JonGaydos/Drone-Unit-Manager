@@ -19,7 +19,7 @@ extraction, token retirement) rather than any one piece in isolation.
 import io
 import json
 import zipfile
-from datetime import date, datetime
+from datetime import date, datetime, time, timezone
 
 from sqlalchemy import text
 
@@ -30,6 +30,10 @@ from app.models.vehicle import Vehicle
 from app.models.flight import Flight
 from app.models.setting import Setting
 from app.models.telemetry import TelemetryPoint
+from app.models.flight_requirement import (
+    FlightRequirement, FlightRequirementModel, FlightRequirementNotice, FlightRequirementPilot,
+    FlightRequirementPurpose, FlightRequirementResult, FlightRequirementTemplate,
+)
 
 IMPORT_URL = "/api/backup/import"
 
@@ -68,6 +72,14 @@ def test_parse_rows_applies_legacy_column_rename():
     parsed = _parse_rows([{"serial_number": "B-1", "purchase_date": "2024-01-01"}], Battery)
     assert "purchase_date" not in parsed[0]
     assert parsed[0]["acquired_date"] == date(2024, 1, 1)   # renamed AND parsed
+
+
+def test_parse_rows_revives_iso_time():
+    from app.routers.backup import _parse_rows
+    parsed = _parse_rows([{"id": 1, "window_start_time": "22:30:00", "window_end_time": None}],
+                         FlightRequirement)
+    assert parsed[0]["window_start_time"] == time(22, 30)
+    assert parsed[0]["window_end_time"] is None
 
 
 # --- full round trip --------------------------------------------------------
@@ -219,6 +231,73 @@ def test_restore_round_trips_logins_api_tokens_and_secrets(
     # The restored API token authenticates; the revoked one still does not.
     assert client.get("/api/flights", headers={"Authorization": f"Bearer {raw}"}).status_code == 200
     assert client.get("/api/flights", headers={"Authorization": "Bearer dum_revoked"}).status_code == 401
+
+
+def _seed_requirement_tables(db):
+    """One row in each flight requirement table, using every column type they add:
+    Time, Date, UTCDateTime and JSON."""
+    pilot = Pilot(first_name="Ana", last_name="Alvarez", status="active")
+    db.add(pilot)
+    db.commit()
+    stamp = datetime(2026, 10, 2, 3, 4, tzinfo=timezone.utc)
+    req = FlightRequirement(
+        name="Evening hour", period_type="calendar_month", start_date=date(2026, 9, 1),
+        end_date=date(2027, 8, 31), recurring=True, model_mode="combined", time_mode="clock",
+        window_start_time=time(22, 30), window_end_time=time(5, 15), target_minutes=60,
+        active_changed_at=stamp, closed_through=date(2026, 9, 30))
+    db.add(req)
+    db.commit()
+    db.add_all([
+        FlightRequirementModel(requirement_id=req.id, model="X10"),
+        FlightRequirementPurpose(requirement_id=req.id, purpose="Training"),
+        FlightRequirementPilot(requirement_id=req.id, pilot_id=pilot.id, added_at=stamp),
+        FlightRequirementResult(requirement_id=req.id, pilot_id=pilot.id, period_start=date(2026, 9, 1),
+                                period_end=date(2026, 9, 30), status="met",
+                                totals={"X10": {"minutes": 61, "flights": 2}},
+                                target_snapshot={"window_start_time": "22:30"}, excused=False, saved_at=stamp),
+        FlightRequirementNotice(requirement_id=req.id, pilot_id=pilot.id, period_start=date(2026, 9, 1),
+                                kind="assigned", sent_at=stamp),
+        FlightRequirementTemplate(name="Evening", settings={"time_mode": "clock", "window_start_time": "22:30"}),
+    ])
+    db.commit()
+    return stamp
+
+
+def test_restore_round_trips_the_flight_requirement_tables(client, db, telemetry_db, tmp_path, monkeypatch):
+    (tmp_path / "uploads").mkdir()
+    monkeypatch.setattr(app_settings, "UPLOAD_DIR", tmp_path / "uploads")
+    monkeypatch.setattr(app_settings, "DATA_DIR", tmp_path)
+    stamp = _seed_requirement_tables(db)
+
+    spooled, manifest = build_backup_archive(db, include_telemetry=False)
+    archive = spooled.read()
+    assert manifest["tables"]["flight_requirements"] == 1
+    _clear_all(db, telemetry_db)
+
+    token = "requirements-install-token"
+    with open(_install_token_path(), "w") as f:
+        f.write(token)
+    resp = client.post(IMPORT_URL, headers={"X-Install-Token": token},
+                       files={"file": ("backup.zip", archive, "application/zip")})
+    assert resp.status_code == 200, resp.text
+
+    db.expire_all()
+    req = db.query(FlightRequirement).one()
+    assert (req.window_start_time, req.window_end_time) == (time(22, 30), time(5, 15))
+    assert (req.start_date, req.end_date, req.closed_through) == (
+        date(2026, 9, 1), date(2027, 8, 31), date(2026, 9, 30))
+    assert req.active_changed_at == stamp
+    assert [row.model for row in req.models] == ["X10"]
+    assert [row.purpose for row in req.purposes] == ["Training"]
+    assert req.pilots[0].added_at == stamp
+    result = db.query(FlightRequirementResult).one()
+    assert result.totals == {"X10": {"minutes": 61, "flights": 2}}
+    assert result.target_snapshot == {"window_start_time": "22:30"}
+    assert (result.period_start, result.saved_at, result.excused) == (date(2026, 9, 1), stamp, False)
+    notice = db.query(FlightRequirementNotice).one()
+    assert (notice.period_start, notice.kind, notice.sent_at) == (date(2026, 9, 1), "assigned", stamp)
+    assert db.query(FlightRequirementTemplate).one().settings == {
+        "time_mode": "clock", "window_start_time": "22:30"}
 
 
 def test_backup_import_rejects_a_non_zip(client, db, tmp_path, monkeypatch):

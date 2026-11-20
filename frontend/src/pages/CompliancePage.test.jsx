@@ -285,4 +285,35 @@ describe('CompliancePage', () => {
       expect(await screen.findByText('SMTP down')).toBeInTheDocument()
     })
   })
+
+  describe('Requirements score', () => {
+    it('shows the Requirements score next to the compliance score, which requirements data leaves unchanged', async () => {
+      mockMount()
+      server.use(http.get('/api/requirements/status', () => HttpResponse.json({ score: 0.95, requirements: [] })))
+      renderWithProviders(<CompliancePage />, { role: 'admin' })
+      const score = await screen.findByRole('figure', { name: 'Requirements score' })
+      expect(within(score).getByText('95%')).toBeInTheDocument()
+      // The compliance score is the payload's own value, not mixed with requirements.
+      expect(screen.getByText('72')).toBeInTheDocument()
+      expect(screen.getByText('Compliance Score')).toBeInTheDocument()
+    })
+
+    it('says No results yet when the Requirements score is null', async () => {
+      mockMount()
+      server.use(http.get('/api/requirements/status', () => HttpResponse.json({ score: null, requirements: [] })))
+      renderWithProviders(<CompliancePage />, { role: 'admin' })
+      const score = await screen.findByRole('figure', { name: 'Requirements score' })
+      expect(within(score).getByText('No results yet')).toBeInTheDocument()
+    })
+
+    it('hides the Requirements score without requirements.view', async () => {
+      let asked = false
+      mockMount()
+      server.use(http.get('/api/requirements/status', () => { asked = true; return HttpResponse.json({ score: 1, requirements: [] }) }))
+      renderWithProviders(<CompliancePage />, { role: 'viewer', permissions: { 'requirements.view': 'no' } })
+      expect(await screen.findByText('72')).toBeInTheDocument()
+      expect(screen.queryByRole('figure', { name: 'Requirements score' })).toBeNull()
+      expect(asked).toBe(false)
+    })
+  })
 })

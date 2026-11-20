@@ -13,6 +13,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
 import DocumentUpload from '@/components/DocumentUpload'
+import PilotRequirementsCard from '@/components/requirements/PilotRequirementsCard'
 import { useAuthedImage } from '@/hooks/useAuthedImage'
 
 /** Performance tiles whose values come from other features. The server leaves a
@@ -96,6 +97,8 @@ export default function PilotDetailPage() {
   }, [id, canSeeFlights, canSeeCerts])
 
   const canEdit = canRecord('pilots.edit', isOwnPilot)
+  // An excusal can clear a missed requirement from Needs Attention.
+  const reloadNeedsAttention = () => getSection(canSeeCerts, `/pilots/${id}/needs-attention`, null).then(setNeedsAttention)
 
   const startEditing = () => {
     setEditForm({
@@ -548,6 +551,8 @@ export default function PilotDetailPage() {
           </div>
         </div>
       )}
+
+      <PilotRequirementsCard pilotId={id} onChange={reloadNeedsAttention} />
 
       {/* Documents */}
       <DocumentUpload entityType="pilot" entityId={id} folderId={generalFolderId} canUpload={canRecord('files.upload', isOwnPilot)} />

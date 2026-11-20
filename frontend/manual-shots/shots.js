@@ -303,6 +303,50 @@ export const SHOTS = [
     after: (dialog) => dialog.getByRole('button', { name: /^X10 \(\d+\)$/ }).click(),
   }),
   {
+    file: 'flight-requirements-requirements-tab.png',
+    route: '/settings',
+    prepare: async (page) => {
+      await page.getByRole('button', { name: 'Flight Requirements', exact: true }).click()
+      await page.getByText('Demo monthly flight time', { exact: true }).waitFor()
+    },
+    target: (page) => page.locator('section[aria-labelledby="req-list-title"]'),
+  },
+  {
+    file: 'flight-requirements-creating-a-requirement.png',
+    route: '/settings',
+    prepare: async (page) => {
+      await page.setViewportSize({ width: 1280, height: 1900 }) // tall enough to show the whole form
+      await page.getByRole('button', { name: 'Flight Requirements', exact: true }).click()
+      await page.getByRole('button', { name: 'New requirement', exact: true }).click()
+      const form = page.getByRole('form', { name: 'New requirement' })
+      await form.getByLabel('Name', { exact: true }).fill('Demo quarterly model time')
+      await form.getByLabel('Period', { exact: true }).selectOption('calendar_quarter')
+      await form.getByLabel('Minutes', { exact: true }).fill('15')
+      await form.getByRole('button', { name: /^X10 \(\d+\)$/ }).click()
+      await form.getByRole('button', { name: /^Matrice 30 \(\d+\)$/ }).click()
+      await form.getByRole('button', { name: 'Each separately', exact: true }).click()
+      await page.waitForTimeout(SETTLE_MS)
+    },
+    target: (page) => page.getByRole('form', { name: 'New requirement' }),
+  },
+  {
+    file: 'flight-requirements-progress-and-the-dashboard.png',
+    route: '/',
+    prepare: async (page) => {
+      await page.getByRole('region', { name: 'This Period' }).getByText('Demo monthly flight time').waitFor()
+    },
+    target: (page) => page.getByRole('region', { name: 'This Period' }),
+  },
+  {
+    file: 'flight-requirements-excusing-and-misses.png',
+    route: '/pilots',
+    prepare: async (page) => {
+      await page.getByRole('link', { name: /Avery Brooks/ }).click()
+      await page.getByRole('region', { name: 'Flight Requirements' }).getByText('Demo proficiency flight').first().waitFor()
+    },
+    target: (page) => page.getByRole('region', { name: 'Flight Requirements' }),
+  },
+  {
     file: 'certifications-certification-matrix.png',
     route: '/certifications',
     prepare: async (page) => {

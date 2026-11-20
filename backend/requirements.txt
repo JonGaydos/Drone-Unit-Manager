@@ -17,3 +17,5 @@ pillow==13.0.0
 openpyxl==3.1.5
 matplotlib==3.9.3
 reportlab==4.2.5
+# civil twilight for night requirements
+astral==3.2
