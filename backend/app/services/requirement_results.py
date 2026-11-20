@@ -9,6 +9,7 @@ an admin recalculates the period on purpose with ``recalculate_period``.
 import math
 from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
+from typing import cast
 
 from sqlalchemy import exists, func, or_
 from sqlalchemy.orm import Session, aliased
@@ -149,7 +150,7 @@ def _due_periods(db: Session, req: FlightRequirement, settings: UnitEvalSettings
 def _switched_off(progress: PilotProgress) -> PilotProgress:
     """A pilot's result for a period that ended while the requirement was off."""
     zeros = {key: {"minutes": 0, "flights": 0} for key in progress.totals}
-    return replace(progress, status=EXCUSED, totals=zeros, excused=True, excused_reason=OFF_REASON)
+    return cast(PilotProgress, replace(progress, status=EXCUSED, totals=zeros, excused=True, excused_reason=OFF_REASON))
 
 
 def _save_rows(db: Session, req: FlightRequirement, period: Period, progress: dict[int, PilotProgress],

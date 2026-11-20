@@ -123,7 +123,8 @@ def test_night_window_matches_published():
     published_dawn = datetime(2026, 6, 22, 3, 55, tzinfo=LONDON)
     assert abs(dusk - published_dusk) <= timedelta(minutes=2)
     assert abs(dawn - published_dawn) <= timedelta(minutes=2)
-    assert dusk.hour >= 21 and dawn.hour < 4
+    assert dusk.hour >= 21
+    assert dawn.hour < 4
     length = dawn.astimezone(timezone.utc) - dusk.astimezone(timezone.utc)
     assert abs(length - timedelta(hours=5, minutes=46)) <= timedelta(minutes=5)
 

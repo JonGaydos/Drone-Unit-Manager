@@ -129,8 +129,7 @@ export async function seedDemo(request, adminToken) {
   const purposes = ['Training', 'Patrol', 'Search']
   // All but the three newest are reviewed, so requirements have flights to count
   // and the review queue still has some.
-  for (let i = 0; i < 20; i++) {
-    const flight = await createFlight(request, A, {
+  const flights = await Promise.all(Array.from({ length: 20 }, (_, i) => createFlight(request, A, {
       pilot_id: pilots[i % pilots.length].id,
       vehicle_id: vehicles[i % vehicles.length].id,
       date: day(-3 * (i + 1)),
@@ -139,13 +138,10 @@ export async function seedDemo(request, adminToken) {
       takeoff_address: LOCATIONS[i % 2],
       landing_address: LOCATIONS[i % 2],
       max_altitude_m: 60 + (i % 5) * 10,
-    })
-    if (i >= 3) {
-      await attempt('review flight', () => api(request, A).patch(
-        `/flights/${flight.id}/review-status`, { review_status: 'reviewed' },
-      ), skipped)
-    }
-  }
+  })))
+  await Promise.all(flights.slice(3).map(flight => attempt('review flight', () => api(request, A).patch(
+    `/flights/${flight.id}/review-status`, { review_status: 'reviewed' },
+  ), skipped)))
 
   // Flight requirements: one this month that is still open, and one custom
   // range that ended after the 14 grace days, so a pilot has saved history.

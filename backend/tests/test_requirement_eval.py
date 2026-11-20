@@ -417,4 +417,5 @@ def test_unit_eval_settings_clamps_out_of_range_values(db, grace, month, expecte
                 Setting(key="fiscal_year_start_month", value=month)])
     db.commit()
     settings = unit_eval_settings(db)
-    assert (settings.grace_days, settings.fiscal_start_month) == expected
+    actual = (settings.grace_days, settings.fiscal_start_month)
+    assert actual == expected

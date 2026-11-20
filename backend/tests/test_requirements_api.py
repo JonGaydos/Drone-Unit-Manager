@@ -200,13 +200,16 @@ def _detail_text(response) -> str:
 
 def test_clock_window_with_the_same_start_and_end_is_refused(client, admin_headers):
     response = client.post(URL, headers=admin_headers, json={**BASE, **SAME_TIMES})
-    assert response.status_code == 422 and SAME_TIMES_REFUSED in _detail_text(response)
+    assert response.status_code == 422
+    assert SAME_TIMES_REFUSED in _detail_text(response)
     req_id = _create(client, admin_headers)["id"]
     response = client.patch(f"{URL}/{req_id}", headers=admin_headers, json=SAME_TIMES)
-    assert response.status_code == 422 and SAME_TIMES_REFUSED in _detail_text(response)
+    assert response.status_code == 422
+    assert SAME_TIMES_REFUSED in _detail_text(response)
     response = client.post(f"{URL}/templates", headers=admin_headers,
                            json={"name": "Same", "settings": {**BASE, **SAME_TIMES}})
-    assert response.status_code == 422 and SAME_TIMES_REFUSED in _detail_text(response)
+    assert response.status_code == 422
+    assert SAME_TIMES_REFUSED in _detail_text(response)
 
 
 def test_unknown_pilot_is_refused(client, admin_headers):

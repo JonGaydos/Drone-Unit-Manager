@@ -123,8 +123,10 @@ def test_assignment_escapes_user_values(db, smtp, sent):
     req = _req(db, name="<b>Night</b> & day", description="<script>x</script>")
     notify_assigned(db, req, [pilot.id])
     html = sent[0]["html"]
-    assert "<b>Night</b>" not in html and "&lt;b&gt;Night&lt;/b&gt; &amp; day" in html
-    assert "<script>" not in html and "<i>Ann</i>" not in html
+    assert "<b>Night</b>" not in html
+    assert "&lt;b&gt;Night&lt;/b&gt; &amp; day" in html
+    assert "<script>" not in html
+    assert "<i>Ann</i>" not in html
 
 
 def test_assignment_for_an_inactive_requirement_sends_nothing(db, smtp, sent):
@@ -239,7 +241,8 @@ def test_miss_emails_the_pilot_and_managers_but_not_viewers(db, smtp, sent, mana
     assert _to(sent) == ["admin@example.test", "one@example.test", "supervisor@example.test",
                          "two@example.test"]
     manager_email = next(email for email in sent if email["to"] == "supervisor@example.test")
-    assert first.full_name in manager_email["html"] and second.full_name in manager_email["html"]
+    assert first.full_name in manager_email["html"]
+    assert second.full_name in manager_email["html"]
     assert len(_notices(db, "missed")) == 2
     assert notify_missed(db, rows) == 0
     assert len(sent) == 4
@@ -420,7 +423,8 @@ def test_digest_lists_periods_ending_soon_with_pilots_not_met(db, viewer_user, d
     _req(db)
     digest_day(date(2026, 11, 25))
     section = _section(db, viewer_user)
-    assert section and "1 of 1 pilots not met" in json.dumps(section)
+    assert section
+    assert "1 of 1 pilots not met" in json.dumps(section)
 
 
 def test_digest_leaves_out_a_period_far_from_its_end(db, viewer_user, digest_day):
@@ -436,7 +440,8 @@ def test_digest_lists_periods_pending_review_with_unreviewed_flights(db, viewer_
     _flight(db, pilot, date(2026, 10, 20), review_status="needs_review")
     digest_day(date(2026, 11, 5))
     text = json.dumps(_section(db, viewer_user))
-    assert "Pending review" in text and "1 of 1 pilots not met, 1 unreviewed flight" in text
+    assert "Pending review" in text
+    assert "1 of 1 pilots not met, 1 unreviewed flight" in text
 
 
 def test_digest_leaves_out_a_pending_period_every_pilot_met(db, viewer_user, digest_day):
@@ -459,7 +464,8 @@ def test_digest_lists_misses_saved_in_the_last_week(db, viewer_user, digest_day)
     db.commit()
     digest_day(date(2026, 11, 10))
     text = json.dumps(_section(db, viewer_user))
-    assert "Recent Pilot" in text and "Older Pilot" not in text
+    assert "Recent Pilot" in text
+    assert "Older Pilot" not in text
 
 
 def test_digest_leaves_the_section_out_when_the_category_is_off(db, viewer_user, digest_day):
@@ -490,7 +496,8 @@ def test_new_preferences_include_the_requirements_category(db, viewer_user):
 def test_digest_renders_the_section_escaped(viewer_user):
     html = render_digest_html({"requirements": [{"requirement": "<b>X</b>", "status": "Ends soon"}]},
                               viewer_user, "Unit")
-    assert "Flight Requirements" in html and "<b>X</b>" not in html
+    assert "Flight Requirements" in html
+    assert "<b>X</b>" not in html
 
 
 # Daily job
@@ -573,7 +580,8 @@ def test_daily_job_audits_its_notices_as_one_entry_per_step(db, scheduler_db, mo
     monkeypatch.setattr(sched, "local_today", lambda _db: REMINDER_DAY)
     monkeypatch.setattr(requirement_notify, "local_today", lambda _db: REMINDER_DAY)
     sched._run_requirements_daily()
-    assert len(_notices(db, "missed")) == 2 and len(_notices(db, "reminder")) == 2
+    assert len(_notices(db, "missed")) == 2
+    assert len(_notices(db, "reminder")) == 2
     assert _audit_summary(db) == [
         ("close_periods", "flight_requirement_result", "Saved flight requirement periods past their grace time"),
         ("send_notices", "flight_requirement_notice", "Flight requirement miss emails"),
@@ -595,7 +603,8 @@ def test_scheduler_registers_the_daily_job(scheduler_db, monkeypatch):
     sched.start_scheduler()
     try:
         job = sched._scheduler.get_job(sched.REQUIREMENTS_DAILY_JOB_ID)
-        assert job is not None and sched.REQUIREMENTS_DAILY_JOB_ID == "requirements_daily"
+        assert job is not None
+        assert sched.REQUIREMENTS_DAILY_JOB_ID == "requirements_daily"
         hour = next(field for field in job.trigger.fields if field.name == "hour")
         assert str(hour) == str(sched.MAINTENANCE_ALERT_HOUR)
     finally:

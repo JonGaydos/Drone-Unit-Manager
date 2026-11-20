@@ -136,9 +136,13 @@ def _record(db: Session, key: NoticeKey, kind: str) -> None:
 @contextmanager
 def notice_run(db: Session, details: str):
     """Record the notices written in this block as one audit entry, then commit it."""
-    with machine_run(db, "send_notices", "flight_requirement_notice", details=details):
-        yield
-    db.commit()
+    try:
+        with machine_run(db, "send_notices", "flight_requirement_notice", details=details):
+            yield
+    except BaseException:
+        raise
+    else:
+        db.commit()
 
 
 def _send_once(db: Session, key: NoticeKey, kind: str, address: str | None, subject: str, html: str) -> bool:

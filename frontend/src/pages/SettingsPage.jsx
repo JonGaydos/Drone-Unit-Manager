@@ -79,7 +79,7 @@ function NoLinkedPilotBadge({ user }) {
 export default function SettingsPage() {
   // A tab can be linked to, e.g. /settings?tab=requirements.
   const [searchParams] = useSearchParams()
-  const [requestedTab, setActiveTab] = useState(() => searchParams.get('tab') || 'general')
+  const [requestedTab, setRequestedTab] = useState(() => searchParams.get('tab') || 'general')
   const [settings, setSettings] = useState({})
   // The General fields stay disabled until the stored values arrive, so
   // nothing typed early is wiped when the loaded value replaces it.
@@ -1684,7 +1684,7 @@ export default function SettingsPage() {
         {TABS.map(tab => (
           <button
             key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => setRequestedTab(tab.id)}
             className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
               activeTab === tab.id
                 ? 'border-primary text-primary'

@@ -297,7 +297,7 @@ export function ReminderFields({ form, update }) {
       <label className="flex items-center gap-2 py-2 text-sm text-foreground cursor-pointer select-none">
         <input type="checkbox" checked={form.is_active} onChange={() => update(f => ({ is_active: !f.is_active }))}
           className="w-4 h-4 rounded border-border text-primary focus:ring-ring" />
-        Active
+        <span>Active</span>
       </label>
     </div>
   )
