@@ -148,11 +148,16 @@ def get_pilot_needs_attention(pilot_id: int, db: DBSession, user: ViewUser, _cer
     return {"count": len(items), "items": items}
 
 
+def _requirement_text(flag: dict) -> str:
+    if flag["kind"] == "lapsed":
+        return f"Lapsed: {flag['name']} since {flag['period_start']}"
+    return f"Missed requirement: {flag['name']} ({flag['period_start']} to {flag['period_end']})"
+
+
 def _requirement_items(db, pilot_id: int) -> list[dict]:
-    """One red item per saved requirement miss still open for the pilot."""
-    return [{"level": "red", "category": "requirement",
-             "text": f"Missed requirement: {miss['name']} ({miss['period_start']} to {miss['period_end']})"}
-            for miss in open_misses(db, [pilot_id]).get(pilot_id, [])]
+    """One red item per saved requirement miss still open for the pilot, and per open lapse."""
+    return [{"level": "red", "category": "requirement", "text": _requirement_text(flag)}
+            for flag in open_misses(db, [pilot_id]).get(pilot_id, [])]
 
 
 def _check_badge_free(db, badge: str | None, pilot_id: int | None = None) -> None:

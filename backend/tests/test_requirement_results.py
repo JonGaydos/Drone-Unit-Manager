@@ -413,8 +413,8 @@ def test_miss_is_open_until_the_next_period_is_met(db):
     req = _req(db, start_date=SEP[0])
     sep = _saved(db, req, pilot, SEP, "missed")
     flags = open_misses(db)
-    assert flags == {pilot.id: [{"result_id": sep.id, "requirement_id": req.id, "name": "Monthly 1 hr",
-                                 "period_start": SEP[0], "period_end": SEP[1]}]}
+    assert flags == {pilot.id: [{"kind": "missed", "result_id": sep.id, "lapse_id": None, "requirement_id": req.id,
+                                 "name": "Monthly 1 hr", "period_start": SEP[0], "period_end": SEP[1]}]}
     _saved(db, req, pilot, OCT, "met")
     assert open_misses(db) == {}
 

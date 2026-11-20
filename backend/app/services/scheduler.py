@@ -148,9 +148,10 @@ def _requirements_step(name: str, step, default):
 
 def _run_requirements_daily():
     """Save the requirement periods due today, email the misses saved
-    recently and not yet announced, then send the reminders due (scheduled daily)."""
+    recently and not yet announced, record rolling lapses and email the recent
+    open ones not yet announced, then send the reminders due (scheduled daily)."""
     from app.models.flight_requirement import FlightRequirementResult
-    from app.services import requirement_notify, requirement_results
+    from app.services import requirement_lapses, requirement_notify, requirement_results
     from app.services.requirement_eval import MISSED
 
     def close(db):
@@ -170,11 +171,24 @@ def _run_requirements_daily():
         with requirement_notify.notice_run(db, "Flight requirement miss emails"):
             return requirement_notify.notify_missed(db, rows)
 
+    def record_lapses(db):
+        return len(requirement_lapses.sync_lapses(db, local_today(db))[0])
+
+    def lapsed(db):
+        since = local_today(db) - timedelta(days=MISS_SWEEP_DAYS)
+        rows = [row for row, _name in requirement_lapses.open_lapses(db) if row.lapsed_on >= since]
+        if not rows:
+            return 0
+        with requirement_notify.notice_run(db, "Flight requirement lapse emails"):
+            return requirement_notify.notify_lapsed(db, rows)
+
     saved = _requirements_step("saving periods", close, 0)
     miss_emails = _requirements_step("miss emails", missed, 0)
+    opened = _requirements_step("recording lapses", record_lapses, 0)
+    lapse_emails = _requirements_step("lapse emails", lapsed, 0)
     reminders = _requirements_step("reminders", remind, 0)
-    logger.info("Flight requirements daily job: %d results saved, %d miss emails, %d reminders",
-                saved, miss_emails, reminders)
+    logger.info("Flight requirements daily job: %d results saved, %d miss emails, %d lapses opened, "
+                "%d lapse emails, %d reminders", saved, miss_emails, opened, lapse_emails, reminders)
 
 
 def _run_scheduled_telemetry_sync():

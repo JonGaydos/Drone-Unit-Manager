@@ -237,14 +237,34 @@ class PeriodProgressOut(PeriodOut):
     pilots: list[PilotProgressOut]
 
 
+class RollingProgressOut(BaseModel):
+    pilot_id: int
+    pilot_name: str
+    status: str  # current, lapsed, not_yet_due, excused
+    totals: dict[str, dict]
+    met_by_model: dict[str, bool]
+    lapse_date: Optional[date] = None  # while current: the first day the window falls short
+    excused_until: Optional[date] = None
+    excluded_no_takeoff: int
+    unreviewed_in_window: int
+
+
+class RollingWindowOut(BaseModel):
+    window_start: date
+    window_end: date
+    pilots: list[RollingProgressOut]
+
+
 class RequirementStatusOut(BaseModel):
     requirement_id: int
     name: str
+    period_type: str
     target_minutes: Optional[int] = None
     target_flights: Optional[int] = None
     model_mode: str
-    current_period: Optional[PeriodProgressOut] = None
+    current_period: Optional[PeriodProgressOut] = None  # None for a rolling requirement
     pending_periods: list[PeriodProgressOut]  # ended, inside their grace time, oldest first
+    rolling: Optional[RollingWindowOut] = None  # a rolling requirement's window today
 
 
 class StatusOut(BaseModel):
@@ -275,17 +295,38 @@ class HistoryRowOut(BaseModel):
     switched_off: bool = False  # excused because the requirement was off; cannot be un-excused
 
 
+class PilotRollingOut(RollingProgressOut):
+    requirement_id: int
+    name: str
+    window_start: date
+    window_end: date
+
+
+class LapseOut(BaseModel):
+    lapse_id: int
+    requirement_id: int
+    name: str
+    lapsed_on: date
+    recovered_on: Optional[date] = None  # None while still lapsed
+
+
 class PilotRequirementsOut(BaseModel):
     pilot_id: int
     current: list[PilotPeriodOut]
     pending: list[PilotPeriodOut]  # ended, inside their grace time, oldest first
     history: list[HistoryRowOut]
+    rolling: list[PilotRollingOut] = []  # standing on each active rolling requirement
+    lapses: list[LapseOut] = []  # newest first
 
 
 class ExcuseIn(BaseModel):
+    """A periodic excusal sends ``period_start`` and ``excused``; a rolling one
+    sends ``excused_until`` (today or later), or null to remove the excusal."""
+
     pilot_id: int
-    period_start: date
-    excused: bool
+    period_start: Optional[date] = None
+    excused: Optional[bool] = None
+    excused_until: Optional[date] = None
     reason: Optional[str] = Field(None, max_length=500)
 
 
@@ -298,11 +339,13 @@ class RecalculateOut(BaseModel):
 
 
 class FlagOut(BaseModel):
-    result_id: int
+    kind: str  # missed (a saved result) or lapsed (an open lapse)
+    result_id: Optional[int] = None
+    lapse_id: Optional[int] = None
     requirement_id: int
     name: str
-    period_start: date
-    period_end: date
+    period_start: date  # the lapse's start for a lapse
+    period_end: Optional[date] = None  # None for a lapse
     pilot_name: str
 
 

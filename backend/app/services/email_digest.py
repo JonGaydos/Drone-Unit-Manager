@@ -216,9 +216,19 @@ def _recent_requirement_misses(db: Session) -> list[dict]:
              "status": f"Missed {row.period_start} to {row.period_end}"} for row, name, pilot in rows]
 
 
+def _lapsed_pilots(db: Session) -> list[dict]:
+    from app.services.requirement_lapses import open_lapses
+    lapses = open_lapses(db)
+    names = {pilot.id: pilot.full_name for pilot in db.query(Pilot).filter(
+        Pilot.id.in_({row.pilot_id for row, _name in lapses}))}
+    return [{"requirement": name, "pilot": names.get(row.pilot_id, ""), "status": f"Lapsed since {row.lapsed_on}"}
+            for row, name in sorted(lapses, key=lambda found: (found[1], found[0].lapsed_on))]
+
+
 def _build_requirements(db: Session) -> list[dict] | None:
     """Flight requirements: open periods ending within a week with pilots not
-    met, periods pending review, and misses saved in the last week."""
+    met, periods pending review, misses saved in the last week, and the
+    pilots lapsed on a rolling requirement now."""
     from app.models.flight_requirement import FlightRequirement
     from app.services.local_time import local_today
     from app.services.requirement_eval import unit_eval_settings
@@ -229,6 +239,7 @@ def _build_requirements(db: Session) -> list[dict] | None:
                 .order_by(FlightRequirement.name, FlightRequirement.id)):
         items.extend(_requirement_items(db, req, settings, today))
     items.extend(_recent_requirement_misses(db))
+    items.extend(_lapsed_pilots(db))
     return items or None
 
 

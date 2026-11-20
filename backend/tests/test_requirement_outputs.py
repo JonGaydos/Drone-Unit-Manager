@@ -210,7 +210,8 @@ def test_report_has_summary_and_a_row_per_result(client, db, admin_headers):
     _saved(db, req, pilot, SEP, "met")
     _saved(db, req, pilot, OCT, "missed")
     body = client.post(REPORT_URL, headers=admin_headers, json=_config()).json()
-    assert body["summary"] == {"requirements": 1, "results": 2, "met": 1, "missed": 1, "excused": 0, "score": "50%"}
+    assert body["summary"] == {"requirements": 1, "results": 2, "met": 1, "missed": 1, "excused": 0, "lapsed": 0,
+                               "score": "50%"}
     assert len(body["rows"]) == 2
     assert len(body["columns"]) == len(body["rows"][0])
 

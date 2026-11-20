@@ -29,7 +29,7 @@ from app.models.operating_authority import (
     OperatingAuthority, authority_status,
 )
 from app.models.battery import Battery
-from app.models.flight_requirement import FlightRequirement, FlightRequirementResult
+from app.models.flight_requirement import FlightRequirement, FlightRequirementLapse, FlightRequirementResult
 from app.models.maintenance import MaintenanceRecord
 from app.models.setting import Setting
 from app.models.user import User
@@ -962,8 +962,31 @@ def _pilot_certifications(config: ReportConfig, db: Session):
     }
 
 
+def _lapses_in_range(config: ReportConfig, db: Session) -> list:
+    """Rolling requirement lapses that overlap the date range, with the requirement's name and the pilot."""
+    query = db.query(FlightRequirementLapse, FlightRequirement.name, Pilot).join(
+        FlightRequirement, FlightRequirement.id == FlightRequirementLapse.requirement_id).join(
+        Pilot, Pilot.id == FlightRequirementLapse.pilot_id)
+    if config.date_from:
+        query = query.filter(or_(FlightRequirementLapse.recovered_on.is_(None),
+                                 FlightRequirementLapse.recovered_on >= config.date_from))
+    if config.date_to:
+        query = query.filter(FlightRequirementLapse.lapsed_on <= config.date_to)
+    if config.pilot_ids:
+        query = query.filter(FlightRequirementLapse.pilot_id.in_(config.pilot_ids))
+    return query.order_by(FlightRequirementLapse.lapsed_on, FlightRequirement.name,
+                          Pilot.last_name, Pilot.first_name).all()
+
+
+def _lapse_row(lapse: FlightRequirementLapse, name: str, pilot: Pilot) -> dict:
+    period = f"{lapse.lapsed_on} to {lapse.recovered_on}" if lapse.recovered_on else f"Since {lapse.lapsed_on}"
+    return {"requirement": name, "period": period, "pilot": pilot.full_name, "status": "lapsed",
+            "minutes": "", "flights": "", "per_model": ""}
+
+
 def _flight_requirements(config: ReportConfig, db: Session):
-    """Saved requirement results whose period ended in the date range."""
+    """Saved requirement results whose period ended in the date range, then
+    the rolling requirement lapses that overlap it."""
     query = db.query(FlightRequirementResult, FlightRequirement.name, Pilot).join(
         FlightRequirement, FlightRequirement.id == FlightRequirementResult.requirement_id).join(
         Pilot, Pilot.id == FlightRequirementResult.pilot_id).filter(
@@ -989,17 +1012,21 @@ def _flight_requirements(config: ReportConfig, db: Session):
             "flights": overall["flights"],
             "per_model": per_model_text(result.totals),
         })
+    lapses = _lapses_in_range(config, db)
+    rows.extend(_lapse_row(*found_lapse) for found_lapse in lapses)
     statuses = [result.status for result, _, _ in found]
     met, missed = statuses.count("met"), statuses.count("missed")
     return {
         "report_type": "flight_requirements",
         "title": "Flight Requirements Report",
         "summary": {
-            "requirements": len({result.requirement_id for result, _, _ in found}),
+            "requirements": len({result.requirement_id for result, _, _ in found}
+                                | {lapse.requirement_id for lapse, _, _ in lapses}),
             "results": len(found),
             "met": met,
             "missed": missed,
             "excused": statuses.count("excused"),
+            "lapsed": len(lapses),
             "score": f"{round(100 * met / (met + missed))}%" if met + missed else "-",
         },
         "columns": ["Requirement", "Period", "Pilot", "Status", "Minutes", "Flights", "Per model"],

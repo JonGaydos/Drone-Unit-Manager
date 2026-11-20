@@ -22,7 +22,9 @@ from app.services.requirement_eval import (
     EXCUSED, MET, MISSED, PilotProgress, UnitEvalSettings, assigned_pilots, evaluate_period,
     unit_eval_settings,
 )
+from app.services.requirement_lapses import open_lapses
 from app.services.requirement_periods import Period, periods_between
+from app.services.requirement_rolling import LAPSED
 
 SCORE_WINDOW_DAYS = 365
 OFF_REASON = "Requirement was switched off"
@@ -252,10 +254,12 @@ def recalculate_period(db: Session, req: FlightRequirement, period_start: date, 
 
 
 def open_misses(db: Session, pilot_ids: list[int] | None = None) -> dict[int, list[dict]]:
-    """Per pilot, the saved misses still flagged, oldest first by requirement.
+    """Per pilot, the saved misses still flagged, oldest first by requirement,
+    then the open lapses on active rolling requirements (``kind`` tells them apart).
 
     A miss clears when any later saved result of the pilot on the same
-    requirement is met, or when the miss is excused. Pilots with none are left out.
+    requirement is met, or when the miss is excused. A lapse clears when it
+    closes. Pilots with none are left out.
     """
     result, later = FlightRequirementResult, aliased(FlightRequirementResult)
     met_later = exists().where(
@@ -273,8 +277,13 @@ def open_misses(db: Session, pilot_ids: list[int] | None = None) -> dict[int, li
     flags: dict[int, list[dict]] = {}
     for row, name in query.order_by(result.pilot_id, result.requirement_id, result.period_start):
         flags.setdefault(row.pilot_id, []).append({
-            "result_id": row.id, "requirement_id": row.requirement_id, "name": name,
-            "period_start": row.period_start, "period_end": row.period_end,
+            "kind": MISSED, "result_id": row.id, "lapse_id": None, "requirement_id": row.requirement_id,
+            "name": name, "period_start": row.period_start, "period_end": row.period_end,
+        })
+    for lapse, name in open_lapses(db, pilot_ids):
+        flags.setdefault(lapse.pilot_id, []).append({
+            "kind": LAPSED, "result_id": None, "lapse_id": lapse.id, "requirement_id": lapse.requirement_id,
+            "name": name, "period_start": lapse.lapsed_on, "period_end": None,
         })
     return flags
 
