@@ -157,14 +157,18 @@ def _run_requirements_daily():
         return len(requirement_results.close_due_periods(db, local_today(db)))
 
     def remind(db):
-        return requirement_notify.send_due_reminders(db, local_today(db))
+        with requirement_notify.notice_run(db, "Flight requirement reminders"):
+            return requirement_notify.send_due_reminders(db, local_today(db))
 
     def missed(db):
         since = datetime.now(timezone.utc) - timedelta(days=MISS_SWEEP_DAYS)
         rows = db.query(FlightRequirementResult).filter(
             FlightRequirementResult.status == MISSED, FlightRequirementResult.saved_at >= since,
         ).order_by(FlightRequirementResult.id).all()
-        return requirement_notify.notify_missed(db, rows) if rows else 0
+        if not rows:
+            return 0
+        with requirement_notify.notice_run(db, "Flight requirement miss emails"):
+            return requirement_notify.notify_missed(db, rows)
 
     saved = _requirements_step("saving periods", close, 0)
     miss_emails = _requirements_step("miss emails", missed, 0)

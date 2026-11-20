@@ -27,7 +27,7 @@ const ACTIONS = [
   'delete', 'deny', 'digest', 'disconnect', 'dismiss', 'dismiss_all', 'enrich_flights',
   'enrich_run', 'export', 'hold', 'import', 'link', 'login', 'login_blocked', 'login_failed',
   'logout', 'merge', 'password_change', 'password_reset', 'purge', 'reactivate', 'read', 'recalculate',
-  'release_hold', 'reset', 'restore', 'restore_held_item', 'retire', 'send_reminders', 'send_test',
+  'release_hold', 'reset', 'restore', 'restore_held_item', 'retire', 'send_notices', 'send_reminders', 'send_test',
   'setup', 'sync', 'sync_deep', 'sync_run', 'telemetry_sync', 'unapprove', 'unlink', 'update',
   'upload', 'view',
 ]

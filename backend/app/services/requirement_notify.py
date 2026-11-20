@@ -7,6 +7,7 @@ recorded, while SMTP is not set up or when the address is blank.
 """
 
 import logging
+from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 from html import escape
 
@@ -21,6 +22,7 @@ from app.models.pilot import Pilot
 from app.models.setting import Setting
 from app.models.user import User
 from app.services import email_digest
+from app.services.audit_capture import machine_run
 from app.services.local_time import local_today
 from app.services.permissions import can
 from app.services.requirement_eval import (
@@ -131,6 +133,14 @@ def _record(db: Session, key: NoticeKey, kind: str) -> None:
     db.commit()
 
 
+@contextmanager
+def notice_run(db: Session, details: str):
+    """Record the notices written in this block as one audit entry, then commit it."""
+    with machine_run(db, "send_notices", "flight_requirement_notice", details=details):
+        yield
+    db.commit()
+
+
 def _send_once(db: Session, key: NoticeKey, kind: str, address: str | None, subject: str, html: str) -> bool:
     """Send unless the address is blank or the notice exists, and record it after a successful send."""
     if not (address or "").strip() or _sent_before(db, key, kind):
@@ -170,10 +180,11 @@ def notify_assigned(db: Session, req: FlightRequirement, pilot_ids: list[int]) -
     org_name = _org_name(db)
     body = _paragraph("You have been assigned a flight requirement:") + _requirement_html(req, period)
     sent = 0
-    for pilot in sorted(_pilots(db, pilot_ids).values(), key=lambda p: p.id):
-        html = _page(org_name, "Flight Requirement Assigned", _greeting(pilot), body)
-        sent += _send_once(db, (req.id, pilot.id, period[0]), ASSIGNED, pilot.email,
-                           f"Flight requirement assigned: {req.name}", html)
+    with notice_run(db, "Flight requirement assignment emails"):
+        for pilot in sorted(_pilots(db, pilot_ids).values(), key=lambda p: p.id):
+            html = _page(org_name, "Flight Requirement Assigned", _greeting(pilot), body)
+            sent += _send_once(db, (req.id, pilot.id, period[0]), ASSIGNED, pilot.email,
+                               f"Flight requirement assigned: {req.name}", html)
     return sent
 
 

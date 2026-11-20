@@ -250,7 +250,7 @@ describe('AuditLogPage', () => {
       await user.click(await screen.findByRole('button', { name: /Filters/ }))
       const optionsOf = label => within(screen.getByLabelText(label)).getAllByRole('option').map(o => o.value)
       expect(optionsOf('Action')).toEqual(expect.arrayContaining([
-        'restore_held_item', 'unapprove', 'reset', 'recalculate', 'close_periods',
+        'restore_held_item', 'unapprove', 'reset', 'recalculate', 'close_periods', 'send_notices',
       ]))
       expect(optionsOf('Entity Type')).toEqual(expect.arrayContaining([
         'photo_pilot', 'photo_flight', 'photo_incident', 'mission_log_pilot', 'training_log_pilot',

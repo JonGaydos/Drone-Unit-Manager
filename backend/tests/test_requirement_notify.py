@@ -6,6 +6,7 @@ from datetime import date, datetime, time, timedelta, timezone
 import pytest
 
 import app.services.scheduler as sched
+from app.models.audit_log import AuditLog
 from app.models.flight import Flight
 from app.models.flight_requirement import (
     FlightRequirement, FlightRequirementNotice, FlightRequirementPilot, FlightRequirementResult,
@@ -558,6 +559,35 @@ def test_daily_job_sends_real_emails_end_to_end(db, scheduler_db, monkeypatch, s
     sched._run_requirements_daily()
     assert _to(sent) == ["admin@example.test", "pilot@example.test", "supervisor@example.test"]
     assert len(_notices(db, "missed")) == 1
+
+
+def _audit_summary(db):
+    db.expire_all()
+    return sorted((entry.action, entry.entity_type, entry.details) for entry in db.query(AuditLog))
+
+
+def test_daily_job_audits_its_notices_as_one_entry_per_step(db, scheduler_db, monkeypatch, smtp, sent, managers):
+    _pilot(db, "One", "one@example.test")
+    _pilot(db, "Two", "two@example.test")
+    _req(db)
+    monkeypatch.setattr(sched, "local_today", lambda _db: REMINDER_DAY)
+    monkeypatch.setattr(requirement_notify, "local_today", lambda _db: REMINDER_DAY)
+    sched._run_requirements_daily()
+    assert len(_notices(db, "missed")) == 2 and len(_notices(db, "reminder")) == 2
+    assert _audit_summary(db) == [
+        ("close_periods", "flight_requirement_result", "Saved flight requirement periods past their grace time"),
+        ("send_notices", "flight_requirement_notice", "Flight requirement miss emails"),
+        ("send_notices", "flight_requirement_notice", "Flight requirement reminders"),
+    ]
+
+
+def test_assignment_emails_from_a_request_are_one_audit_entry(client, db, admin_headers, smtp, sent):
+    _pilot(db, "One", "one@example.test")
+    _pilot(db, "Two", "two@example.test")
+    _api_create(client, admin_headers)
+    assert len(_notices(db, "assigned")) == 2
+    notice_entries = [entry for entry in _audit_summary(db) if entry[1] == "flight_requirement_notice"]
+    assert notice_entries == [("send_notices", "flight_requirement_notice", "Flight requirement assignment emails")]
 
 
 def test_scheduler_registers_the_daily_job(scheduler_db, monkeypatch):
