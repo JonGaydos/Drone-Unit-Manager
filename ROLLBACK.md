@@ -11,6 +11,7 @@ a "Roll production back" section for the release before it.
 
 | Version | Tag | Commit | Image | Extra Parameters |
 | --- | --- | --- | --- | --- |
+| 3.6.0 | `v3.6.0` | set when tagged | `ghcr.io/jongaydos/drone-unit-manager:3.6.0` (digest recorded after the tag build) | `--restart unless-stopped` |
 | 3.5.0 | `v3.5.0` | 8e7b98b | `ghcr.io/jongaydos/drone-unit-manager@sha256:1bfe877604c0f45708e4c6abce8bcb73945ad162cd5fb6e7d1e59441d18ef0bb` | `--restart unless-stopped` |
 | 3.4.2 | `v3.4.2` | 5b15043 | `ghcr.io/jongaydos/drone-unit-manager@sha256:36c52e7b1d20c14a9cfe76e24631fada57282d8968fcc5d44a9909aed20a712b` | `--restart unless-stopped` |
 | 3.4.1 | `v3.4.1` | 8b3caaf | `ghcr.io/jongaydos/drone-unit-manager@sha256:283a2bc634643221f3b2d98035cd100f82009435f8decfb6862b2e47901b76c5` | `--restart unless-stopped` |
@@ -21,7 +22,32 @@ pushed and the release build has finished. Check it on ghcr.io before changing
 production's Repository; an Apply to a missing tag removes the running container
 and then fails to pull.
 
+## Roll production back to 3.5.0 (from 3.6.0)
+
+3.6.0 adds two migrations. 0016 moves each currency rule's vehicle model into a
+list (`currency_rule_models`); 0017 adds the Flight Requirements tables. An
+older image cannot undo them, so run the downgrade inside 3.6.0 before
+switching back:
+
+1. Take an in-app backup and copy the data folder. The downgrade deletes every
+   flight requirement, its saved results and templates, and a currency rule
+   with several models keeps only the first one (alphabetically).
+2. With 3.6.0 still running, step the schema back two revisions:
+
+        docker exec -w /app <container> alembic downgrade 0015_drop_geofences
+
+3. Check it reported `Running downgrade 0017_flight_requirements -> 0016_currency_rule_models`
+   and `Running downgrade 0016_currency_rule_models -> 0015_drop_geofences`.
+4. Set the Repository to `ghcr.io/jongaydos/drone-unit-manager:3.5.0` and Apply.
+   The data folder and Extra Parameters stay as they are.
+
+On 3.5.0, restore only a backup made before the upgrade to 3.6.0: a later
+backup brings currency rules back with their old single model. To return to
+3.6.0, run it again; it applies both migrations on start.
+
 ## Roll production back to 3.4.2 (from 3.5.0)
+
+Step back to 3.5.0 first (above).
 
 3.5.0 adds two migrations. 0014 rebuilds every table with AUTOINCREMENT ids
 (rows, ids, indexes and foreign keys are copied as they are). 0015 drops the
