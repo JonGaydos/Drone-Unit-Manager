@@ -2,7 +2,9 @@
 
 Pure functions, no database. A PeriodSpec describes how a requirement's periods
 are laid out; period_containing, periods_between and first_period answer which
-inclusive (start, end) periods exist. Recurring periods are generated one by
+inclusive (start, end) periods exist. A rolling requirement has no periods (its
+window slides with each day; see requirement_rolling), so they answer None or
+an empty list for it. Recurring periods are generated one by
 one from an anchor, so consecutive periods never overlap. Calendar, fiscal, span
 and every-N-months periods tile with no gap; monthly windows leave gaps by design
 (19 to 5 leaves the 6th to the 18th).
@@ -23,6 +25,7 @@ PeriodType = Literal[
     "span",
     "custom",
     "every_n_months",
+    "rolling",
 ]
 
 Period = tuple[date, date]
@@ -42,7 +45,7 @@ class PeriodSpec:
     fiscal_start_month: int = 10
 
 
-def _add_months(d: date, months: int) -> date:
+def add_months(d: date, months: int) -> date:
     """Add calendar months, clamping the day to the target month's length."""
     year, month0 = divmod(d.year * 12 + d.month - 1 + months, 12)
     month = month0 + 1
@@ -54,8 +57,8 @@ def _clamped(year: int, month: int, day: int) -> date:
 
 
 def _months_period(anchor: date, length: int, k: int) -> Period:
-    first = _add_months(anchor, k * length)
-    last = _add_months(anchor, (k + 1) * length) - timedelta(days=1)
+    first = add_months(anchor, k * length)
+    last = add_months(anchor, (k + 1) * length) - timedelta(days=1)
     return first, last
 
 
@@ -132,6 +135,8 @@ _NTH: dict[str, Callable[[PeriodSpec, int], Period]] = {
 
 def _periods(spec: PeriodSpec) -> Iterator[Period]:
     """Yield periods in order, stopping per the one-time and end-date rules."""
+    if spec.period_type == "rolling":
+        return
     nth = _NTH[spec.period_type]
     recurring = spec.recurring and spec.period_type != "custom"
     k = 0

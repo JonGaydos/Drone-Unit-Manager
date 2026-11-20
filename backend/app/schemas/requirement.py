@@ -9,7 +9,7 @@ from app.services.fleet_models import normalize_model
 
 PeriodType = Literal[
     "calendar_month", "calendar_quarter", "calendar_year", "fiscal_quarter", "fiscal_year",
-    "monthly_window", "span", "custom", "every_n_months",
+    "monthly_window", "span", "custom", "every_n_months", "rolling",
 ]
 ModelMode = Literal["all", "combined", "each", "each_all_active"]
 TimeMode = Literal["any", "clock", "night"]
@@ -32,6 +32,7 @@ MAX_ITEMS = 50
 PERIOD_FIELDS = {
     "monthly_window": ("window_start_day", "window_end_day"),
     "span": ("span_length", "span_unit"),
+    "rolling": ("span_length", "span_unit"),
     "every_n_months": ("every_months",),
 }
 ALL_PERIOD_FIELDS = ("window_start_day", "window_end_day", "span_length", "span_unit", "every_months")
@@ -98,6 +99,15 @@ class RequirementDefinition(BaseModel):
         for name in ALL_PERIOD_FIELDS:
             if name not in needed:
                 setattr(self, name, None)
+        if self.period_type == "rolling":
+            self._check_rolling()
+
+    def _check_rolling(self) -> None:
+        """A rolling window is always continuous. Recurring defaults to true for
+        the other types, so it is refused only when sent as true."""
+        if self.recurring and "recurring" in self.model_fields_set:
+            raise ValueError("A rolling requirement is not recurring")
+        self.recurring = False
 
     def _check_time_window(self) -> None:
         if self.time_mode != "clock":
@@ -129,6 +139,8 @@ class RequirementIn(RequirementDefinition):
     def _check_dates(self):
         if self.period_type == "custom" and self.end_date is None:
             raise ValueError("A custom period needs an end date")
+        if self.period_type == "rolling" and self.end_date is not None:
+            raise ValueError("A rolling requirement has no end date")
         if self.end_date is not None and self.end_date < self.start_date:
             raise ValueError("The end date cannot be before the start date")
         return self

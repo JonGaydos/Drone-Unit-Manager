@@ -7,7 +7,7 @@ unreviewed ones that would otherwise count are reported apart so a supervisor
 can review them before the grace period ends.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, tzinfo
 from zoneinfo import ZoneInfo
 
@@ -57,7 +57,9 @@ class PilotProgress:
 
 
 @dataclass(frozen=True)
-class _Context:
+class EvalContext:
+    """What counting a requirement's flights over one stretch of days needs."""
+
     period: Period
     keys: list[str]
     key_map: dict[str, str] | None  # normalized model to totals key; None counts every flight
@@ -71,10 +73,14 @@ class _Context:
 
 
 @dataclass
-class _Tally:
+class Tally:
+    """One pilot's totals per key, and each reviewed flight's part as
+    ``(key, flight date, minutes, flights)`` in ``counted``."""
+
     totals: dict[str, dict]
     excluded_no_takeoff: int = 0
     unreviewed_in_period: int = 0
+    counted: list[tuple[str, date, float, int]] = field(default_factory=list)
 
 
 def _float_or_none(value: str | None) -> float | None:
@@ -160,8 +166,9 @@ def _windows(req: FlightRequirement, period: Period, settings: UnitEvalSettings)
     return windows_for_period(req.time_mode, period, window_settings)
 
 
-def _context(req: FlightRequirement, period: Period, settings: UnitEvalSettings,
-             models: list[str] | None) -> _Context:
+def eval_context(req: FlightRequirement, period: Period, settings: UnitEvalSettings,
+                 models: list[str] | None) -> EvalContext:
+    """The totals keys, model map, purposes, zone and time-of-day windows for ``period``."""
     if models is None:
         keys, key_map = [ALL_KEY], None
     elif req.model_mode == "combined":
@@ -169,11 +176,11 @@ def _context(req: FlightRequirement, period: Period, settings: UnitEvalSettings,
     else:
         keys, key_map = list(models), {normalize_model(m): m for m in models}
     purposes = frozenset(p.purpose.strip().casefold() for p in req.purposes if p.purpose.strip())
-    return _Context(period=period, keys=keys, key_map=key_map, purposes=purposes, zone=settings.zone,
-                    windows=_windows(req, period, settings), clip=period_bounds(period, settings.zone))
+    return EvalContext(period=period, keys=keys, key_map=key_map, purposes=purposes, zone=settings.zone,
+                       windows=_windows(req, period, settings), clip=period_bounds(period, settings.zone))
 
 
-def _load_flights(db: Session, pilot_ids: list[int], ctx: _Context) -> list[tuple[Flight, bool]]:
+def _load_flights(db: Session, pilot_ids: list[int], ctx: EvalContext) -> list[tuple[Flight, bool]]:
     """Every counted-toward-totals flight of the pilots from the day before the
     period through its end, with whether it is reviewed, purpose-filtered."""
     first, last = ctx.period
@@ -188,14 +195,14 @@ def _load_flights(db: Session, pilot_ids: list[int], ctx: _Context) -> list[tupl
             if not ctx.purposes or (flight.purpose or "").strip().casefold() in ctx.purposes]
 
 
-def _flight_key(flight: Flight, ctx: _Context) -> str | None:
+def _flight_key(flight: Flight, ctx: EvalContext) -> str | None:
     """The totals key a flight adds to, or None when its model is out of scope."""
     if ctx.key_map is None:
         return ALL_KEY
     return ctx.key_map.get(normalize_model(flight.vehicle.model if flight.vehicle else None))
 
 
-def _amount(flight: Flight, ctx: _Context) -> tuple[float, int] | None:
+def _amount(flight: Flight, ctx: EvalContext) -> tuple[float, int] | None:
     """Minutes and flights a flight adds, or None when it has no interval to place in a window."""
     if ctx.windows is None:
         if not ctx.in_period(flight.date):
@@ -208,7 +215,7 @@ def _amount(flight: Flight, ctx: _Context) -> tuple[float, int] | None:
     return minutes, 1 if minutes > 0 else 0
 
 
-def _record(tally: _Tally, key: str, flight: Flight, reviewed: bool, ctx: _Context) -> None:
+def _record(tally: Tally, key: str, flight: Flight, reviewed: bool, ctx: EvalContext) -> None:
     amount = _amount(flight, ctx)
     if not reviewed:
         tally.unreviewed_in_period += amount is not None and amount[1] > 0
@@ -219,9 +226,21 @@ def _record(tally: _Tally, key: str, flight: Flight, reviewed: bool, ctx: _Conte
     total = tally.totals[key]
     total["minutes"] += amount[0]
     total["flights"] += amount[1]
+    if amount[0] > 0 or amount[1] > 0:
+        tally.counted.append((key, flight.date, amount[0], amount[1]))
 
 
-def _reaches(total: dict, req: FlightRequirement) -> bool:
+def tally_flights(db: Session, pilot_ids: list[int], ctx: EvalContext) -> dict[int, Tally]:
+    """Each pilot's totals over ``ctx.period``, by the count rules, keyed by pilot id."""
+    tallies = {pilot_id: Tally(totals={k: {"minutes": 0, "flights": 0} for k in ctx.keys}) for pilot_id in pilot_ids}
+    for flight, reviewed in _load_flights(db, pilot_ids, ctx):
+        key = _flight_key(flight, ctx)
+        if key is not None:
+            _record(tallies[flight.pilot_id], key, flight, reviewed, ctx)
+    return tallies
+
+
+def reaches(total: dict, req: FlightRequirement) -> bool:
     if req.target_minutes is not None and total["minutes"] < req.target_minutes:
         return False
     return req.target_flights is None or total["flights"] >= req.target_flights
@@ -245,12 +264,25 @@ def _joined_on(pilot: Pilot, added_at: datetime | None, zone: tzinfo) -> date | 
     return max(days, default=None)
 
 
+def late_joiners(req: FlightRequirement, pilots: list[Pilot], start: date, zone: tzinfo) -> dict[int, date]:
+    """The local join date of each pilot who joined after both ``start`` and the
+    requirement's creation. Assignment rows written when the requirement was
+    created carry its creation time, so they make no one a late joiner."""
+    added = {row.pilot_id: row.added_at for row in req.pilots}
+    created = local_flight_date(req.created_at, zone)
+    cutoff = max(start, created) if created is not None else start
+    late: dict[int, date] = {}
+    for pilot in pilots:
+        joined = _joined_on(pilot, added.get(pilot.id), zone)
+        if joined is not None and joined > cutoff:
+            late[pilot.id] = joined
+    return late
+
+
 def _excusals(db: Session, req: FlightRequirement, pilots: list[Pilot], period_start: date,
               zone: tzinfo) -> dict[int, tuple[bool, str | None]]:
-    """Per pilot, whether excused and why: a stored override wins, else a pilot
-    who joined after both the period start and the requirement's creation is
-    excused automatically. Assignment rows written when the requirement was
-    created carry its creation time, so they do not excuse anyone."""
+    """Per pilot, whether excused and why: a stored override wins, else a late
+    joiner (see ``late_joiners``) is excused automatically."""
     overrides = {
         row.pilot_id: row for row in db.query(FlightRequirementResult).filter(
             FlightRequirementResult.requirement_id == req.id,
@@ -258,18 +290,14 @@ def _excusals(db: Session, req: FlightRequirement, pilots: list[Pilot], period_s
             FlightRequirementResult.excused.isnot(None),
         )
     }
-    added = {row.pilot_id: row.added_at for row in req.pilots}
-    created = local_flight_date(req.created_at, zone)
-    cutoff = max(period_start, created) if created is not None else period_start
+    late = late_joiners(req, pilots, period_start, zone)
     result: dict[int, tuple[bool, str | None]] = {}
     for pilot in pilots:
         row = overrides.get(pilot.id)
         if row is not None:
             result[pilot.id] = (bool(row.excused), row.excused_reason if row.excused else None)
-            continue
-        joined = _joined_on(pilot, added.get(pilot.id), zone)
-        late = joined is not None and joined > cutoff
-        result[pilot.id] = (late, AUTO_EXCUSE_REASON if late else None)
+        else:
+            result[pilot.id] = (pilot.id in late, AUTO_EXCUSE_REASON if pilot.id in late else None)
     return result
 
 
@@ -286,16 +314,12 @@ def evaluate_period(db: Session, req: FlightRequirement, period: tuple[date, dat
     if not pilots:
         return {}
     settings = unit_eval_settings(db)
-    ctx = _context(req, period, settings, scope_models(db, req, period[0]))
-    tallies = {p.id: _Tally(totals={k: {"minutes": 0, "flights": 0} for k in ctx.keys}) for p in pilots}
-    for flight, reviewed in _load_flights(db, list(tallies), ctx):
-        key = _flight_key(flight, ctx)
-        if key is not None:
-            _record(tallies[flight.pilot_id], key, flight, reviewed, ctx)
+    ctx = eval_context(req, period, settings, scope_models(db, req, period[0]))
+    tallies = tally_flights(db, [p.id for p in pilots], ctx)
     excusals = _excusals(db, req, pilots, period[0], settings.zone)
     progress: dict[int, PilotProgress] = {}
     for pilot_id, tally in tallies.items():
-        met_by_model = {key: _reaches(total, req) for key, total in tally.totals.items()}
+        met_by_model = {key: reaches(total, req) for key, total in tally.totals.items()}
         excused, reason = excusals[pilot_id]
         progress[pilot_id] = PilotProgress(
             pilot_id=pilot_id,
