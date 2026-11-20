@@ -2568,7 +2568,7 @@
         "notes": [
           "You cannot see the token again after you close the window. If you lose it, create a new one.",
           "Treat a token like a password. Anyone who has it can act as you, within its access and areas.",
-          "The areas are Fleet, Flights, Pilots & Certifications, Maintenance, Operations, Documents & Media, Reports & Dashboard and Audit Log. **Audit Log** is not part of **All areas**. Tick it yourself if the program needs it.",
+          "The areas are Fleet, Flights, Pilots, Certifications & Requirements, Maintenance, Operations, Documents & Media, Reports & Dashboard and Audit Log. **Audit Log** is not part of **All areas**. Tick it yourself if the program needs it.",
           "The list shows each token's start, access, areas, when it was last used and its status. Choose **Revoke** to switch one off.",
           "Settings, users, backups and syncing can never be reached with a token."
         ]

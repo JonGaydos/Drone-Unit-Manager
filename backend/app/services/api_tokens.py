@@ -41,6 +41,7 @@ SCOPE_PREFIXES = {
     "pilots": [
         "/api/pilots", "/api/certification-types", "/api/pilot-certifications",
         "/api/pilot-equipment-quals", "/api/certifications", "/api/currency",
+        "/api/requirements",
     ],
     "maintenance": ["/api/maintenance"],
     "operations": [
