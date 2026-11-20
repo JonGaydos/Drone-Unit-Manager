@@ -3,7 +3,8 @@
 Each email goes out at most once per requirement, pilot, period start and kind:
 a ``FlightRequirementNotice`` row is written after a successful send, and a
 pilot with a notice already gets nothing. Nothing is sent, and nothing
-recorded, while SMTP is not set up or when the address is blank.
+recorded, unless the unit switched requirement emails on, while SMTP is not
+set up, or when the address is blank. The switch is off by default.
 """
 
 import logging
@@ -35,6 +36,7 @@ logger = logging.getLogger(__name__)
 ASSIGNED, REMINDER, MISSED_NOTICE = "assigned", "reminder", "missed"
 # A requirement that starts later is announced for its first period within a year.
 ASSIGNMENT_LOOKAHEAD_DAYS = 366
+EMAILS_ENABLED_KEY = "requirements_emails_enabled"
 NoticeKey = tuple[int, int, date]  # requirement, pilot, period start
 
 _CELL = 'style="padding:6px 12px;border-bottom:1px solid #eee;"'
@@ -49,6 +51,15 @@ def smtp_ready(db: Session) -> bool:
     """Whether SMTP is switched on and has a server and a sender."""
     return (_setting(db, "smtp_enabled") == "true"
             and bool(_setting(db, "smtp_host")) and bool(_setting(db, "smtp_from_address")))
+
+
+def emails_enabled(db: Session) -> bool:
+    """Whether the unit switched requirement emails on (off unless set to "true")."""
+    return _setting(db, EMAILS_ENABLED_KEY) == "true"
+
+
+def _can_send(db: Session) -> bool:
+    return emails_enabled(db) and smtp_ready(db)
 
 
 def _org_name(db: Session) -> str:
@@ -177,7 +188,7 @@ def _assignment_period(req: FlightRequirement, fiscal_start_month: int, today: d
 def notify_assigned(db: Session, req: FlightRequirement, pilot_ids: list[int]) -> int:
     """Email each pilot that they now have ``req`` to meet, for the period
     running today or the next one. Returns the number sent."""
-    if not req.is_active or not pilot_ids or not smtp_ready(db):
+    if not req.is_active or not pilot_ids or not _can_send(db):
         return 0
     period = _assignment_period(req, unit_eval_settings(db).fiscal_start_month, local_today(db))
     if period is None:
@@ -233,7 +244,7 @@ def send_due_reminders(db: Session, today: date) -> int:
     not excused, once its period ends ``reminder_days`` or fewer days after
     ``today`` (and not today), so a missed run is caught up the next day. The
     reminder notice keeps it to one per pilot per period. Returns the number sent."""
-    if not smtp_ready(db):
+    if not _can_send(db):
         return 0
     settings = unit_eval_settings(db)
     org_name = _org_name(db)
@@ -295,7 +306,7 @@ def notify_missed(db: Session, results: list[FlightRequirementResult]) -> int:
     every active user with requirements.manage one email listing them all.
     A miss is announced once: its notice is written when an email about it got
     through, and a miss with a notice is left out. Returns the number sent."""
-    if not smtp_ready(db):
+    if not _can_send(db):
         return 0
     misses = [row for row in results if row.status == MISSED and not _sent_before(db, _key(row), MISSED_NOTICE)]
     if not misses:

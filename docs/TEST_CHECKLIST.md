@@ -471,10 +471,11 @@ Setup: an admin, a supervisor, a pilot and a viewer login. Fleet with at least t
 - [ ] The Flight Requirements report matches the saved results; the requirement and pilot CSV downloads match too
 
 ### 39.9 Emails (SMTP pointed at a test inbox)
+- [ ] Requirement emails are off by default: with the switch off, nothing is sent for assignment, reminder or miss; turn on Send requirement emails in Settings > Flight Requirements first for the checks below, and nothing is sent for earlier assignments or misses
 - [ ] An assignment email reaches each assigned pilot on create, activation and when a pilot is added
 - [ ] A reminder arrives the set number of days before the period ends, once per pilot per period, also if the scheduler runs twice
 - [ ] A miss email reaches the pilot and each user who can manage requirements
-- [ ] The digest holds a Flight Requirements section only for users who ticked it
+- [ ] The digest holds a Flight Requirements section only for users who ticked it (unchecked by default, also with the requirement emails switch on)
 - [ ] Nothing is sent with SMTP off or for a pilot with no email
 
 ### 39.10 Manual and pictures

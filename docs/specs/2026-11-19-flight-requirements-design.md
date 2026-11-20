@@ -172,12 +172,12 @@ The form shows a live plain-English summary, for example:
 
 ## Notifications
 
-All emails use the existing SMTP settings and notification log, and are skipped when SMTP is not set up or the recipient has no email.
+All emails use the existing SMTP settings and notification log, and are skipped when SMTP is not set up or the recipient has no email. Requirement emails (assignment, reminder, miss) are off by default behind a unit switch, `requirements_emails_enabled`, set in Settings > Flight Requirements. Nothing is sent or recorded while it is off, and nothing is back-filled when it is turned on. The digest section is opt-in per user: it is left out unless `requirements` is in the user's stored digest categories.
 
 - **Assignment**: each assigned pilot is emailed when a requirement is created or activated, or when they are added to it.
 - **Reminder**: pilots who have not met the target are emailed the set number of days before the period ends (default 7). Sent once per pilot per period by the daily scheduler.
 - **Miss**: when a period is saved as Missed, the pilot and every user with `requirements.manage` are emailed.
-- **Digest**: a Requirements section in the existing daily or weekly digest (progress, periods pending review, recent misses), with its own toggle in each user's digest preferences.
+- **Digest**: a Requirements section in the existing daily or weekly digest (progress, periods pending review, recent misses), with its own toggle in each user's digest preferences, unchecked until the user chooses it.
 
 ## Export and calendar
 
@@ -283,3 +283,4 @@ All write routes are audited like currency rules.
 19. The unit default location is set on production (owner, 2026-11-18).
 21. Night uses the unit default location for every flight, not takeoff coordinates (2026-11-18).
 20. Build order: two changes, currency model picker first (migration 0016), then Flight Requirements (migration 0017) (2026-11-18).
+22. Emails are off by default: the unit switch `requirements_emails_enabled` starts off, and the digest section is opt-in per user (owner, 2026-11-20).

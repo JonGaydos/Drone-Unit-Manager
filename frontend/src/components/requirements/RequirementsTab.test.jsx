@@ -37,7 +37,7 @@ function mock({ settings = [{ key: 'org_default_lat', value: '1.5' }, { key: 'or
     http.get('/api/requirements', () => HttpResponse.json(requirements)),
     http.get('/api/requirements/templates', () => HttpResponse.json([TEMPLATE])),
     http.get('/api/requirements/models', () => HttpResponse.json([{ name: 'X10', aircraft: 4, retired: 0 }, { name: 'X2E', aircraft: 2, retired: 0 }])),
-    http.get('/api/requirements/settings', () => HttpResponse.json({ grace_days: 14, fiscal_year_start_month: 10 })),
+    http.get('/api/requirements/settings', () => HttpResponse.json({ grace_days: 14, fiscal_year_start_month: 10, emails_enabled: false })),
     http.get('/api/settings', () => HttpResponse.json(settings)),
     http.get('/api/flights/purposes/list', () => HttpResponse.json([{ id: 1, name: 'Patrol', is_active: true, sort_order: 0 }])),
     http.get('/api/pilots/options', () => HttpResponse.json([{ id: 1, full_name: 'Pat Pilot', badge_number: 'B-1', status: 'active' }])),
@@ -222,6 +222,20 @@ describe('RequirementsTab', () => {
     await user.selectOptions(screen.getByLabelText('Fiscal year starts in'), '7')
     await user.click(screen.getByRole('button', { name: 'Save settings' }))
     await waitFor(() => expect(calls).toHaveLength(1))
-    expect(calls[0]).toMatchObject({ method: 'PUT', url: '/api/requirements/settings', body: { grace_days: 10, fiscal_year_start_month: 7 } })
+    expect(calls[0]).toMatchObject({ method: 'PUT', url: '/api/requirements/settings', body: { grace_days: 10, fiscal_year_start_month: 7, emails_enabled: false } })
+  })
+
+  it('leaves requirement emails off until the box is checked, then saves it', async () => {
+    const calls = mock()
+    const { user } = renderTab()
+    const box = await screen.findByLabelText('Send requirement emails')
+    await waitFor(() => expect(screen.getByLabelText('Grace days')).toHaveValue(14))
+    expect(box).not.toBeChecked()
+    expect(screen.getByText(/assignment, a reminder before the period ends and a missed requirement/)).toBeInTheDocument()
+    expect(screen.getByText(/SMTP must be set up/)).toBeInTheDocument()
+    await user.click(box)
+    await user.click(screen.getByRole('button', { name: 'Save settings' }))
+    await waitFor(() => expect(calls).toHaveLength(1))
+    expect(calls[0].body).toMatchObject({ emails_enabled: true })
   })
 })

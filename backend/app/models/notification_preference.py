@@ -24,7 +24,7 @@ class NotificationPreference(Base):
     frequency: Mapped[str] = mapped_column(String(20), default="daily")  # daily, weekly, off
     send_time: Mapped[str] = mapped_column(String(5), default="07:00")  # HH:MM 24h format
     send_day: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # 0=Mon..6=Sun (weekly only)
-    categories: Mapped[str] = mapped_column(Text, default='["pending_approvals","needs_review","expiring_certs","expiring_registrations","overdue_maintenance","assigned_missions","overdue_checkouts","recent_incidents","requirements"]')
+    categories: Mapped[str] = mapped_column(Text, default='["pending_approvals","needs_review","expiring_certs","expiring_registrations","overdue_maintenance","assigned_missions","overdue_checkouts","recent_incidents"]')
     email_override: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # Override user's default email
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now(), onupdate=func.now())

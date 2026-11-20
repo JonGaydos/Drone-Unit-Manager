@@ -31,8 +31,15 @@ def _get_setting(db: Session, key: str, default: str = "") -> str:
     return s.value if s else default
 
 
+# Left out unless the user's stored categories list them.
+OPT_IN_CATEGORIES = {"requirements"}
+
+
 def _is_category_enabled(enabled_categories: list | None, category: str) -> bool:
-    """Check if a digest category is enabled (None means all enabled)."""
+    """Check if a digest category is enabled (None or empty means all enabled,
+    except an opt-in category, which must be listed)."""
+    if category in OPT_IN_CATEGORIES:
+        return category in (enabled_categories or [])
     return not enabled_categories or category in enabled_categories
 
 

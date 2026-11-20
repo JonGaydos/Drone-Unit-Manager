@@ -254,7 +254,7 @@ MANAGE_ROUTES = [
     ("PATCH", lambda r, t, p: f"{URL}/{r}", {"name": "Changed"}, 200),
     ("DELETE", lambda r, t, p: f"{URL}/{r}", None, 200),
     ("GET", lambda r, t, p: f"{URL}/models", None, 200),
-    ("PUT", lambda r, t, p: f"{URL}/settings", {"grace_days": 10, "fiscal_year_start_month": 10}, 200),
+    ("PUT", lambda r, t, p: f"{URL}/settings", {"grace_days": 10, "fiscal_year_start_month": 10, "emails_enabled": False}, 200),
     ("GET", lambda r, t, p: f"{URL}/templates", None, 200),
     ("POST", lambda r, t, p: f"{URL}/templates", {"name": "New", "settings": BASE}, 201),
     ("PATCH", lambda r, t, p: f"{URL}/templates/{t}", {"name": "Renamed"}, 200),
@@ -555,12 +555,30 @@ def test_models_lists_the_fleet(client, db, admin_headers):
 
 def test_settings_round_trip(client, admin_headers, viewer_headers):
     assert client.get(f"{URL}/settings", headers=viewer_headers).json() == {
-        "grace_days": 14, "fiscal_year_start_month": 10}
+        "grace_days": 14, "fiscal_year_start_month": 10, "emails_enabled": False}
     response = client.put(f"{URL}/settings", headers=admin_headers,
-                          json={"grace_days": 0, "fiscal_year_start_month": 1})
+                          json={"grace_days": 0, "fiscal_year_start_month": 1, "emails_enabled": True})
     assert response.status_code == 200, response.text
     assert client.get(f"{URL}/settings", headers=viewer_headers).json() == {
-        "grace_days": 0, "fiscal_year_start_month": 1}
+        "grace_days": 0, "fiscal_year_start_month": 1, "emails_enabled": True}
+
+
+def test_settings_save_without_emails_enabled_leaves_it_off(client, admin_headers):
+    body = {"grace_days": 5, "fiscal_year_start_month": 4}
+    assert client.put(f"{URL}/settings", headers=admin_headers, json=body).status_code == 200
+    assert client.get(f"{URL}/settings", headers=admin_headers).json()["emails_enabled"] is False
+
+
+def test_supervisor_can_set_emails_enabled_and_a_pilot_cannot(client, supervisor_headers, pilot_headers):
+    body = {"grace_days": 14, "fiscal_year_start_month": 10, "emails_enabled": True}
+    assert client.put(f"{URL}/settings", headers=pilot_headers, json=body).status_code == 403
+    assert client.put(f"{URL}/settings", headers=supervisor_headers, json=body).status_code == 200
+    assert client.get(f"{URL}/settings", headers=supervisor_headers).json()["emails_enabled"] is True
+
+
+def test_emails_enabled_must_be_a_boolean(client, admin_headers):
+    body = {"grace_days": 14, "fiscal_year_start_month": 10, "emails_enabled": "maybe"}
+    assert client.put(f"{URL}/settings", headers=admin_headers, json=body).status_code == 422
 
 
 @pytest.mark.parametrize("body", [

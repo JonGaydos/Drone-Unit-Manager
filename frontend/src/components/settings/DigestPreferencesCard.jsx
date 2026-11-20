@@ -15,8 +15,11 @@ const DIGEST_CATEGORIES = [
   { key: 'assigned_missions', label: 'Assigned Missions' },
   { key: 'overdue_checkouts', label: 'Overdue Equipment Checkouts' },
   { key: 'recent_incidents', label: 'Recent Incidents' },
-  { key: 'requirements', label: 'Flight Requirements' },
+  { key: 'requirements', label: 'Flight Requirements', optIn: true },
 ]
+
+// What a user who never chose gets: every category except the opt-in ones.
+const DEFAULT_ON = DIGEST_CATEGORIES.filter(c => !c.optIn).map(c => c.key)
 
 const CATEGORY_LABEL = Object.fromEntries(DIGEST_CATEGORIES.map(c => [c.key, c.label]))
 
@@ -59,7 +62,7 @@ export default function DigestPreferencesCard() {
         frequency: p.frequency || 'daily',
         send_time: p.send_time || '07:00',
         send_day: p.send_day ?? 0,
-        categories: Array.isArray(p.categories) ? p.categories : DIGEST_CATEGORIES.map(c => c.key),
+        categories: Array.isArray(p.categories) ? p.categories : DEFAULT_ON,
         email_override: p.email_override || '',
       }))
       .catch(err => toast.error(`Could not load digest preferences: ${err.message}`))
