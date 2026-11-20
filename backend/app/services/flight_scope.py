@@ -40,6 +40,12 @@ def counted_flight_clause():
     )
 
 
+def counted_flights_filter():
+    """The flights that count toward flight requirements: only reviewed ones,
+    from every source."""
+    return Flight.review_status == "reviewed"
+
+
 def counted_only(query, include_all: bool = False):
     """Apply the rule to a query, unless the caller asked for everything.
 

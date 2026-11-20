@@ -13,7 +13,6 @@ import SettingsPage from './SettingsPage'
 //   admin-only:
 //   GET /auth/users         (array)
 //   GET /pilots             (array)
-//   GET /currency/rules     (array)
 //   GET /backup/status      ({ enabled, retention, hour, count, last_backup_at })
 // Save: PUT /settings/bulk with [{key, value}, ...] (handleSave gathers refs).
 // Secret keys (skydio_api_token / smtp_password) come back redacted as
@@ -42,15 +41,6 @@ const PILOTS = [
   { id: 10, full_name: 'Jamie Pilot', badge_number: 'B-10', is_active: true },
 ]
 
-const RULES = [
-  { id: 5, name: 'Quarterly currency', required_hours: 5, period_days: 90, required_flights: null, is_active: true, vehicle_models: [], description: null },
-]
-
-const MODELS = [
-  { name: 'X10', aircraft: 4, retired: 0 },
-  { name: 'X2E', aircraft: 2, retired: 0 },
-]
-
 const PURPOSE_ROWS = [
   { id: 1, name: 'Patrol', flight_count: 12 },
   { id: 2, name: 'Search Warrant', flight_count: 3 },
@@ -61,8 +51,6 @@ function mockMount(overrides = {}) {
     settings: () => HttpResponse.json(SETTINGS),
     users: () => HttpResponse.json(USERS),
     pilots: () => HttpResponse.json(PILOTS),
-    rules: () => HttpResponse.json(RULES),
-    models: () => HttpResponse.json(MODELS),
     backup: () => HttpResponse.json({ enabled: true, retention: 7, hour: 3, count: 4, last_backup_at: null }),
     purposes: () => HttpResponse.json(PURPOSE_ROWS),
     ...overrides,
@@ -71,8 +59,6 @@ function mockMount(overrides = {}) {
     http.get('/api/settings', base.settings),
     http.get('/api/auth/users', base.users),
     http.get('/api/pilots', base.pilots),
-    http.get('/api/currency/rules', base.rules),
-    http.get('/api/currency/models', base.models),
     http.get('/api/backup/status', base.backup),
     // The page loads the purposes table on mount too. Without this every test
     // in this file made an unhandled request, and with onUnhandledRequest set
@@ -82,6 +68,10 @@ function mockMount(overrides = {}) {
   )
 }
 
+// The General fields are disabled until GET /settings has loaded; wait for
+// that before reading or changing one.
+const settingsLoaded = () => waitFor(() => expect(screen.getByLabelText('Organization Name')).toBeEnabled())
+
 describe('SettingsPage', () => {
   it('renders without crashing', async () => {
     mockMount()
@@ -89,117 +79,37 @@ describe('SettingsPage', () => {
     expect(await screen.findByText('Organization')).toBeInTheDocument()
   })
 
-  it('refuses a currency rule period outside 1-3650 days without saving', async () => {
+  it.each(['viewer', 'supervisor', 'admin'])('shows a %s no Currency Rules card', async (role) => {
     mockMount()
-    let posted = false
-    server.use(http.post('/api/currency/rules', () => { posted = true; return HttpResponse.json({}) }))
-    const { user } = renderWithProviders(<SettingsPage />, { role: 'admin' })
-    await screen.findByText('Quarterly currency')
-    await user.click(screen.getByRole('button', { name: /New Rule/ }))
-    const dialog = await screen.findByRole('dialog')
-    fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Long' } })
-    const days = within(dialog).getByLabelText('Period (days)')
-    expect(days).toHaveAttribute('max', '3650')
-    fireEvent.change(days, { target: { value: '99999' } })
-    await user.click(within(dialog).getAllByRole('button').find(b => /Create|Save/.test(b.textContent)))
-    expect(await screen.findByText('Period must be 1 to 3650 days')).toBeInTheDocument()
-    expect(posted).toBe(false)
-  })
-
-  it('lets a supervisor create a rule with models chosen from the fleet', async () => {
-    mockMount()
-    let body = null
-    server.use(http.post('/api/currency/rules', async ({ request }) => { body = await request.json(); return HttpResponse.json({ id: 9 }) }))
-    const { user } = renderWithProviders(<SettingsPage />, { role: 'supervisor' })
-    await screen.findByText('Quarterly currency')
-    await user.click(screen.getByRole('button', { name: /New Rule/ }))
-    const dialog = await screen.findByRole('dialog')
-    expect(dialog.querySelector('#rule-vmodel')).toBeNull()
-    fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Typed' } })
-    await user.click(await within(dialog).findByRole('button', { name: 'X10 (4)' }))
-    await user.click(within(dialog).getByRole('button', { name: 'X2E (2)' }))
-    await user.click(within(dialog).getAllByRole('button').find(b => /Create|Save/.test(b.textContent)))
-    await waitFor(() => expect(body).not.toBeNull())
-    expect(body.vehicle_models).toEqual(['X10', 'X2E'])
-    expect(body).not.toHaveProperty('vehicle_model')
-  })
-
-  it('names the vehicle models group for assistive technology', async () => {
-    mockMount()
-    const { user } = renderWithProviders(<SettingsPage />, { role: 'supervisor' })
-    await screen.findByText('Quarterly currency')
-    await user.click(screen.getByRole('button', { name: /New Rule/ }))
-    const dialog = await screen.findByRole('dialog')
-    expect(await within(dialog).findByRole('group', { name: 'Vehicle models' })).toBeInTheDocument()
+    renderWithProviders(<SettingsPage />, { role })
+    expect(await screen.findByText('Organization')).toBeInTheDocument()
+    expect(screen.queryByText('Currency Rules')).toBeNull()
+    expect(screen.queryByRole('button', { name: /New Rule/ })).toBeNull()
   })
 
   it('keeps a supervisor out of admin-only content', async () => {
     mockMount()
     renderWithProviders(<SettingsPage />, { role: 'supervisor' })
-    await screen.findByText('Quarterly currency')
+    await screen.findByRole('heading', { name: 'Email Digest' })
     expect(screen.queryByRole('button', { name: 'Users' })).toBeNull()
     expect(screen.queryByText('Automated Backups')).toBeNull()
-  })
-
-  it('does not call saved models "Not in fleet" when the fleet list fails to load', async () => {
-    mockMount({
-      rules: () => HttpResponse.json([{ ...RULES[0], vehicle_models: ['X10'] }]),
-      models: () => new HttpResponse(null, { status: 500 }),
-    })
-    const { user } = renderWithProviders(<SettingsPage />, { role: 'supervisor' })
-    await screen.findByText(/X10 only/)
-    await user.click(screen.getByTitle('Edit rule'))
-    const dialog = await screen.findByRole('dialog')
-    expect(await within(dialog).findByText('Fleet models could not be loaded')).toBeInTheDocument()
-    expect(within(dialog).getByRole('button', { name: 'X10' })).toHaveAttribute('aria-pressed', 'true')
-    expect(within(dialog).queryByText(/Not in fleet/)).toBeNull()
-  })
-
-  it('saves an untouched rule with a model outside the fleet unchanged', async () => {
-    mockMount({ rules: () => HttpResponse.json([{ ...RULES[0], vehicle_models: ['X11'] }]) })
-    let body = null
-    server.use(http.patch('/api/currency/rules/5', async ({ request }) => { body = await request.json(); return HttpResponse.json({ id: 5 }) }))
-    const { user } = renderWithProviders(<SettingsPage />, { role: 'supervisor' })
-    await screen.findByText(/X11 only/)
-    await user.click(screen.getByTitle('Edit rule'))
-    const dialog = await screen.findByRole('dialog')
-    expect(await within(dialog).findByRole('button', { name: /X11 \(Not in fleet\)/ })).toBeInTheDocument()
-    await user.click(within(dialog).getAllByRole('button').find(b => /Create|Save/.test(b.textContent)))
-    await waitFor(() => expect(body).not.toBeNull())
-    expect(body.vehicle_models).toEqual(['X11'])
-  })
-
-  it('lists a two-model rule with both models', async () => {
-    mockMount({ rules: () => HttpResponse.json([{ ...RULES[0], vehicle_models: ['X10', 'X2E'] }]) })
-    renderWithProviders(<SettingsPage />, { role: 'admin' })
-    expect(await screen.findByText(/X10, X2E only/)).toBeInTheDocument()
-  })
-
-  it('shows a viewer no Currency Rules card', async () => {
-    mockMount()
-    renderWithProviders(<SettingsPage />, { role: 'viewer' })
-    expect(await screen.findByText('Organization')).toBeInTheDocument()
-    expect(screen.queryByText('Currency Rules')).toBeNull()
   })
 
   it('loads settings into the organization field', async () => {
     mockMount()
     renderWithProviders(<SettingsPage />, { role: 'admin' })
-    // Currency rule (admin section) proves isAdmin settled + /settings loaded.
-    expect(await screen.findByText('Quarterly currency')).toBeInTheDocument()
+    // An admin-only card proves isAdmin settled.
+    expect(await screen.findByText('Automated Backups')).toBeInTheDocument()
     expect(await screen.findByDisplayValue('Metro PD Drone Unit')).toBeInTheDocument()
   })
 
-  it('handles empty payloads without crashing (no currency rules)', async () => {
+  it('handles empty payloads without crashing', async () => {
     mockMount({
       settings: () => HttpResponse.json([]),
       users: () => HttpResponse.json([]),
-      rules: () => HttpResponse.json([]),
     })
     renderWithProviders(<SettingsPage />, { role: 'admin' })
     expect(await screen.findByText('Organization')).toBeInTheDocument()
-    // Empty currency-rules UI.
-    expect(screen.getByText(/No rules defined yet/)).toBeInTheDocument()
   })
 
   it('renders the page when /settings 500s (error swallowed by .catch)', async () => {
@@ -217,7 +127,6 @@ describe('SettingsPage', () => {
     expect(await screen.findByText('Organization')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Save Settings/ })).toBeNull()
     // Admin-only sections are absent.
-    expect(screen.queryByText('Currency Rules')).toBeNull()
     expect(screen.queryByText('Users')).toBeNull()
   })
 
@@ -243,7 +152,7 @@ describe('SettingsPage', () => {
     )
     const { user } = renderWithProviders(<SettingsPage />, { role: 'admin' })
     // Wait for isAdmin to settle so the field is enabled and seeded.
-    await screen.findByText('Quarterly currency')
+    await screen.findByText('Automated Backups')
     const orgInput = await screen.findByDisplayValue('Metro PD Drone Unit')
 
     await user.clear(orgInput)
@@ -270,7 +179,7 @@ describe('SettingsPage', () => {
       }),
     )
     const { user } = renderWithProviders(<SettingsPage />, { role: 'admin' })
-    await screen.findByText('Quarterly currency')
+    await screen.findByText('Automated Backups')
     const orgInput = await screen.findByDisplayValue('Metro PD Drone Unit')
 
     await user.clear(orgInput)
@@ -295,7 +204,7 @@ describe('SettingsPage', () => {
       settings: async () => { await loaded; return HttpResponse.json([{ key: 'org_name', value: 'Metro PD Drone Unit' }]) },
     })
     renderWithProviders(<SettingsPage />, { role: 'admin' })
-    await screen.findByText('Quarterly currency')
+    await screen.findByText('Automated Backups')
     const before = await screen.findByLabelText('Organization Name')
     expect(before).toBeDisabled()
 
@@ -315,7 +224,7 @@ describe('SettingsPage', () => {
       http.put('/api/settings/bulk', async ({ request }) => { bulkBody = await request.json(); return HttpResponse.json({ ok: true }) }),
     )
     const { user } = renderWithProviders(<SettingsPage />, { role: 'admin' })
-    await screen.findByText('Quarterly currency')
+    await screen.findByText('Automated Backups')
     const orgInput = await screen.findByDisplayValue('Metro PD Drone Unit')
     await waitFor(() => expect(orgInput).toBeEnabled())
     await user.clear(orgInput)
@@ -337,7 +246,8 @@ describe('SettingsPage', () => {
     const { user } = renderWithProviders(<SettingsPage />, { role: 'admin' })
 
     // Wait for isAdmin to settle so the select is enabled.
-    await screen.findByText('Quarterly currency')
+    await screen.findByText('Automated Backups')
+    await settingsLoaded()
     const select = await screen.findByLabelText('Time Zone')
     await user.selectOptions(select, 'America/Denver')
     await user.click(screen.getByRole('button', { name: 'Save Settings' }))
@@ -355,7 +265,8 @@ describe('SettingsPage', () => {
     )
     const { user } = renderWithProviders(<SettingsPage />, { role: 'admin' })
 
-    await screen.findByText('Quarterly currency')
+    await screen.findByText('Automated Backups')
+    await settingsLoaded()
     const select = await screen.findByLabelText('Idle lock')
     expect(within(select).getAllByRole('option').map(o => o.textContent)).toEqual([
       '30 minutes', '1 hour', '2 hours', '4 hours', '6 hours', '8 hours', '12 hours',
@@ -371,7 +282,7 @@ describe('SettingsPage', () => {
   it('defaults the idle lock to 30 minutes when none is stored', async () => {
     mockMount({ settings: () => HttpResponse.json([]) })
     renderWithProviders(<SettingsPage />, { role: 'admin' })
-    await screen.findByText('Quarterly currency')
+    await screen.findByText('Automated Backups')
     expect(await screen.findByLabelText('Idle lock')).toHaveValue('30')
   })
 
@@ -749,7 +660,8 @@ describe('SettingsPage settings fixes', () => {
       return HttpResponse.json({ ok: true })
     }))
     const { user } = renderWithProviders(<SettingsPage />, { role: 'admin' })
-    await screen.findByText('Quarterly currency')
+    await screen.findByText('Automated Backups')
+    await settingsLoaded()
     const select = await screen.findByLabelText('Time Zone')
     await waitFor(() => expect(select).toHaveValue('America/Chicago'))
     await user.selectOptions(select, 'America/Denver')
@@ -764,10 +676,10 @@ describe('SettingsPage settings fixes', () => {
     mockMount()
     server.use(http.get('/api/api-tokens', () => HttpResponse.json([])))
     const { user } = renderWithProviders(<SettingsPage />, { role: 'admin' })
-    await screen.findByText('Quarterly currency')
+    await screen.findByText('Automated Backups')
     await user.click(screen.getByRole('button', { name: 'API Tokens' }))
 
-    await waitFor(() => expect(screen.queryByText('Quarterly currency')).toBeNull())
+    await waitFor(() => expect(screen.queryByText('Automated Backups')).toBeNull())
     expect(screen.queryByText('Organization')).toBeNull()
     expect(screen.queryByRole('button', { name: /Save Settings/ })).toBeNull()
   })
@@ -787,7 +699,7 @@ describe('SettingsPage settings fixes', () => {
     mockMount()
     server.use(http.put('/api/settings/bulk', () => { saved = true; return HttpResponse.json({ ok: true }) }))
     const { user } = renderWithProviders(<SettingsPage />, { role: 'admin' })
-    await screen.findByText('Quarterly currency')
+    await screen.findByText('Automated Backups')
     const orgInput = await screen.findByDisplayValue('Metro PD Drone Unit')
     await user.clear(orgInput)
     await user.type(orgInput, '   ')
@@ -801,7 +713,7 @@ describe('SettingsPage settings fixes', () => {
   it('hides the API Documentation card when the server does not serve the docs', async () => {
     mockMount()
     renderWithProviders(<SettingsPage />, { role: 'admin' })
-    await screen.findByText('Quarterly currency')
+    await screen.findByText('Automated Backups')
     await new Promise(resolve => setTimeout(resolve, 50))
     expect(screen.queryByText('API Documentation')).toBeNull()
   })
@@ -947,7 +859,7 @@ describe('SettingsPage and Flight Requirements', () => {
   it('has no Flight Requirements tab, also for a supervisor or an admin', async () => {
     mockMount()
     const { unmount } = renderWithProviders(<SettingsPage />, { role: 'supervisor' })
-    await screen.findByText('Quarterly currency')
+    await screen.findByText('Organization')
     expect(screen.queryByRole('button', { name: 'Flight Requirements' })).toBeNull()
     unmount()
     mockMount()

@@ -19,8 +19,7 @@ export default function FlightRequirementsPage() {
           <CalendarClock className="w-5 h-5 text-primary" aria-hidden="true" /> Flight Requirements
         </h1>
         <p className="text-sm text-muted-foreground mt-1 max-w-3xl">
-          Flight time pilots must log in a period, such as 15 minutes on each model every quarter. Currency rules are
-          separate and do not change.
+          Flight time pilots must log in a period, such as 15 minutes on each model every quarter.
         </p>
       </div>
       <RequirementsTab />

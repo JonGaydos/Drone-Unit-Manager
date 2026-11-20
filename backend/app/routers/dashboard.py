@@ -14,7 +14,6 @@ from app.models.pilot import Pilot
 from app.models.user import User
 from app.services.flight_scope import counted_flight_clause
 from app.services.permissions import can
-from app.services.pilot_contacts import hides_contacts
 from app.models.vehicle import Vehicle
 from app.models.certification import PilotCertification, CertificationType
 from app.models.maintenance import MaintenanceRecord
@@ -561,46 +560,6 @@ def fleet_health(db: DBSession, user: FleetUser):
     }
 
 
-def _currency_status(db, total_pilots, with_email: bool = True):
-    """Evaluate active pilots against active currency rules. Returns
-    (active_rule_count, per_pilot_status, pilots_current, pilots_lapsed). With no
-    rules defined, every pilot is implicitly current."""
-    from app.models.currency_rule import CurrencyRule
-    from app.routers.currency import _evaluate_currency, flights_by_pilot
-    rules = db.query(CurrencyRule).filter(CurrencyRule.is_active.is_(True)).all()
-    if not rules:
-        return 0, [], total_pilots, 0
-    status: list[dict] = []
-    pilots_current = 0
-    pilots_lapsed = 0
-    pilots = db.query(Pilot).filter(Pilot.status == "active").all()
-    flights = flights_by_pilot(db, [p.id for p in pilots], rules)
-    for p in pilots:
-        entry = _pilot_currency_entry(p, _evaluate_currency(rules, flights.get(p.id, [])), with_email)
-        status.append(entry)
-        if entry["is_current"]:
-            pilots_current += 1
-        else:
-            pilots_lapsed += 1
-    return len(rules), status, pilots_current, pilots_lapsed
-
-
-def _pilot_currency_entry(pilot, rule_results: list[dict], with_email: bool = True) -> dict:
-    """One pilot's line in the compliance currency list; the email only when
-    the caller may see it."""
-    is_current = all(r["is_current"] for r in rule_results) if rule_results else True
-    # Earliest expiry across current-passing rules; null when any rule lapsed.
-    expiries = [r["expires_date"] for r in rule_results if r.get("expires_date")]
-    return {
-        "pilot_id": pilot.id,
-        "pilot_name": pilot.full_name,
-        "email": pilot.email if with_email else None,
-        "is_current": is_current,
-        "earliest_expires_date": min(expiries) if (expiries and is_current) else None,
-        "rules": rule_results,
-    }
-
-
 def _authority_summary(db, today):
     """Score the org's active operating authorities. Returns (authorities,
     expired, expiring, grounding_expired, advisory_expired, score_cap_reason).
@@ -694,21 +653,14 @@ def compliance_dashboard(db: DBSession, user: CurrentUser):
         FlightPlan.status == "pending"
     ).scalar()
 
-    # Pilot currency: reuses currency.py's evaluator so the rule semantics stay
-    # identical to PilotDetailPage.
-    currency_rules_active, pilot_currency_status, pilots_current, pilots_lapsed = _currency_status(
-        db, total_pilots, with_email=not hides_contacts(db, user))
-
     # Operating authority (org-level COAs / Part 107 waivers).
     authorities, expired_authorities, expiring_authorities, grounding_expired, advisory_expired, score_cap_reason = _authority_summary(db, today)
 
     # The score and counts are unit-wide. The lists name records, so they follow
     # their features' view permissions.
     visible_certifications = []
-    visible_currency = []
     if can(db, user, "certifications.view"):
         visible_certifications = [_certification_brief(c, today) for c in expiring_soon]
-        visible_currency = pilot_currency_status
     visible_expired_authorities = []
     visible_expiring_authorities = []
     if can(db, user, "authority.view"):
@@ -725,10 +677,6 @@ def compliance_dashboard(db: DBSession, user: CurrentUser):
         "unreviewed_flights": unreviewed_flights,
         "open_incidents": open_incidents,
         "pending_flight_plans": pending_plans,
-        "currency_rules_active": currency_rules_active,
-        "pilots_current": pilots_current,
-        "pilots_lapsed": pilots_lapsed,
-        "pilot_currency_status": visible_currency,
         "operating_authorities_tracked": len(authorities),
         "expired_authorities": visible_expired_authorities,
         "expiring_authorities": visible_expiring_authorities,
@@ -736,7 +684,6 @@ def compliance_dashboard(db: DBSession, user: CurrentUser):
         "compliance_score": _calc_compliance_score(
             total_pilots, expired_certs, total_vehicles, expired_regs,
             overdue_maintenance, open_incidents,
-            pilots_lapsed, currency_rules_active,
             len(expiring_authorities), len(advisory_expired), bool(grounding_expired),
         ),
     }
@@ -768,16 +715,14 @@ def _authority_brief(a, today) -> dict:
 
 
 def _calc_compliance_score(pilots, exp_certs, vehicles, exp_regs, overdue, incidents,
-                           pilots_lapsed=0, currency_rules_active=0,
                            authorities_expiring=0, authorities_expired_advisory=0,
                            authority_cap=False):
-    """Simple compliance score 0-100. Currency only contributes when at least
-    one active rule exists — otherwise we have no signal to score against.
+    """Simple compliance score 0-100.
 
     Operating authority is the one input that can override the sum: an expired
     authority the unit depends on means every flight is unauthorised, so the
     score is capped rather than merely deducted. A unit with no authorities on
-    file is unaffected, same as currency with no rules defined."""
+    file is unaffected."""
     deductions = 0
     if pilots > 0:
         deductions += (exp_certs / pilots) * 25  # cert compliance worth 25 points
@@ -785,8 +730,6 @@ def _calc_compliance_score(pilots, exp_certs, vehicles, exp_regs, overdue, incid
         deductions += (exp_regs / vehicles) * 20  # reg compliance worth 20 points
     deductions += min(overdue * 5, 20)  # maintenance worth up to 20 points
     deductions += min(incidents * 10, 20)  # incidents worth up to 20 points
-    if currency_rules_active > 0 and pilots > 0:
-        deductions += (pilots_lapsed / pilots) * 15  # currency worth 15 points
     if authorities_expired_advisory > 0:
         deductions += 10  # expired, but flagged as not grounding the unit
     if authorities_expiring > 0:

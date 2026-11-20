@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { screen, waitFor, within } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { renderWithProviders } from '@/test/render'
@@ -20,23 +20,8 @@ const COMPLIANCE = {
   expired_authorities: [],
   expiring_authorities: [],
   score_cap_reason: null,
-  pilots_lapsed: 1,
-  pilots_current: 4,
   total_pilots: 5,
   total_vehicles: 3,
-  currency_rules_active: 1,
-  pilot_currency_status: [
-    {
-      pilot_id: 5, pilot_name: 'Ada Lovelace', email: 'ada@unit.gov', is_current: false,
-      earliest_expires_date: null,
-      rules: [{ rule_id: 1, rule_name: 'Quarterly', actual_hours: 1, required_hours: 5, actual_flights: 1, required_flights: 3, period_days: 90, is_current: false }],
-    },
-    {
-      pilot_id: 6, pilot_name: 'Grace Hopper', email: 'grace@unit.gov', is_current: true,
-      earliest_expires_date: '2026-12-31',
-      rules: [{ rule_id: 1, rule_name: 'Quarterly', actual_hours: 9, required_hours: 5, actual_flights: 4, required_flights: 3, period_days: 90, is_current: true }],
-    },
-  ],
 }
 
 function mockMount(overrides = {}) {
@@ -64,15 +49,20 @@ describe('CompliancePage', () => {
     expect(screen.getByText('Expired Certifications')).toBeInTheDocument()
   })
 
-  it('renders lapsed currency rows without rendering raw rule objects', async () => {
+  it.each(['Out of Currency', 'Pilot Currency Status', 'Currency Compliance', 'Pilots Out of Currency'])(
+    'has no currency text: %s', async (text) => {
+      mockMount()
+      renderWithProviders(<CompliancePage />, { role: 'admin' })
+      await screen.findByRole('heading', { name: 'Compliance Dashboard' })
+      expect(screen.queryByText(text)).toBeNull()
+    })
+
+  it('offers no Send currency reminders to a manager', async () => {
     mockMount()
     renderWithProviders(<CompliancePage />, { role: 'admin' })
-    expect(await screen.findByText('Ada Lovelace')).toBeInTheDocument()
-    // LAPSED badge for the out-of-currency pilot
-    expect(screen.getByText('LAPSED')).toBeInTheDocument()
-    // Rule details rendered as text, not [object Object]
-    expect(screen.getByText(/Quarterly: 1\/5 hours flown/)).toBeInTheDocument()
-    expect(screen.queryByText(/\[object Object\]/)).toBeNull()
+    await screen.findByRole('heading', { name: 'Compliance Dashboard' })
+    expect(screen.queryByRole('button', { name: /Send Reminders/ })).toBeNull()
+    expect(screen.queryByText(/Send currency reminders/)).toBeNull()
   })
 
   it('names the pilot and certification on an expiring-cert item, apart from its label', async () => {
@@ -98,7 +88,7 @@ describe('CompliancePage', () => {
   it('hides Generate Compliance Report from a viewer', async () => {
     mockMount()
     renderWithProviders(<CompliancePage />, { role: 'viewer' })
-    await screen.findByText('Ada Lovelace')
+    await screen.findByRole('heading', { name: 'Compliance Dashboard' })
     expect(screen.queryByRole('button', { name: /Generate Compliance Report/ })).toBeNull()
   })
 
@@ -108,19 +98,6 @@ describe('CompliancePage', () => {
     expect(await screen.findByText('Failed to load compliance data.')).toBeInTheDocument()
   })
 
-  it('filters the currency section to lapsed only', async () => {
-    mockMount()
-    const { user } = renderWithProviders(<CompliancePage />, { role: 'admin' })
-    await screen.findByText('Ada Lovelace')
-
-    // Default view (lapsed + expiring 30d) lists Ada; Grace expires far out so is hidden.
-    expect(screen.queryByText('Grace Hopper')).toBeNull()
-
-    // "All pilots" surfaces the current pilot too.
-    const section = document.getElementById('currency')
-    await user.selectOptions(within(section).getByRole('combobox'), 'all')
-    expect(await screen.findByText('Grace Hopper')).toBeInTheDocument()
-  })
   it('shows the cap reason under the score when an authority has expired', async () => {
     mockMount({
       compliance: () => HttpResponse.json({
@@ -170,120 +147,6 @@ describe('CompliancePage', () => {
 
     expect(await screen.findByText('Operating Authority Expiring')).toBeInTheDocument()
     expect(screen.getByText(/45 days remaining/)).toBeInTheDocument()
-  })
-
-  // The tile answers "what fraction of pilots are current", and it has to
-  // refuse the question when nothing defines what current means. 100% against
-  // no rule reads as a pass the unit has not earned.
-  describe('currency compliance tile', () => {
-    // The label sits in its own div inside the tile, so closest('div') would
-    // return that label, not the card holding the number.
-    const tile = () => screen.getByText('Currency Compliance').parentElement
-
-    it('shows a dash and says so when no currency rule is configured', async () => {
-      mockMount({ compliance: () => HttpResponse.json({ ...COMPLIANCE, currency_rules_active: 0 }) })
-      renderWithProviders(<CompliancePage />, { role: 'admin' })
-
-      await screen.findByRole('heading', { name: 'Compliance Dashboard' })
-      expect(within(tile()).getByText(String.fromCharCode(8212))).toBeInTheDocument()
-      expect(within(tile()).getByText('no rules')).toBeInTheDocument()
-    })
-
-    it('shows the percentage of pilots current when rules exist', async () => {
-      mockMount({ compliance: () => HttpResponse.json({
-        ...COMPLIANCE, currency_rules_active: 1, pilots_current: 3, total_pilots: 4 }) })
-      renderWithProviders(<CompliancePage />, { role: 'admin' })
-
-      await screen.findByRole('heading', { name: 'Compliance Dashboard' })
-      expect(within(tile()).getByText('75%')).toBeInTheDocument()
-    })
-
-    it('reads 100% rather than dividing by zero when the unit has no pilots', async () => {
-      mockMount({ compliance: () => HttpResponse.json({
-        ...COMPLIANCE, currency_rules_active: 1, pilots_current: 0, total_pilots: 0,
-        pilot_currency_status: [] }) })
-      renderWithProviders(<CompliancePage />, { role: 'admin' })
-
-      await screen.findByRole('heading', { name: 'Compliance Dashboard' })
-      expect(within(tile()).getByText('100%')).toBeInTheDocument()
-    })
-  })
-
-  describe('currency reminders', () => {
-    // G-6: the API takes an intro message but the dialog had no field for it.
-    it('sends the optional message typed in the confirm dialog', async () => {
-      let sent = null
-      mockMount()
-      server.use(
-        http.post('/api/currency/send-reminders/start', async ({ request }) => {
-          sent = await request.json()
-          return HttpResponse.json({ job_id: 'j1' })
-        }),
-        http.get('/api/currency/jobs/j1', () => HttpResponse.json({
-          id: 'j1', status: 'done', progress: { done: 1, total: 1 },
-          result: { sent: 1, skipped_no_email: 0, skipped_current: 0, failed: 0 },
-        })),
-      )
-      const { user } = renderWithProviders(<CompliancePage />, { role: 'admin' })
-      await user.click(await screen.findByRole('button', { name: /Send Reminders/ }))
-      const dialog = await screen.findByRole('dialog')
-      expect(within(dialog).getByText(/to 1 lapsed pilot\?/)).toBeInTheDocument()
-      await user.type(within(dialog).getByLabelText('Message to pilots (optional)'), 'Book a training flight this week.')
-      await user.click(within(dialog).getByRole('button', { name: 'Send' }))
-
-      await waitFor(() => expect(sent).not.toBeNull())
-      expect(sent.custom_message).toBe('Book a training flight this week.')
-      expect(await screen.findByText('Reminders: 1 sent')).toBeInTheDocument()
-    })
-
-    it('sends nothing when the dialog is cancelled', async () => {
-      let posted = false
-      mockMount()
-      server.use(http.post('/api/currency/send-reminders/start', () => { posted = true; return HttpResponse.json({}) }))
-      const { user } = renderWithProviders(<CompliancePage />, { role: 'admin' })
-      await user.click(await screen.findByRole('button', { name: /Send Reminders/ }))
-      const dialog = await screen.findByRole('dialog')
-      await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
-      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
-      expect(posted).toBe(false)
-    })
-
-    // G-8: reminders ran inside one request, with only a disabled button for
-    // minutes on a large unit.
-    it('runs the reminders as a job and shows its progress', async () => {
-      let polls = 0
-      mockMount()
-      server.use(
-        http.post('/api/currency/send-reminders/start', () => HttpResponse.json({ job_id: 'j2' })),
-        http.get('/api/currency/jobs/j2', () => {
-          polls += 1
-          if (polls === 1) return HttpResponse.json({ id: 'j2', status: 'running', progress: { done: 1, total: 2 } })
-          return HttpResponse.json({
-            id: 'j2', status: 'done', progress: { done: 2, total: 2 },
-            result: { sent: 1, skipped_no_email: 1, skipped_current: 0, failed: 0 },
-          })
-        }),
-      )
-      const { user } = renderWithProviders(<CompliancePage />, { role: 'admin' })
-      await user.click(await screen.findByRole('button', { name: /Send Reminders/ }))
-      await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Send' }))
-
-      expect(await screen.findByText('Sending 1 of 2')).toBeInTheDocument()
-      expect(await screen.findByText('Reminders: 1 sent, 1 skipped (no email)', {}, { timeout: 3000 })).toBeInTheDocument()
-      expect(screen.queryByText(/Sending \d/)).toBeNull()
-    })
-
-    it('reports a failed reminder job', async () => {
-      mockMount()
-      server.use(
-        http.post('/api/currency/send-reminders/start', () => HttpResponse.json({ job_id: 'j3' })),
-        http.get('/api/currency/jobs/j3', () => HttpResponse.json({ id: 'j3', status: 'failed', error: 'SMTP down' })),
-      )
-      const { user } = renderWithProviders(<CompliancePage />, { role: 'admin' })
-      await user.click(await screen.findByRole('button', { name: /Send Reminders/ }))
-      await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Send' }))
-      expect(await screen.findByText('SMTP down')).toBeInTheDocument()
-    })
   })
 
   describe('Requirements score', () => {

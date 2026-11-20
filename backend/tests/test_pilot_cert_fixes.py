@@ -4,8 +4,6 @@
 from datetime import date, timedelta
 
 from app.models.certification import CertificationType, PilotCertification
-from app.models.currency_rule import CurrencyRule
-from app.models.flight import Flight
 from app.models.pilot import Pilot
 
 TODAY = date.today()
@@ -17,39 +15,6 @@ def _pilot(db, first="Test", last="Pilot", status="active"):
     db.commit()
     db.refresh(p)
     return p
-
-
-# --- C-F12: a huge period_days must not crash currency evaluation ---
-
-
-def test_currency_rule_period_days_out_of_range_is_refused(client, admin_headers):
-    for days in (99999999, 3651, 0, -10):
-        r = client.post("/api/currency/rules", headers=admin_headers, json={
-            "name": "Huge", "required_hours": 1, "period_days": days})
-        assert r.status_code == 422, (days, r.text)
-    ok = client.post("/api/currency/rules", headers=admin_headers, json={
-        "name": "Ten years", "required_hours": 1, "period_days": 3650})
-    assert ok.status_code == 200
-    r = client.patch(f"/api/currency/rules/{ok.json()['id']}", headers=admin_headers,
-                     json={"period_days": 99999999})
-    assert r.status_code == 422
-
-
-def test_stored_huge_period_rule_does_not_break_compliance(client, db, admin_headers):
-    pilot = _pilot(db)
-    db.add(Flight(pilot_id=pilot.id, date=TODAY, duration_seconds=7200,
-                  review_status="reviewed"))
-    db.add(CurrencyRule(name="Huge", required_hours=1, period_days=99999999, is_active=True))
-    db.add(CurrencyRule(name="Backwards", required_hours=1, period_days=-10, is_active=True))
-    db.commit()
-    for url in ("/api/currency/status", f"/api/currency/status/{pilot.id}",
-                "/api/dashboard/compliance", f"/api/pilots/{pilot.id}/needs-attention"):
-        r = client.get(url, headers=admin_headers)
-        assert r.status_code == 200, (url, r.text)
-    status = client.get(f"/api/currency/status/{pilot.id}", headers=admin_headers).json()
-    # Both stored rules are evaluated within the allowed range, so the recent
-    # two-hour flight keeps the pilot current on each.
-    assert all(r["is_current"] for r in status["rules"])
 
 
 # --- C-F1: pilot names must not be blank ---
@@ -314,27 +279,6 @@ def test_upcoming_expirations_skip_inactive_pilots(client, db, admin_headers):
     r = client.get("/api/dashboard/upcoming-expirations", headers=admin_headers)
     assert r.status_code == 200
     assert [row["pilot_id"] for row in r.json()] == [active.id]
-
-
-# --- C-F13: currency rule name, hours and flights ---
-
-
-def test_currency_rule_fields_are_checked(client, db, admin_headers):
-    url = "/api/currency/rules"
-    base = {"name": "Quarterly", "required_hours": 5, "period_days": 90}
-    for extra in ({"name": ""}, {"name": "  "}, {"required_hours": -1}, {"required_flights": -2},
-                  {"name": "N" * 301}):
-        r = client.post(url, headers=admin_headers, json={**base, **extra})
-        assert r.status_code == 422, extra
-    ok = client.post(url, headers=admin_headers, json={**base, "name": " Quarterly ", "required_flights": 0})
-    assert ok.status_code == 200
-    assert ok.json()["name"] == "Quarterly"
-    rid = ok.json()["id"]
-    for body in ({"name": ""}, {"name": None}, {"required_hours": -0.5}, {"required_hours": None},
-                 {"period_days": None}, {"required_flights": -1}, {"is_active": None}):
-        r = client.patch(f"{url}/{rid}", headers=admin_headers, json=body)
-        assert r.status_code == 422, body
-    assert client.patch(f"{url}/{rid}", headers=admin_headers, json={"required_flights": None}).status_code == 200
 
 
 # --- C-F20: deleting a certification takes its renewal history with it ---

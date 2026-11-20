@@ -43,7 +43,7 @@ from app.routers import (
     certifications, documents, sync, telemetry, maintenance, media, alerts,
     equipment, reports, export, mission_logs, training_logs, maintenance_schedules,
     photos, folders, audit, incidents, flight_plans,
-    weather, currency, equipment_checkouts, checklists,
+    weather, equipment_checkouts, checklists,
     components, adsb, notifications, calendar, geocode,
 )
 from app.routers import vehicle_registrations, backup, search
@@ -255,7 +255,6 @@ app.include_router(audit.router)
 app.include_router(incidents.router)
 app.include_router(flight_plans.router)
 app.include_router(weather.router)
-app.include_router(currency.router)
 app.include_router(requirements_router.router)
 app.include_router(equipment_checkouts.router)
 app.include_router(checklists.router)

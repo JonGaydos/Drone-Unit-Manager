@@ -9,7 +9,7 @@ import { getDisplayTimezone } from '@/lib/utils'
 const ENTITY_TYPES = [
   '', 'alert', 'api_token', 'attachment', 'audit_log', 'auth', 'backup', 'battery', 'battery_reading',
   'calendar_event', 'certification_type', 'checklist_completion', 'checklist_template',
-  'component', 'controller', 'currency', 'currency_rule', 'currency_rule_model', 'dock', 'document', 'equipment',
+  'component', 'controller', 'dock', 'document', 'equipment',
   'flight', 'flight_plan', 'flight_purpose', 'flight_requirement', 'flight_requirement_model',
   'flight_requirement_notice', 'flight_requirement_pilot', 'flight_requirement_purpose',
   'flight_requirement_result', 'flight_requirement_template', 'folder', 'incident', 'maintenance',
@@ -27,7 +27,7 @@ const ACTIONS = [
   'delete', 'deny', 'digest', 'disconnect', 'dismiss', 'dismiss_all', 'enrich_flights',
   'enrich_run', 'export', 'hold', 'import', 'link', 'login', 'login_blocked', 'login_failed',
   'logout', 'merge', 'password_change', 'password_reset', 'purge', 'reactivate', 'read', 'recalculate',
-  'release_hold', 'reset', 'restore', 'restore_held_item', 'retire', 'send_notices', 'send_reminders', 'send_test',
+  'release_hold', 'reset', 'restore', 'restore_held_item', 'retire', 'send_notices', 'send_test',
   'setup', 'sync', 'sync_deep', 'sync_run', 'telemetry_sync', 'unapprove', 'unlink', 'update',
   'upload', 'view',
 ]

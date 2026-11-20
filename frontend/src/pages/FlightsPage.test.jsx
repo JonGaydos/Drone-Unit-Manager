@@ -516,7 +516,7 @@ describe('FlightsPage', () => {
     await user.clear(screen.getByPlaceholderText('sec'))
     await user.type(screen.getByPlaceholderText('sec'), '700')
     await user.click(screen.getByTitle('Save'))
-    expect(await screen.findByText(/back for review.*does not count toward currency until reviewed/i)).toBeInTheDocument()
+    expect(await screen.findByText(/back for review.*does not count toward flight requirements until reviewed/i)).toBeInTheDocument()
   })
 
   it('keeps the plain message when the flight stays where it was', async () => {

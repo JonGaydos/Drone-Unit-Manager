@@ -6,7 +6,7 @@ import {
 import { todayLocal } from '@/lib/utils'
 
 const REQ = {
-  id: 4, name: 'Night currency', description: null, period_type: 'monthly_window', recurring: true,
+  id: 4, name: 'Night proficiency', description: null, period_type: 'monthly_window', recurring: true,
   window_start_day: 19, window_end_day: 5, span_length: null, span_unit: null, every_months: null,
   target_minutes: 90, target_flights: null, model_mode: 'combined', models: ['X10'], time_mode: 'clock',
   window_start_time: '18:00:00', window_end_time: '02:00:00', purposes: ['Patrol'], pilot_ids: [3],
@@ -16,7 +16,7 @@ const REQ = {
 describe('form state', () => {
   it('round-trips a requirement into the body the API takes', () => {
     expect(toBody(fromRequirement(REQ))).toEqual({
-      name: 'Night currency', description: null, period_type: 'monthly_window', recurring: true,
+      name: 'Night proficiency', description: null, period_type: 'monthly_window', recurring: true,
       window_start_day: 19, window_end_day: 5, span_length: null, span_unit: null, every_months: null,
       target_minutes: 90, target_flights: null, model_mode: 'combined', models: ['X10'], time_mode: 'clock',
       window_start_time: '18:00', window_end_time: '02:00', purposes: ['Patrol'], reminder_days: 5,
@@ -26,7 +26,7 @@ describe('form state', () => {
 
   it('names a duplicate "Copy of ..." and starts it today', () => {
     const copy = duplicateOf({ ...REQ, start_date: '2026-01-01' })
-    expect(copy.name).toBe('Copy of Night currency')
+    expect(copy.name).toBe('Copy of Night proficiency')
     expect(copy.start_date).toBe(todayLocal())
   })
 
@@ -58,7 +58,7 @@ describe('form state', () => {
 
   it('fills from a template without dates or pilots', () => {
     const f = fromTemplate({ id: 1, name: 'T', settings: toDefinition(fromRequirement(REQ)) })
-    expect(f.name).toBe('Night currency')
+    expect(f.name).toBe('Night proficiency')
     expect(f.start_date).toBe('')
     expect(f.end_date).toBe('')
     expect(f.all_pilots).toBe(true)

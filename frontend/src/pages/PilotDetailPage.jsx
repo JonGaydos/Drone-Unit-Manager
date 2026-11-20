@@ -72,7 +72,6 @@ export default function PilotDetailPage() {
   const [editing, setEditing] = useState(false)
   const [editForm, setEditForm] = useState({})
   const [saving, setSaving] = useState(false)
-  const [currencyStatus, setCurrencyStatus] = useState(null)
   const [performance, setPerformance] = useState(null)
   const [needsAttention, setNeedsAttention] = useState(null)
 
@@ -82,15 +81,13 @@ export default function PilotDetailPage() {
       getSection(canSeeFlights, `/pilots/${id}/stats`, null),
       getSection(canSeeFlights, `/flights?pilot_id=${id}&per_page=20`, []),
       getSection(canSeeCerts, `/pilot-certifications?pilot_id=${id}`, []),
-      getSection(canSeeCerts, `/currency/status/${id}`, null),
       getSection(canSeeFlights, `/dashboard/analytics/pilot-performance/${id}`, null),
       getSection(canSeeCerts, `/pilots/${id}/needs-attention`, null),
-    ]).then(([p, s, fData, c, cur, perf, na]) => {
+    ]).then(([p, s, fData, c, perf, na]) => {
       setPilot(p)
       setStats(s)
       setFlights(fData.flights || fData)
       setCertifications(c)
-      setCurrencyStatus(cur)
       setPerformance(perf)
       setNeedsAttention(na)
     }).catch(() => {}).finally(() => setLoading(false))
@@ -384,7 +381,7 @@ export default function PilotDetailPage() {
         </>
       )}
 
-      {/* Needs Attention — backend-aggregated lapsed currency and expired/expiring certs */}
+      {/* Needs Attention: backend-aggregated expired/expiring certs and missed requirements */}
       {(() => {
         const items = needsAttention?.items || []
         return (
@@ -398,7 +395,7 @@ export default function PilotDetailPage() {
             </div>
             <div className="p-4">
               {items.length === 0 ? (
-                <p className="flex items-center gap-2 text-sm text-emerald-400"><CheckCircle className="w-4 h-4" /> All clear. No lapsed currency or expiring certifications.</p>
+                <p className="flex items-center gap-2 text-sm text-emerald-400"><CheckCircle className="w-4 h-4" /> All clear. No expiring certifications or missed requirements.</p>
               ) : (
                 <ul className="space-y-1.5">
                   {items.map(a => (
@@ -480,77 +477,6 @@ export default function PilotDetailPage() {
         </table>
         </div>
       </div>
-
-      {/* Currency Status */}
-      {currencyStatus?.rules?.length > 0 && (
-        <div className="bg-card border border-border rounded-xl overflow-hidden">
-          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4 text-primary" />
-              <h3 className="font-semibold text-foreground">Currency Status</h3>
-            </div>
-            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
-              currencyStatus.is_current
-                ? 'bg-emerald-500/15 text-emerald-400'
-                : 'bg-red-500/15 text-red-400'
-            }`}>
-              {currencyStatus.is_current ? (
-                <><CheckCircle className="w-3.5 h-3.5" /> Current</>
-              ) : (
-                <><XCircle className="w-3.5 h-3.5" /> Lapsed</>
-              )}
-            </span>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/30">
-                  <th className="text-left px-4 py-2 text-foreground font-medium">Rule</th>
-                  <th className="text-left px-4 py-2 text-foreground font-medium hidden md:table-cell">Model</th>
-                  <th className="text-left px-4 py-2 text-foreground font-medium">Hours</th>
-                  <th className="text-left px-4 py-2 text-foreground font-medium">Flights</th>
-                  <th className="text-left px-4 py-2 text-foreground font-medium">Status</th>
-                  <th className="text-left px-4 py-2 text-foreground font-medium hidden md:table-cell">Expires</th>
-                </tr>
-              </thead>
-              <tbody>
-                {currencyStatus.rules.map(r => (
-                  <tr key={r.rule_id} className="border-b border-border/50 hover:bg-accent/30">
-                    <td className="px-4 py-2 text-foreground font-medium">{r.rule_name}</td>
-                    <td className="px-4 py-2 text-foreground hidden md:table-cell">{r.vehicle_models?.length > 0 ? r.vehicle_models.join(', ') : 'All'}</td>
-                    <td className="px-4 py-2 text-foreground">
-                      <span className={r.actual_hours >= r.required_hours ? 'text-emerald-400' : 'text-red-400'}>
-                        {r.actual_hours}
-                      </span>
-                      <span className="text-muted-foreground"> / {r.required_hours}h</span>
-                      <span className="text-xs text-muted-foreground ml-1">({r.period_days}d)</span>
-                    </td>
-                    <td className="px-4 py-2 text-foreground">
-                      {r.required_flights == null ? '—' : (
-                        <>
-                          <span className={r.actual_flights >= r.required_flights ? 'text-emerald-400' : 'text-red-400'}>
-                            {r.actual_flights}
-                          </span>
-                          <span className="text-muted-foreground"> / {r.required_flights}</span>
-                        </>
-                      )}
-                    </td>
-                    <td className="px-4 py-2">
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-                        r.is_current ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'
-                      }`}>
-                        {r.is_current ? <CheckCircle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
-                        {r.is_current ? 'Current' : 'Lapsed'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2 text-foreground hidden md:table-cell">{r.expires_date || '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
 
       <PilotRequirementsCard pilotId={id} onChange={reloadNeedsAttention} />
 

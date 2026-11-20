@@ -306,7 +306,7 @@ describe('FlightDetailPage', () => {
     await user.click(await screen.findByRole('button', { name: 'Edit' }))
     await user.type(await screen.findByLabelText('Case #'), 'C-9')
     await user.click(screen.getByRole('button', { name: 'Save' }))
-    expect(await screen.findByText(/back for review.*does not count toward currency until reviewed/i)).toBeInTheDocument()
+    expect(await screen.findByText(/back for review.*does not count toward flight requirements until reviewed/i)).toBeInTheDocument()
   })
 
   it.each(['/api/fleet/options', '/api/pilots/options', '/api/flights/purposes/list'])('stays rendered with the flight when %s 500s', async (path) => {

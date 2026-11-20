@@ -113,9 +113,9 @@ _DEFAULT_GRID = (
         ("pilots.edit", "Edit profile", ALL, OWN, LOCKED),
         ("pilots.manage", "Create, delete, merge", YES, NO, LOCKED),
     )),
-    ("Certifications and currency", (
+    ("Certifications", (
         ("certifications.view", VIEW, YES, YES, YES),
-        ("certifications.manage", "Manage, send reminders", YES, NO, LOCKED),
+        ("certifications.manage", MANAGE, YES, NO, LOCKED),
     )),
     ("Flight requirements", (
         ("requirements.view", VIEW, YES, YES, YES),

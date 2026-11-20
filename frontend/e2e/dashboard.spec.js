@@ -14,8 +14,9 @@ import { test, expect } from '@playwright/test'
 //     "Vehicles Flown (30d)" — labels always render; values come from
 //     /dashboard/stats and /dashboard/trends, and the vehicles tile's subtitle
 //     carries fleet_size ("2 in fleet" for the 2 seeded vehicles).
-//   - Section headings: "Recent Flights", "Currency Risk", "Activity by Month",
-//     "Top Pilots (30d)", "Top Vehicles (30d)", "Locations" — always render.
+//   - Section headings: "Recent Flights", "Activity by Month",
+//     "Top Pilots (30d)", "Top Vehicles (30d)", "Locations" (always render).
+//     Currency was removed in 3.7.0, so there is no "Currency Risk" tile.
 //   - Recent Flights lists the 1 seeded Training flight (pilot "E2E Seedpilot").
 //   - No error banner on a normal seeded load.
 //
@@ -43,7 +44,7 @@ test.describe('dashboard journey', () => {
 
     // Section tiles render their headings (real content, not error/empty crash).
     await expect(page.getByRole('heading', { name: /Recent Flights/ })).toBeVisible()
-    await expect(page.getByRole('heading', { name: /Currency Risk/ })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /Currency Risk/ })).toHaveCount(0)
     await expect(page.getByRole('heading', { name: /Activity by Month/ })).toBeVisible()
     await expect(page.getByRole('heading', { name: /Top Pilots/ })).toBeVisible()
     await expect(page.getByRole('heading', { name: /Locations/ })).toBeVisible()

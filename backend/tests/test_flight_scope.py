@@ -328,3 +328,16 @@ def test_a_certification_with_no_type_does_not_break_the_review(client, db, scop
     section = next(s for s in report["sections"] if s["title"].startswith("Alex"))
 
     assert section["rows"][0]["issue_date"] == "—"
+
+
+# --- Reviewed flights only (requirements) ----------------------------------
+
+
+def test_requirement_filter_requires_reviewed(db, scoped):
+    from app.services.flight_scope import counted_flights_filter
+
+    reviewed = Flight(external_id="reviewed-1", date=RECENT, duration_seconds=60,
+                      pilot_id=scoped["unit_pilot"].id, review_status="reviewed")
+    db.add(reviewed)
+    db.commit()
+    assert [f.id for f in db.query(Flight).filter(counted_flights_filter()).all()] == [reviewed.id]

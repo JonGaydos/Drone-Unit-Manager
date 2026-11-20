@@ -19,8 +19,6 @@ export const handlers = [
     categories: ['expiring_certs'], email_override: null,
   })),
   http.get('/api/notifications/log', () => HttpResponse.json([])),
-  // The currency rule picker's fleet models.
-  http.get('/api/currency/models', () => HttpResponse.json([])),
   // Settings > Flight Requirements: definitions, fleet models, templates and settings.
   http.get('/api/requirements', () => HttpResponse.json([])),
   http.get('/api/requirements/models', () => HttpResponse.json([])),

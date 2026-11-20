@@ -83,7 +83,7 @@ export default async function globalSetup() {
   const certType = await createCertType(reqCtx, adminToken, {
     name: 'E2E Part 107', category: 'custom', has_expiration: true, renewal_period_months: 24,
   })
-  // One expired cert so the compliance/currency view has a red status item.
+  // One expired cert so the compliance view has a red status item.
   await createPilotCertification(reqCtx, adminToken, {
     pilot_id: pilot.id, certification_type_id: certType.id,
     status: 'complete', issue_date: '2020-01-01', expiration_date: '2022-01-01',

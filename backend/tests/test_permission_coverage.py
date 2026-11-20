@@ -309,17 +309,6 @@ EXPECTED_ROUTE_KEYS = {
     "PATCH /api/pilot-equipment-quals/{peq_id}": {CERTIFICATIONS_MANAGE},
     "DELETE /api/pilot-equipment-quals/{peq_id}": {CERTIFICATIONS_MANAGE},
     "GET /api/certifications/matrix": {CERTIFICATIONS_VIEW},
-    # currency
-    "GET /api/currency/models": {CERTIFICATIONS_MANAGE},
-    "GET /api/currency/rules": {CERTIFICATIONS_VIEW},
-    "GET /api/currency/status": {CERTIFICATIONS_VIEW},
-    "GET /api/currency/status/{pilot_id}": {CERTIFICATIONS_VIEW},
-    "POST /api/currency/rules": {CERTIFICATIONS_MANAGE},
-    "PATCH /api/currency/rules/{rule_id}": {CERTIFICATIONS_MANAGE},
-    "DELETE /api/currency/rules/{rule_id}": {CERTIFICATIONS_MANAGE},
-    "POST /api/currency/send-reminders": {CERTIFICATIONS_MANAGE},
-    "POST /api/currency/send-reminders/start": {CERTIFICATIONS_MANAGE},
-    "GET /api/currency/jobs/{job_id}": {CERTIFICATIONS_MANAGE},
     # flight requirements; recalculate also checks for an admin inside the handler
     "GET /api/requirements": {REQUIREMENTS_VIEW},
     "POST /api/requirements": {REQUIREMENTS_MANAGE},

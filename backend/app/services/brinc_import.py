@@ -166,7 +166,7 @@ def _find_or_create_pilot(db: Session, name: str) -> tuple[Optional[Pilot], bool
     A new name is created active, and marked in notes as having come from an
     import. There is no way to tell a genuinely new unit pilot from a vendor rep
     on site ("Pat (Vendor) Quinn") at import time, and active is the safer
-    default of the two: ``status == "active"`` gates currency tracking,
+    default of the two: ``status == "active"`` gates flight requirements,
     certification rollups, the dashboard's pilot figures, and the default view
     of the Pilot Hours and Pilot Activity reports, so creating them inactive
     would quietly drop a real pilot's flights out of all of it. A vendor rep in
@@ -178,8 +178,8 @@ def _find_or_create_pilot(db: Session, name: str) -> tuple[Optional[Pilot], bool
 
     A blank name goes to the shared "Unknown" pilot, which stays inactive: it
     is a placeholder for an unattributed flight rather than a person, and it can
-    never hold a certification or satisfy currency. The flight itself is real
-    airframe time and stays visible for review.
+    never hold a certification or meet a flight requirement. The flight itself
+    is real airframe time and stays visible for review.
     """
     value = (name or "").strip()
     if not value:

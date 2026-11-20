@@ -19,9 +19,7 @@ from app.models.user import User
 from app.routers.auth import require_permission
 from app.models.pilot import Pilot
 from app.models.flight import Flight
-from app.models.currency_rule import CurrencyRule
 from app.models.certification import PilotCertification, CertificationType
-from app.routers.currency import _pilot_currency
 from app.schemas.pilot import PilotCreate, PilotUpdate, PilotOut, PilotStats
 from app.responses import responses
 from app.services import permissions as permissions_service
@@ -105,7 +103,7 @@ def get_pilot_stats(pilot_id: int, db: DBSession, user: ViewUser, _flights: Flig
 
 @router.get("/{pilot_id}/needs-attention", responses=responses(401, 404))
 def get_pilot_needs_attention(pilot_id: int, db: DBSession, user: ViewUser, _certifications: CertificationsViewUser):
-    """Aggregate a pilot's lapsed currency and expired/expiring certifications.
+    """Aggregate a pilot's expired/expiring certifications and missed requirements.
 
     Single source of truth for the Pilot Detail "Needs Attention" card.
     """
@@ -114,17 +112,6 @@ def get_pilot_needs_attention(pilot_id: int, db: DBSession, user: ViewUser, _cer
         raise HTTPException(status_code=404, detail=PILOT_NOT_FOUND)
 
     items = []
-
-    # Currency: any active rule the pilot is not current on.
-    rules = db.query(CurrencyRule).filter(CurrencyRule.is_active.is_(True)).all()
-    rule_results = _pilot_currency(pilot, rules, db)
-    for r in rule_results:
-        if not r["is_current"]:
-            items.append({
-                "level": "red",
-                "category": "currency",
-                "text": f"Currency lapsed: {r['rule_name']}",
-            })
 
     # Certifications: expired or expiring within 30 days.
     certs = db.query(

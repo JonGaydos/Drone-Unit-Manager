@@ -1,7 +1,7 @@
 /**
  * Bento-style dashboard hub. Tiles of intentionally varying sizes arranged
  * on a 12-column grid, surfacing the most operationally relevant signals up
- * front: compliance score, currency risk, recent flights, trend deltas,
+ * front: compliance score, recent flights, trend deltas,
  * activity tempo, top performers.
  */
 import { useState, useEffect, useMemo } from 'react'
@@ -9,7 +9,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { api, getSection } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
-import { daysUntil, formatHours } from '@/lib/utils'
+import { formatHours } from '@/lib/utils'
 import {
   Clock, Users, Box, AlertTriangle, ClipboardCheck, ArrowRight, Wrench,
   TrendingUp, TrendingDown, Minus, Target, GraduationCap, ChevronRight,
@@ -113,8 +113,7 @@ function HeroTile({ user, compliance }) {
         <p className="text-sm text-muted-foreground mt-1">
           {compliance ? (
             <>
-              {compliance.pilots_current} of {compliance.total_pilots} pilots current
-              {compliance.currency_rules_active === 0 ? ' (no currency rules)' : ''}
+              {pluralise(compliance.total_pilots, 'active pilot')}
               {' · '}
               {compliance.expired_certifications > 0
                 ? pluralise(compliance.expired_certifications, 'expired cert')
@@ -185,64 +184,6 @@ function RecentFlightsTile({ flights }) {
           ))}
         </ul>
       )}
-    </Tile>
-  )
-}
-
-// Three states, in order: no rules configured at all, rules that nobody is
-// failing, and the list of who is lapsed or close to it.
-function currencyBody(compliance, lapsedAndSoon) {
-  if (compliance?.currency_rules_active === 0) {
-    return (
-      <div className="p-4 text-center text-xs text-muted-foreground">
-        No rules defined.{' '}
-        <Link to="/settings" className="text-primary hover:underline">Set up rules</Link>
-      </div>
-    )
-  }
-  if (lapsedAndSoon.length === 0) {
-    return <div className="p-4 text-center text-xs text-emerald-400">All pilots current</div>
-  }
-  return (
-    <ul className="divide-y divide-border">
-      {lapsedAndSoon.map(p => (
-        <li key={p.pilot_id}>
-          <Link to={`/pilots/${p.pilot_id}`} className="flex items-center gap-2 px-4 py-2 hover:bg-secondary/50 transition-colors">
-            <span className={`inline-flex w-14 justify-center px-1.5 py-0.5 rounded-full text-[10px] font-medium border ${
-              countdownTone(!p.is_current, p.daysUntilExpiry <= 14)
-            }`}>
-              {!p.is_current ? 'LAPSED' : `${p.daysUntilExpiry}d`}
-            </span>
-            <span className="text-xs text-foreground truncate flex-1">{p.pilot_name}</span>
-          </Link>
-        </li>
-      ))}
-    </ul>
-  )
-}
-
-function CurrencyRiskTile({ compliance }) {
-  const lapsedAndSoon = useMemo(() => {
-    if (!compliance?.pilot_currency_status) return []
-    return compliance.pilot_currency_status
-      .map(p => ({ ...p, daysUntilExpiry: daysUntil(p.earliest_expires_date) }))
-      .filter(p => !p.is_current || (p.daysUntilExpiry != null && p.daysUntilExpiry <= 30))
-      .sort((a, b) => {
-        if (a.is_current !== b.is_current) return a.is_current ? 1 : -1
-        return (a.daysUntilExpiry ?? 9999) - (b.daysUntilExpiry ?? 9999)
-      })
-      .slice(0, 5)
-  }, [compliance])
-
-  return (
-    <Tile className="lg:col-span-3 overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-        <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5"><Users className="w-4 h-4 text-primary" /> Currency Risk</h3>
-        {compliance && (
-          <span className="text-xs text-muted-foreground">{compliance.pilots_lapsed || 0} lapsed</span>
-        )}
-      </div>
-      {currencyBody(compliance, lapsedAndSoon)}
     </Tile>
   )
 }
@@ -486,8 +427,6 @@ export default function DashboardPage() {
       {/* Row 3: Recent flights (tall) + supporting tiles */}
       <RecentFlightsTile flights={recentFlights} />
 
-      <CurrencyRiskTile compliance={compliance} />
-
       <ListTile
         title="Needs Review"
         icon={ClipboardCheck}
@@ -532,9 +471,11 @@ export default function DashboardPage() {
         }}
       />
 
+      {/* Wide enough to close the row beside Recent Flights. */}
       <ListTile
         title="Cert Expirations"
         icon={AlertTriangle}
+        colSpan="lg:col-span-6"
         items={expiringCerts}
         emptyLabel="None expiring soon"
         link="/certifications"

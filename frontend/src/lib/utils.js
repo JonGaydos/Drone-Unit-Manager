@@ -318,11 +318,11 @@ export function inSequence(items, fn) {
 }
 
 /** The message after saving a flight. An edit that sent a reviewed flight back to
- *  the queue says so, since the flight stops counting toward currency. */
+ *  the queue says so, since the flight stops counting toward flight requirements. */
 export function flightSavedMessage(before, after) {
   const sentBack = before?.review_status === 'reviewed' && after?.review_status === 'needs_review'
   return sentBack
-    ? 'Flight updated. It is back for review and does not count toward currency until reviewed.'
+    ? 'Flight updated. It is back for review and does not count toward flight requirements until reviewed.'
     : 'Flight updated'
 }
 

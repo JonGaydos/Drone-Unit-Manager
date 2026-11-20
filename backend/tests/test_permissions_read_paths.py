@@ -216,7 +216,6 @@ def test_fleet_health_per_vehicle_overdue_follows_maintenance_view(client, db, a
 
 COMPLIANCE_LISTS = [
     (CERTIFICATIONS_VIEW, "expiring_certifications"),
-    (CERTIFICATIONS_VIEW, "pilot_currency_status"),
     (AUTHORITY_VIEW, "expired_authorities"),
     (AUTHORITY_VIEW, "expiring_authorities"),
 ]
@@ -224,12 +223,10 @@ COMPLIANCE_LISTS = [
 
 @pytest.mark.parametrize("view_key,field", COMPLIANCE_LISTS)
 def test_compliance_named_lists_follow_view_keys(client, db, admin_headers, pilot_headers, view_key, field):
-    from app.models.currency_rule import CurrencyRule
     pilot = _pilot(db)
     _cert(db, pilot.id)
     _authority(db, days=-5)
     _authority(db, days=10)
-    _add(db, CurrencyRule(name="Rule", required_hours=1, period_days=30, is_active=True))
 
     before = client.get(COMPLIANCE_URL, headers=pilot_headers).json()
     assert before[field]
@@ -241,13 +238,11 @@ def test_compliance_named_lists_follow_view_keys(client, db, admin_headers, pilo
 
 
 def test_unit_totals_stay_visible(client, db, admin_headers, pilot_headers):
-    from app.models.currency_rule import CurrencyRule
     pilot = _pilot(db)
     vehicle = _vehicle(db)
     _flight(db, pilot.id, vehicle.id, review_status="reviewed")
     _cert(db, pilot.id)
     _authority(db, days=-5)
-    _add(db, CurrencyRule(name="Rule", required_hours=50, period_days=30, is_active=True))
     urls = ["/api/dashboard/stats", "/api/dashboard/trends", COMPLIANCE_URL]
     before = {url: client.get(url, headers=pilot_headers).json() for url in urls}
 
@@ -261,7 +256,7 @@ def test_unit_totals_stay_visible(client, db, admin_headers, pilot_headers):
         assert resp.json() == before[url]
     after = client.get(COMPLIANCE_URL, headers=pilot_headers)
     assert after.status_code == 200
-    for field in ("total_pilots", "compliance_score", "pilots_lapsed", "pilots_current",
+    for field in ("total_pilots", "compliance_score",
                   "expired_certifications", "operating_authorities_tracked"):
         assert after.json()[field] == before[COMPLIANCE_URL][field]
 

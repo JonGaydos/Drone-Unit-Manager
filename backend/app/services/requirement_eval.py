@@ -18,9 +18,8 @@ from app.models.flight_requirement import FlightRequirement, FlightRequirementRe
 from app.models.pilot import Pilot
 from app.models.setting import Setting
 from app.models.vehicle import Vehicle
-from app.routers.currency import counted_flights_filter
 from app.services.fleet_models import fleet_models, normalize_model
-from app.services.flight_scope import counted_flight_clause
+from app.services.flight_scope import counted_flight_clause, counted_flights_filter
 from app.services.local_time import display_zone, local_flight_date
 from app.services.requirement_periods import Period
 from app.services.requirement_time import (

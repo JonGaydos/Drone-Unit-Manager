@@ -291,17 +291,6 @@ export const SHOTS = [
     },
     target: (page) => cardOf(page.getByRole('heading', { name: 'Needs Attention' })),
   },
-  formShot('pilots-pilot-currency.png', '/settings', {
-    open: 'New Rule',
-    fields: {
-      '#rule-name': 'Demo quarterly currency',
-      '#rule-desc': 'Demo rule for the manual',
-      '#rule-hours': '5',
-      '#rule-days': '90',
-      '#rule-flights': '3',
-    },
-    after: (dialog) => dialog.getByRole('button', { name: /^X10 \(\d+\)$/ }).click(),
-  }),
   {
     file: 'flight-requirements-requirements-page.png',
     route: '/requirements',

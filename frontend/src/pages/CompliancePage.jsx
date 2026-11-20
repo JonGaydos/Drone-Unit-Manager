@@ -1,36 +1,14 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { api } from '@/api/client'
 import { useToast } from '@/contexts/ToastContext'
 import {
   ShieldCheck, AlertTriangle, Clock, Wrench, FileText,
-  ClipboardCheck, Loader2, ChevronRight, RefreshCw, Download, Send, Users, Mail, Stamp,
+  ClipboardCheck, Loader2, ChevronRight, RefreshCw, Download, Stamp,
 } from 'lucide-react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
-import { Modal } from '@/components/ui/Modal'
-import { daysUntil } from '@/lib/utils'
 import RequirementsScore from '@/components/requirements/RequirementsScore'
-
-// How often a running reminder job is checked on.
-const REMINDER_POLL_MS = 1000
-
-/**
- * Start the currency reminders as a server job and wait for it, passing each
- * progress report ({done, total}) to onProgress. Sending one email after
- * another took longer than a request may on a large unit.
- * @returns {Promise<Object>} The job's counts.
- */
-async function runReminderJob(body, onProgress) {
-  const { job_id: jobId } = await api.post('/currency/send-reminders/start', body)
-  for (;;) {
-    const job = await api.get(`/currency/jobs/${jobId}`)
-    if (job.status === 'done') return job.result
-    if (job.status === 'failed') throw new Error(job.error || 'Sending reminders failed')
-    if (job.progress) onProgress(job.progress)
-    await new Promise(resolve => setTimeout(resolve, REMINDER_POLL_MS))
-  }
-}
 
 function getScoreTheme(score) {
   if (score > 80) return { color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30' }
@@ -95,7 +73,6 @@ const COUNT_ATTENTION_ALERTS = [
   { field: 'open_incidents', type: 'Open Incidents', severity: 'high', link: '/incidents' },
   { field: 'unreviewed_flights', type: 'Unreviewed Flights', severity: 'medium', link: '/flights' },
   { field: 'pending_flight_plans', type: 'Pending Flight Plans', severity: 'low', link: '/flight-plans' },
-  { field: 'pilots_lapsed', type: 'Pilots Out of Currency', severity: 'high', link: '#currency' },
 ]
 
 function expiringCertItem(c) {
@@ -127,15 +104,6 @@ function expiringAuthorityItem(a) {
   }
 }
 
-// Pilots expiring currency within 14 days (and currently still current).
-function expiringCurrencySoonCount(data) {
-  return (data.pilot_currency_status || []).filter(p => {
-    if (!p.is_current || !p.earliest_expires_date) return false
-    const days = daysUntil(p.earliest_expires_date)
-    return days !== null && days >= 0 && days <= 14
-  }).length
-}
-
 function buildAttentionItems(data) {
   const items = []
   if (data.expired_certifications > 0) {
@@ -158,192 +126,17 @@ function buildAttentionItems(data) {
       items.push({ type: alert.type, count: data[alert.field], severity: alert.severity, link: alert.link })
     }
   }
-  const expiringSoon = expiringCurrencySoonCount(data)
-  if (expiringSoon > 0) {
-    items.push({ type: 'Pilots Expiring Currency Soon', count: expiringSoon, severity: 'medium', link: '#currency' })
-  }
   const severityOrder = { grounding: -1, critical: 0, high: 1, medium: 2, low: 3 }
   items.sort((a, b) => (severityOrder[a.severity] ?? 9) - (severityOrder[b.severity] ?? 9))
   return items
-}
-
-function CurrencyStatusSection({ data, onSendReminders, sending, progress, canSendReminders }) {
-  const [filter, setFilter] = useState('lapsed-and-soon')  // 'all' | 'lapsed' | 'lapsed-and-soon'
-  const [expanded, setExpanded] = useState(false)
-  const navigate = useNavigate()
-
-  const enriched = useMemo(() => {
-    return (data.pilot_currency_status || []).map(p => {
-      let daysUntilExpiry = null
-      if (p.is_current && p.earliest_expires_date) {
-        daysUntilExpiry = daysUntil(p.earliest_expires_date)
-      }
-      return { ...p, daysUntilExpiry }
-    }).sort((a, b) => {
-      // Lapsed first; then by ascending days-until-expiry; then by name.
-      if (a.is_current !== b.is_current) return a.is_current ? 1 : -1
-      const ad = a.daysUntilExpiry ?? 9999
-      const bd = b.daysUntilExpiry ?? 9999
-      if (ad !== bd) return ad - bd
-      return (a.pilot_name || '').localeCompare(b.pilot_name || '')
-    })
-  }, [data.pilot_currency_status])
-
-  const filtered = useMemo(() => {
-    if (filter === 'all') return enriched
-    if (filter === 'lapsed') return enriched.filter(p => !p.is_current)
-    return enriched.filter(p => !p.is_current || (p.daysUntilExpiry !== null && p.daysUntilExpiry <= 30))
-  }, [enriched, filter])
-
-  const shown = expanded ? filtered : filtered.slice(0, 8)
-
-  if (data.currency_rules_active === 0) {
-    return (
-      <div id="currency" className="bg-card border border-border rounded-xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
-            <Users className="w-5 h-5 text-primary" /> Pilot Currency Status
-          </h2>
-        </div>
-        <div className="p-8 text-center text-muted-foreground">
-          <p className="font-medium text-foreground">No currency rules defined</p>
-          <p className="text-sm mt-1">Add rules in Settings → Currency Rules to start tracking pilot currency.</p>
-          <button
-            onClick={() => navigate('/settings')}
-            className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90"
-          >
-            Open Settings
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div id="currency" className="bg-card border border-border rounded-xl overflow-hidden">
-      <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-2 flex-wrap">
-        <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
-          <Users className="w-5 h-5 text-primary" /> Pilot Currency Status
-          <span className="text-sm font-normal text-muted-foreground ml-2">
-            {data.pilots_lapsed} lapsed / {data.total_pilots} total
-          </span>
-        </h2>
-        <div className="flex items-center gap-2">
-          <select
-            value={filter}
-            onChange={e => { setFilter(e.target.value); setExpanded(false) }}
-            className="px-2 py-1 text-xs bg-secondary border border-border rounded-lg text-foreground"
-          >
-            <option value="lapsed-and-soon">Lapsed + Expiring 30d</option>
-            <option value="lapsed">Lapsed only</option>
-            <option value="all">All pilots</option>
-          </select>
-          {canSendReminders && (
-            <button
-              onClick={onSendReminders}
-              disabled={sending || data.pilots_lapsed === 0}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-primary text-primary-foreground rounded-lg disabled:opacity-50 hover:opacity-90"
-              title={data.pilots_lapsed === 0 ? 'No lapsed pilots to remind' : 'Email a reminder to every lapsed pilot with an email on file'}
-            >
-              {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-              {sending && progress ? `Sending ${progress.done} of ${progress.total}` : 'Send Reminders'}
-            </button>
-          )}
-        </div>
-      </div>
-      {filtered.length === 0 ? (
-        <div className="p-8 text-center text-muted-foreground">
-          <ShieldCheck className="w-10 h-10 mx-auto mb-3 text-emerald-400" />
-          <p className="font-medium text-foreground">All pilots current</p>
-          <p className="text-sm mt-1">Nobody is lapsed or expiring within 30 days.</p>
-        </div>
-      ) : (
-        <>
-          <div className="divide-y divide-border">
-            {shown.map(p => {
-              let badgeClasses, badgeText
-              if (!p.is_current) {
-                badgeClasses = 'bg-red-500/15 text-red-400 border-red-500/30'
-                badgeText = 'LAPSED'
-              } else if (p.daysUntilExpiry !== null && p.daysUntilExpiry <= 14) {
-                badgeClasses = 'bg-amber-500/15 text-amber-400 border-amber-500/30'
-                badgeText = `${p.daysUntilExpiry}d`
-              } else if (p.daysUntilExpiry !== null && p.daysUntilExpiry <= 30) {
-                badgeClasses = 'bg-blue-500/15 text-blue-400 border-blue-500/30'
-                badgeText = `${p.daysUntilExpiry}d`
-              } else {
-                badgeClasses = 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                badgeText = 'CURRENT'
-              }
-              return (
-                <button
-                  key={p.pilot_id}
-                  onClick={() => navigate(`/pilots/${p.pilot_id}`)}
-                  className="w-full flex items-center gap-3 px-5 py-3 hover:bg-secondary/50 transition-colors text-left"
-                >
-                  <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-medium border w-20 ${badgeClasses}`}>
-                    {badgeText}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-foreground truncate">{p.pilot_name}</p>
-                    <p className="text-xs text-muted-foreground truncate flex gap-2 flex-wrap mt-0.5">
-                      {p.rules.map(r => {
-                        const ratioOk = r.actual_hours >= r.required_hours
-                        const colorCls = r.is_current ? 'text-emerald-400' : 'text-red-400'
-                        return (
-                          <span key={r.rule_id} className={colorCls}>
-                            {r.rule_name}: {r.actual_hours}/{r.required_hours} hours flown
-                            {r.required_flights ? `, ${r.actual_flights}/${r.required_flights} flights` : ''}
-                            {` in the last ${r.period_days} days`}
-                            {!ratioOk && r.is_current ? ' ✓' : ''}
-                          </span>
-                        )
-                      })}
-                    </p>
-                  </div>
-                  {p.email ? (
-                    <Mail className="w-3.5 h-3.5 text-muted-foreground" title={p.email} />
-                  ) : (
-                    <span className="text-xs text-amber-400" title="No email on file">no email</span>
-                  )}
-                  <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                </button>
-              )
-            })}
-          </div>
-          {filtered.length > shown.length && (
-            <button
-              onClick={() => setExpanded(true)}
-              className="w-full px-5 py-2 text-sm text-primary hover:bg-secondary/50 transition-colors border-t border-border"
-            >
-              Show all {filtered.length} pilots
-            </button>
-          )}
-        </>
-      )}
-    </div>
-  )
-}
-
-// A dash rather than a percentage when no currency rule exists at all: 100%
-// against no rule reads as a pass the unit has not actually earned.
-function currencyCompliance(data) {
-  if (data.currency_rules_active === 0) return '—'
-  // Falsy rather than <= 0, so a missing or unparsed count does not divide.
-  if (!data.total_pilots) return '100%'
-  return `${Math.round((data.pilots_current / data.total_pilots) * 100)}%`
 }
 
 export default function CompliancePage() {
   const { can } = useAuth()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [sending, setSending] = useState(false)
-  const [reminderProgress, setReminderProgress] = useState(null)
   const toast = useToast()
   const navigate = useNavigate()
-  // The reminder confirm dialog is open while this holds its intro message.
-  const [reminderIntro, setReminderIntro] = useState(null)
 
   const load = async () => {
     setLoading(true)
@@ -358,30 +151,6 @@ export default function CompliancePage() {
   }
 
   useEffect(() => { void load() }, [])
-
-  const handleSendReminders = () => {
-    if (!data || data.pilots_lapsed === 0) return
-    setReminderIntro('')
-  }
-
-  const sendReminders = async () => {
-    const intro = reminderIntro.trim()
-    setReminderIntro(null)
-    setSending(true)
-    try {
-      const res = await runReminderJob(intro ? { custom_message: intro } : {}, setReminderProgress)
-      const bits = [`${res.sent} sent`]
-      if (res.skipped_no_email) bits.push(`${res.skipped_no_email} skipped (no email)`)
-      if (res.skipped_current) bits.push(`${res.skipped_current} already current`)
-      if (res.failed) bits.push(`${res.failed} failed`)
-      toast.success(`Reminders: ${bits.join(', ')}`)
-    } catch (err) {
-      toast.error(err.message)
-    } finally {
-      setSending(false)
-      setReminderProgress(null)
-    }
-  }
 
   if (loading) {
     return (
@@ -511,21 +280,11 @@ export default function CompliancePage() {
             color={data.unreviewed_flights > 0 ? 'amber' : 'emerald'}
             onClick={() => navigate('/flights')}
           />
-          <StatCard
-            icon={Users}
-            label="Out of Currency"
-            value={data.pilots_lapsed || 0}
-            color={data.pilots_lapsed > 0 ? 'red' : 'emerald'}
-            onClick={() => {
-              const el = document.getElementById('currency')
-              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-            }}
-          />
         </div>
       </div>
 
       {/* Summary Bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-card border border-border rounded-xl p-4 text-center">
           <div className="text-sm text-muted-foreground">Active Pilots</div>
           <div className="text-2xl font-bold text-foreground mt-1">{data.total_pilots}</div>
@@ -546,25 +305,7 @@ export default function CompliancePage() {
             {data.total_vehicles > 0 ? Math.round(((data.total_vehicles - data.expired_registrations) / data.total_vehicles) * 100) : 100}%
           </div>
         </div>
-        <div className="bg-card border border-border rounded-xl p-4 text-center">
-          <div className="text-sm text-muted-foreground">Currency Compliance</div>
-          <div className="text-2xl font-bold text-foreground mt-1">
-            {currencyCompliance(data)}
-          </div>
-          {data.currency_rules_active === 0 && (
-            <div className="text-[10px] text-muted-foreground mt-0.5">no rules</div>
-          )}
-        </div>
       </div>
-
-      {/* Pilot Currency Status */}
-      <CurrencyStatusSection
-        data={data}
-        sending={sending}
-        onSendReminders={handleSendReminders}
-        progress={reminderProgress}
-        canSendReminders={can('certifications.manage')}
-      />
 
       {/* Attention Items Table */}
       <div className="bg-card border border-border rounded-xl overflow-hidden">
@@ -613,27 +354,6 @@ export default function CompliancePage() {
           </button>
         </div>
       )}
-
-      <Modal open={reminderIntro !== null} onClose={() => setReminderIntro(null)} title="Send currency reminders">
-        <p className="text-sm text-muted-foreground mb-4">
-          {`Send currency reminder emails to ${data.pilots_lapsed} lapsed pilot${data.pilots_lapsed === 1 ? '' : 's'}? Pilots without an email on file will be skipped.`}
-        </p>
-        <label htmlFor="reminder-intro" className="block text-sm font-medium text-foreground mb-1">Message to pilots (optional)</label>
-        <textarea id="reminder-intro" rows={3} maxLength={2000} value={reminderIntro ?? ''}
-          onChange={e => setReminderIntro(e.target.value)}
-          placeholder="Shown at the top of each reminder"
-          className="w-full mb-6 px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
-        <div className="flex gap-2 justify-end">
-          <button onClick={() => setReminderIntro(null)}
-            className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90">
-            Cancel
-          </button>
-          <button onClick={sendReminders}
-            className="px-4 py-2 rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:opacity-90">
-            Send
-          </button>
-        </div>
-      </Modal>
     </div>
   )
 }
