@@ -34,6 +34,7 @@ class RollingProgress:
     excused_until: date | None  # while excused: the last day of the excusal
     excluded_no_takeoff: int
     unreviewed_in_window: int
+    due_on: date  # the first day the pilot can be lapsed (not yet due before it)
 
 
 def rolling_window(day: date, length: int, unit: str) -> tuple[date, date]:
@@ -100,7 +101,7 @@ def _progress(req: FlightRequirement, window: Period, pilot_id: int, tally: Tall
         pilot_id=pilot_id, status=status, totals=tally.totals, met_by_model=met_by_model,
         lapse_date=_lapse_date(tally, req, window) if status == CURRENT else None,
         excused_until=excused_until, excluded_no_takeoff=tally.excluded_no_takeoff,
-        unreviewed_in_window=tally.unreviewed_in_period,
+        unreviewed_in_window=tally.unreviewed_in_period, due_on=due_on,
     )
 
 

@@ -5,6 +5,7 @@ from datetime import date, datetime, time, timezone
 
 import pytest
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm.exc import StaleDataError
 
 import app.services.scheduler as sched
 from app.models.audit_log import AuditLog
@@ -215,6 +216,45 @@ def test_sync_skips_inactive_and_periodic_requirements(db):
     assert sync_lapses(db, TODAY) == ([], [])
 
 
+def test_switching_a_requirement_off_closes_its_open_lapses(db):
+    _pilot(db)
+    req = _req(db)
+    sync_lapses(db, TODAY)
+    req.is_active = False
+    db.commit()
+    later = date(2026, 11, 21)
+    _opened, closed = sync_lapses(db, later)
+    assert len(closed) == 1
+    assert _lapses(db, req) == [(TODAY, later)]
+
+
+def test_changing_a_requirement_to_periodic_closes_its_open_lapses(db):
+    _pilot(db)
+    req = _req(db)
+    sync_lapses(db, TODAY)
+    req.period_type = "calendar_month"
+    req.recurring = True
+    db.commit()
+    later = date(2026, 11, 21)
+    sync_lapses(db, later)
+    assert _lapses(db, req) == [(TODAY, later)]
+
+
+def test_switching_back_on_opens_a_new_lapse_for_a_pilot_still_lapsed(db):
+    _pilot(db)
+    req = _req(db)
+    sync_lapses(db, TODAY)
+    req.is_active = False
+    db.commit()
+    sync_lapses(db, date(2026, 11, 21))
+    req.is_active = True
+    db.commit()
+    back_on = date(2026, 11, 25)
+    opened, _closed = sync_lapses(db, back_on)
+    assert len(opened) == 1
+    assert _lapses(db, req) == [(TODAY, date(2026, 11, 21)), (back_on, None)]
+
+
 def test_open_lapses_leave_out_inactive_requirements(db):
     pilot = _pilot(db)
     active = _req(db)
@@ -293,6 +333,17 @@ def test_a_racing_lapse_sync_does_not_fail_a_page_load(client, db, admin_headers
         assert client.get(f"{URL}/{path}", headers=admin_headers).status_code == 200, path
 
 
+def test_a_lapse_changed_meanwhile_does_not_fail_a_page_load(client, db, admin_headers, monkeypatch):
+    _pilot(db)
+    _req(db)
+
+    def stale(*_args):
+        raise StaleDataError("UPDATE statement on table 'flight_requirement_lapses' expected to update 1 row")
+
+    monkeypatch.setattr(requirements_router, "sync_lapses", stale)
+    assert client.get(f"{URL}/status", headers=admin_headers).status_code == 200
+
+
 def test_excusing_a_rolling_pilot_until_a_date(client, db, admin_headers, supervisor_headers, supervisor_user):
     pilot = _pilot(db)
     req = _req(db)
@@ -305,6 +356,14 @@ def test_excusing_a_rolling_pilot_until_a_date(client, db, admin_headers, superv
     row = client.get(f"{URL}/status", headers=admin_headers).json()["requirements"][0]
     assert row["rolling"]["pilots"][0]["status"] == "excused"
     assert row["rolling"]["pilots"][0]["excused_until"] == "2026-12-31"
+    assert _lapses(db, req) == [(TODAY, TODAY)]
+
+
+def test_a_rolling_excusal_closes_the_open_lapse_at_once(client, db, admin_headers):
+    pilot = _pilot(db)
+    req = _req(db)
+    sync_lapses(db, TODAY)
+    assert _excuse(client, admin_headers, req.id, pilot.id, excused_until="2026-12-31").status_code == 200
     assert _lapses(db, req) == [(TODAY, TODAY)]
 
 
@@ -360,6 +419,29 @@ PERIODIC = {"name": "Monthly 1 hr", "period_type": "calendar_month", "start_date
             "recurring": True, "target_minutes": 60}
 
 
+def test_an_open_lapse_cannot_be_deleted(client, db, admin_headers):
+    pilot = _pilot(db)
+    req = _req(db)
+    lapse = _lapse(db, req, pilot, date(2026, 11, 2))
+    response = client.delete(f"{URL}/{req.id}/lapses/{lapse.id}", headers=admin_headers)
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Only a closed lapse can be deleted"
+
+
+def test_a_rolling_requirement_with_lapses_cannot_be_deleted(client, db, admin_headers):
+    pilot = _pilot(db)
+    req = _req(db)
+    _lapse(db, req, pilot, date(2026, 6, 1), recovered_on=date(2026, 6, 20))
+    response = client.delete(f"{URL}/{req.id}", headers=admin_headers)
+    assert response.status_code == 409
+    assert response.json()["detail"] == "This requirement has saved results. Switch it off instead."
+
+
+def test_a_rolling_requirement_without_lapses_can_be_deleted(client, db, admin_headers):
+    req = _req(db)
+    assert client.delete(f"{URL}/{req.id}", headers=admin_headers).status_code == 200
+
+
 def test_patch_to_rolling_clears_recurring_and_end_date(client, admin_headers):
     req_id = client.post(URL, headers=admin_headers, json={**PERIODIC, "end_date": "2027-06-30"}).json()["id"]
     response = client.patch(f"{URL}/{req_id}", headers=admin_headers,
@@ -396,6 +478,61 @@ def test_no_reminder_far_from_the_lapse(db, smtp, sent):
     _flight(db, pilot, date(2026, 11, 10))  # ages out on December 10
     assert send_due_reminders(db, TODAY) == 0
     assert sent == []
+
+
+LATE_ADDED = datetime(2026, 11, 1, 18, 0, tzinfo=timezone.utc)  # November 1 locally; due December 1
+
+
+@pytest.mark.parametrize(("day", "count"), [(date(2026, 11, 23), 0), (date(2026, 11, 24), 1),
+                                            (date(2026, 12, 1), 0)])
+def test_a_pilot_not_yet_due_is_reminded_before_becoming_due(db, smtp, sent, day, count):
+    pilot = _pilot(db)
+    _req(db, pilots=[pilot], added_at=LATE_ADDED)
+    assert send_due_reminders(db, day) == count
+
+
+def test_the_not_yet_due_reminder_is_keyed_by_the_due_date(db, smtp, sent):
+    pilot = _pilot(db)
+    req = _req(db, pilots=[pilot], added_at=LATE_ADDED)
+    send_due_reminders(db, date(2026, 11, 28))
+    assert _notices(db, "reminder") == [(req.id, pilot.id, date(2026, 12, 1))]
+
+
+def test_rolling_status_of_a_pilot_not_yet_due_is_unchanged_by_reminders(client, db, admin_headers, smtp, sent):
+    pilot = _pilot(db)
+    _req(db, pilots=[pilot], added_at=LATE_ADDED)
+    send_due_reminders(db, TODAY)
+    row = client.get(f"{URL}/status", headers=admin_headers).json()["requirements"][0]
+    assert row["rolling"]["pilots"][0]["status"] == "not_yet_due"
+
+
+ROLLING_API = {"name": "Rolling 1 hr", "period_type": "rolling", "start_date": "2026-01-01",
+               "span_length": 30, "span_unit": "days", "target_minutes": 60}
+
+
+def test_creating_a_rolling_requirement_emails_its_pilots(client, db, admin_headers, smtp, sent):
+    pilot = _pilot(db)
+    response = client.post(URL, headers=admin_headers, json={**ROLLING_API, "pilot_ids": [pilot.id]})
+    assert response.status_code == 201, response.text
+    assert _to(sent) == ["pilot@example.test"]
+    assert "Last 30 days" in sent[0]["html"]
+    assert _notices(db, "assigned") == [(response.json()["id"], pilot.id, date(2026, 1, 1))]
+
+
+def test_switching_a_rolling_requirement_on_emails_its_pilots(client, db, admin_headers, smtp, sent):
+    _pilot(db)
+    req_id = client.post(URL, headers=admin_headers, json={**ROLLING_API, "is_active": False}).json()["id"]
+    assert sent == []
+    client.patch(f"{URL}/{req_id}", headers=admin_headers, json={"is_active": True})
+    assert _to(sent) == ["pilot@example.test"]
+
+
+def test_adding_a_pilot_to_a_rolling_requirement_emails_only_the_new_one(client, db, admin_headers, smtp, sent):
+    first = _pilot(db, email="one@example.test")
+    second = _pilot(db, email="two@example.test")
+    req_id = client.post(URL, headers=admin_headers, json={**ROLLING_API, "pilot_ids": [first.id]}).json()["id"]
+    client.patch(f"{URL}/{req_id}", headers=admin_headers, json={"pilot_ids": [first.id, second.id]})
+    assert _to(sent) == ["one@example.test", "two@example.test"]
 
 
 def test_lapse_email_goes_to_the_pilot_and_managers_once(db, smtp, sent, managers):

@@ -33,7 +33,7 @@ from app.services.requirement_eval import (
     ALL_KEY, EXCUSED, MET, MISSED, PilotProgress, evaluate_period, unit_eval_settings,
 )
 from app.services.requirement_periods import Period, period_containing, periods_between
-from app.services.requirement_rolling import CURRENT, RollingProgress, evaluate_rolling
+from app.services.requirement_rolling import CURRENT, NOT_YET_DUE, RollingProgress, evaluate_rolling
 
 logger = logging.getLogger(__name__)
 
@@ -186,7 +186,10 @@ def _greeting(pilot: Pilot) -> str:
 
 
 def _assignment_period(req: FlightRequirement, fiscal_start_month: int, today: date) -> Period | None:
-    """The period running today, else the next one to start."""
+    """The period running today, else the next one to start. A rolling
+    requirement has no periods; its notice is keyed by its start date."""
+    if req.period_type == "rolling":
+        return req.start_date, req.start_date
     spec = req.to_period_spec(fiscal_start_month)
     upcoming = periods_between(spec, today, today + timedelta(days=ASSIGNMENT_LOOKAHEAD_DAYS))
     return upcoming[0] if upcoming else None
@@ -246,25 +249,34 @@ def _remind(db: Session, req: FlightRequirement, period: Period, today: date, gr
     return sent
 
 
+def _projected_lapse(progress: RollingProgress) -> date | None:
+    """When a pilot would lapse with no new flights: a current pilot's lapse
+    date, or the day a pilot not yet due becomes due."""
+    if progress.status == CURRENT:
+        return progress.lapse_date
+    return progress.due_on if progress.status == NOT_YET_DUE else None
+
+
 def _rolling_due(req: FlightRequirement, progress: RollingProgress, today: date) -> bool:
-    return (progress.status == CURRENT and progress.lapse_date is not None
-            and 0 < (progress.lapse_date - today).days <= req.reminder_days)
+    lapse = _projected_lapse(progress)
+    return lapse is not None and 0 < (lapse - today).days <= req.reminder_days
 
 
 def _remind_rolling(db: Session, req: FlightRequirement, today: date, org_name: str) -> int:
-    """Remind each current pilot whose projected lapse is ``reminder_days`` or
-    fewer days away, once per projected lapse date."""
+    """Remind each current or not yet due pilot whose projected lapse is
+    ``reminder_days`` or fewer days away, once per projected lapse date."""
     due = [p for p in evaluate_rolling(db, req, today).values() if _rolling_due(req, p, today)]
     pilots = _pilots(db, (p.pilot_id for p in due))
     sent = 0
     for progress in due:
         pilot = pilots[progress.pilot_id]
-        body = (_paragraph(f"You lapse on {_day(progress.lapse_date)} unless you fly again before then.")
+        lapse = _projected_lapse(progress)
+        body = (_paragraph(f"You lapse on {_day(lapse)} unless you fly enough before then.")
                 + _requirement_html(req, None)
                 + _paragraph("Your reviewed flights in the window:")
                 + _table(("Aircraft", "Time", "Flights"), _totals_rows(progress)))
         html = _page(org_name, "Flight Requirement Reminder", _greeting(pilot), body)
-        sent += _send_once(db, (req.id, pilot.id, progress.lapse_date), REMINDER, pilot.email,
+        sent += _send_once(db, (req.id, pilot.id, lapse), REMINDER, pilot.email,
                            f"Flight requirement reminder: {req.name}", html)
     return sent
 

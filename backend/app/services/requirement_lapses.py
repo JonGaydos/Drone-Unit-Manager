@@ -3,11 +3,14 @@
 ``sync_lapses`` compares each assigned pilot's standing today with the open
 lapse rows: a lapsed pilot with none gets one dated today, and an open lapse
 closes today once the pilot is current, excused or not yet due, or no longer
-assigned. Later reviews never edit a lapse; an admin may delete one.
+assigned, or once its requirement is switched off or no longer rolling (a
+pilot still lapsed when it is switched back on gets a new lapse). Later
+reviews never edit a lapse; an admin may delete a closed one.
 """
 
 from datetime import date
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.models.flight_requirement import FlightRequirement, FlightRequirementLapse
@@ -67,15 +70,32 @@ def _sync_requirement(db: Session, req: FlightRequirement, today: date,
         closed.append(row)
 
 
-def sync_lapses(db: Session, today: date) -> tuple[list[FlightRequirementLapse], list[FlightRequirementLapse]]:
-    """Open and close lapses on every active rolling requirement for ``today``.
-    Returns (opened, closed). Safe to run again: a second run changes nothing.
-    Commits, and records the run as one audit entry when it changes anything."""
+def _close_untracked(db: Session, today: date, closed: list[FlightRequirementLapse]) -> None:
+    """Close the open lapses of requirements switched off or no longer rolling."""
+    rows = (db.query(FlightRequirementLapse)
+            .join(FlightRequirement, FlightRequirement.id == FlightRequirementLapse.requirement_id)
+            .filter(FlightRequirementLapse.recovered_on.is_(None),
+                    or_(FlightRequirement.is_active.is_(False), FlightRequirement.period_type != ROLLING))
+            .order_by(FlightRequirementLapse.id).all())
+    for row in rows:
+        row.recovered_on = today
+        closed.append(row)
+
+
+def sync_lapses(db: Session, today: date, req: FlightRequirement | None = None,
+                ) -> tuple[list[FlightRequirementLapse], list[FlightRequirementLapse]]:
+    """Open and close lapses on every active rolling requirement for
+    ``today``, and close those of requirements no longer tracked; with ``req``,
+    on that requirement only. Returns (opened, closed). Safe to run again: a
+    second run changes nothing. Commits, and records the run as one audit
+    entry when it changes anything."""
     opened: list[FlightRequirementLapse] = []
     closed: list[FlightRequirementLapse] = []
     with machine_run(db, "sync_lapses", "flight_requirement_lapse", details="Recorded rolling requirement lapses"):
-        for req in rolling_requirements(db):
-            _sync_requirement(db, req, today, opened, closed)
+        if req is None:
+            _close_untracked(db, today, closed)
+        for tracked in rolling_requirements(db) if req is None else [req]:
+            _sync_requirement(db, tracked, today, opened, closed)
     db.commit()
     return opened, closed
 

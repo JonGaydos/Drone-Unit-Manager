@@ -472,8 +472,10 @@ def test_open_misses_reads_only_open_missed_rows(db):
         assert open_misses(db) == {}
     finally:
         event.remove(engine, "before_cursor_execute", record)
-    [statement] = statements  # one query, filtered in the database
-    assert "EXISTS" in statement
+    # One query for the misses, filtered in the database, and one for the open lapses.
+    [misses, lapses] = statements
+    assert "EXISTS" in misses
+    assert "flight_requirement_lapses" in lapses
 
 
 def test_miss_clears_when_excused(db):

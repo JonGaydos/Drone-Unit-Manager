@@ -15,6 +15,7 @@ from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.exc import StaleDataError
 
 from app.deps import DBSession
 from app.models.flight_requirement import (
@@ -77,11 +78,13 @@ def _close_safely(db: Session, today: date) -> None:
         db.rollback()
 
 
-def _sync_safely(db: Session, today: date) -> None:
-    """Record rolling lapses; a racing writer is handled as in ``_close_safely``."""
+def _sync_safely(db: Session, today: date, req: FlightRequirement | None = None) -> None:
+    """Record rolling lapses. A racing writer is handled as in
+    ``_close_safely``; one that changed or deleted a lapse meanwhile
+    (StaleDataError) likewise."""
     try:
-        sync_lapses(db, today)
-    except IntegrityError:
+        sync_lapses(db, today, req)
+    except (IntegrityError, StaleDataError):
         db.rollback()
 
 
@@ -261,9 +264,10 @@ def update_requirement(requirement_id: int, data: RequirementUpdate, db: DBSessi
 
 @router.delete("/{requirement_id}", responses=responses(401, 403, 404, 409))
 def delete_requirement(requirement_id: int, db: DBSession, user: ManageUser):
-    """Delete a requirement with no saved results; one with history is switched off instead."""
+    """Delete a requirement with no saved results or lapses; one with history is switched off instead."""
     req = _get_requirement(db, requirement_id)
-    if saved_through(db, req.id) is not None:
+    has_lapses = db.query(FlightRequirementLapse.id).filter_by(requirement_id=req.id).first() is not None
+    if has_lapses or saved_through(db, req.id) is not None:
         raise HTTPException(409, "This requirement has saved results. Switch it off instead.")
     db.delete(req)
     db.commit()
@@ -525,22 +529,29 @@ def excuse_pilot(requirement_id: int, data: ExcuseIn, db: DBSession, user: Excus
     req = _get_requirement(db, requirement_id)
     if db.get(Pilot, data.pilot_id) is None:
         raise HTTPException(404, "Pilot not found")
-    if req.period_type == ROLLING:
-        _excuse_rolling(db, req, data, user)
-    else:
+    if req.period_type != ROLLING:
         _excuse_period(db, req, data, user)
+        db.commit()
+        return {"ok": True}
+    _excuse_rolling(db, req, data, user)
     db.commit()
+    if req.is_active:
+        # An open lapse closes, or one opens again, at once.
+        _sync_safely(db, local_today(db), req)
     return {"ok": True}
 
 
-@router.delete("/{requirement_id}/lapses/{lapse_id}", responses=responses(401, 403, 404))
+@router.delete("/{requirement_id}/lapses/{lapse_id}", responses=responses(401, 403, 404, 422))
 def delete_lapse(requirement_id: int, lapse_id: int, db: DBSession, user: ManageUser):
-    """Delete a lapse record caused by data later corrected. Admins only; the delete is audited."""
+    """Delete a closed lapse record caused by data later corrected. Admins
+    only; the delete is audited. An open lapse would only open again."""
     if user.role != "admin":
         raise HTTPException(403, "Only an admin can delete a lapse")
     lapse = db.get(FlightRequirementLapse, lapse_id)
     if lapse is None or lapse.requirement_id != requirement_id:
         raise HTTPException(404, "Lapse not found")
+    if lapse.recovered_on is None:
+        raise HTTPException(422, "Only a closed lapse can be deleted")
     db.delete(lapse)
     db.commit()
     return {"ok": True}
