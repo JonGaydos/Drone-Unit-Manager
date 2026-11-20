@@ -13,6 +13,30 @@ Behind a reverse proxy or tunnel, set `TRUSTED_PROXIES` before upgrading (see
 "Reverse Proxy" in the README). The login lock counts failures per address, so
 without it every visitor shares the proxy's address.
 
+## 3.6.0: what changes on upgrade
+
+- **Migrations run on start.** 0016 moves each currency rule's vehicle model
+  into a list; 0017 adds the Flight Requirements tables. Existing data is
+  unchanged. To go back to 3.5.0, see `ROLLBACK.md` (requirement data is lost).
+- **Currency rules pick models from the fleet.** The free-text model field is
+  replaced by toggles, a rule can cover several models, and supervisors can
+  manage currency rules (the Certifications and currency: Manage permission).
+- **Currency API change for scripts.** Rules use `vehicle_models` (a list) in
+  place of `vehicle_model`, in requests, responses and the currency status. A
+  write that still sends `vehicle_model` is refused with 422.
+- **Flight Requirements.** Fixed-period flight assignments with their own
+  Settings tab, dashboard tile, pilot card, score, calendar deadlines, CSV and
+  report. New permission rows: Flight requirements View (all roles), Manage and
+  Excuse (supervisors by default). The compliance score is unchanged.
+- **Requirement emails are off by default.** Turn on Send requirement emails in
+  Settings, Flight Requirements, once SMTP is set up. The digest section is
+  opt-in for each user.
+- **A new daily job** closes requirement periods and, if emails are on, sends
+  reminders and miss emails.
+- **API tokens.** The Pilots area now also covers `/api/requirements`.
+- **Before the upgrade:** rename any vehicle whose model is misspelled, so the
+  model toggles show one entry per real model.
+
 ## 3.5.0: what changes on upgrade
 
 - **Migrations run on start.** 0014 rebuilds every table so ids are never
