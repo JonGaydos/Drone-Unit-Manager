@@ -6,15 +6,15 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
   'September', 'October', 'November', 'December']
 
 /**
- * Grace days and the fiscal year start month. `settings` is null until it
- * loads; `onSave({ grace_days, fiscal_year_start_month })` resolves to
+ * Grace days, the fiscal year start month and the requirement emails switch.
+ * `settings` is null until it loads; `onSave({ grace_days, fiscal_year_start_month, emails_enabled })` resolves to
  * whether it saved; it reports its own errors.
  */
 export default function RequirementSettingsCard({ settings, onSave }) {
   const [form, setForm] = useState(null)
   const [saving, setSaving] = useState(false)
   // Show the loaded values until the user edits one.
-  const shown = form || settings || { grace_days: '', fiscal_year_start_month: 10 }
+  const shown = form || settings || { grace_days: '', fiscal_year_start_month: 10, emails_enabled: false }
 
   const save = async (e) => {
     e.preventDefault()
@@ -23,6 +23,7 @@ export default function RequirementSettingsCard({ settings, onSave }) {
       const saved = await onSave({
         grace_days: Number.parseInt(shown.grace_days, 10),
         fiscal_year_start_month: Number(shown.fiscal_year_start_month),
+        emails_enabled: shown.emails_enabled === true,
       })
       if (saved) setForm(null)
     } finally {
@@ -48,6 +49,17 @@ export default function RequirementSettingsCard({ settings, onSave }) {
             onChange={e => setForm({ ...shown, fiscal_year_start_month: e.target.value })} className={INPUT}>
             {MONTHS.map((name, i) => <option key={name} value={i + 1}>{name}</option>)}
           </select>
+        </div>
+      </div>
+      <div className="mt-4 flex items-start gap-2">
+        <input id="req-emails" type="checkbox" disabled={!settings} checked={shown.emails_enabled === true}
+          onChange={e => setForm({ ...shown, emails_enabled: e.target.checked })} className="mt-1" />
+        <div>
+          <label htmlFor="req-emails" className="block text-sm font-medium text-foreground">Send requirement emails</label>
+          <p className="text-sm text-muted-foreground">
+            Emails each pilot an assignment, a reminder before the period ends and a missed requirement, and tells
+            managers about misses. Off until you turn it on. SMTP must be set up in Settings.
+          </p>
         </div>
       </div>
       <button type="submit" disabled={!settings || saving}

@@ -25,7 +25,7 @@ export const handlers = [
   http.get('/api/requirements', () => HttpResponse.json([])),
   http.get('/api/requirements/models', () => HttpResponse.json([])),
   http.get('/api/requirements/templates', () => HttpResponse.json([])),
-  http.get('/api/requirements/settings', () => HttpResponse.json({ grace_days: 14, fiscal_year_start_month: 10 })),
+  http.get('/api/requirements/settings', () => HttpResponse.json({ grace_days: 14, fiscal_year_start_month: 10, emails_enabled: false })),
   // Requirement progress on the dashboard, Compliance, Pilots and pilot pages.
   http.get('/api/requirements/status', () => HttpResponse.json({ score: null, requirements: [] })),
   http.get('/api/requirements/flags', () => HttpResponse.json({})),

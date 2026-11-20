@@ -39,10 +39,18 @@ def unit(db, monkeypatch):
 
 
 @pytest.fixture
-def smtp(db):
+def smtp_only(db):
+    """Mail is set up but the requirement emails switch is left at its default (off)."""
     for key, value in (("smtp_enabled", "true"), ("smtp_host", "mail.example.test"),
                        ("smtp_from_address", "unit@example.test")):
         db.add(Setting(key=key, value=value))
+    db.commit()
+
+
+@pytest.fixture
+def smtp(db, smtp_only):
+    """Mail is set up and the requirement emails switch is on."""
+    db.add(Setting(key="requirements_emails_enabled", value="true"))
     db.commit()
 
 
@@ -278,6 +286,39 @@ def test_no_smtp_sends_and_records_nothing(db, sent, managers):
     assert _notices(db) == []
 
 
+def test_emails_are_off_by_default(db, smtp_only, sent, managers):
+    pilot = _pilot(db)
+    req = _req(db)
+    rows = close_due_periods(db, TODAY)
+    assert notify_assigned(db, req, [pilot.id]) == 0
+    assert send_due_reminders(db, REMINDER_DAY) == 0
+    assert notify_missed(db, rows) == 0
+    assert sent == []
+    assert _notices(db) == []
+
+
+def test_emails_off_when_the_switch_is_false(db, smtp, sent):
+    db.query(Setting).filter(Setting.key == "requirements_emails_enabled").update({"value": "false"})
+    db.commit()
+    pilot = _pilot(db)
+    assert notify_assigned(db, _req(db), [pilot.id]) == 0
+    assert sent == []
+    assert _notices(db) == []
+
+
+def test_emails_go_out_once_the_switch_is_on(db, smtp_only, sent, managers):
+    pilot = _pilot(db)
+    req = _req(db)
+    rows = close_due_periods(db, TODAY)
+    assert notify_assigned(db, req, [pilot.id]) == 0
+    db.add(Setting(key="requirements_emails_enabled", value="true"))
+    db.commit()
+    assert notify_assigned(db, req, [pilot.id]) == 1
+    assert send_due_reminders(db, REMINDER_DAY) == 1
+    assert notify_missed(db, rows) > 0
+    assert {n.kind for n in _notices(db)} == {"assigned", "reminder", "missed"}
+
+
 def test_smtp_switched_off_sends_nothing(db, smtp, sent):
     db.query(Setting).filter(Setting.key == "smtp_enabled").update({"value": "false"})
     db.commit()
@@ -418,7 +459,13 @@ def _section(db, user):
     return (build_digest(db, user) or {}).get("requirements")
 
 
+def _opt_in(db, user, *others):
+    db.add(NotificationPreference(user_id=user.id, categories=json.dumps([*others, "requirements"])))
+    db.commit()
+
+
 def test_digest_lists_periods_ending_soon_with_pilots_not_met(db, viewer_user, digest_day):
+    _opt_in(db, viewer_user)
     _pilot(db)
     _req(db)
     digest_day(date(2026, 11, 25))
@@ -428,6 +475,7 @@ def test_digest_lists_periods_ending_soon_with_pilots_not_met(db, viewer_user, d
 
 
 def test_digest_leaves_out_a_period_far_from_its_end(db, viewer_user, digest_day):
+    _opt_in(db, viewer_user)
     _pilot(db)
     _req(db, start_date=date(2026, 11, 1))
     digest_day(date(2026, 11, 10))
@@ -435,6 +483,7 @@ def test_digest_leaves_out_a_period_far_from_its_end(db, viewer_user, digest_day
 
 
 def test_digest_lists_periods_pending_review_with_unreviewed_flights(db, viewer_user, digest_day):
+    _opt_in(db, viewer_user)
     pilot = _pilot(db)
     _req(db)
     _flight(db, pilot, date(2026, 10, 20), review_status="needs_review")
@@ -445,6 +494,7 @@ def test_digest_lists_periods_pending_review_with_unreviewed_flights(db, viewer_
 
 
 def test_digest_leaves_out_a_pending_period_every_pilot_met(db, viewer_user, digest_day):
+    _opt_in(db, viewer_user)
     pilot = _pilot(db)
     _req(db)
     _flight(db, pilot, date(2026, 10, 20))
@@ -453,6 +503,7 @@ def test_digest_leaves_out_a_pending_period_every_pilot_met(db, viewer_user, dig
 
 
 def test_digest_lists_misses_saved_in_the_last_week(db, viewer_user, digest_day):
+    _opt_in(db, viewer_user)
     pilot = _pilot(db, "Recent")
     old = _pilot(db, "Older")
     req = _req(db, pilots=[pilot, old])
@@ -478,6 +529,7 @@ def test_digest_leaves_the_section_out_when_the_category_is_off(db, viewer_user,
 
 
 def test_digest_leaves_the_section_out_without_view(db, viewer_user, digest_day):
+    _opt_in(db, viewer_user)
     _pilot(db)
     _req(db)
     db.add(RolePermission(role="viewer", permission_key="requirements.view", value="no"))
@@ -486,11 +538,59 @@ def test_digest_leaves_the_section_out_without_view(db, viewer_user, digest_day)
     assert _section(db, viewer_user) is None
 
 
-def test_new_preferences_include_the_requirements_category(db, viewer_user):
+def test_new_preferences_leave_out_the_requirements_category(db, viewer_user):
     pref = NotificationPreference(user_id=viewer_user.id)
     db.add(pref)
     db.commit()
-    assert "requirements" in json.loads(pref.categories)
+    assert "requirements" not in json.loads(pref.categories)
+
+
+def test_digest_omits_the_section_without_a_preference(db, viewer_user, digest_day):
+    _pilot(db)
+    _req(db)
+    digest_day(date(2026, 11, 25))
+    assert _section(db, viewer_user) is None
+
+
+def test_digest_omits_the_section_for_an_empty_category_list(db, viewer_user, digest_day):
+    _pilot(db)
+    _req(db)
+    db.add(NotificationPreference(user_id=viewer_user.id, categories="[]"))
+    db.commit()
+    digest_day(date(2026, 11, 25))
+    assert _section(db, viewer_user) is None
+
+
+def test_digest_omits_the_section_for_the_old_default_list(db, viewer_user, digest_day):
+    _pilot(db)
+    _req(db)
+    old_default = ["pending_approvals", "needs_review", "expiring_certs", "expiring_registrations",
+                   "overdue_maintenance", "assigned_missions", "overdue_checkouts", "recent_incidents"]
+    db.add(NotificationPreference(user_id=viewer_user.id, categories=json.dumps(old_default)))
+    db.commit()
+    digest_day(date(2026, 11, 25))
+    assert _section(db, viewer_user) is None
+
+
+def test_digest_includes_the_section_once_opted_in(db, viewer_user, digest_day):
+    _pilot(db)
+    _req(db)
+    _opt_in(db, viewer_user, "needs_review")
+    digest_day(date(2026, 11, 25))
+    assert _section(db, viewer_user)
+
+
+def test_requirements_stays_a_valid_category_to_save(client, viewer_headers):
+    response = client.put("/api/notifications/preferences", headers=viewer_headers,
+                          json={"categories": ["requirements"]})
+    assert response.status_code == 200, response.text
+    saved = client.get("/api/notifications/preferences", headers=viewer_headers).json()
+    assert saved["categories"] == ["requirements"]
+
+
+def test_preferences_default_leaves_out_requirements(client, viewer_headers):
+    saved = client.get("/api/notifications/preferences", headers=viewer_headers).json()
+    assert "requirements" not in saved["categories"]
 
 
 def test_digest_renders_the_section_escaped(viewer_user):

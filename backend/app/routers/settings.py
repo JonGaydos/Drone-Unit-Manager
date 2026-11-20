@@ -38,7 +38,7 @@ ALLOWED_SETTING_KEYS = {
     "backup_enabled", "backup_retention", "backup_hour",
     "idle_lock_minutes",
     "sidebar_show_groups",
-    "requirements_grace_days", "fiscal_year_start_month",
+    "requirements_grace_days", "fiscal_year_start_month", "requirements_emails_enabled",
 }
 
 # Minutes of no input before a browser locks. One value for every role.
@@ -77,7 +77,7 @@ PUBLIC_KEYS = {
     "drone_location_places",
     "org_default_lat", "org_default_lon", "org_location_name",
     "idle_lock_minutes",
-    "requirements_grace_days", "fiscal_year_start_month",
+    "requirements_grace_days", "fiscal_year_start_month", "requirements_emails_enabled",
 }
 
 
@@ -98,7 +98,7 @@ def _check_idle_lock(key: str, value: str) -> None:
 
 
 # Settings stored as the text "true" or "false".
-BOOLEAN_KEYS = {"sidebar_show_groups"}
+BOOLEAN_KEYS = {"sidebar_show_groups", "requirements_emails_enabled"}
 
 
 # Each GO limit against its CAUTION limit: (go key, caution key, label, go must be

@@ -36,7 +36,7 @@ from app.services.requirement_eval import (
     EXCUSED, MET, MISSED, PilotProgress, UnitEvalSettings, assigned_pilots, evaluate_period,
     unit_eval_settings,
 )
-from app.services.requirement_notify import notify_assigned
+from app.services.requirement_notify import EMAILS_ENABLED_KEY, emails_enabled, notify_assigned
 from app.services.requirement_periods import Period, period_containing
 from app.services.requirement_results import (
     close_due_periods, closed_watermark, open_misses, pending_periods, recalculate_period, requirements_score,
@@ -458,19 +458,22 @@ def requirement_models(db: DBSession, user: ManageUser):
 @router.get("/settings", response_model=RequirementSettings, responses=responses(401, 403))
 def get_requirement_settings(db: DBSession, user: ViewUser):
     settings = unit_eval_settings(db)
-    return {"grace_days": settings.grace_days, "fiscal_year_start_month": settings.fiscal_start_month}
+    return {"grace_days": settings.grace_days, "fiscal_year_start_month": settings.fiscal_start_month,
+            "emails_enabled": emails_enabled(db)}
 
 
 @router.put("/settings", response_model=RequirementSettings, responses=responses(401, 403))
 def put_requirement_settings(data: RequirementSettings, db: DBSession, user: ManageUser):
     """Save the settings, after saving the periods due under the old ones."""
     _close_safely(db, local_today(db))
-    for key, value in ((GRACE_KEY, data.grace_days), (FISCAL_KEY, data.fiscal_year_start_month)):
+    values = ((GRACE_KEY, str(data.grace_days)), (FISCAL_KEY, str(data.fiscal_year_start_month)),
+              (EMAILS_ENABLED_KEY, "true" if data.emails_enabled else "false"))
+    for key, value in values:
         row = db.get(Setting, key)
         if row is None:
-            db.add(Setting(key=key, value=str(value)))
+            db.add(Setting(key=key, value=value))
         else:
-            row.value = str(value)
+            row.value = value
     db.commit()
     return data
 

@@ -17,6 +17,7 @@ from app.models.notification_preference import NotificationPreference
 from app.models.notification_log import NotificationLog
 from app.responses import responses
 from app.services.audit import log_action
+from app.services.email_digest import OPT_IN_CATEGORIES
 from app.services.permissions import can
 
 logger = logging.getLogger(__name__)
@@ -26,8 +27,10 @@ router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 DEFAULT_CATEGORIES = [
     "pending_approvals", "needs_review", "expiring_certs",
     "expiring_registrations", "overdue_maintenance",
-    "assigned_missions", "overdue_checkouts", "recent_incidents", "requirements",
+    "assigned_missions", "overdue_checkouts", "recent_incidents",
 ]
+# Opt-in categories are valid to save but are not in the default list.
+VALID_CATEGORIES = [*DEFAULT_CATEGORIES, *sorted(OPT_IN_CATEGORIES)]
 
 # Single-line address with no whitespace/control chars (header-injection guard).
 # Not RFC-complete; just rejects newlines/control chars and obvious non-emails.
@@ -98,7 +101,7 @@ def _check_pref_values(data: NotificationPrefUpdate) -> None:
     if data.send_day is not None and not 0 <= data.send_day <= 6:
         raise HTTPException(400, "send_day must be 0 (Monday) to 6 (Sunday)")
     if data.categories is not None:
-        unknown = [c for c in data.categories if c not in DEFAULT_CATEGORIES]
+        unknown = [c for c in data.categories if c not in VALID_CATEGORIES]
         if unknown:
             raise HTTPException(400, f"Unknown digest categories: {', '.join(map(str, unknown))}")
 

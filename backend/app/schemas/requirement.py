@@ -288,6 +288,7 @@ class FlagOut(BaseModel):
 class RequirementSettings(BaseModel):
     grace_days: GraceDays
     fiscal_year_start_month: Month
+    emails_enabled: bool = False
 
 
 class TemplateIn(BaseModel):

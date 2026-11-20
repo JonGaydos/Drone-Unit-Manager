@@ -305,7 +305,8 @@ def test_preferences_null_clears_or_resets(client, db, supervisor_headers):
     assert got["send_day"] is None
     assert got["send_time"] == "07:00"
     assert got["email_override"] is None
-    assert len(got["categories"]) == 9
+    assert len(got["categories"]) == 8
+    assert "requirements" not in got["categories"]
     assert got["frequency"] == "weekly"
 
 
@@ -500,3 +501,17 @@ def test_requirement_settings_accept_in_range(client, db, admin_headers, key, va
     resp = client.put(BULK_URL, headers=admin_headers, json=[{"key": key, "value": value}])
     assert resp.status_code == 200, resp.text
     assert _stored(db, key) == value
+
+
+@pytest.mark.parametrize("value", ["yes", "", "1"])
+def test_requirements_emails_enabled_refuses_non_boolean(client, db, admin_headers, value):
+    resp = client.put("/api/settings", headers=admin_headers, json={"key": "requirements_emails_enabled", "value": value})
+    assert resp.status_code == 422, resp.text
+    assert _stored(db, "requirements_emails_enabled") is None
+
+
+@pytest.mark.parametrize("value", ["true", "false"])
+def test_requirements_emails_enabled_accepts_boolean(client, db, admin_headers, value):
+    resp = client.put(BULK_URL, headers=admin_headers, json=[{"key": "requirements_emails_enabled", "value": value}])
+    assert resp.status_code == 200, resp.text
+    assert _stored(db, "requirements_emails_enabled") == value

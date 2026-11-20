@@ -12,7 +12,7 @@ import DigestPreferencesCard from './DigestPreferencesCard'
 
 const ALL = [
   'pending_approvals', 'needs_review', 'expiring_certs', 'expiring_registrations',
-  'overdue_maintenance', 'assigned_missions', 'overdue_checkouts', 'recent_incidents', 'requirements',
+  'overdue_maintenance', 'assigned_missions', 'overdue_checkouts', 'recent_incidents',
 ]
 
 const PREFS = {
@@ -52,6 +52,22 @@ describe('DigestPreferencesCard', () => {
     expect(within(log).getByText('Sent')).toBeInTheDocument()
   })
 
+  it('starts Flight Requirements unchecked for a user who never chose it', async () => {
+    mockMount()
+    renderWithProviders(<DigestPreferencesCard />, { role: 'pilot' })
+
+    expect(await screen.findByLabelText('Expiring Certifications')).toBeChecked()
+    expect(screen.getByLabelText('Flight Requirements')).not.toBeChecked()
+  })
+
+  it('unchecks Flight Requirements when the preferences hold no category list', async () => {
+    mockMount({ prefs: { ...PREFS, categories: null } })
+    renderWithProviders(<DigestPreferencesCard />, { role: 'pilot' })
+
+    expect(await screen.findByLabelText('Expiring Certifications')).toBeChecked()
+    expect(screen.getByLabelText('Flight Requirements')).not.toBeChecked()
+  })
+
   it('saves frequency, day, time and categories', async () => {
     let sent = null
     mockMount()
@@ -76,9 +92,9 @@ describe('DigestPreferencesCard', () => {
     expect(await screen.findByText('Digest preferences saved')).toBeInTheDocument()
   })
 
-  it('offers the Flight Requirements section and keeps it on when saving', async () => {
+  it('keeps Flight Requirements on when saving once the user opted in', async () => {
     let sent = null
-    mockMount()
+    mockMount({ prefs: { ...PREFS, categories: [...ALL, 'requirements'] } })
     server.use(http.put('/api/notifications/preferences', async ({ request }) => {
       sent = await request.json()
       return HttpResponse.json({ ok: true })
@@ -88,6 +104,20 @@ describe('DigestPreferencesCard', () => {
     await user.click(screen.getByRole('button', { name: 'Save Preferences' }))
     await waitFor(() => expect(sent).not.toBeNull())
     expect(sent.categories).toContain('requirements')
+  })
+
+  it('saves Flight Requirements once the user checks it', async () => {
+    let sent = null
+    mockMount()
+    server.use(http.put('/api/notifications/preferences', async ({ request }) => {
+      sent = await request.json()
+      return HttpResponse.json({ ok: true })
+    }))
+    const { user } = renderWithProviders(<DigestPreferencesCard />, { role: 'pilot' })
+    await user.click(await screen.findByLabelText('Flight Requirements'))
+    await user.click(screen.getByRole('button', { name: 'Save Preferences' }))
+    await waitFor(() => expect(sent).not.toBeNull())
+    expect(sent.categories).toEqual([...ALL, 'requirements'])
   })
 
   it('offers the email override only to roles that may redirect the digest', async () => {

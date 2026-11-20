@@ -1311,18 +1311,19 @@
       {
         "id": "requirement-emails",
         "title": "Requirement emails",
-        "summary": "The app emails pilots when a requirement is assigned, before a period ends and when a period is missed. It sends email only when email sending is set up.",
+        "summary": "The app can email pilots when a requirement is assigned, before a period ends and when a period is missed. These emails are off until a supervisor or admin turns them on, and they need email sending to be set up.",
         "steps": [
           "An admin sets up email once. See \"Setting up email sending\".",
+          "In **Settings**, open the **Flight Requirements** tab. In **Requirement Settings**, tick **Send requirement emails** and choose **Save settings**. It is off until you do. Nothing is sent for earlier assignments or misses when you turn it on.",
           "Set **Reminder (days before the period ends)** on each requirement. The default is 7. Use 0 to switch the reminder off.",
-          "In **Email Digest** on the **General** tab, tick **Flight Requirements** under **Include** to get a section in your digest."
+          "To get the digest section, open **Email Digest** on the **General** tab and tick **Flight Requirements** under **Include**. It is not ticked until you choose it."
         ],
         "notes": [
           "**Assignment**: each assigned pilot is emailed when a requirement is created or activated, or when they are added to it.",
           "**Reminder**: pilots who have not met the target are emailed the set number of days before the period ends. Each pilot gets one reminder for each period.",
           "**Miss**: when a period is saved as **Missed**, the pilot and every user who can manage requirements are emailed.",
-          "**Digest**: the **Flight Requirements** section holds progress, periods pending review and recent misses.",
-          "A person without an email address on file is skipped. Nothing is sent when email is not set up."
+          "**Digest**: the **Flight Requirements** section holds progress, periods pending review and recent misses. It does not depend on the **Send requirement emails** switch, and only people who ticked it receive it.",
+          "A person without an email address on file is skipped. Nothing is sent when **Send requirement emails** is off or email is not set up."
         ]
       },
       {
@@ -2529,7 +2530,7 @@
           "Tick **Send me email digests**.",
           "Pick the **Frequency**: Daily, Weekly or Off. For Weekly, pick the weekday under **Send on**.",
           "Pick the time under **Send at**.",
-          "Under **Include**, tick what you want listed: **Pending Flight Plan Approvals**, **Flights Needing Review**, **Expiring Certifications**, **Expiring FAA Registrations**, **Overdue Maintenance**, **Assigned Missions**, **Overdue Equipment Checkouts**, **Recent Incidents** and **Flight Requirements**.",
+          "Under **Include**, tick what you want listed: **Pending Flight Plan Approvals**, **Flights Needing Review**, **Expiring Certifications**, **Expiring FAA Registrations**, **Overdue Maintenance**, **Assigned Missions**, **Overdue Equipment Checkouts**, **Recent Incidents** and **Flight Requirements**. **Flight Requirements** is not ticked until you tick it; the others start ticked.",
           "Choose **Save Preferences**.",
           "Choose **Preview** to see what the next digest would hold, or **Send Test** to email one now."
         ],
