@@ -451,6 +451,7 @@ Setup: an admin, a supervisor, a pilot and a viewer login. Fleet with at least t
 ### 39.5 Pilots joining, leaving, excused (review focus 4)
 - [ ] A pilot added after the period started is excused automatically; Un-excuse removes it
 - [ ] An inactive pilot drops out of open periods and keeps saved history
+- [ ] A requirement's only selected pilot set inactive for some months, then active again, gets no results for the months away
 - [ ] Excuse with a reason shows the reason in the card; Un-excuse brings the status back
 - [ ] A requirement switched off for a month is saved as excused with Requirement was switched off
 
@@ -480,5 +481,5 @@ Setup: an admin, a supervisor, a pilot and a viewer login. Fleet with at least t
 - [ ] Every topic in the Flight Requirements section opens, and its picture matches the screen
 
 ### 39.11 Backup and restore
-- [ ] Export a backup with a requirement, a template, an excusal and a saved result; delete them; restore; all are back
+- [ ] Export a backup with a clock-window requirement, a clock-window template, an excusal and a saved result; delete them; restore; all are back with the same window times
 - [ ] Restore a backup taken before this feature; the app starts and the Flight Requirements tab is empty

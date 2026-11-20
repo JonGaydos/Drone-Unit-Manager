@@ -95,11 +95,18 @@ def saved_through(db: Session, requirement_id: int) -> date | None:
     ).scalar()
 
 
+def closed_watermark(db: Session, req: FlightRequirement) -> date | None:
+    """The end of the requirement's latest closed period: the later of its last
+    saved period and the last one closed with no pilots to save. Periods up to
+    it are closed."""
+    return max((day for day in (saved_through(db, req.id), req.closed_through) if day is not None), default=None)
+
+
 def pending_periods(db: Session, req: FlightRequirement, settings: UnitEvalSettings,
                     today: date) -> list[Period]:
-    """Periods that have ended and are still inside their grace time, not saved, oldest first."""
+    """Periods that have ended and are still inside their grace time, not closed, oldest first."""
     first = today - timedelta(days=settings.grace_days)
-    watermark = saved_through(db, req.id)
+    watermark = closed_watermark(db, req)
     spec = req.to_period_spec(settings.fiscal_start_month)
     return [period for period in periods_between(spec, first, today - timedelta(days=1))
             if first <= period[1] < today and (watermark is None or period[0] > watermark)]
@@ -108,12 +115,12 @@ def pending_periods(db: Session, req: FlightRequirement, settings: UnitEvalSetti
 def _due_periods(db: Session, req: FlightRequirement, settings: UnitEvalSettings,
                  today: date) -> list[Period]:
     """The requirement's periods ready to close: due, and starting after the
-    last saved period ended. Closed periods never reopen, so a pilot added or
+    last closed period ended. Closed periods never reopen, so a pilot added or
     reactivated later, or a changed period layout, does not save past dates."""
     ends = _closing_ends(req, settings, today)
     if ends is None:
         return []
-    watermark = saved_through(db, req.id)
+    watermark = closed_watermark(db, req)
     spec = req.to_period_spec(settings.fiscal_start_month)
     return [period for period in periods_between(spec, *ends)
             if period[1] <= ends[1] and (watermark is None or period[0] > watermark)]
@@ -148,7 +155,13 @@ def _save_rows(db: Session, req: FlightRequirement, period: Period, progress: di
 def _close_requirement(db: Session, req: FlightRequirement, settings: UnitEvalSettings,
                        today: date, now: datetime) -> list[FlightRequirementResult]:
     periods = _due_periods(db, req, settings, today)
-    if not periods or not assigned_pilots(db, req):
+    if not periods:
+        return []
+    # Closed even with no pilots to save, so a pilot added or reactivated later
+    # is not saved into periods that ended before.
+    last_end = max(period[1] for period in periods)
+    req.closed_through = last_end if req.closed_through is None else max(req.closed_through, last_end)
+    if not assigned_pilots(db, req):
         return []
     overrides = {
         (row.pilot_id, row.period_start): row for row in db.query(FlightRequirementResult).filter(
@@ -168,7 +181,7 @@ def _close_requirement(db: Session, req: FlightRequirement, settings: UnitEvalSe
 def close_due_periods(db: Session, today: date) -> list[FlightRequirementResult]:
     """Save each assigned pilot's result for every period, of every requirement,
     whose grace time ended before ``today`` and which starts after the
-    requirement's last saved period ended. A period is saved for every assigned
+    requirement's last closed period ended (see ``closed_watermark``). A period is saved for every assigned
     pilot at once and is closed from then on; an open-period excusal row is
     filled in. An inactive requirement saves only periods that ended by the day
     it was switched off. One switched back on saves the periods that ended

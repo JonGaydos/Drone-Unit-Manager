@@ -33,6 +33,8 @@ class FlightRequirement(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     # When is_active last changed on a saved row; NULL if never switched.
     active_changed_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime, nullable=True)
+    # The end of the latest period closed, with or without pilots to save; NULL if none.
+    closed_through: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)

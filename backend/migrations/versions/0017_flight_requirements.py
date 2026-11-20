@@ -44,6 +44,7 @@ def upgrade() -> None:
     sa.Column('reminder_days', sa.Integer(), nullable=False),
     sa.Column('is_active', sa.Boolean(), nullable=False),
     sa.Column('active_changed_at', sa.DateTime(), nullable=True),
+    sa.Column('closed_through', sa.Date(), nullable=True),
     sa.Column('created_at', sa.DateTime(), nullable=False),
     sa.Column('updated_at', sa.DateTime(), nullable=False),
     sa.Column('created_by_id', sa.Integer(), nullable=True),

@@ -7,12 +7,15 @@ import pytest
 from app.models.audit_log import AuditLog
 from app.models.flight import Flight
 from app.models.flight_requirement import (
-    FlightRequirement, FlightRequirementModel, FlightRequirementPurpose, FlightRequirementResult,
+    FlightRequirement, FlightRequirementModel, FlightRequirementPilot, FlightRequirementPurpose,
+    FlightRequirementResult,
 )
 from app.models.pilot import Pilot
 from app.models.setting import Setting
+from app.services.requirement_eval import unit_eval_settings
 from app.services.requirement_results import (
-    close_due_periods, open_misses, recalculate_period, requirements_score, target_snapshot,
+    close_due_periods, closed_watermark, open_misses, pending_periods, recalculate_period, requirements_score,
+    target_snapshot,
 )
 
 LONG_AGO = datetime(2025, 1, 1, tzinfo=timezone.utc)
@@ -153,6 +156,52 @@ def test_changed_period_layout_never_saves_dates_already_closed(db):
     saved = close_due_periods(db, date(2026, 12, 2))
     assert [(row.period_start, row.period_end) for row in saved] == [(date(2026, 11, 4), date(2026, 11, 17))]
     assert close_due_periods(db, date(2026, 12, 2)) == []
+
+
+def test_sole_selected_pilot_reactivated_gets_no_rows_for_months_away(db):
+    pilot = _pilot(db)
+    req = _req(db, start_date=date(2026, 1, 1))
+    db.add(FlightRequirementPilot(requirement_id=req.id, pilot_id=pilot.id, added_at=LONG_AGO))
+    db.commit()
+    _flight(db, pilot, day=date(2026, 1, 10), minutes=60)
+    assert [row.status for row in close_due_periods(db, date(2026, 2, 16))] == ["met"]
+    pilot.status = "inactive"
+    db.commit()
+    for month in (3, 4, 5, 6):  # the daily run while the pilot is away
+        assert close_due_periods(db, date(2026, month, 16)) == []
+    assert req.closed_through == date(2026, 5, 31)
+    pilot.status = "active"
+    db.commit()
+    assert close_due_periods(db, date(2026, 7, 2)) == []
+    assert [row.period_start for row in _rows(db, req)] == [date(2026, 1, 1)]
+    assert open_misses(db) == {}
+
+
+def test_month_with_no_active_pilots_is_not_back_filled_for_a_new_pilot(db):
+    req = _req(db, start_date=SEP[0])
+    assert close_due_periods(db, date(2026, 10, 15)) == []
+    assert req.closed_through == SEP[1]
+    _pilot(db)
+    saved = close_due_periods(db, DAY_AFTER_GRACE)
+    assert [row.period_start for row in saved] == [OCT[0]]
+
+
+def test_watermark_is_the_later_of_closed_through_and_the_last_saved_period(db):
+    pilot = _pilot(db)
+    req = _req(db, start_date=AUG[0])
+    assert closed_watermark(db, req) is None
+    _saved(db, req, pilot, AUG, "met")
+    assert closed_watermark(db, req) == AUG[1]
+    req.closed_through = SEP[1]
+    db.commit()
+    assert closed_watermark(db, req) == SEP[1]
+    _saved(db, req, pilot, OCT, "met")
+    assert closed_watermark(db, req) == OCT[1]
+
+
+def test_pending_periods_skip_periods_closed_with_no_pilots(db):
+    req = _req(db, start_date=SEP[0], closed_through=OCT[1])
+    assert pending_periods(db, req, unit_eval_settings(db), date(2026, 11, 5)) == []
 
 
 def _switch(db, req, active, at):

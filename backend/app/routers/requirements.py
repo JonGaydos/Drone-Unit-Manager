@@ -39,8 +39,8 @@ from app.services.requirement_eval import (
 from app.services.requirement_notify import notify_assigned
 from app.services.requirement_periods import Period, period_containing
 from app.services.requirement_results import (
-    OFF_REASON, close_due_periods, open_misses, pending_periods, recalculate_period, requirements_score,
-    saved_through,
+    OFF_REASON, close_due_periods, closed_watermark, open_misses, pending_periods, recalculate_period,
+    requirements_score, saved_through,
 )
 
 logger = logging.getLogger(__name__)
@@ -389,7 +389,7 @@ def _excuse_saved(row: FlightRequirementResult, data: ExcuseIn, user: User) -> N
 
 def _excuse_open(db: Session, req: FlightRequirement, data: ExcuseIn, user: User) -> None:
     """Store an excusal for a period not saved yet; saving the period fills it in."""
-    watermark = saved_through(db, req.id)
+    watermark = closed_watermark(db, req)
     if watermark is not None and data.period_start <= watermark:
         raise HTTPException(422, "That period is closed and has no saved result for this pilot")
     period = _current(req, unit_eval_settings(db).fiscal_start_month, data.period_start)

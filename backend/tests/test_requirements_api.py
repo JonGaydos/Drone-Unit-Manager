@@ -434,6 +434,14 @@ def test_excuse_refuses_a_closed_period_with_no_saved_row(client, db, admin_head
     assert response.status_code == 422, response.text
 
 
+def test_excuse_refuses_a_period_closed_with_no_pilots(client, db, admin_headers):
+    req_id = _create(client, admin_headers)["id"]
+    client.get(f"{URL}/status", headers=admin_headers)  # closes September and October with no pilots
+    late = _pilot(db)
+    response = _excuse(client, admin_headers, req_id, late.id, SEP)
+    assert response.status_code == 422, response.text
+
+
 def test_excuse_refuses_to_un_excuse_a_month_the_requirement_was_off(client, db, admin_headers):
     pilot = _pilot(db)
     req_id = _create(client, admin_headers, start_date=SEP)["id"]
