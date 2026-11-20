@@ -4,8 +4,9 @@ A rolling requirement has no periods: on any day its window is the last N days,
 weeks or months ending that day. Flights count by the same rules, scope,
 purposes and time-of-day windows as periodic requirements (see
 ``requirement_eval``). A pilot is current when every required model meets every
-set target inside today's window, else lapsed; not yet due until one full
-window has passed since tracking began or they joined; or excused until a date.
+set target inside today's window, else lapsed, or not yet due (instead of
+lapsed) until one full window has passed since tracking began or they joined;
+or excused until a date.
 """
 
 from dataclasses import dataclass
@@ -75,11 +76,13 @@ def _lapse_date(tally: Tally, req: FlightRequirement, window: Period) -> date | 
 
 
 def _status(met: bool, excused_until: date | None, due_on: date, today: date) -> str:
+    """Excused wins; a pilot meeting every target is current; not yet due only
+    replaces what would otherwise be lapsed."""
     if excused_until is not None:
         return EXCUSED
-    if today < due_on:
-        return NOT_YET_DUE
-    return CURRENT if met else LAPSED
+    if met:
+        return CURRENT
+    return NOT_YET_DUE if today < due_on else LAPSED
 
 
 def _excused_until(db: Session, req: FlightRequirement, today: date) -> dict[int, date]:
@@ -105,7 +108,8 @@ def evaluate_rolling(db: Session, req: FlightRequirement, today: date) -> dict[i
     """Standing of every assigned pilot on rolling ``req`` on ``today``, keyed by pilot id.
 
     Totals are over ``rolling_window(today, ...)``, keyed as in
-    ``evaluate_period``. A pilot is not yet due until one window after the
+    ``evaluate_period``. A pilot short of a target is not yet due, rather
+    than lapsed, until one window after the
     later of the requirement's start and their join date; a join date counts
     only when it is after the requirement's start and creation, as for
     periodic automatic excusals. Each separately and all active models take the

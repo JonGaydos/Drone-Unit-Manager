@@ -212,10 +212,10 @@ def test_each_separately_lapses_on_the_earliest_model(db, chicago):
 
 def test_time_of_day_lapse_uses_counted_minutes(db, chicago):
     pilot = _pilot(db)
-    req = _req(db, time_mode="clock", window_start_time=time(18, 0), window_end_time=time(21, 30))
-    # 03:00 UTC is 21:00 in Chicago the evening before: 30 of the 60 minutes are inside the window.
-    _flight(db, pilot, date(2026, 11, 10), 60, takeoff=time(3, 0))
-    _flight(db, pilot, date(2026, 11, 5), 60, takeoff=time(3, 0))
+    req = _req(db, time_mode="clock", window_start_time=time(8, 0), window_end_time=time(9, 30))
+    # 15:00 UTC is 09:00 the same day in Chicago: 30 of the 60 minutes are inside the window.
+    _flight(db, pilot, date(2026, 11, 10), 60)
+    _flight(db, pilot, date(2026, 11, 5), 60)
     progress = _progress(db, req, pilot)
     assert progress.totals == {"*": {"minutes": 60, "flights": 2}}
     assert progress.lapse_date == date(2026, 12, 5)
@@ -248,6 +248,15 @@ def test_unreviewed_and_non_unit_flights_do_not_count(db, chicago):
 
 
 # Not yet due
+
+
+def test_new_pilot_meeting_the_target_is_current(db, chicago):
+    pilot = _pilot(db, created_at=NOV_1_NOON)
+    req = _req(db)
+    _flight(db, pilot, date(2026, 11, 10), 60)
+    progress = _progress(db, req, pilot)
+    assert progress.status == "current"
+    assert progress.lapse_date == date(2026, 12, 10)
 
 
 def test_new_pilot_is_not_yet_due_for_one_window(db, chicago):
@@ -304,6 +313,13 @@ def test_excusal_wins_over_current(db, chicago):
     assert _progress(db, req, pilot).status == "excused"
 
 
+def test_excusal_wins_over_not_yet_due(db, chicago):
+    pilot = _pilot(db, created_at=NOV_1_NOON)
+    req = _req(db)
+    _excuse(db, req, pilot, TODAY)
+    assert _progress(db, req, pilot).status == "excused"
+
+
 # Validation
 
 
@@ -317,6 +333,26 @@ def test_rolling_definition_is_accepted_and_clears_other_period_fields():
     assert (data.window_start_day, data.every_months, data.end_date) == (None, None, None)
 
 
+@pytest.mark.parametrize("length, unit", [(730, "days"), (104, "weeks"), (24, "months")])
+def test_rolling_window_may_be_two_years(length, unit):
+    data = RequirementIn.model_validate({**ROLLING, "span_length": length, "span_unit": unit})
+    assert (data.span_length, data.span_unit) == (length, unit)
+
+
+@pytest.mark.parametrize("length, unit", [(731, "days"), (105, "weeks"), (25, "months")])
+def test_rolling_window_over_two_years_is_refused(length, unit):
+    with pytest.raises(ValidationError):
+        RequirementIn.model_validate({**ROLLING, "span_length": length, "span_unit": unit})
+
+
+@pytest.mark.parametrize("length, unit", [(365, "days"), (365, "weeks"), (365, "months")])
+def test_span_keeps_its_limit(length, unit):
+    span = {**ROLLING, "period_type": "span", "recurring": True, "span_length": length, "span_unit": unit}
+    assert RequirementIn.model_validate(span).span_length == 365
+    with pytest.raises(ValidationError):
+        RequirementIn.model_validate({**span, "span_length": 366})
+
+
 def test_rolling_recurring_defaults_to_false():
     data = RequirementIn.model_validate({k: v for k, v in ROLLING.items() if k != "recurring"})
     assert data.recurring is False
@@ -326,7 +362,9 @@ def test_rolling_recurring_defaults_to_false():
     {"span_length": None},
     {"span_unit": None},
     {"span_length": 0},
-    {"span_length": 366},
+    {"span_length": 731},
+    {"span_length": 105, "span_unit": "weeks"},
+    {"span_length": 25, "span_unit": "months"},
     {"span_unit": "years"},
     {"recurring": True},
     {"end_date": "2026-12-31"},

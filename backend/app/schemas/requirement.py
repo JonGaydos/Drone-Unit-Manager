@@ -19,7 +19,7 @@ Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max
 ModelName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 PurposeName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
 WindowDay = Annotated[int, Field(ge=1, le=31)]
-SpanLength = Annotated[int, Field(ge=1, le=365)]
+SpanLength = Annotated[int, Field(ge=1, le=730)]  # 365 at most except for rolling; see SPAN_MAX
 EveryMonths = Annotated[int, Field(ge=1, le=24)]
 TargetMinutes = Annotated[int, Field(ge=1, le=100000)]
 TargetFlights = Annotated[int, Field(ge=1, le=10000)]
@@ -35,6 +35,9 @@ PERIOD_FIELDS = {
     "rolling": ("span_length", "span_unit"),
     "every_n_months": ("every_months",),
 }
+# Longest span: two years for a rolling window, else 365 of any unit.
+SPAN_MAX = 365
+ROLLING_SPAN_MAX = {"days": 730, "weeks": 104, "months": 24}
 ALL_PERIOD_FIELDS = ("window_start_day", "window_end_day", "span_length", "span_unit", "every_months")
 # Fewest models each mode takes. A single model is stored as combined, since the
 # Combined or Each separately choice only appears with two or more.
@@ -101,6 +104,8 @@ class RequirementDefinition(BaseModel):
                 setattr(self, name, None)
         if self.period_type == "rolling":
             self._check_rolling()
+        elif self.span_length is not None and self.span_length > SPAN_MAX:
+            raise ValueError(f"A span is at most {SPAN_MAX} {self.span_unit}")
 
     def _check_rolling(self) -> None:
         """A rolling window is always continuous. Recurring defaults to true for
@@ -108,6 +113,9 @@ class RequirementDefinition(BaseModel):
         if self.recurring and "recurring" in self.model_fields_set:
             raise ValueError("A rolling requirement is not recurring")
         self.recurring = False
+        longest = ROLLING_SPAN_MAX[self.span_unit]
+        if self.span_length > longest:
+            raise ValueError(f"A rolling window is at most {longest} {self.span_unit}")
 
     def _check_time_window(self) -> None:
         if self.time_mode != "clock":
