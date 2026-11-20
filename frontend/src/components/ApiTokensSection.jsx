@@ -13,7 +13,7 @@ import { Plus, Copy, KeyRound, Loader2 } from 'lucide-react'
 const SCOPE_LABELS = {
   fleet: 'Fleet',
   flights: 'Flights',
-  pilots: 'Pilots & Certifications',
+  pilots: 'Pilots, Certifications & Requirements',
   maintenance: 'Maintenance',
   operations: 'Operations',
   documents: 'Documents & Media',

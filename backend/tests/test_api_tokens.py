@@ -48,6 +48,25 @@ def test_fleet_token_reads_fleet_options(client, admin_headers):
     assert client.get("/api/fleet/options", headers=_bearer(token)).status_code == 200
 
 
+def test_pilots_token_reads_flight_requirements(client, admin_headers):
+    token = _create_token(client, admin_headers, scopes=["pilots"])["token"]
+
+    assert client.get("/api/requirements", headers=_bearer(token)).status_code == 200
+    assert client.get("/api/requirements/status", headers=_bearer(token)).status_code == 200
+
+
+def test_all_areas_token_reads_flight_requirements(client, admin_headers):
+    token = _create_token(client, admin_headers)["token"]
+
+    assert client.get("/api/requirements", headers=_bearer(token)).status_code == 200
+
+
+def test_flights_token_cannot_read_flight_requirements(client, admin_headers):
+    token = _create_token(client, admin_headers, scopes=["flights"])["token"]
+
+    assert client.get("/api/requirements", headers=_bearer(token)).status_code == 403
+
+
 def test_token_blocked_outside_scope(client, admin_headers):
     token = _create_token(client, admin_headers, scopes=["flights"])["token"]
 
