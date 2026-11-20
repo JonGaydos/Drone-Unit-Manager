@@ -303,20 +303,20 @@ export const SHOTS = [
     after: (dialog) => dialog.getByRole('button', { name: /^X10 \(\d+\)$/ }).click(),
   }),
   {
-    file: 'flight-requirements-requirements-tab.png',
-    route: '/settings',
+    file: 'flight-requirements-requirements-page.png',
+    route: '/requirements',
     prepare: async (page) => {
-      await page.getByRole('button', { name: 'Flight Requirements', exact: true }).click()
-      await page.getByText('Demo monthly flight time', { exact: true }).waitFor()
+      const list = page.locator('section[aria-labelledby="req-list-title"]')
+      await list.getByText('Demo monthly flight time', { exact: true }).waitFor()
+      await list.getByText(/days? left/).first().waitFor()
     },
     target: (page) => page.locator('section[aria-labelledby="req-list-title"]'),
   },
   {
     file: 'flight-requirements-creating-a-requirement.png',
-    route: '/settings',
+    route: '/requirements',
     prepare: async (page) => {
       await page.setViewportSize({ width: 1280, height: 1900 }) // tall enough to show the whole form
-      await page.getByRole('button', { name: 'Flight Requirements', exact: true }).click()
       await page.getByRole('button', { name: 'New requirement', exact: true }).click()
       const form = page.getByRole('form', { name: 'New requirement' })
       await form.getByLabel('Name', { exact: true }).fill('Demo quarterly model time')

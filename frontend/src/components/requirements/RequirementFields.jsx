@@ -65,6 +65,34 @@ export function BasicsFields({ form, update }) {
   )
 }
 
+// Track and thumb of the Active switch, on and off; the panel turns to a
+// warning tone when off, so a requirement switched off by mistake stands out.
+const ACTIVE_TONES = {
+  on: { panel: 'border-border bg-muted/30', track: 'bg-primary', thumb: 'translate-x-4 bg-primary-foreground', hint: 'text-muted-foreground' },
+  off: { panel: 'border-warning bg-warning-bg', track: 'bg-secondary border border-border', thumb: 'translate-x-0.5 bg-muted-foreground', hint: 'text-warning' },
+}
+
+export function ActiveField({ form, update }) {
+  const tone = ACTIVE_TONES[form.is_active ? 'on' : 'off']
+  return (
+    <div className={`flex items-start gap-3 rounded-lg border px-4 py-3 ${tone.panel}`}>
+      <button id="req-active" type="button" role="switch" aria-checked={form.is_active} aria-describedby="req-active-hint"
+        onClick={() => update(f => ({ is_active: !f.is_active }))}
+        className={`mt-0.5 inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${tone.track}`}>
+        <span aria-hidden="true" className={`h-4 w-4 rounded-full shadow-sm transition-transform ${tone.thumb}`} />
+      </button>
+      <div className="min-w-0">
+        <label htmlFor="req-active" className="block text-sm font-medium text-foreground cursor-pointer select-none">
+          Requirement is active
+        </label>
+        <p id="req-active-hint" className={`text-xs mt-0.5 ${tone.hint}`}>
+          Inactive requirements are kept but do not track progress, show on the dashboard or send emails.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 function PeriodDetailFields({ form, update }) {
   if (form.period_type === 'monthly_window') {
     return (
@@ -288,17 +316,12 @@ export function PilotField({ form, update, pilots }) {
 
 export function ReminderFields({ form, update }) {
   return (
-    <div className="grid gap-3 sm:grid-cols-2 sm:items-end">
+    <div className="grid gap-3 sm:grid-cols-2">
       <div>
         <label htmlFor="req-reminder" className={LABEL}>Reminder (days before the period ends)</label>
         <input id="req-reminder" type="number" inputMode="numeric" min={0} max={60} value={form.reminder_days}
           onChange={e => update({ reminder_days: e.target.value })} className={INPUT} />
       </div>
-      <label className="flex items-center gap-2 py-2 text-sm text-foreground cursor-pointer select-none">
-        <input type="checkbox" checked={form.is_active} onChange={() => update(f => ({ is_active: !f.is_active }))}
-          className="w-4 h-4 rounded border-border text-primary focus:ring-ring" />
-        <span>Active</span>
-      </label>
     </div>
   )
 }

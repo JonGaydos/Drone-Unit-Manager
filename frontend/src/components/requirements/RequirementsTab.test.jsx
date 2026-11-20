@@ -238,4 +238,39 @@ describe('RequirementsTab', () => {
     await waitFor(() => expect(calls).toHaveLength(1))
     expect(calls[0].body).toMatchObject({ emails_enabled: true })
   })
+
+  it('switches a requirement off after confirming, then refreshes the list', async () => {
+    const calls = mock()
+    let listed = 0
+    server.use(http.get('/api/requirements', () => { listed += 1; return HttpResponse.json([REQ, OFF]) }))
+    const { user } = renderTab()
+    await user.click(await screen.findByRole('button', { name: 'Switch off Quarterly models' }))
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByText(/stops tracking progress/)).toBeInTheDocument()
+    expect(within(dialog).getByText(/recorded as excused/)).toBeInTheDocument()
+    expect(calls).toHaveLength(0)
+    await user.click(within(dialog).getByRole('button', { name: 'Switch off' }))
+    await waitFor(() => expect(calls).toHaveLength(1))
+    expect(calls[0]).toMatchObject({ method: 'PATCH', url: '/api/requirements/4', body: { is_active: false } })
+    expect(await screen.findByText('Requirement switched off')).toBeInTheDocument()
+    await waitFor(() => expect(listed).toBe(2))
+  })
+
+  it('keeps a requirement on when switching off is cancelled', async () => {
+    const calls = mock()
+    const { user } = renderTab()
+    await user.click(await screen.findByRole('button', { name: 'Switch off Quarterly models' }))
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }))
+    expect(calls).toHaveLength(0)
+  })
+
+  it('switches a requirement on in one click', async () => {
+    const calls = mock()
+    const { user } = renderTab()
+    await user.click(await screen.findByRole('button', { name: 'Switch on Old monthly' }))
+    await waitFor(() => expect(calls).toHaveLength(1))
+    expect(calls[0]).toMatchObject({ method: 'PATCH', url: '/api/requirements/5', body: { is_active: true } })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(await screen.findByText('Requirement switched on')).toBeInTheDocument()
+  })
 })

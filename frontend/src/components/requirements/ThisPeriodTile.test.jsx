@@ -80,9 +80,23 @@ describe('ThisPeriodTile', () => {
   })
 
   it('shows an empty state when there are no active requirements', async () => {
-    mock({ status: { score: null, requirements: [] } })
+    mock({ status: { score: null, requirements: [], inactive_count: 0 } })
     renderWithProviders(<ThisPeriodTile />, { role: 'pilot' })
     expect(await screen.findByText('No active flight requirements')).toBeInTheDocument()
     expect(screen.queryByText(/Open misses/)).toBeNull()
+  })
+
+  it('says how many requirements are switched off when none is active, with a link for managers', async () => {
+    mock({ status: { score: null, requirements: [], inactive_count: 2 } })
+    const { unmount } = renderWithProviders(<ThisPeriodTile />, { role: 'supervisor' })
+    const link = await screen.findByRole('link', { name: '2 flight requirements switched off' })
+    expect(link).toHaveAttribute('href', '/requirements')
+    expect(screen.queryByText('No active flight requirements')).toBeNull()
+    unmount()
+
+    mock({ status: { score: null, requirements: [], inactive_count: 1 } })
+    renderWithProviders(<ThisPeriodTile />, { role: 'pilot' })
+    expect(await screen.findByText('1 flight requirement switched off')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /switched off/ })).toBeNull()
   })
 })

@@ -230,6 +230,7 @@ class RequirementStatusOut(BaseModel):
 class StatusOut(BaseModel):
     score: Optional[float] = None
     requirements: list[RequirementStatusOut]
+    inactive_count: int = 0
 
 
 class PilotPeriodOut(PilotProgressOut):

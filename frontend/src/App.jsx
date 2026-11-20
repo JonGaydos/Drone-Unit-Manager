@@ -75,6 +75,7 @@ const FleetHealthPage = lazy(() => import('@/pages/FleetHealthPage'))
 const ChecklistPage = lazy(() => import('@/pages/ChecklistPage'))
 const CompliancePage = lazy(() => import('@/pages/CompliancePage'))
 const OperatingAuthorityPage = lazy(() => import('@/pages/OperatingAuthorityPage'))
+const FlightRequirementsPage = lazy(() => import('@/pages/FlightRequirementsPage'))
 const UserManualPage = lazy(() => import('@/pages/UserManualPage'))
 const AirspacePage = lazy(() => import('@/pages/AirspacePage'))
 const CalendarPage = lazy(() => import('@/pages/CalendarPage'))
@@ -191,6 +192,7 @@ function AppRoutes() {
           <Route path="/checklists" element={<ChecklistPage />} />
           <Route path="/compliance" element={<CompliancePage />} />
           <Route path="/operating-authority" element={<OperatingAuthorityPage />} />
+          <Route path="/requirements" element={<FlightRequirementsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/audit-log" element={<AdminRoute view="audit.view"><AuditLogPage /></AdminRoute>} />
           <Route path="/manual" element={<UserManualPage />} />

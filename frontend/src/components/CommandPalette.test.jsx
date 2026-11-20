@@ -94,4 +94,18 @@ describe('CommandPalette', () => {
     expect(screen.queryByRole('button', { name: /Pilots/ })).toBeNull()
     expect(screen.getByRole('button', { name: /Fleet Health/ })).toBeInTheDocument()
   })
+
+  it('jumps to Flight Requirements with requirements.view and leaves it out without', async () => {
+    const { user, unmount } = renderPalette({ role: 'viewer' })
+    await user.keyboard('{Control>}k{/Control}')
+    await user.type(await screen.findByPlaceholderText(/Search pilots/), 'requirements')
+    await user.click(await screen.findByRole('button', { name: /Flight Requirements/ }))
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/requirements'))
+    unmount()
+
+    const next = renderPalette({ role: 'supervisor', permissions: { 'requirements.view': 'no' } })
+    await next.user.keyboard('{Control>}k{/Control}')
+    await screen.findByPlaceholderText(/Search pilots/)
+    expect(screen.queryByRole('button', { name: /Flight Requirements/ })).toBeNull()
+  })
 })

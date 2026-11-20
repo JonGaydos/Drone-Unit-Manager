@@ -418,9 +418,14 @@ Setup: an admin, a supervisor and a viewer login. Fleet with at least two models
 
 Setup: an admin, a supervisor, a pilot and a viewer login. Fleet with at least two models (for example X10 and Matrice 30). Unit default location and display time zone set. Three pilots with reviewed flights, one of them added after the test period starts. SMTP pointed at a test inbox for 39.9.
 
-### 39.1 Access and permissions
-- [ ] Supervisor sees the Flight Requirements tab in Settings and can create, edit, duplicate, save as template and delete a requirement
-- [ ] Pilot and viewer do not see the tab; direct writes to the requirement routes are refused
+### 39.1 Page location and access
+- [ ] Flight Requirements is in the sidebar under Compliance, right after Operating Authority, and opens /requirements; it is also in the command palette (Ctrl+K)
+- [ ] Settings has no Flight Requirements tab; an old /settings?tab=requirements link opens /requirements
+- [ ] With a sidebar order saved in Settings > General before this change, Flight Requirements still shows, at the end of Compliance, and in the Sidebar Configuration list
+- [ ] Supervisor sees New requirement, Switch on or Switch off, edit, duplicate, save as template and delete on each row, Templates and Requirement Settings, and can use each
+- [ ] Pilot and viewer open the page and see every requirement with its current period (days left, met count, each pilot's progress) and Download CSV, but no New requirement, Switch on or off, edit, duplicate, template or delete, and no Templates or Requirement Settings; direct writes to the requirement routes are refused
+- [ ] A role with Flight requirements: View off has no sidebar entry and is sent to the dashboard when it opens /requirements
+- [ ] Calendar Due entries open /requirements for every role with view
 - [ ] Pilot and viewer see the dashboard This Period tile, the Compliance Requirements Score and every pilot's Flight Requirements card (view is on)
 - [ ] Pilot and viewer see no Excuse or Un-excuse buttons; a direct excuse call is refused
 - [ ] Turning Flight requirements: View off for a role hides the tile, the score, the card, the badge and the report option for that role
@@ -433,6 +438,8 @@ Setup: an admin, a supervisor, a pilot and a viewer login. Fleet with at least t
 - [ ] The model picker offers one chip per fleet model; Combined and Each separately appear with two or more models
 - [ ] Night is greyed out with a reason until the unit default location is set
 - [ ] Duplicate opens a filled form named Copy of the original; a template keeps everything except dates and pilots
+- [ ] Requirement is active is the switch right under Name and Description, on by default, with its help text; switched off, its panel turns to the warning color; it is nowhere near Reminder
+- [ ] A requirement saved with the switch off shows Inactive in the list and is missing from the dashboard tile
 
 ### 39.3 Period edges (review focus 1 and 2)
 - [ ] A flight that crosses midnight counts only its minutes inside a clock window (5:30 AM to 6:15 AM gives 30 minutes toward 12 AM to 6 AM)
@@ -459,6 +466,9 @@ Setup: an admin, a supervisor, a pilot and a viewer login. Fleet with at least t
 - [ ] After editing the target, the open period uses the new target on the dashboard tile and on the pilot card
 - [ ] Saved periods keep their old target in the history table
 - [ ] Delete is refused for a requirement with saved results; switching it off works
+- [ ] Switch off on a row asks for confirmation that names the excused months; Cancel changes nothing; confirming shows a toast, the row turns Inactive and loses its progress
+- [ ] Switch on on a row works in one click, with a toast, and the progress comes back
+- [ ] With every requirement switched off, the dashboard tile says N flight requirement(s) switched off; for a supervisor it links to /requirements, for a pilot it is plain text
 
 ### 39.7 Misses and the score
 - [ ] A miss shows in Needs Attention, as a Missed requirement badge on the pilots list and profile, and under Open misses on the dashboard
@@ -471,7 +481,7 @@ Setup: an admin, a supervisor, a pilot and a viewer login. Fleet with at least t
 - [ ] The Flight Requirements report matches the saved results; the requirement and pilot CSV downloads match too
 
 ### 39.9 Emails (SMTP pointed at a test inbox)
-- [ ] Requirement emails are off by default: with the switch off, nothing is sent for assignment, reminder or miss; turn on Send requirement emails in Settings > Flight Requirements first for the checks below, and nothing is sent for earlier assignments or misses
+- [ ] Requirement emails are off by default: with the switch off, nothing is sent for assignment, reminder or miss; turn on Send requirement emails under Requirement Settings on the Flight Requirements page first for the checks below, and nothing is sent for earlier assignments or misses
 - [ ] An assignment email reaches each assigned pilot on create, activation and when a pilot is added
 - [ ] A reminder arrives the set number of days before the period ends, once per pilot per period, also if the scheduler runs twice
 - [ ] A miss email reaches the pilot and each user who can manage requirements
@@ -483,4 +493,4 @@ Setup: an admin, a supervisor, a pilot and a viewer login. Fleet with at least t
 
 ### 39.11 Backup and restore
 - [ ] Export a backup with a clock-window requirement, a clock-window template, an excusal and a saved result; delete them; restore; all are back with the same window times
-- [ ] Restore a backup taken before this feature; the app starts and the Flight Requirements tab is empty
+- [ ] Restore a backup taken before this feature; the app starts and the Flight Requirements page is empty

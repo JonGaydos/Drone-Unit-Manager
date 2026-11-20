@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Navigate, useSearchParams } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -18,7 +18,6 @@ import { SIDEBAR_META, GROUP_ORDER } from '@/lib/sidebarNav'
 
 const IntegrationsContent = React.lazy(() => import('@/pages/IntegrationsPage'))
 const ApiTokensSection = React.lazy(() => import('@/components/ApiTokensSection'))
-const RequirementsTab = React.lazy(() => import('@/components/requirements/RequirementsTab'))
 
 const DEFAULT_PLACES = ['North', 'Central', 'South']
 
@@ -36,8 +35,9 @@ function parseJsonSetting(raw, fallback) {
   try { return JSON.parse(raw) } catch { return fallback }
 }
 
-// Merge a saved sidebar config over the shared nav metadata: new items appear,
-// saved visibility/order win, and each item keeps its group (so the editor can
+// Merge a saved sidebar config over the shared nav metadata: new items are
+// appended after the saved ones (as the sidebar shows them), saved
+// visibility/order win, and each item keeps its group (so the editor can
 // present the same grouping the sidebar renders). Returns defaults for a missing
 // or invalid config.
 function buildSidebarItems(rawConfig) {
@@ -51,7 +51,7 @@ function buildSidebarItems(rawConfig) {
     return {
       ...item,
       visible: existing ? existing.visible !== false : true,
-      order: existing ? existing.order : i,
+      order: existing ? existing.order : parsed.length + i,
     }
   }).sort((a, b) => a.order - b.order)
 }
@@ -77,7 +77,14 @@ function NoLinkedPilotBadge({ user }) {
 }
 
 export default function SettingsPage() {
-  // A tab can be linked to, e.g. /settings?tab=requirements.
+  const [searchParams] = useSearchParams()
+  // Flight Requirements was a Settings tab before it got its own page; old links still land there.
+  if (searchParams.get('tab') === 'requirements') return <Navigate to="/requirements" replace />
+  return <SettingsTabs />
+}
+
+function SettingsTabs() {
+  // A tab can be linked to, e.g. /settings?tab=users.
   const [searchParams] = useSearchParams()
   const [requestedTab, setRequestedTab] = useState(() => searchParams.get('tab') || 'general')
   const [settings, setSettings] = useState({})
@@ -631,7 +638,6 @@ export default function SettingsPage() {
     ...(isAdmin ? [{ id: 'users', label: 'Users' }] : []),
     ...(isAdmin ? [{ id: 'integrations', label: 'Integrations' }] : []),
     ...(isAdmin ? [{ id: 'api-tokens', label: 'API Tokens' }] : []),
-    ...(can('requirements.manage') ? [{ id: 'requirements', label: 'Flight Requirements' }] : []),
   ]
   // A linked or remembered tab the user cannot see falls back to General.
   const activeTab = TABS.some(tab => tab.id === requestedTab) ? requestedTab : 'general'
@@ -1712,13 +1718,6 @@ export default function SettingsPage() {
 
       {/* Users Tab */}
       {renderUsersTab()}
-
-      {/* Flight Requirements Tab */}
-      {activeTab === 'requirements' && (
-        <React.Suspense fallback={<div className="flex items-center justify-center h-32"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}>
-          <RequirementsTab />
-        </React.Suspense>
-      )}
 
       {/* General Tab */}
       {activeTab === 'general' && (

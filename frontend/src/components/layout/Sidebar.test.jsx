@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { withPermissions } from '@/test/permissions'
@@ -111,6 +111,40 @@ describe('Sidebar Fleet Health link', () => {
     renderWithProviders(<Sidebar mobileOpen={false} onMobileClose={() => {}} />, { role: 'admin' })
 
     expect(await screen.findByRole('link', { name: /Fleet Health/ })).toBeInTheDocument()
+  })
+})
+
+describe('Sidebar Flight Requirements link', () => {
+  const linkNames = () => screen.getAllByRole('link').map(l => l.textContent)
+
+  it('lists Flight Requirements under Compliance right after Operating Authority', async () => {
+    authAs('viewer')
+    renderWithProviders(<Sidebar mobileOpen={false} onMobileClose={() => {}} />, { role: 'viewer' })
+
+    const link = await screen.findByRole('link', { name: /Flight Requirements/ })
+    expect(link).toHaveAttribute('href', '/requirements')
+    expect(linkNames().indexOf('Flight Requirements')).toBe(linkNames().indexOf('Operating Authority') + 1)
+  })
+
+  it('hides Flight Requirements without requirements.view', async () => {
+    authAs('supervisor', { 'requirements.view': 'no' })
+    renderWithProviders(<Sidebar mobileOpen={false} onMobileClose={() => {}} />, { role: 'supervisor' })
+
+    await screen.findByText('supervisor')
+    expect(screen.queryByRole('link', { name: /Flight Requirements/ })).not.toBeInTheDocument()
+  })
+
+  it('appends Flight Requirements to a saved sidebar config that predates it', async () => {
+    authAs('admin')
+    const saved = ['/', '/compliance', '/operating-authority', '/alerts', '/incidents']
+      .map((to, order) => ({ to, visible: true, order }))
+    server.use(http.get('/api/settings', () => HttpResponse.json([
+      { key: 'sidebar_config', value: JSON.stringify(saved) },
+    ])))
+    renderWithProviders(<Sidebar mobileOpen={false} onMobileClose={() => {}} />, { role: 'admin' })
+
+    await screen.findByRole('link', { name: /Flight Requirements/ })
+    await waitFor(() => expect(linkNames().indexOf('Flight Requirements')).toBe(linkNames().indexOf('Activity Reports') + 1))
   })
 })
 

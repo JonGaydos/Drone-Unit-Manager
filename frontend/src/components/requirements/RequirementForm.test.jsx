@@ -157,5 +157,29 @@ describe('RequirementForm', () => {
     await waitFor(() => expect(onSubmit).toHaveBeenCalled())
     expect(onSubmit.mock.calls[0][0].purposes).toEqual([])
   })
-})
 
+  it('puts the Active switch first, with Name and Description, away from the Reminder', () => {
+    setup()
+    const active = screen.getByRole('switch', { name: 'Requirement is active' })
+    expect(active).toHaveAttribute('aria-checked', 'true')
+    expect(active).toHaveAccessibleDescription(
+      'Inactive requirements are kept but do not track progress, show on the dashboard or send emails.')
+    const firstSection = screen.getByLabelText('Name').closest('[data-form-section]')
+    expect(firstSection).toContainElement(active)
+    expect(firstSection).toContainElement(screen.getByLabelText('Description (optional)'))
+    expect(firstSection).not.toContainElement(screen.getByLabelText('Period'))
+    const reminderSection = screen.getByLabelText('Reminder (days before the period ends)').closest('[data-form-section]')
+    expect(reminderSection).not.toContainElement(active)
+    expect(screen.queryByRole('checkbox', { name: 'Active' })).toBeNull()
+  })
+
+  it('saves a requirement switched off from the Active switch', async () => {
+    const { onSubmit, user } = setup({ initial: { ...newForm(), name: 'Off', target_flights: '1', start_date: '2026-10-01' } })
+    const active = screen.getByRole('switch', { name: 'Requirement is active' })
+    await user.click(active)
+    expect(active).toHaveAttribute('aria-checked', 'false')
+    await user.click(screen.getByRole('button', { name: 'Save requirement' }))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled())
+    expect(onSubmit.mock.calls[0][0].is_active).toBe(false)
+  })
+})

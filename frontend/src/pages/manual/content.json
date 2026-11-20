@@ -1159,7 +1159,7 @@
         "title": "What flight requirements are",
         "summary": "A flight requirement is an assignment for a fixed period, such as 1 hour in October or 15 minutes on each aircraft type every quarter. It is separate from currency, which asks whether a pilot is legal to fly right now.",
         "steps": [
-          "Supervisors and admins set requirements up under **Settings**, on the **Flight Requirements** tab.",
+          "Open **Flight Requirements** in the sidebar, under **Compliance**. Everyone who may view requirements sees the list there, with each requirement's current period: the days left, how many pilots have met it and each pilot's progress. Supervisors and admins set requirements up on the same page.",
           "Everyone who may view requirements sees the progress. The **This Period** tile on the **Dashboard** shows it for the whole unit. The **Flight Requirements** card on each pilot page shows it for one pilot.",
           "Each pilot has one status for each period: **On track**, **Met**, **Pending review**, **Missed** or **Excused**."
         ],
@@ -1173,20 +1173,21 @@
       {
         "id": "creating-a-requirement",
         "title": "Creating a requirement",
-        "summary": "The builder on the **Flight Requirements** tab sets the period, the target, the aircraft, the time of day, the flight purposes and the pilots. A summary at the bottom says the result in plain words before you save.",
+        "summary": "The builder on the **Flight Requirements** page sets the period, the target, the aircraft, the time of day, the flight purposes and the pilots. A summary at the bottom says the result in plain words before you save.",
         "image": {
           "src": "/manual-pictures/flight-requirements-creating-a-requirement.png",
           "alt": "The New requirement form with a name, a calendar quarter period, 15 minutes as the target, two aircraft models set to each separately, and a summary sentence at the bottom",
           "caption": "The requirement builder with its live summary."
         },
         "steps": [
-          "Open **Settings**, choose the **Flight Requirements** tab and click **New requirement**.",
+          "Open **Flight Requirements** in the sidebar, under **Compliance**, and click **New requirement**.",
           "Enter a **Name**. Add a **Description (optional)** if you like.",
+          "Leave **Requirement is active** on, just below the name. An inactive requirement is kept but does not track progress, show on the dashboard or send emails, and its panel changes to the warning color so it stands out.",
           "Pick the **Period** (see the list below) and choose **One time** or **Recurring** under **Repeats**. Set **Starts**. For a recurring requirement, **Ends (optional)** stops it after a date.",
           "Under **Target**, enter **Hours** and **Minutes**, **Flights**, or both. Both must be met when you set both.",
           "Choose the aircraft, the time of day and the flight purposes. The next topics explain them.",
           "Under **Applies to**, leave **All active pilots** on, or choose **Selected pilots** and tick the pilots.",
-          "Set **Reminder (days before the period ends)**. The default is 7. Leave **Active** ticked.",
+          "Set **Reminder (days before the period ends)**. The default is 7. Use 0 for no reminder. It does not switch the requirement off.",
           "Read the **Summary**. Click **Save requirement**."
         ],
         "notes": [
@@ -1259,7 +1260,7 @@
           "The score at the top right of the tile is the **Requirements score**. See \"History and the score\".",
           "A period that has ended but is still inside its grace days shows as **Previous period**, with the number of pilots **pending review** and the date it runs until.",
           "**Open misses** at the bottom names the pilots flagged for a miss.",
-          "The tile shows only to people who may view requirements. It says **No active flight requirements** when none exist.",
+          "The tile shows only to people who may view requirements. It says **No active flight requirements** when none exist. When every requirement is switched off, it says how many are switched off instead, and for supervisors and admins that line opens the **Flight Requirements** page.",
           "The **Calendar** shows one entry on the last day of each period, titled **Due:** and the requirement's name. Periods themselves are not drawn.",
           "**Reports** has a **Flight Requirements** report of saved results, by period and pilot, with the unit logo. A requirement's results and one pilot's history also download as CSV."
         ]
@@ -1299,13 +1300,13 @@
           "Open **Compliance** to see the **Requirements Score** next to the compliance score. It also shows on the **Dashboard** tile."
         ],
         "notes": [
-          "A period stays **Pending review** for the grace days after it ends. The default is 14. Admins and supervisors can change it, and the **Fiscal year starts in** month, under **Requirement Settings** on the **Flight Requirements** tab.",
+          "A period stays **Pending review** for the grace days after it ends. The default is 14. Admins and supervisors can change it, and the **Fiscal year starts in** month, under **Requirement Settings** on the **Flight Requirements** page.",
           "During the grace days a flight that is reviewed late still counts. The pilot's card and the dashboard list the flights still awaiting review, so they can be reviewed in time.",
           "When the grace days end, the result is saved with the hours and flights, the status and a copy of the target. It never changes after that, even if the requirement is edited or an old flight is reviewed again. Only an admin can recalculate one period, and that is recorded in the audit log.",
           "The score counts saved results that are **Met** out of all saved results whose period ended in the last 12 months. **Excused** results are left out, and so are periods still open or pending review.",
           "With no saved results in the last 12 months, the score says **No results yet**.",
           "The score is separate from the compliance score. The compliance score does not change.",
-          "A requirement with saved results cannot be deleted. Switch it off instead by clearing **Active**."
+          "A requirement with saved results cannot be deleted. Switch it off instead with **Switch off** in the list."
         ]
       },
       {
@@ -1314,7 +1315,7 @@
         "summary": "The app can email pilots when a requirement is assigned, before a period ends and when a period is missed. These emails are off until a supervisor or admin turns them on, and they need email sending to be set up.",
         "steps": [
           "An admin sets up email once. See \"Setting up email sending\".",
-          "In **Settings**, open the **Flight Requirements** tab. In **Requirement Settings**, tick **Send requirement emails** and choose **Save settings**. It is off until you do. Nothing is sent for earlier assignments or misses when you turn it on.",
+          "Open **Flight Requirements** in the sidebar. In **Requirement Settings**, tick **Send requirement emails** and choose **Save settings**. It is off until you do. Nothing is sent for earlier assignments or misses when you turn it on.",
           "Set **Reminder (days before the period ends)** on each requirement. The default is 7. Use 0 to switch the reminder off.",
           "To get the digest section, open **Email Digest** on the **General** tab and tick **Flight Requirements** under **Include**. It is not ticked until you choose it."
         ],
@@ -1331,21 +1332,22 @@
         "title": "Templates and duplicating",
         "summary": "Reuse a requirement's settings instead of filling the builder in again. Duplicate copies one requirement. A template keeps the settings under a name.",
         "image": {
-          "src": "/manual-pictures/flight-requirements-requirements-tab.png",
-          "alt": "The Flight Requirements list in Settings with two demo requirements, each with edit, duplicate, save as template and delete buttons",
-          "caption": "The requirement list in Settings."
+          "src": "/manual-pictures/flight-requirements-requirements-page.png",
+          "alt": "The Requirements list on the Flight Requirements page with two demo requirements, each with a Switch off button, edit, duplicate, save as template, download and delete buttons, and the current month's progress for each demo pilot",
+          "caption": "The requirement list on the Flight Requirements page."
         },
         "steps": [
-          "On the **Flight Requirements** tab, click the **Duplicate** icon on a requirement. The builder opens filled in as a new requirement named **Copy of** and the old name. Change what you need and save.",
+          "On the **Flight Requirements** page, click the **Duplicate** icon on a requirement. The builder opens filled in as a new requirement named **Copy of** and the old name. Change what you need and save.",
           "To keep the settings, click the **Save as template** icon, enter a **Template name** and click **Save template**.",
           "Under **Templates**, click **New from template** to open the builder filled in. Use the pencil to rename a template and the bin to delete it.",
-          "To change a requirement, click the **Edit** icon. To remove one, click the **Delete** icon and confirm."
+          "To change a requirement, click the **Edit** icon. To remove one, click the **Delete** icon and confirm.",
+          "To stop a requirement without deleting it, click **Switch off** and confirm. It stops tracking progress, leaves the dashboard and sends no emails, and the months it stays off are saved as excused. Click **Switch on** to start it again."
         ],
         "notes": [
           "A template keeps every setting except the start date, the end date and the selected pilots.",
           "Changing or deleting a template never changes requirements made from it.",
           "**Delete** is refused once a requirement has saved results. Switch it off instead.",
-          "The **Flight Requirements** tab shows only to people with **Flight requirements: Manage**. **Requirement Settings** on the tab holds **Grace days** and **Fiscal year starts in**."
+          "**New requirement**, **Switch on**, **Switch off**, the edit, duplicate, template and delete icons, **Templates** and **Requirement Settings** show only to people with **Flight requirements: Manage**. Everyone else with **View** sees the list and the progress. **Requirement Settings** holds **Grace days**, **Fiscal year starts in** and **Send requirement emails**."
         ]
       }
     ]
@@ -2410,12 +2412,12 @@
           "The **Users** tab is for admins. It holds **User Management** and **Role Permissions**.",
           "The **Integrations** tab is for admins. It holds the Skydio connection, email sending and flight log import.",
           "The **API Tokens** tab is for admins. It holds the keys for other programs.",
-          "The **Flight Requirements** tab is for supervisors and admins who may manage requirements. It holds the requirement list and builder, **Templates** and **Requirement Settings**."
+          "Flight requirements are not on the Settings page. Open **Flight Requirements** in the sidebar, under **Compliance**."
         ],
         "notes": [
           "Choose **Save Settings** at the bottom of the **General** tab to keep changes to the **Organization**, **Weather Thresholds** and similar cards. Some cards have their own save button.",
           "A line saying **Unsaved changes** shows beside **Save Settings** until you save.",
-          "Other topics cover the cards that belong to a feature: **Certification Status Labels** under Certifications, **Weather Thresholds** under Weather, **Currency Rules** under Pilots **Drone Locations** under Drone Locations and the **Flight Requirements** tab under Flight Requirements.",
+          "Other topics cover the cards that belong to a feature: **Certification Status Labels** under Certifications, **Weather Thresholds** under Weather, **Currency Rules** under Pilots and **Drone Locations** under Drone Locations.",
           "If your server has it turned on, everyone sees an **API Documentation** link at the bottom of the **General** tab. It is for people who write programs."
         ]
       },

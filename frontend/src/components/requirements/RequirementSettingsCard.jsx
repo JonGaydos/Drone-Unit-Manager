@@ -33,7 +33,7 @@ export default function RequirementSettingsCard({ settings, onSave }) {
 
   return (
     <form onSubmit={save} aria-labelledby="req-settings-title" className="bg-card border border-border rounded-xl p-6">
-      <h3 id="req-settings-title" className="text-lg font-semibold text-foreground mb-1">Requirement Settings</h3>
+      <h2 id="req-settings-title" className="text-lg font-semibold text-foreground mb-1">Requirement Settings</h2>
       <p className="text-sm text-muted-foreground mb-4">
         Grace days give reviewers time to finish reviewing flights after a period ends, before its results are saved.
       </p>

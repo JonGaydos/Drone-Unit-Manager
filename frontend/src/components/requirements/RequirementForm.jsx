@@ -3,11 +3,11 @@ import { Loader2 } from 'lucide-react'
 import { describeRequirement } from './RequirementSummary'
 import { formProblem, startsInPast, toBody } from './formState'
 import {
-  AircraftField, BasicsFields, PeriodFields, PilotField, PurposeField, ReminderFields, TargetFields, TimeFields,
+  ActiveField, AircraftField, BasicsFields, PeriodFields, PilotField, PurposeField, ReminderFields, TargetFields, TimeFields,
 } from './RequirementFields'
 
 function Section({ children }) {
-  return <div className="pt-5 first:pt-0 border-t border-border first:border-t-0">{children}</div>
+  return <div data-form-section className="pt-5 first:pt-0 border-t border-border first:border-t-0">{children}</div>
 }
 
 /**
@@ -51,8 +51,13 @@ export default function RequirementForm({
   return (
     <form ref={formRef} onSubmit={submit} noValidate aria-labelledby="req-form-title"
       className="bg-card border border-border rounded-xl p-6 space-y-5">
-      <h3 id="req-form-title" className="text-lg font-semibold text-foreground">{title}</h3>
-      <Section><BasicsFields form={form} update={update} /></Section>
+      <h2 id="req-form-title" className="text-lg font-semibold text-foreground">{title}</h2>
+      <Section>
+        <div className="space-y-4">
+          <BasicsFields form={form} update={update} />
+          <ActiveField form={form} update={update} />
+        </div>
+      </Section>
       <Section>
         <PeriodFields form={form} update={update} />
         {isNew && startsInPast(form, fiscalStartMonth) && (

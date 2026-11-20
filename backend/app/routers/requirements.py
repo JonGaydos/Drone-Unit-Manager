@@ -287,7 +287,8 @@ def _requirement_status(db: Session, req: FlightRequirement, settings: UnitEvalS
 @router.get("/status", response_model=StatusOut, responses=responses(401, 403))
 def requirements_status(db: DBSession, user: ViewUser):
     """The current period of each active requirement, and the periods still in
-    their grace time, with every assigned pilot's progress; and the Requirements score."""
+    their grace time, with every assigned pilot's progress; the Requirements
+    score; and how many requirements are switched off."""
     today = local_today(db)
     _close_safely(db, today)
     settings = unit_eval_settings(db)
@@ -295,6 +296,7 @@ def requirements_status(db: DBSession, user: ViewUser):
     return {
         "score": requirements_score(db, today),
         "requirements": [_requirement_status(db, req, settings, today, names) for req in _active_requirements(db)],
+        "inactive_count": db.query(FlightRequirement).filter(FlightRequirement.is_active.is_(False)).count(),
     }
 
 

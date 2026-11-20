@@ -329,10 +329,13 @@ def test_status_reports_progress_and_score(client, db, viewer_headers, admin_hea
     assert progress["totals"] == {"*": {"minutes": 45.0, "flights": 1}}
 
 
-def test_inactive_requirement_is_left_out_of_status(client, admin_headers):
+def test_inactive_requirement_is_left_out_of_status_and_counted(client, admin_headers, viewer_headers):
     req_id = _create(client, admin_headers, is_active=False)["id"]
     body = client.get(f"{URL}/status", headers=admin_headers).json()
     assert req_id not in [row["requirement_id"] for row in body["requirements"]]
+    assert body["inactive_count"] == 1
+    _create(client, admin_headers)
+    assert client.get(f"{URL}/status", headers=viewer_headers).json()["inactive_count"] == 1
 
 
 def test_pilot_page_shows_current_progress_and_history_newest_first(client, db, admin_headers):

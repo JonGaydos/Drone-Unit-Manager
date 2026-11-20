@@ -104,7 +104,7 @@ describe('CalendarPage', () => {
   it('draws requirement deadlines in their own color, toggled by their own legend entry, and links them', async () => {
     server.use(http.get('/api/calendar', () => HttpResponse.json({
       events: [{ id: 'requirement-1-2026-11-30', title: 'Due: Monthly hour', category: 'requirement', source: 'requirement',
-        start: '2026-11-30', end: null, all_day: true, link: '/settings?tab=requirements', editable: false }],
+        start: '2026-11-30', end: null, all_day: true, link: '/requirements', editable: false }],
       flight_counts: {},
     })))
     const { user } = renderWithProviders(<CalendarPage />, { role: 'admin' })
@@ -116,7 +116,7 @@ describe('CalendarPage', () => {
     const taken = ['#64748b', '#0ea5e9', '#8b5cf6', '#f59e0b', '#ef4444', '#10b981', '#6b7280', '#3b82f6']
     expect(due.color).toMatch(/^#[0-9a-f]{6}$/)
     expect(taken).not.toContain(due.color)
-    expect(due.extendedProps.link).toBe('/settings?tab=requirements')
+    expect(due.extendedProps.link).toBe('/requirements')
 
     await user.click(screen.getByLabelText('Requirement deadlines'))
     await waitFor(() => expect(fc.props.events.some(e => e.id === 'requirement-1-2026-11-30')).toBe(false))
