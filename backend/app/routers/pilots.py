@@ -1,5 +1,6 @@
 """Pilot CRUD endpoints with flight statistics and profile photo management."""
 
+import logging
 from datetime import date
 from pathlib import Path
 from typing import Annotated
@@ -9,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import func
+from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.constants import PILOT_NOT_FOUND, ACCESS_DENIED, FILE_TYPE_NOT_ALLOWED, FILE_TOO_LARGE
@@ -24,9 +26,11 @@ from app.schemas.pilot import PilotCreate, PilotUpdate, PilotOut, PilotStats
 from app.responses import responses
 from app.services import permissions as permissions_service
 from app.services.pilot_contacts import CONTACT_FIELDS, hides_contacts, pilot_out
+from app.services.requirement_notify import notify_joined
 from app.services.requirement_results import open_misses
 
 router = APIRouter(prefix="/api/pilots", tags=["pilots"])
+logger = logging.getLogger(__name__)
 
 EDIT_KEY = "pilots.edit"
 MANAGE_KEY = "pilots.manage"
@@ -176,6 +180,18 @@ def _check_badge_free(db, badge: str | None, pilot_id: int | None = None) -> Non
         raise HTTPException(status_code=400, detail=f"Badge number {badge.strip()} is already used by {holder.full_name}")
 
 
+def _notify_joined_safely(db: Session, pilot: Pilot) -> None:
+    """Email an active pilot about the requirements every active pilot has. A
+    failure is logged, never raised: the pilot is already saved."""
+    if pilot.status != "active":
+        return
+    try:
+        notify_joined(db, pilot.id)
+    except Exception:
+        logger.exception("Requirement assignment emails for pilot %s failed", pilot.id)
+        db.rollback()
+
+
 @router.post("", response_model=PilotOut, responses=responses(400, 401))
 def create_pilot(data: PilotCreate, db: DBSession, admin: ManageUser):
     """Create a new pilot record. Needs the pilots.manage permission."""
@@ -187,6 +203,7 @@ def create_pilot(data: PilotCreate, db: DBSession, admin: ManageUser):
     log_action(db, admin.id, admin.display_name, "create", "pilot", pilot.id, f"{pilot.first_name} {pilot.last_name}")
     db.commit()
     db.refresh(pilot)
+    _notify_joined_safely(db, pilot)
     return pilot_out(db, pilot, admin)
 
 
@@ -222,12 +239,15 @@ def update_pilot(pilot_id: int, data: PilotUpdate, db: DBSession, user: EditUser
     if "badge_number" in update_data:
         _check_badge_free(db, update_data["badge_number"], pilot_id)
     changes = compute_changes(pilot, update_data, list(update_data.keys()))
+    was_active = pilot.status == "active"
     for key, value in update_data.items():
         setattr(pilot, key, value)
     if changes:
         log_action(db, user.id, user.display_name, "update", "pilot", pilot.id, f"{pilot.first_name} {pilot.last_name}", changes=changes)
     db.commit()
     db.refresh(pilot)
+    if not was_active:
+        _notify_joined_safely(db, pilot)
     return pilot_out(db, pilot, user)
 
 

@@ -190,6 +190,25 @@ def test_patch_validates_the_merged_definition(client, admin_headers):
     assert response.status_code == 200, response.text
 
 
+SAME_TIMES = {"time_mode": "clock", "window_start_time": "18:00", "window_end_time": "18:00"}
+SAME_TIMES_REFUSED = "Start and end time must differ"
+
+
+def _detail_text(response) -> str:
+    return str(response.json()["detail"])
+
+
+def test_clock_window_with_the_same_start_and_end_is_refused(client, admin_headers):
+    response = client.post(URL, headers=admin_headers, json={**BASE, **SAME_TIMES})
+    assert response.status_code == 422 and SAME_TIMES_REFUSED in _detail_text(response)
+    req_id = _create(client, admin_headers)["id"]
+    response = client.patch(f"{URL}/{req_id}", headers=admin_headers, json=SAME_TIMES)
+    assert response.status_code == 422 and SAME_TIMES_REFUSED in _detail_text(response)
+    response = client.post(f"{URL}/templates", headers=admin_headers,
+                           json={"name": "Same", "settings": {**BASE, **SAME_TIMES}})
+    assert response.status_code == 422 and SAME_TIMES_REFUSED in _detail_text(response)
+
+
 def test_unknown_pilot_is_refused(client, admin_headers):
     response = client.post(URL, headers=admin_headers, json={**BASE, "pilot_ids": [9999]})
     assert response.status_code == 422
@@ -323,6 +342,25 @@ def test_pilot_page_shows_current_progress_and_history_newest_first(client, db, 
     assert [(row["requirement_id"], row["period"]["start"], row["status"]) for row in body["current"]] == [
         (req_id, NOV, "on_track")]
     assert client.get(f"{URL}/pilots/9999", headers=admin_headers).status_code == 404
+
+
+def test_flags_carry_the_pilot_name(client, db, admin_headers):
+    pilot = _pilot(db)
+    _create(client, admin_headers)
+    flags = client.get(f"{URL}/flags", headers=admin_headers).json()[str(pilot.id)]
+    assert {flag["pilot_name"] for flag in flags} == {"Test Pilot"}
+
+
+def test_history_marks_rows_saved_while_switched_off(client, db, admin_headers):
+    pilot = _pilot(db)
+    req_id = _create(client, admin_headers)["id"]
+    db.add(FlightRequirementResult(requirement_id=req_id, pilot_id=pilot.id, period_start=date(2026, 8, 1),
+                                   period_end=date(2026, 8, 31), status="excused", totals={},
+                                   target_snapshot={}, excused=True, excused_reason=OFF_REASON,
+                                   saved_at=LONG_AGO))
+    db.commit()
+    history = {row["period_start"]: row["switched_off"] for row in _history(client, admin_headers, pilot.id)}
+    assert history == {"2026-08-01": True, SEP: False, OCT: False}
 
 
 def test_a_racing_close_does_not_fail_a_page_load(client, db, admin_headers, monkeypatch):

@@ -177,6 +177,15 @@ def notify_assigned(db: Session, req: FlightRequirement, pilot_ids: list[int]) -
     return sent
 
 
+def notify_joined(db: Session, pilot_id: int) -> int:
+    """Email a pilot who has just become active about each active requirement
+    that applies to every active pilot. Returns the number sent."""
+    requirements = db.query(FlightRequirement).filter(
+        FlightRequirement.is_active.is_(True), ~FlightRequirement.pilots.any(),
+    ).order_by(FlightRequirement.id).all()
+    return sum(notify_assigned(db, req, [pilot_id]) for req in requirements)
+
+
 # Reminders
 
 

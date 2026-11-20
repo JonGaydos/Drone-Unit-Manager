@@ -3,6 +3,7 @@
 from datetime import date, datetime, time, timedelta, timezone
 
 import pytest
+from sqlalchemy import event
 
 from app.models.audit_log import AuditLog
 from app.models.flight import Flight
@@ -442,6 +443,37 @@ def test_miss_after_the_last_met_stays_open(db):
     _saved(db, req, pilot, SEP, "met")
     _saved(db, req, pilot, OCT, "missed")
     assert [f["period_start"] for f in open_misses(db)[pilot.id]] == [OCT[0]]
+
+
+def test_later_met_on_another_pilot_does_not_clear_a_miss(db):
+    pilot, other = _pilot(db), _pilot(db)
+    req = _req(db, start_date=SEP[0])
+    _saved(db, req, pilot, SEP, "missed")
+    _saved(db, req, other, OCT, "met")
+    _saved(db, req, pilot, AUG, "met")  # earlier met leaves the September miss open
+    assert [f["period_start"] for f in open_misses(db)[pilot.id]] == [SEP[0]]
+
+
+def test_open_misses_reads_only_open_missed_rows(db):
+    pilot = _pilot(db)
+    req = _req(db, start_date=AUG[0])
+    _saved(db, req, pilot, AUG, "missed")
+    _saved(db, req, pilot, SEP, "met")
+    for month in range(1, 8):
+        _saved(db, req, pilot, (date(2025, month, 1), date(2025, month, 28)), "met")
+    statements = []
+
+    def record(_conn, _cursor, statement, *_args):
+        statements.append(statement)
+
+    engine = db.get_bind()
+    event.listen(engine, "before_cursor_execute", record)
+    try:
+        assert open_misses(db) == {}
+    finally:
+        event.remove(engine, "before_cursor_execute", record)
+    [statement] = statements  # one query, filtered in the database
+    assert "EXISTS" in statement
 
 
 def test_miss_clears_when_excused(db):

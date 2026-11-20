@@ -9,11 +9,9 @@ an admin recalculates the period on purpose with ``recalculate_period``.
 import math
 from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
-from itertools import groupby
-from operator import attrgetter
 
-from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy import exists, func, or_
+from sqlalchemy.orm import Session, aliased
 
 from app.models.flight_requirement import FlightRequirement, FlightRequirementResult
 from app.services.audit import log_action
@@ -27,6 +25,12 @@ from app.services.requirement_periods import Period, periods_between
 
 SCORE_WINDOW_DAYS = 365
 OFF_REASON = "Requirement was switched off"
+
+
+def switched_off(row: FlightRequirementResult) -> bool:
+    """Whether a saved result was excused because the requirement was off then;
+    such a result cannot be un-excused."""
+    return bool(row.excused) and row.excused_by_id is None and row.excused_reason == OFF_REASON
 
 
 def _clock(value) -> str | None:
@@ -47,6 +51,22 @@ def target_snapshot(req: FlightRequirement) -> dict:
         "window_end_time": _clock(req.window_end_time),
         "purposes": sorted((row.purpose for row in req.purposes), key=str.casefold),
     }
+
+
+def overall_totals(totals: dict | None) -> dict:
+    """A saved result's minutes and flights over all its models: the ``*``
+    entry, or for each model separately the sum of the per-model entries."""
+    totals = totals or {}
+    if "*" in totals:
+        return totals["*"]
+    return {"minutes": sum(total["minutes"] for total in totals.values()),
+            "flights": sum(total["flights"] for total in totals.values())}
+
+
+def per_model_text(totals: dict | None) -> str:
+    """The per-model part of a saved result's totals, as ``Model: N min / F``."""
+    return "; ".join(f"{model}: {total['minutes']} min / {total['flights']}"
+                     for model, total in sorted((totals or {}).items()) if model != "*")
 
 
 def _fill(row: FlightRequirementResult, progress: PilotProgress, period_end: date, snapshot: dict,
@@ -230,43 +250,31 @@ def recalculate_period(db: Session, req: FlightRequirement, period_start: date, 
     return count
 
 
-def _open_in_group(rows: list[FlightRequirementResult]) -> list[FlightRequirementResult]:
-    """One pilot's saved results on one requirement, by period start: the misses
-    not excused and not followed by any met result."""
-    found: list[FlightRequirementResult] = []
-    met_later = False
-    for row in reversed(rows):
-        met_later = met_later or row.status == MET
-        if row.status == MISSED and not row.excused and not met_later:
-            found.append(row)
-    return found[::-1]
-
-
 def open_misses(db: Session, pilot_ids: list[int] | None = None) -> dict[int, list[dict]]:
     """Per pilot, the saved misses still flagged, oldest first by requirement.
 
     A miss clears when any later saved result of the pilot on the same
     requirement is met, or when the miss is excused. Pilots with none are left out.
     """
+    result, later = FlightRequirementResult, aliased(FlightRequirementResult)
+    met_later = exists().where(
+        later.requirement_id == result.requirement_id, later.pilot_id == result.pilot_id,
+        later.saved_at.isnot(None), later.status == MET, later.period_start > result.period_start,
+    )
     query = (
-        db.query(FlightRequirementResult, FlightRequirement.name)
-        .join(FlightRequirement, FlightRequirement.id == FlightRequirementResult.requirement_id)
-        .filter(FlightRequirementResult.saved_at.isnot(None))
+        db.query(result, FlightRequirement.name)
+        .join(FlightRequirement, FlightRequirement.id == result.requirement_id)
+        .filter(result.saved_at.isnot(None), result.status == MISSED,
+                or_(result.excused.is_(None), result.excused.is_(False)), ~met_later)
     )
     if pilot_ids is not None:
-        query = query.filter(FlightRequirementResult.pilot_id.in_(pilot_ids))
-    found = query.order_by(FlightRequirementResult.pilot_id, FlightRequirementResult.requirement_id,
-                           FlightRequirementResult.period_start).all()
-    names = {row.requirement_id: name for row, name in found}
+        query = query.filter(result.pilot_id.in_(pilot_ids))
     flags: dict[int, list[dict]] = {}
-    rows = (row for row, _ in found)
-    for (pilot_id, _req_id), group in groupby(rows, key=attrgetter("pilot_id", "requirement_id")):
-        for row in _open_in_group(list(group)):
-            flags.setdefault(pilot_id, []).append({
-                "result_id": row.id, "requirement_id": row.requirement_id,
-                "name": names[row.requirement_id],
-                "period_start": row.period_start, "period_end": row.period_end,
-            })
+    for row, name in query.order_by(result.pilot_id, result.requirement_id, result.period_start):
+        flags.setdefault(row.pilot_id, []).append({
+            "result_id": row.id, "requirement_id": row.requirement_id, "name": name,
+            "period_start": row.period_start, "period_end": row.period_end,
+        })
     return flags
 
 

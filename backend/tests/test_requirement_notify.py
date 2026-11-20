@@ -324,6 +324,58 @@ def test_adding_a_pilot_emails_only_the_new_one(client, db, admin_headers, smtp,
     assert _to(sent) == ["one@example.test", "two@example.test"]
 
 
+PILOTS_URL = "/api/pilots"
+
+
+def test_a_new_active_pilot_is_emailed_each_all_active_requirement(client, db, admin_headers, smtp, sent):
+    selected = _pilot(db, "Picked", "picked@example.test")
+    _req(db, name="Everyone")
+    _req(db, pilots=[selected], name="Only picked")
+    _req(db, name="Switched off", is_active=False)
+    response = client.post(PILOTS_URL, headers=admin_headers,
+                           json={"first_name": "New", "last_name": "Pilot", "email": "new@example.test"})
+    assert response.status_code == 200, response.text
+    assert [(email["to"], email["subject"]) for email in sent] == [
+        ("new@example.test", "Flight requirement assigned: Everyone")]
+
+
+def test_a_new_inactive_pilot_is_not_emailed(client, db, admin_headers, smtp, sent):
+    _req(db)
+    response = client.post(PILOTS_URL, headers=admin_headers,
+                           json={"first_name": "New", "last_name": "Pilot", "email": "new@example.test",
+                                 "status": "inactive"})
+    assert response.status_code == 200, response.text
+    assert sent == []
+
+
+def test_a_reactivated_pilot_is_emailed_each_all_active_requirement(client, db, admin_headers, smtp, sent):
+    pilot = _pilot(db)
+    pilot.status = "inactive"
+    db.commit()
+    _req(db)
+    response = client.patch(f"{PILOTS_URL}/{pilot.id}", headers=admin_headers, json={"notes": "Back"})
+    assert response.status_code == 200, response.text
+    assert sent == []  # an edit that does not reactivate sends nothing
+    response = client.patch(f"{PILOTS_URL}/{pilot.id}", headers=admin_headers, json={"status": "active"})
+    assert response.status_code == 200, response.text
+    assert _to(sent) == ["pilot@example.test"]
+    response = client.patch(f"{PILOTS_URL}/{pilot.id}", headers=admin_headers, json={"status": "active"})
+    assert len(sent) == 1  # already active: nothing more
+
+
+def test_a_failing_assignment_email_does_not_fail_the_pilot_save(client, db, admin_headers, smtp, monkeypatch):
+    _req(db)
+
+    def broken(*_args):
+        raise RuntimeError("mail server down")
+
+    monkeypatch.setattr(requirement_notify, "notify_assigned", broken)
+    response = client.post(PILOTS_URL, headers=admin_headers,
+                           json={"first_name": "New", "last_name": "Pilot", "email": "new@example.test"})
+    assert response.status_code == 200, response.text
+    assert db.query(Pilot).filter_by(first_name="New").count() == 1
+
+
 def test_narrowing_from_all_pilots_emails_nobody(client, db, admin_headers, smtp, sent):
     first = _pilot(db, "One", "one@example.test")
     _pilot(db, "Two", "two@example.test")

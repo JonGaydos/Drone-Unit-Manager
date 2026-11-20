@@ -92,11 +92,15 @@ def _int_or(value: str | None, default: int) -> int:
         return default
 
 
+def _clamp(value: int, low: int, high: int) -> int:
+    return min(max(value, low), high)
+
+
 def unit_eval_settings(db: Session) -> UnitEvalSettings:
     """Display zone, unit default location, grace days and fiscal start month.
 
     Blank or unreadable values fall back to no location, 14 grace days and an
-    October fiscal year.
+    October fiscal year; grace days are kept to 0..60 and the month to 1..12.
     """
     keys = ("org_default_lat", "org_default_lon", "requirements_grace_days", "fiscal_year_start_month")
     values = dict(db.query(Setting.key, Setting.value).filter(Setting.key.in_(keys)).all())
@@ -104,8 +108,8 @@ def unit_eval_settings(db: Session) -> UnitEvalSettings:
         zone=display_zone(db),
         lat=_float_or_none(values.get("org_default_lat")),
         lon=_float_or_none(values.get("org_default_lon")),
-        grace_days=_int_or(values.get("requirements_grace_days"), DEFAULT_GRACE_DAYS),
-        fiscal_start_month=_int_or(values.get("fiscal_year_start_month"), DEFAULT_FISCAL_START_MONTH),
+        grace_days=_clamp(_int_or(values.get("requirements_grace_days"), DEFAULT_GRACE_DAYS), 0, 60),
+        fiscal_start_month=_clamp(_int_or(values.get("fiscal_year_start_month"), DEFAULT_FISCAL_START_MONTH), 1, 12),
     )
 
 

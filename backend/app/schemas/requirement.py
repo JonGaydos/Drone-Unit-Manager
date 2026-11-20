@@ -104,6 +104,8 @@ class RequirementDefinition(BaseModel):
             self.window_start_time = self.window_end_time = None
         elif self.window_start_time is None or self.window_end_time is None:
             raise ValueError("A clock window needs a start and an end time")
+        elif self.window_start_time == self.window_end_time:
+            raise ValueError("Start and end time must differ")
 
     def _check_models(self) -> None:
         fewest = MIN_MODELS.get(self.model_mode)
@@ -249,6 +251,7 @@ class HistoryRowOut(BaseModel):
     excused_by_id: Optional[int] = None  # None on an automatic excusal
     excused_reason: Optional[str] = None
     saved_at: datetime
+    switched_off: bool = False  # excused because the requirement was off; cannot be un-excused
 
 
 class PilotRequirementsOut(BaseModel):
@@ -279,6 +282,7 @@ class FlagOut(BaseModel):
     name: str
     period_start: date
     period_end: date
+    pilot_name: str
 
 
 class RequirementSettings(BaseModel):

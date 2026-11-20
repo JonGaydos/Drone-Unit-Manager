@@ -21,6 +21,7 @@ from app.services.permissions import can
 from app.models.flight import Flight
 from app.models.pilot import Pilot
 from app.services.flight_scope import counted_flight_clause, counted_only
+from app.services.requirement_results import overall_totals, per_model_text
 from app.models.vehicle import Vehicle
 from app.models.certification import CertificationType, PilotCertification
 from app.models.operating_authority import (
@@ -978,7 +979,7 @@ def _flight_requirements(config: ReportConfig, db: Session):
 
     rows = []
     for result, name, pilot in found:
-        overall = (result.totals or {}).get("*") or {"minutes": 0, "flights": 0}
+        overall = overall_totals(result.totals)
         rows.append({
             "requirement": name,
             "period": f"{result.period_start} to {result.period_end}",
@@ -986,6 +987,7 @@ def _flight_requirements(config: ReportConfig, db: Session):
             "status": result.status,
             "minutes": overall["minutes"],
             "flights": overall["flights"],
+            "per_model": per_model_text(result.totals),
         })
     statuses = [result.status for result, _, _ in found]
     met, missed = statuses.count("met"), statuses.count("missed")
@@ -1000,7 +1002,7 @@ def _flight_requirements(config: ReportConfig, db: Session):
             "excused": statuses.count("excused"),
             "score": f"{round(100 * met / (met + missed))}%" if met + missed else "-",
         },
-        "columns": ["Requirement", "Period", "Pilot", "Status", "Minutes", "Flights"],
+        "columns": ["Requirement", "Period", "Pilot", "Status", "Minutes", "Flights", "Per model"],
         "rows": rows,
     }
 

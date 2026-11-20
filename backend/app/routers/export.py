@@ -19,6 +19,7 @@ from app.models.flight import Flight
 from app.models.flight_requirement import FlightRequirement, FlightRequirementResult
 from app.services.local_time import display_zone, stamped_on_or_after, stamped_on_or_before
 from app.services.pilot_contacts import hides_contacts, redact_audit_changes, redact_audit_details
+from app.services.requirement_results import overall_totals, per_model_text
 from app.models.pilot import Pilot
 from app.models.vehicle import Vehicle
 from app.models.vehicle_registration import VehicleRegistration
@@ -241,12 +242,6 @@ def export_pilots_csv(db: DBSession, user: ExportUser, _manage: PilotsManage):
     )
 
 
-def _per_model_text(totals: dict) -> str:
-    """The per-model part of a saved result's totals, as ``Model: N min / F``."""
-    return "; ".join(f"{model}: {total['minutes']} min / {total['flights']}"
-                     for model, total in sorted(totals.items()) if model != "*")
-
-
 @router.get("/requirements/{requirement_id}/csv", responses=responses(401, 403, 404))
 def export_requirement_csv(requirement_id: int, db: DBSession, user: ExportUser, _view: RequirementsView,
                            pilot_id: int | None = None):
@@ -273,11 +268,10 @@ def export_requirement_csv(requirement_id: int, db: DBSession, user: ExportUser,
     writer.writerow(["Requirement", "Period start", "Period end", "Pilot", "Status", "Minutes", "Flights",
                      "Per model", "Excused reason"])
     for row, pilot in results:
-        totals = row.totals or {}
-        overall = totals.get("*") or {"minutes": 0, "flights": 0}
+        overall = overall_totals(row.totals)
         writer.writerow([
             _csv_safe(req.name), row.period_start, row.period_end, _csv_safe(pilot.full_name), row.status,
-            overall["minutes"], overall["flights"], _csv_safe(_per_model_text(totals)),
+            overall["minutes"], overall["flights"], _csv_safe(per_model_text(row.totals)),
             _csv_safe(row.excused_reason or ""),
         ])
     return StreamingResponse(

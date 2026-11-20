@@ -53,6 +53,7 @@ AUTHORITY_VIEW = "authority.view"
 REGISTRATIONS_VIEW = "registrations.view"
 FLIGHT_PLANS_VIEW = "flight_plans.view"
 CHECKLISTS_VIEW = "checklists.view"
+REQUIREMENTS_VIEW = "requirements.view"
 REPORTS_EXPORT = "reports.export"
 REPORTS_GENERATE = "reports.generate"
 DIGEST_REDIRECT = "digest.redirect"
@@ -353,6 +354,7 @@ EXPECTED_REPORT_KEYS = {
     "annual_unit_report": {FLIGHTS_VIEW, LOGS_VIEW, FLEET_VIEW, CERTIFICATIONS_VIEW, AUTHORITY_VIEW,
                            MAINTENANCE_VIEW, INCIDENTS_VIEW},
     "per_pilot_annual_review": {FLIGHTS_VIEW, LOGS_VIEW, CERTIFICATIONS_VIEW},
+    "flight_requirements": {REQUIREMENTS_VIEW, FLIGHTS_VIEW},
 }
 REPORT_CASES = [(rtype, key) for rtype, keys in EXPECTED_REPORT_KEYS.items() for key in sorted(keys)]
 

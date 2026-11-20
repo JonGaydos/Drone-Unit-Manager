@@ -126,6 +126,18 @@ def test_csv_has_header_and_a_row_per_saved_result(client, db, admin_headers):
     assert lines[2].endswith(",excused,0,0,,On leave")
 
 
+EACH_TOTALS = {"ModelA": {"minutes": 30, "flights": 1}, "ModelB": {"minutes": 15, "flights": 2}}
+EACH_TEXT = "ModelA: 30 min / 1; ModelB: 15 min / 2"
+
+
+def test_csv_sums_the_models_of_an_each_separately_result(client, db, admin_headers):
+    req = _req(db, model_mode="each")
+    _saved(db, req, _pilot(db), SEP, "met", totals=EACH_TOTALS)
+    response = client.get(f"/api/export/requirements/{req.id}/csv", headers=admin_headers)
+    assert response.text.strip().splitlines()[1] == (
+        f"Monthly 1 hr,2026-09-01,2026-09-30,Test Pilot,met,45,3,{EACH_TEXT},")
+
+
 def test_csv_escapes_a_name_starting_with_a_formula_character(client, db, admin_headers):
     pilot = _pilot(db)
     req = _req(db, name="=SUM(A1)")
@@ -190,6 +202,19 @@ def test_report_has_summary_and_a_row_per_result(client, db, admin_headers):
     assert body["summary"] == {"requirements": 1, "results": 2, "met": 1, "missed": 1, "excused": 0, "score": "50%"}
     assert len(body["rows"]) == 2
     assert len(body["columns"]) == len(body["rows"][0])
+
+
+def test_report_sums_the_models_of_an_each_separately_result(client, db, admin_headers):
+    req = _req(db, model_mode="each")
+    _saved(db, req, _pilot(db), SEP, "met", totals=EACH_TOTALS)
+    _saved(db, _req(db, name="Combined"), _pilot(db), SEP, "met",
+           totals={"*": {"minutes": 70, "flights": 4}})
+    body = client.post(REPORT_URL, headers=admin_headers, json=_config()).json()
+    assert body["columns"] == ["Requirement", "Period", "Pilot", "Status", "Minutes", "Flights", "Per model"]
+    rows = {row["requirement"]: row for row in body["rows"]}
+    assert (rows["Monthly 1 hr"]["minutes"], rows["Monthly 1 hr"]["flights"]) == (45, 3)
+    assert rows["Monthly 1 hr"]["per_model"] == EACH_TEXT
+    assert (rows["Combined"]["minutes"], rows["Combined"]["flights"], rows["Combined"]["per_model"]) == (70, 4, "")
 
 
 def test_report_filters_by_date_range(client, db, admin_headers):

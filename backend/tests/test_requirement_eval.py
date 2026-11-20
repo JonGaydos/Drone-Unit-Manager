@@ -406,3 +406,15 @@ def test_unit_eval_settings_defaults_and_values(db):
     configured = unit_eval_settings(db)
     assert (configured.lat, configured.lon, configured.grace_days, configured.fiscal_start_month) == (
         41.5, -87.5, 7, 7)
+
+
+@pytest.mark.parametrize("grace, month, expected", [
+    ("-5", "0", (0, 1)),
+    ("99", "13", (60, 12)),
+])
+def test_unit_eval_settings_clamps_out_of_range_values(db, grace, month, expected):
+    db.add_all([Setting(key="requirements_grace_days", value=grace),
+                Setting(key="fiscal_year_start_month", value=month)])
+    db.commit()
+    settings = unit_eval_settings(db)
+    assert (settings.grace_days, settings.fiscal_start_month) == expected

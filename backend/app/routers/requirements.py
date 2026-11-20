@@ -39,8 +39,8 @@ from app.services.requirement_eval import (
 from app.services.requirement_notify import notify_assigned
 from app.services.requirement_periods import Period, period_containing
 from app.services.requirement_results import (
-    OFF_REASON, close_due_periods, closed_watermark, open_misses, pending_periods, recalculate_period,
-    requirements_score, saved_through,
+    close_due_periods, closed_watermark, open_misses, pending_periods, recalculate_period, requirements_score,
+    saved_through, switched_off,
 )
 
 logger = logging.getLogger(__name__)
@@ -333,7 +333,8 @@ def _pilot_history(db: Session, pilot_id: int) -> list[dict]:
     )
     return [{**{key: getattr(row, key) for key in (
         "requirement_id", "period_start", "period_end", "status", "totals", "target_snapshot",
-        "excused", "excused_by_id", "excused_reason", "saved_at")}, "result_id": row.id, "name": name}
+        "excused", "excused_by_id", "excused_reason", "saved_at")}, "result_id": row.id, "name": name,
+        "switched_off": switched_off(row)}
         for row, name in rows]
 
 
@@ -352,9 +353,12 @@ def pilot_requirements(pilot_id: int, db: DBSession, user: ViewUser):
 
 @router.get("/flags", response_model=dict[int, list[FlagOut]], responses=responses(401, 403))
 def requirement_flags(db: DBSession, user: ViewUser):
-    """Per pilot, the saved misses still flagged."""
+    """Per pilot, the saved misses still flagged, with the pilot's name."""
     _close_safely(db, local_today(db))
-    return open_misses(db)
+    flags = open_misses(db)
+    names = {pilot.id: pilot.full_name for pilot in db.query(Pilot).filter(Pilot.id.in_(flags))}
+    return {pilot_id: [{**flag, "pilot_name": names[pilot_id]} for flag in found]
+            for pilot_id, found in flags.items()}
 
 
 # Excusals and recalculation
@@ -379,7 +383,7 @@ def _saved_status(row: FlightRequirementResult) -> str:
 
 def _excuse_saved(row: FlightRequirementResult, data: ExcuseIn, user: User) -> None:
     """Excuse or un-excuse a saved result. A month the requirement was off stays excused."""
-    if row.excused and row.excused_by_id is None and row.excused_reason == OFF_REASON:
+    if switched_off(row):
         raise HTTPException(422, "This period was excused because the requirement was switched off")
     row.excused = data.excused
     row.excused_by_id = user.id
