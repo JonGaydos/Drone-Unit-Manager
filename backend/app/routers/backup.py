@@ -42,7 +42,6 @@ def _telemetry_session():
 from app.deps import DBSession, AdminUser
 from app.services import permissions
 from app.services.audit_capture import ACTOR_KEY, set_actor
-from app.services.fleet_models import backfill_rule_models
 from app.services.sync_lock import restoring, sync_guard_http
 from app.models.user import User
 from app.models.pilot import Pilot
@@ -77,10 +76,10 @@ from app.models.folder import Folder
 from app.models.audit_log import AuditLog
 from app.models.incident import Incident
 from app.models.flight_approval import FlightPlan
-from app.models.currency_rule import CurrencyRule, CurrencyRuleModel
 from app.models.flight_requirement import (
-    FlightRequirement, FlightRequirementModel, FlightRequirementNotice, FlightRequirementPilot,
-    FlightRequirementPurpose, FlightRequirementResult, FlightRequirementTemplate,
+    FlightRequirement, FlightRequirementExcusal, FlightRequirementLapse, FlightRequirementModel,
+    FlightRequirementNotice, FlightRequirementPilot, FlightRequirementPurpose, FlightRequirementResult,
+    FlightRequirementTemplate,
 )
 from app.models.equipment_checkout import EquipmentCheckout
 from app.models.checklist import ChecklistTemplate, ChecklistCompletion
@@ -110,13 +109,11 @@ EXPORT_ORDER = [
     ("folders", Folder),
     ("flight_purposes", FlightPurpose),
     ("certification_types", CertificationType),
-    ("currency_rules", CurrencyRule),
     ("operating_authorities", OperatingAuthority),
     ("role_permissions", RolePermission),
     # Tier 2: Base entities
     ("pilots", Pilot),
     ("users", User),
-    ("currency_rule_models", CurrencyRuleModel),
     ("flight_requirements", FlightRequirement),
     ("flight_requirement_templates", FlightRequirementTemplate),
     ("flight_requirement_models", FlightRequirementModel),
@@ -124,6 +121,8 @@ EXPORT_ORDER = [
     ("flight_requirement_pilots", FlightRequirementPilot),
     ("flight_requirement_results", FlightRequirementResult),
     ("flight_requirement_notices", FlightRequirementNotice),
+    ("flight_requirement_lapses", FlightRequirementLapse),
+    ("flight_requirement_excusals", FlightRequirementExcusal),
     ("vehicles", Vehicle),
     ("batteries", Battery),
     ("controllers", Controller),
@@ -890,10 +889,6 @@ def _restore_main_tables(db: Session, db_tables: dict, held_items: list[dict] | 
             if name == "audit_logs":
                 audit_imported = len(rows)
             logger.info("  Imported %s: %d rows", name, len(rows))
-        # A backup made before 0016 has no rule model rows; its rules keep their
-        # single vehicle_model. A backup that has the key is restored as is.
-        if "currency_rule_models" not in db_tables:
-            backfill_rule_models(db)
         # One entry per held item the restore removed or changed, in the same
         # transaction: the restore and its record stand or fall together.
         if held_items:

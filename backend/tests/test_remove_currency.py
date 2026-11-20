@@ -5,7 +5,6 @@ from datetime import date, timedelta
 
 import pytest
 
-from app.models.currency_rule import CurrencyRule
 from app.models.flight import Flight
 from app.models.pilot import Pilot
 from app.services import api_tokens, permissions
@@ -15,9 +14,8 @@ COMPLIANCE_URL = "/api/dashboard/compliance"
 
 @pytest.fixture
 def lapsed_pilot(db):
-    """An active pilot who would be lapsed on an active currency rule: the
-    rule row can still exist until migration 0018 drops the table."""
-    db.add(CurrencyRule(name="Monthly hour", required_hours=5, period_days=30, is_active=True))
+    """An active pilot whose last flight is long past, who would have been
+    lapsed under currency."""
     pilot = Pilot(first_name="Lee", last_name="Lapsed", status="active")
     db.add(pilot)
     db.commit()

@@ -51,6 +51,11 @@ class FlightRequirement(Base):
         back_populates="requirement", cascade=DELETE_ORPHAN, lazy="selectin")
     purposes: Mapped[list["FlightRequirementPurpose"]] = relationship(
         back_populates="requirement", cascade=DELETE_ORPHAN, lazy="selectin")
+    # Rolling history and excusals: loaded on access, not with every requirement.
+    lapses: Mapped[list["FlightRequirementLapse"]] = relationship(
+        back_populates="requirement", cascade=DELETE_ORPHAN)
+    excusals: Mapped[list["FlightRequirementExcusal"]] = relationship(
+        back_populates="requirement", cascade=DELETE_ORPHAN)
 
     @validates("is_active")
     def _stamp_active_change(self, _key: str, value: bool) -> bool:
@@ -141,3 +146,37 @@ class FlightRequirementNotice(Base):
     period_start: Mapped[date] = mapped_column(Date)
     kind: Mapped[str] = mapped_column(String(20))  # assigned, reminder, missed
     sent_at: Mapped[datetime] = mapped_column(UTCDateTime)
+
+
+class FlightRequirementLapse(Base):
+    """One lapse of a pilot on a rolling requirement: when it started and, once
+    the pilot is current again, when it ended (NULL while still lapsed)."""
+    __tablename__ = "flight_requirement_lapses"
+    __table_args__ = (UniqueConstraint("requirement_id", "pilot_id", "lapsed_on"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    requirement_id: Mapped[int] = mapped_column(
+        ForeignKey(FLIGHT_REQUIREMENTS_ID, ondelete="CASCADE"), index=True)
+    pilot_id: Mapped[int] = mapped_column(ForeignKey(PILOTS_ID, ondelete="CASCADE"), index=True)
+    lapsed_on: Mapped[date] = mapped_column(Date)
+    recovered_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    requirement: Mapped["FlightRequirement"] = relationship(back_populates="lapses")
+
+
+class FlightRequirementExcusal(Base):
+    """A pilot excused from a rolling requirement until a date (leave, injury)."""
+    __tablename__ = "flight_requirement_excusals"
+    __table_args__ = (UniqueConstraint("requirement_id", "pilot_id"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    requirement_id: Mapped[int] = mapped_column(
+        ForeignKey(FLIGHT_REQUIREMENTS_ID, ondelete="CASCADE"), index=True)
+    pilot_id: Mapped[int] = mapped_column(ForeignKey(PILOTS_ID, ondelete="CASCADE"), index=True)
+    excused_until: Mapped[date] = mapped_column(Date)
+    reason: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    excused_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey(USERS_ID), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    requirement: Mapped["FlightRequirement"] = relationship(back_populates="excusals")

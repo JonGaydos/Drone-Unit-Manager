@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import String, ForeignKey, func
+from sqlalchemy import JSON, String, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -25,5 +25,8 @@ class User(Base):
     token_version: Mapped[int] = mapped_column(default=0, server_default="0")
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now(), onupdate=func.now())
+    # The user's own dashboard and analytics arrangement; NULL = use the default.
+    dashboard_layout: Mapped[Optional[dict | list]] = mapped_column(JSON, nullable=True)
+    analytics_layout: Mapped[Optional[dict | list]] = mapped_column(JSON, nullable=True)
 
     pilot = relationship("Pilot", back_populates="user", foreign_keys=[pilot_id])
