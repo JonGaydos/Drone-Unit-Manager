@@ -133,3 +133,35 @@
 - [ ] **Step 3:** Run the full backend, frontend and e2e suites; migration 0018 up, down, up on a temp database copied from a 0017 schema.
 - [ ] **Step 4:** Whole-branch review by a fresh reviewer on the most capable model; one fix wave.
 - [ ] **Step 5:** Report to the owner and ask for the go to push. Then PR, merge on green CI and zero new SonarCloud issues, and ask before tagging `v3.6.1`.
+
+---
+
+## Interface improvements (added 2026-11-20; spec section "Interface improvements in the same release")
+
+Run after Task 6 and before Task 7, so Task 7's docs, pictures and review cover them. Migration 0018 (Task 2) also adds `users.dashboard_layout` and `users.analytics_layout` (JSON, nullable).
+
+### Task 6a: Fixed page header
+- Files: `frontend/src/components/layout/Layout.jsx`, `TopBar.jsx`, tests.
+- The desktop top bar is sticky at the top of the content column (solid background, border, above page content); only the content scrolls. Phone top bar unchanged. Check pages with their own sticky elements (tables, modals, the flights bar) still layer correctly.
+- Tests: the top bar has the sticky classes on desktop; a long page keeps it in view (component test on classes; e2e scroll check in Task 7).
+- Commit: `Keep the page header in place while content scrolls`.
+
+### Task 6b: Arrangeable dashboard and analytics
+- Files: add `@dnd-kit/core` and `@dnd-kit/sortable` (pinned, lockfile updated with npm); create `frontend/src/components/layout/ArrangeableGrid.jsx` (+ tests) used by `DashboardPage.jsx` and `AnalyticsPage.jsx`; backend `models/user.py`, `schemas/user.py`, `routers/auth.py` (`PATCH /api/auth/me` accepts `dashboard_layout`/`analytics_layout`: `{"order": [tile ids], "hidden": [tile ids]}`, validated: known tile id strings, at most 50, no duplicates; `null` clears), `routers/settings.py` (admin keys `default_dashboard_layout`, `default_analytics_layout`, same validation), `UserOut` returns both layouts.
+- Interfaces: each tile gets a stable id (e.g. `recent-flights`, `currency-risk` removed, `this-period`, `locations`); `ArrangeableGrid({ tiles: [{id, span, render, visible}], layout, defaultLayout, onSave, canSetDefault })`.
+- Behavior: Edit layout / Save / Cancel / Reset to default; admins also see "Save as unit default"; unknown ids in a saved layout are ignored; new tiles appended and on; permission-hidden tiles never render; keyboard reordering in edit mode; works on touch.
+- Tests: backend validation and own-account only (a user cannot set another user's layout); frontend reorder by keyboard, hide and show, save body, reset, admin default, unknown and new ids, permission-hidden tile stays hidden.
+- Commit: `Let users arrange their dashboard and analytics`.
+
+### Task 6c: Floating flights selection bar
+- Files: `frontend/src/pages/FlightsPage.jsx`, tests.
+- The selection bar is fixed to the bottom of the viewport (inside the content column on desktop, full width on phones), slides up when the first row is ticked, and leaves room so the last table row is not hidden under it. Same controls as today.
+- Tests: ticking a row does not insert anything above the table; the bar shows the count and controls; clearing the selection hides it.
+- Commit: `Float the flights selection bar instead of shifting the table`.
+
+### Task 6d: Certifications views
+- Files: `frontend/src/pages/CertificationsPage.jsx` (split into view components under `frontend/src/components/certifications/`), tests.
+- Views per the spec: Matrix (pinned pilot column and header, status icon cells with accessible labels and the date in a tooltip), By pilot (cards), By urgency (Expired, 30, 60, 90 days, Current). View switch remembered in localStorage; By pilot default under the `sm` breakpoint when nothing is stored. Existing filters and actions keep working; bulk renew stays in the Matrix view.
+- Keep each component under complexity 15; this is also the chance to bring the page's large functions down without changing behavior.
+- Tests: each view renders the same data; filters apply in each view; the stored view is restored; actions open the right modals.
+- Commit: `Add pilot and urgency views to certifications`.

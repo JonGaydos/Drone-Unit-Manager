@@ -58,3 +58,25 @@ Backups include the new tables; restoring an older backup skips the currency tab
 - Score: periodic latest-closed-period misses and rolling lapses combined per pilot (a pilot counts once), excused pilots, no active requirements means no deduction, other score parts unchanged.
 - Removal: no route, page, tile, email or permission still refers to currency; old backups restore; migration up and down.
 - Page: tabs per role, redirects, deep links from the calendar and dashboard.
+
+## Interface improvements in the same release (owner, 2026-11-20)
+
+### Fixed page header
+The top bar (page title, search, theme) stays in place on desktop while the content below it scrolls, as the sidebar already does. The phone top bar is already fixed and stays as it is.
+
+### Arrangeable dashboard and analytics
+- An **Edit layout** button on the Dashboard and on Analytics switches to edit mode: each tile gets a drag handle and an on/off switch, tiles snap into the same row grid, and tiles keep their current widths. **Save**, **Cancel** and **Reset to default**.
+- Drag and drop uses `@dnd-kit` (keyboard and touch support). Keyboard users can move a tile with arrow keys in edit mode.
+- **Each user has their own layout**, saved to their account so it follows them between devices. An admin can save the current layout as the **unit default** that users without their own layout get, and that Reset to default returns to.
+- A tile the user cannot see (permission) is never shown, whatever the layout says. A tile added in a later release appears at the end, switched on.
+- Storage: two JSON columns on `users` (`dashboard_layout`, `analytics_layout`, nullable = use the default), written through `PATCH /api/auth/me`; the unit defaults are two settings keys written by admins. Added to migration 0018.
+
+### Flights selection bar
+The bar that appears when flights are selected (count, reassign pilot, set purpose, delete) floats at the bottom of the screen instead of pushing the table down. Nothing shifts when a row is ticked.
+
+### Certifications views
+A view switch at the top of the Certifications page, remembered per device:
+- **Matrix:** the current grid with the pilot column and the certification header pinned while scrolling, and each cell a colored status icon (date on hover or tap).
+- **By pilot:** one card per pilot with their certifications as status chips. Default on phones.
+- **By urgency:** Expired, Expiring within 30, 60 and 90 days, then Current, each a list of pilot and certification with the date.
+Filters (status, pilot search, hide empty) and actions (assign, edit, renew, bulk renew) work in every view where they apply.
