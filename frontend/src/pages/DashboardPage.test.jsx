@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { screen, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
@@ -341,5 +341,84 @@ describe('DashboardPage', () => {
     mockDashboard({ ...POPULATED, locations: [{ vehicle_id: 1, label: 'Falcon', location_text: 'Base' }] })
     renderWithProviders(<DashboardPage />, { role: 'pilot' })
     expect(await screen.findByLabelText('Set location for Falcon')).toBeInTheDocument()
+  })
+
+  describe('arranging', () => {
+    const SAVED = { order: ['locations', 'recent-flights'], hidden: ['activity'] }
+
+    function headings() {
+      return screen.getAllByRole('heading', { level: 3 }).map(h => h.textContent.trim())
+    }
+
+    it("shows the user's own layout", async () => {
+      mockDashboard(POPULATED)
+      renderWithProviders(<DashboardPage />, { user: { id: 1, username: 'p', role: 'pilot', dashboard_layout: SAVED } })
+      await screen.findByText(/7 active pilots/)
+      expect(headings().slice(0, 2)).toEqual(['Locations', 'Recent Flights'])
+      expect(screen.queryByRole('heading', { name: /Activity by Month/ })).toBeNull()
+    })
+
+    it('uses the unit default without a layout of their own', async () => {
+      mockDashboard(POPULATED)
+      server.use(http.get('/api/settings/default_dashboard_layout', () =>
+        HttpResponse.json({ key: 'default_dashboard_layout', value: JSON.stringify({ order: ['top-vehicles'], hidden: [] }) })))
+      renderWithProviders(<DashboardPage />, { role: 'pilot' })
+      await screen.findByText(/7 active pilots/)
+      await vi.waitFor(() => expect(headings()[0]).toBe('Top Vehicles (30d)'))
+    })
+
+    it('saves the arrangement to the account', async () => {
+      const bodies = []
+      mockDashboard(POPULATED)
+      server.use(http.patch('/api/auth/me', async ({ request }) => {
+        const body = await request.json()
+        bodies.push(body)
+        return HttpResponse.json({ id: 1, username: 'p', role: 'pilot', ...body })
+      }))
+      const { user } = renderWithProviders(<DashboardPage />, { role: 'pilot' })
+      await screen.findByText(/7 active pilots/)
+      await user.click(screen.getByRole('button', { name: 'Edit layout' }))
+      await user.click(screen.getByRole('switch', { name: 'Show Locations' }))
+      await user.click(screen.getByRole('button', { name: 'Save' }))
+      await screen.findByRole('button', { name: 'Edit layout' })
+      expect(bodies).toHaveLength(1)
+      expect(bodies[0].dashboard_layout.hidden).toEqual(['locations'])
+      expect(screen.queryByRole('heading', { name: 'Locations' })).toBeNull()
+    })
+
+    it('lets an admin save the unit default', async () => {
+      const puts = []
+      mockDashboard(POPULATED)
+      server.use(http.put('/api/settings', async ({ request }) => {
+        puts.push(await request.json())
+        return HttpResponse.json({ ok: true })
+      }))
+      const { user } = renderWithProviders(<DashboardPage />, { role: 'admin' })
+      await screen.findByText(/7 active pilots/)
+      await user.click(screen.getByRole('button', { name: 'Edit layout' }))
+      await user.click(screen.getByRole('button', { name: 'Save as unit default' }))
+      await screen.findByRole('button', { name: 'Edit layout' })
+      expect(puts[0].key).toBe('default_dashboard_layout')
+      expect(JSON.parse(puts[0].value).order).toContain('this-period')
+    })
+
+    it('offers no unit default to a pilot', async () => {
+      mockDashboard(POPULATED)
+      const { user } = renderWithProviders(<DashboardPage />, { role: 'pilot' })
+      await screen.findByText(/7 active pilots/)
+      await user.click(screen.getByRole('button', { name: 'Edit layout' }))
+      expect(screen.queryByRole('button', { name: 'Save as unit default' })).toBeNull()
+    })
+
+    it('keeps This Period off without requirements.view, even when editing', async () => {
+      mockDashboard(POPULATED)
+      const { user } = renderWithProviders(<DashboardPage />, {
+        role: 'viewer', permissions: { 'requirements.view': 'no' },
+      })
+      await screen.findByText(/7 active pilots/)
+      await user.click(screen.getByRole('button', { name: 'Edit layout' }))
+      expect(screen.queryByRole('switch', { name: 'Show This Period' })).toBeNull()
+      expect(screen.getByRole('switch', { name: 'Show Locations' })).toBeInTheDocument()
+    })
   })
 })

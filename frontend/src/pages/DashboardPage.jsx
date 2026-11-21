@@ -16,6 +16,8 @@ import {
 } from 'lucide-react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 import ThisPeriodTile from '@/components/requirements/ThisPeriodTile'
+import ArrangeableGrid from '@/components/layout/ArrangeableGrid'
+import { usePageLayout } from '@/components/layout/usePageLayout'
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip as RTooltip } from 'recharts'
 
 /* ───────────────────── helpers ───────────────────── */
@@ -99,7 +101,7 @@ function HeroTile({ user, compliance }) {
     return 'Good evening'
   })()
   return (
-    <Tile className="lg:col-span-12 p-5 flex flex-col sm:flex-row gap-5 items-center">
+    <Tile className="p-5 flex flex-col sm:flex-row gap-5 items-center">
       <div className={`relative w-24 h-24 sm:w-28 sm:h-28 rounded-2xl flex items-center justify-center border-2 ${theme.bg} ${theme.border || 'border-border'} shrink-0`}>
         <div className="text-center">
           <div className={`text-3xl font-bold ${theme.color}`}>{compliance?.compliance_score ?? '—'}</div>
@@ -136,7 +138,7 @@ function HeroTile({ user, compliance }) {
 
 function StatTile({ label, value, subtitle, deltaPct, icon: Icon, to }) {
   const card = (
-    <Tile className="lg:col-span-3 p-4 hover:border-primary/50 transition-colors h-full">
+    <Tile className="p-4 hover:border-primary/50 transition-colors h-full">
       <div className="flex items-start justify-between">
         <div className="flex-1 min-w-0">
           <p className="text-xs text-muted-foreground uppercase tracking-wider">{label}</p>
@@ -154,12 +156,12 @@ function StatTile({ label, value, subtitle, deltaPct, icon: Icon, to }) {
       </div>
     </Tile>
   )
-  return to ? <Link to={to} className="lg:col-span-3 block">{card}</Link> : card
+  return to ? <Link to={to} className="block">{card}</Link> : card
 }
 
 function RecentFlightsTile({ flights }) {
   return (
-    <Tile className="lg:col-span-6 lg:row-span-2 overflow-hidden">
+    <Tile className="overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5"><QuadcopterIcon className="w-4 h-4 text-primary" /> Recent Flights</h3>
         <Link to="/flights" className="text-xs text-primary hover:underline flex items-center gap-1">All <ArrowRight className="w-3 h-3" /></Link>
@@ -188,9 +190,9 @@ function RecentFlightsTile({ flights }) {
   )
 }
 
-function ListTile({ title, icon: Icon, items, emptyLabel, renderItem, link, linkLabel = 'View all', colSpan = 'lg:col-span-3' }) {
+function ListTile({ title, icon: Icon, items, emptyLabel, renderItem, link, linkLabel = 'View all' }) {
   return (
-    <Tile className={`${colSpan} overflow-hidden`}>
+    <Tile className="overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5"><Icon className="w-4 h-4 text-primary" /> {title}</h3>
         {link && (
@@ -208,9 +210,9 @@ function ListTile({ title, icon: Icon, items, emptyLabel, renderItem, link, link
   )
 }
 
-function LocationsTile({ items, pilots, places, onChange, canSetLocation, colSpan = 'lg:col-span-4' }) {
+function LocationsTile({ items, pilots, places, onChange, canSetLocation }) {
   return (
-    <Tile className={`${colSpan} overflow-hidden`}>
+    <Tile className="overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5"><Box className="w-4 h-4 text-primary" /> Locations</h3>
       </div>
@@ -255,7 +257,7 @@ function ActivityChartTile({ data }) {
     hours: d.hours,
   })), [data])
   return (
-    <Tile className="lg:col-span-6 p-4 overflow-hidden">
+    <Tile className="p-4 overflow-hidden">
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5"><TrendingUp className="w-4 h-4 text-primary" /> Activity by Month</h3>
         <Link to="/analytics" className="text-xs text-primary hover:underline flex items-center gap-1">Analytics <ArrowRight className="w-3 h-3" /></Link>
@@ -328,6 +330,7 @@ export default function DashboardPage() {
   const [locationPlaces, setLocationPlaces] = useState(['North', 'Central', 'South'])
   const [loading, setLoading] = useState(true)
   const toast = useToast()
+  const pageLayout = usePageLayout('dashboard_layout', 'default_dashboard_layout')
 
   useEffect(() => {
     let alive = true
@@ -383,163 +386,206 @@ export default function DashboardPage() {
     } catch (err) { toast.error(err.message) }
   }
 
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-4 auto-rows-min">
-      {/* Row 1: Hero */}
-      <HeroTile user={user} compliance={compliance} />
+  const reviewCount = stats?.flights_needing_review || 0
+  const reviewItems = reviewCount > 0 ? [{ id: 'review' }] : []
 
-      {/* Row 2: 4 trend stats */}
-      <StatTile
-        label="Flights (30d)"
-        value={trends?.current?.flights ?? stats?.total_flights ?? 0}
-        deltaPct={trends?.deltas_pct?.flights}
-        subtitle={`${stats?.total_flights ?? 0} total`}
-        icon={QuadcopterIcon}
-        to="/flights"
-      />
-      <StatTile
-        label="Hours (30d)"
-        value={trends?.current?.hours ?? formatHours((stats?.total_flight_hours ?? 0) * 3600)}
-        deltaPct={trends?.deltas_pct?.hours}
-        subtitle={`${formatHours((stats?.total_flight_hours ?? 0) * 3600)} total`}
-        icon={Clock}
-        to="/analytics"
-      />
-      {/* Value and delta are who flew in the last 30 days; the roster total is
-          the subtitle, as on the flights and hours cards. */}
-      <StatTile
-        label="Pilots Flying (30d)"
-        value={trends?.current?.active_pilots ?? '—'}
-        deltaPct={trends?.deltas_pct?.active_pilots}
-        subtitle={`${stats?.active_pilots ?? 0} active`}
-        icon={Users}
-        to="/pilots"
-      />
-      <StatTile
-        label="Vehicles Flown (30d)"
-        value={trends?.current?.active_vehicles ?? '—'}
-        deltaPct={trends?.deltas_pct?.active_vehicles}
-        subtitle={`${stats?.fleet_size ?? 0} in fleet`}
-        icon={Box}
-        to="/fleet"
-      />
-
-      {/* Row 3: Recent flights (tall) + supporting tiles */}
-      <RecentFlightsTile flights={recentFlights} />
-
-      <ListTile
-        title="Needs Review"
-        icon={ClipboardCheck}
-        items={(stats?.flights_needing_review || 0) > 0 ? [{ id: 'review' }] : []}
-        emptyLabel="Queue is clear"
-        link="/flights?review_status=needs_review"
-        linkLabel="Open"
-        renderItem={() => (
-          <li key="rev" className="px-4 py-3">
-            <div className="flex items-center justify-between">
-              <span className="text-3xl font-bold text-amber-400">{stats?.flights_needing_review || 0}</span>
-              <button onClick={() => navigate('/flights?review_status=needs_review')} className="text-xs text-primary hover:underline">Review →</button>
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">flights awaiting supervisor review</p>
-          </li>
-        )}
-      />
-
-      <ListTile
-        title="Maintenance Due"
-        icon={Wrench}
-        items={upcomingMaintenance}
-        emptyLabel="No maintenance due"
-        link="/maintenance"
-        renderItem={(m) => {
-          // The endpoint returns both schedules and records, already deduped
-          // and sorted most-overdue first, so the tile just renders them.
-          const days = m.days_remaining
-          const overdue = days < 0
-          return (
+  // Each tile's id is stored in saved layouts: never rename one.
+  const tiles = [
+    {
+      id: 'compliance-summary', label: 'Compliance summary', span: 'lg:col-span-12',
+      render: () => <HeroTile user={user} compliance={compliance} />,
+    },
+    {
+      id: 'flights-30d', label: 'Flights (30d)', span: 'lg:col-span-3',
+      render: () => (
+        <StatTile
+          label="Flights (30d)"
+          value={trends?.current?.flights ?? stats?.total_flights ?? 0}
+          deltaPct={trends?.deltas_pct?.flights}
+          subtitle={`${stats?.total_flights ?? 0} total`}
+          icon={QuadcopterIcon}
+          to="/flights"
+        />
+      ),
+    },
+    {
+      id: 'hours-30d', label: 'Hours (30d)', span: 'lg:col-span-3',
+      render: () => (
+        <StatTile
+          label="Hours (30d)"
+          value={trends?.current?.hours ?? formatHours((stats?.total_flight_hours ?? 0) * 3600)}
+          deltaPct={trends?.deltas_pct?.hours}
+          subtitle={`${formatHours((stats?.total_flight_hours ?? 0) * 3600)} total`}
+          icon={Clock}
+          to="/analytics"
+        />
+      ),
+    },
+    // Value and delta are who flew in the last 30 days; the roster total is
+    // the subtitle, as on the flights and hours cards.
+    {
+      id: 'pilots-flying', label: 'Pilots Flying (30d)', span: 'lg:col-span-3',
+      render: () => (
+        <StatTile
+          label="Pilots Flying (30d)"
+          value={trends?.current?.active_pilots ?? '—'}
+          deltaPct={trends?.deltas_pct?.active_pilots}
+          subtitle={`${stats?.active_pilots ?? 0} active`}
+          icon={Users}
+          to="/pilots"
+        />
+      ),
+    },
+    {
+      id: 'vehicles-flown', label: 'Vehicles Flown (30d)', span: 'lg:col-span-3',
+      render: () => (
+        <StatTile
+          label="Vehicles Flown (30d)"
+          value={trends?.current?.active_vehicles ?? '—'}
+          deltaPct={trends?.deltas_pct?.active_vehicles}
+          subtitle={`${stats?.fleet_size ?? 0} in fleet`}
+          icon={Box}
+          to="/fleet"
+        />
+      ),
+    },
+    {
+      id: 'recent-flights', label: 'Recent Flights', span: 'lg:col-span-6 lg:row-span-2',
+      render: () => <RecentFlightsTile flights={recentFlights} />,
+    },
+    {
+      id: 'needs-review', label: 'Needs Review', span: 'lg:col-span-3',
+      render: () => (
+        <ListTile
+          title="Needs Review"
+          icon={ClipboardCheck}
+          items={reviewItems}
+          emptyLabel="Queue is clear"
+          link="/flights?review_status=needs_review"
+          linkLabel="Open"
+          renderItem={() => (
+            <li key="rev" className="px-4 py-3">
+              <div className="flex items-center justify-between">
+                <span className="text-3xl font-bold text-amber-400">{reviewCount}</span>
+                <button onClick={() => navigate('/flights?review_status=needs_review')} className="text-xs text-primary hover:underline">Review →</button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">flights awaiting supervisor review</p>
+            </li>
+          )}
+        />
+      ),
+    },
+    {
+      id: 'maintenance-due', label: 'Maintenance Due', span: 'lg:col-span-3',
+      render: () => (
+        <ListTile
+          title="Maintenance Due"
+          icon={Wrench}
+          items={upcomingMaintenance}
+          emptyLabel="No maintenance due"
+          link="/maintenance"
+          renderItem={(m) => (
+            // The endpoint returns both schedules and records, already deduped
+            // and sorted most-overdue first, so the tile just renders them.
             <li key={`${m.source}-${m.id}`}>
               <Link to="/maintenance" className="flex items-center gap-2 px-4 py-2 hover:bg-secondary/50 transition-colors">
                 <span className={`inline-flex min-w-14 justify-center px-1.5 py-0.5 rounded-full text-[10px] font-medium border whitespace-nowrap ${
-                  countdownTone(overdue, days <= 7)
+                  countdownTone(m.days_remaining < 0, m.days_remaining <= 7)
                 }`}>
-                  {dueLabel(days)}
+                  {dueLabel(m.days_remaining)}
                 </span>
                 <span className="text-xs text-foreground truncate flex-1">{m.name}</span>
               </Link>
             </li>
-          )
-        }}
-      />
-
-      {/* Wide enough to close the row beside Recent Flights. */}
-      <ListTile
-        title="Cert Expirations"
-        icon={AlertTriangle}
-        colSpan="lg:col-span-6"
-        items={expiringCerts}
-        emptyLabel="None expiring soon"
-        link="/certifications"
-        renderItem={(c, idx) => {
-          const days = c.days_remaining
-          return (
+          )}
+        />
+      ),
+    },
+    // Wide enough to close the row beside Recent Flights.
+    {
+      id: 'cert-expirations', label: 'Cert Expirations', span: 'lg:col-span-6',
+      render: () => (
+        <ListTile
+          title="Cert Expirations"
+          icon={AlertTriangle}
+          items={expiringCerts}
+          emptyLabel="None expiring soon"
+          link="/certifications"
+          renderItem={(c, idx) => (
             <li key={`${c.pilot_id}-${idx}`}>
               <Link to={`/pilots/${c.pilot_id}`} className="flex items-center gap-2 px-4 py-2 hover:bg-secondary/50 transition-colors">
                 <span className={`inline-flex w-14 justify-center px-1.5 py-0.5 rounded-full text-[10px] font-medium border ${
-                  countdownTone(days < 0, days <= 30)
+                  countdownTone(c.days_remaining < 0, c.days_remaining <= 30)
                 }`}>
-                  {countdownLabel(days)}
+                  {countdownLabel(c.days_remaining)}
                 </span>
                 <span className="text-xs text-foreground truncate flex-1">
                   {[c.pilot_name || `Pilot #${c.pilot_id}`, c.cert_type_name].filter(Boolean).join(' - ')}
                 </span>
               </Link>
             </li>
-          )
-        }}
-      />
+          )}
+        />
+      ),
+    },
+    {
+      id: 'activity', label: 'Activity by Month', span: 'lg:col-span-6',
+      render: () => <ActivityChartTile data={activity} />,
+    },
+    {
+      id: 'top-pilots', label: 'Top Pilots (30d)', span: 'lg:col-span-3',
+      render: () => (
+        <ListTile
+          title="Top Pilots (30d)"
+          icon={GraduationCap}
+          items={topPilots}
+          emptyLabel="No flight activity"
+          link="/pilots"
+          renderItem={(p, i) => (
+            <li key={p.pilot_id}>
+              <Link to={`/pilots/${p.pilot_id}`} className="flex items-center gap-2 px-4 py-2 hover:bg-secondary/50 transition-colors">
+                <span className="text-xs text-muted-foreground w-5">{i + 1}</span>
+                <span className="text-xs text-foreground truncate flex-1">{p.pilot_name || `Pilot #${p.pilot_id}`}</span>
+                <span className="text-xs text-primary font-medium">{p.hours}h</span>
+              </Link>
+            </li>
+          )}
+        />
+      ),
+    },
+    {
+      id: 'top-vehicles', label: 'Top Vehicles (30d)', span: 'lg:col-span-3',
+      render: () => (
+        <ListTile
+          title="Top Vehicles (30d)"
+          icon={Target}
+          items={topVehicles}
+          emptyLabel="No flight activity"
+          link="/fleet"
+          renderItem={(v, i) => (
+            <li key={v.vehicle_id}>
+              <Link to={`/fleet/vehicles/${v.vehicle_id}`} className="flex items-center gap-2 px-4 py-2 hover:bg-secondary/50 transition-colors">
+                <span className="text-xs text-muted-foreground w-5">{i + 1}</span>
+                <span className="text-xs text-foreground truncate flex-1">{v.label || `Vehicle #${v.vehicle_id}`}</span>
+                <span className="text-xs text-primary font-medium">{v.hours}h</span>
+              </Link>
+            </li>
+          )}
+        />
+      ),
+    },
+    // Flight requirements this period, beside the drone locations
+    {
+      id: 'this-period', label: 'This Period', span: 'lg:col-span-8', visible: can('requirements.view'),
+      render: () => <ThisPeriodTile />,
+    },
+    {
+      id: 'locations', label: 'Locations', span: 'lg:col-span-4',
+      render: () => (
+        <LocationsTile items={locations} pilots={pilots} places={locationPlaces} onChange={handleSetLocation} canSetLocation={canSetLocation} />
+      ),
+    },
+  ]
 
-      {/* Row 4: Activity chart + leaderboards */}
-      <ActivityChartTile data={activity} />
-
-      <ListTile
-        title="Top Pilots (30d)"
-        icon={GraduationCap}
-        items={topPilots}
-        emptyLabel="No flight activity"
-        link="/pilots"
-        renderItem={(p, i) => (
-          <li key={p.pilot_id}>
-            <Link to={`/pilots/${p.pilot_id}`} className="flex items-center gap-2 px-4 py-2 hover:bg-secondary/50 transition-colors">
-              <span className="text-xs text-muted-foreground w-5">{i + 1}</span>
-              <span className="text-xs text-foreground truncate flex-1">{p.pilot_name || `Pilot #${p.pilot_id}`}</span>
-              <span className="text-xs text-primary font-medium">{p.hours}h</span>
-            </Link>
-          </li>
-        )}
-      />
-
-      <ListTile
-        title="Top Vehicles (30d)"
-        icon={Target}
-        items={topVehicles}
-        emptyLabel="No flight activity"
-        link="/fleet"
-        renderItem={(v, i) => (
-          <li key={v.vehicle_id}>
-            <Link to={`/fleet/vehicles/${v.vehicle_id}`} className="flex items-center gap-2 px-4 py-2 hover:bg-secondary/50 transition-colors">
-              <span className="text-xs text-muted-foreground w-5">{i + 1}</span>
-              <span className="text-xs text-foreground truncate flex-1">{v.label || `Vehicle #${v.vehicle_id}`}</span>
-              <span className="text-xs text-primary font-medium">{v.hours}h</span>
-            </Link>
-          </li>
-        )}
-      />
-
-      {/* Flight requirements this period, beside the drone locations */}
-      <ThisPeriodTile className="lg:col-span-8" />
-
-      {/* Drone locations */}
-      <LocationsTile items={locations} pilots={pilots} places={locationPlaces} onChange={handleSetLocation} canSetLocation={canSetLocation} />
-    </div>
-  )
+  return <ArrangeableGrid tiles={tiles} className="grid-cols-1 sm:grid-cols-2 lg:grid-cols-12" {...pageLayout} />
 }

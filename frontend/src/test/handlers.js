@@ -11,6 +11,11 @@ export const handlers = [
   }),
   http.get('/api/settings/idle_lock_minutes', () =>
     HttpResponse.json({ key: 'idle_lock_minutes', value: '30' })),
+  // No unit default layout for the Dashboard and Analytics.
+  http.get('/api/settings/default_dashboard_layout', () =>
+    HttpResponse.json({ key: 'default_dashboard_layout', value: '' })),
+  http.get('/api/settings/default_analytics_layout', () =>
+    HttpResponse.json({ key: 'default_analytics_layout', value: '' })),
   // The Audit Log user filter's choices.
   http.get('/api/audit/users', () => HttpResponse.json([])),
   // Settings > General shows every user's digest preferences card.
