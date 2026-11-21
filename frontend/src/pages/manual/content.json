@@ -1235,6 +1235,7 @@
           "**Excused** means a supervisor excused the pilot until a date, for leave or an injury. On the pilot page, click **Excuse** on the rolling requirement, choose **Excused until**, add a **Reason (optional)** and click **Excuse**. While excused the pilot is neither current nor lapsed and costs no points. **Remove excusal** ends it early.",
           "There are no grace days. A flight counts as soon as it is reviewed.",
           "Each lapse is saved with the day it began and the day the pilot was current again. The pilot page lists them in a table with **Lapsed on** and **Current again on** (or **Still lapsed**). Reviews made later never change a saved lapse.",
+          "An admin can delete a lapse that is over (it has a **Current again on** date) when it came from data that was later corrected: click **Delete** on its row in the lapse table and confirm. The delete is recorded in the audit log. A lapse that is still open cannot be deleted.",
           "A lapsed pilot gets a **Lapsed:** line in **Needs Attention** and a **Lapsed requirement** badge on the pilot page and in the **Pilots** list, and the **This Period** tile names them under **Lapsed requirement**.",
           "The **Calendar** shows no deadline for a rolling requirement, because there is none."
         ]
@@ -2087,6 +2088,7 @@
           "Everyone can open this page. The names in the lists follow what you may view, so a role without certification access sees the counts but not the pilot names.",
           "The score starts at 100 and loses points for: expired certifications (up to 25), expired FAA registrations (up to 20), overdue maintenance (5 each, up to 20), open or investigating incidents (10 each, up to 20), flight requirements (up to 15), and operating authorities that are expiring or expired.",
           "Flight requirements: a pilot costs points when they missed the most recently closed period of an active requirement, or are lapsed on an active rolling requirement now. A pilot counts once. The points lost are the share of active pilots affected, times 15. Excused pilots do not count, and nothing is lost while no requirement is active. **Missed or lapsed** shows how many pilots that is.",
+          "A one-time requirement that has ended keeps costing points for the pilots who missed it while it stays active, because its last period stays the most recently closed one. Switch it off once it is over.",
           "Only active pilots and active vehicles are counted.",
           "An expired operating authority that grounds the unit caps the score at 50, and the reason shows under the score. See **Operating Authority**.",
           "**Export checkouts CSV** downloads the equipment checkout log (it needs report export and fleet access). **Generate Compliance Report** opens **Reports** for people who may generate reports.",

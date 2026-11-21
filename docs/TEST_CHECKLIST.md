@@ -403,6 +403,7 @@ Setup: an admin, a supervisor, a pilot and a viewer login. Three active pilots w
 - [ ] Remove excusal brings the status back at once
 - [ ] A lapse is saved once when it begins and closed once when the pilot is current again; the pilot card lists it with Lapsed on and Current again on (or Still lapsed)
 - [ ] Reviewing an old flight later does not change a saved lapse
+- [ ] An admin sees Delete on a closed lapse in the lapse table; it asks for confirmation, removes the row and is in the audit log; an open lapse has no Delete; a supervisor sees no Delete
 - [ ] A lapsed pilot shows a Lapsed: line in Needs Attention, a Lapsed requirement badge on the profile and the Pilots list, and is named under Lapsed requirement on the This Period tile
 
 ### 38.4 Compliance score
@@ -410,6 +411,7 @@ Setup: an admin, a supervisor, a pilot and a viewer login. Three active pilots w
 - [ ] A pilot who missed the most recently closed period of a periodic requirement costs points; so does a pilot lapsed on a rolling requirement now
 - [ ] A pilot both missed and lapsed counts once; the loss is (such pilots / active pilots) x 15
 - [ ] Excused pilots do not count
+- [ ] A finished one-time requirement keeps costing points for its misses while active; switching it off removes the deduction
 - [ ] The Missed or lapsed card shows the same pilot count and opens the Flight Requirements tab
 - [ ] Certifications, registrations, maintenance, incidents and operating authority deductions and the cap are unchanged
 - [ ] The Requirements Score still shows beside the compliance score and does not change it
@@ -543,6 +545,8 @@ Setup: an admin, a supervisor and a pilot login; a few hundred flights, some wit
 ### 40.5 Flight distance, landing and cost
 - [ ] After the upgrade, the background fill starts a few minutes after boot and fills distance and landing coordinates for flights with telemetry; landing addresses follow (about 25 minutes of lookups for a large history)
 - [ ] A typed distance or landing value is never replaced; flights without telemetry stay blank
+- [ ] A landing point whose lookup finds no address is not looked up again on the next daily run; a failed lookup is retried
+- [ ] A restore started while the background fill runs stops the fill; it finishes on a later run
 - [ ] A flight with takeoff time and duration but no landing time gets landing time = takeoff + duration
 - [ ] A new synced flight gets its distance at once and its landing address after the next daily run
 - [ ] The aircraft's Hourly Operating Cost ($) gives each flight without a typed cost an estimate marked (estimated); a typed cost (even 0) wins; clearing it brings the estimate back

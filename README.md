@@ -4,7 +4,7 @@ A self-hosted drone fleet management platform for law enforcement, public safety
 
 ## Overview
 
-Drone Unit Manager replaces spreadsheets, AirData subscriptions, and scattered documentation with a unified platform that your organization owns and controls. Import flight data from Skydio's Cloud API, Airdata.com exports, DJI flight logs, Excel spreadsheets, and more. Manage pilot certifications and currency, track equipment maintenance, generate compliance reports, and monitor fleet health — all from a modern web interface accessible on desktop and mobile.
+Drone Unit Manager replaces spreadsheets, AirData subscriptions, and scattered documentation with a unified platform that your organization owns and controls. Import flight data from Skydio's Cloud API, Airdata.com exports, DJI flight logs, Excel spreadsheets, and more. Manage pilot certifications and flight requirements, track equipment maintenance, generate compliance reports, and monitor fleet health — all from a modern web interface accessible on desktop and mobile.
 
 The application runs as a single Docker container with no external dependencies. Your data stays on your infrastructure.
 
@@ -29,14 +29,15 @@ The application runs as a single Docker container with no external dependencies.
 - AGL altitude calculation from GPS data with bucket-averaged smoothing
 - Per-flight detail with equipment linkage (battery, sensor, attachments, carrier)
 - Automatic pilot matching via email cross-reference
-- Reverse geocoding for takeoff addresses
+- Reverse geocoding for takeoff and landing addresses
+- Flight distance and landing location worked out from GPS telemetry
 - Telemetry sync toggle for supervisors
 - Smart auto-tagging (Night Flight, High Speed, Low Battery, etc.)
 
 ### Pilot Management
 - Pilot profiles with contact info, badge numbers, photos
 - Certification matrix with customizable cert types and status labels
-- Pilot currency tracking with admin-managed rules (configurable hours / flights / days, optionally per vehicle model)
+- Flight Requirements: periodic targets (month, quarter, fiscal year, custom ranges and more) and rolling windows (the last N days, weeks or months), with excusals, lapse history, reminder and miss or lapse emails, and points in the compliance score
 - Performance analytics (flights by month, purpose, training hours)
 - Document attachments per pilot
 

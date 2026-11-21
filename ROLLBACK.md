@@ -12,7 +12,7 @@ a "Roll production back" section for the release before it.
 | Version | Tag | Commit | Image | Extra Parameters |
 | --- | --- | --- | --- | --- |
 | 3.7.0 | `v3.7.0` | set when tagged | `ghcr.io/jongaydos/drone-unit-manager:3.7.0` (digest recorded after the tag build) | `--restart unless-stopped` |
-| 3.6.0 | `v3.6.0` | set when tagged | `ghcr.io/jongaydos/drone-unit-manager:3.6.0` (digest recorded after the tag build) | `--restart unless-stopped` |
+| 3.6.0 | `v3.6.0` | 0e7dd41 | `ghcr.io/jongaydos/drone-unit-manager@sha256:3bdf543fdb7096c7f1bd602bad6d453fa64f02fa234cd0958e2d70b38fb728ed` | `--restart unless-stopped` |
 | 3.5.0 | `v3.5.0` | 8e7b98b | `ghcr.io/jongaydos/drone-unit-manager@sha256:1bfe877604c0f45708e4c6abce8bcb73945ad162cd5fb6e7d1e59441d18ef0bb` | `--restart unless-stopped` |
 | 3.4.2 | `v3.4.2` | 5b15043 | `ghcr.io/jongaydos/drone-unit-manager@sha256:36c52e7b1d20c14a9cfe76e24631fada57282d8968fcc5d44a9909aed20a712b` | `--restart unless-stopped` |
 | 3.4.1 | `v3.4.1` | 8b3caaf | `ghcr.io/jongaydos/drone-unit-manager@sha256:283a2bc634643221f3b2d98035cd100f82009435f8decfb6862b2e47901b76c5` | `--restart unless-stopped` |
@@ -38,10 +38,10 @@ inside 3.7.0 before switching back:
         docker exec -w /app <container> alembic downgrade 0017_flight_requirements
 
 3. Check it reported `Running downgrade 0018_rolling_requirements -> 0017_flight_requirements`.
-4. Remove the rolling requirements, which 3.6.0 cannot read (their pilots,
-   models and purposes go with them):
+4. Remove the rolling requirements and rolling templates, which 3.6.0 cannot
+   read (the requirements' pilots, models and purposes go with them):
 
-        docker exec -w /app <container> python -c "from sqlalchemy import text; from app.database import engine; c = engine.connect(); n = c.execute(text(\"DELETE FROM flight_requirements WHERE period_type = 'rolling'\")).rowcount; c.commit(); print(n, 'removed')"
+        docker exec -w /app <container> python -c "from sqlalchemy import text; from app.database import engine; c = engine.connect(); n = c.execute(text(\"DELETE FROM flight_requirements WHERE period_type = 'rolling'\")).rowcount; t = c.execute(text(\"DELETE FROM flight_requirement_templates WHERE json_extract(settings, '$.period_type') = 'rolling'\")).rowcount; c.commit(); print(n, 'requirements and', t, 'templates removed')"
 
 5. Set the Repository to `ghcr.io/jongaydos/drone-unit-manager:3.6.0` and Apply.
    The data folder and Extra Parameters stay as they are.
