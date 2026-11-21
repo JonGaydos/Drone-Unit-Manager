@@ -13,7 +13,10 @@ from app.models.flight import Flight
 from app.models.pilot import Pilot
 from app.models.user import User
 from app.services.flight_scope import counted_flight_clause
+from app.services.local_time import local_today
 from app.services.permissions import can
+from app.services.requirement_results import requirements_score
+from app.services.requirement_standing import pilots_not_in_standing, refresh_requirements
 from app.models.vehicle import Vehicle
 from app.models.certification import PilotCertification, CertificationType
 from app.models.maintenance import MaintenanceRecord
@@ -22,7 +25,7 @@ from app.models.operating_authority import AUTHORITY_SCORE_CAP
 from app.schemas.dashboard import (
     DashboardStats, FlightsByPurpose, FlightsByYear,
     FlightsByYearPurpose, FlightsByPilot, AvgDurationByYear,
-    MonthlyFlights, VehicleHours, PilotHours,
+    MonthlyFlights, VehicleHours, PilotHours, ScorePart,
 )
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
@@ -36,6 +39,11 @@ CertificationsUser = Annotated[User, Depends(require_permission("certifications.
 # What the dashboard tile shows at once. Five is enough to cover everything
 # overdue on a unit this size without the tile becoming the page.
 MAINTENANCE_DUE_LIMIT = 5
+
+# Points each part of the compliance score is worth.
+CERTIFICATION_POINTS = 25
+REGISTRATION_POINTS = 20
+REQUIREMENT_POINTS = 15
 
 
 def _due_items(db):
@@ -590,17 +598,9 @@ def _authority_summary(db, today):
     return authorities, expired, expiring, grounding_expired, advisory_expired, score_cap_reason
 
 
-@router.get("/compliance", responses=responses(401))
-def compliance_dashboard(db: DBSession, user: CurrentUser):
-    from app.models.vehicle_registration import VehicleRegistration
-    from app.models.maintenance_schedule import MaintenanceSchedule
-    from app.models.incident import Incident
-    from app.models.flight_approval import FlightPlan
-
-    today = date.today()
-    soon = today + timedelta(days=90)
-
-    # Certification compliance
+def _certification_counts(db, today, soon):
+    """(Active pilots, those with an expired certification, certifications
+    expiring within 90 days), renewed certifications and inactive pilots aside."""
     total_pilots = db.query(func.count(Pilot.id)).filter(Pilot.status == "active").scalar()
 
     # IDs of active pilots only
@@ -621,8 +621,14 @@ def compliance_dashboard(db: DBSession, user: CurrentUser):
         PilotCertification.status.notin_(["not_issued", "renewed"]),
         PilotCertification.pilot_id.in_(active_pilot_ids),
     ).all()
+    return total_pilots, expired_certs, expiring_soon
 
-    # FAA registration compliance — active fleet only, so expired registrations
+
+def _registration_counts(db, today):
+    """(Active vehicles, those with an expired current registration)."""
+    from app.models.vehicle_registration import VehicleRegistration
+
+    # FAA registration compliance: active fleet only, so expired registrations
     # kept on retired/sold vehicles don't count against compliance.
     total_vehicles = db.query(func.count(Vehicle.id)).filter(Vehicle.status == "active").scalar()
     active_vehicle_ids = db.query(Vehicle.id).filter(Vehicle.status == "active").subquery()
@@ -631,27 +637,43 @@ def compliance_dashboard(db: DBSession, user: CurrentUser):
         VehicleRegistration.expiry_date < today,
         VehicleRegistration.vehicle_id.in_(active_vehicle_ids),
     ).scalar()
+    return total_vehicles, expired_regs
 
-    # Maintenance overdue
-    overdue_maintenance = db.query(func.count(MaintenanceSchedule.id)).filter(
-        MaintenanceSchedule.is_active.is_(True),
-        MaintenanceSchedule.next_due < today,
-    ).scalar()
 
-    # Unreviewed flights
-    unreviewed_flights = db.query(func.count(Flight.id)).filter(
-        Flight.review_status == "needs_review"
-    ).scalar()
+def _open_item_counts(db, today) -> dict:
+    """Overdue maintenance, unreviewed flights, open incidents and pending flight plans."""
+    from app.models.maintenance_schedule import MaintenanceSchedule
+    from app.models.incident import Incident
+    from app.models.flight_approval import FlightPlan
 
-    # Open incidents
-    open_incidents = db.query(func.count(Incident.id)).filter(
-        Incident.status.in_(["open", "investigating"])
-    ).scalar()
+    return {
+        "overdue_maintenance": db.query(func.count(MaintenanceSchedule.id)).filter(
+            MaintenanceSchedule.is_active.is_(True),
+            MaintenanceSchedule.next_due < today,
+        ).scalar(),
+        "unreviewed_flights": db.query(func.count(Flight.id)).filter(
+            Flight.review_status == "needs_review"
+        ).scalar(),
+        "open_incidents": db.query(func.count(Incident.id)).filter(
+            Incident.status.in_(["open", "investigating"])
+        ).scalar(),
+        "pending_flight_plans": db.query(func.count(FlightPlan.id)).filter(
+            FlightPlan.status == "pending"
+        ).scalar(),
+    }
 
-    # Pending flight plans
-    pending_plans = db.query(func.count(FlightPlan.id)).filter(
-        FlightPlan.status == "pending"
-    ).scalar()
+
+@router.get("/compliance", responses=responses(401))
+def compliance_dashboard(db: DBSession, user: CurrentUser):
+    # First, as saving due periods and lapses commits (or rolls back a race).
+    out_of_standing, requirements_active, requirements_figure = _requirement_standing(db)
+
+    today = date.today()
+    soon = today + timedelta(days=90)
+
+    total_pilots, expired_certs, expiring_soon = _certification_counts(db, today, soon)
+    total_vehicles, expired_regs = _registration_counts(db, today)
+    open_items = _open_item_counts(db, today)
 
     # Operating authority (org-level COAs / Part 107 waivers).
     authorities, expired_authorities, expiring_authorities, grounding_expired, advisory_expired, score_cap_reason = _authority_summary(db, today)
@@ -673,20 +695,33 @@ def compliance_dashboard(db: DBSession, user: CurrentUser):
         "expiring_certifications": visible_certifications,
         "total_vehicles": total_vehicles,
         "expired_registrations": expired_regs,
-        "overdue_maintenance": overdue_maintenance,
-        "unreviewed_flights": unreviewed_flights,
-        "open_incidents": open_incidents,
-        "pending_flight_plans": pending_plans,
+        **open_items,
         "operating_authorities_tracked": len(authorities),
         "expired_authorities": visible_expired_authorities,
         "expiring_authorities": visible_expiring_authorities,
         "score_cap_reason": score_cap_reason,
-        "compliance_score": _calc_compliance_score(
-            total_pilots, expired_certs, total_vehicles, expired_regs,
-            overdue_maintenance, open_incidents,
-            len(expiring_authorities), len(advisory_expired), bool(grounding_expired),
-        ),
+        "pilots_out_of_standing": out_of_standing,
+        "requirements_active": requirements_active,
+        "requirements_score": requirements_figure,
+        **_score_payload({
+            "pilots": total_pilots, "exp_certs": expired_certs, "vehicles": total_vehicles,
+            "exp_regs": expired_regs, "overdue": open_items["overdue_maintenance"],
+            "incidents": open_items["open_incidents"],
+            "pilots_out_of_standing": out_of_standing, "requirements_active": requirements_active,
+            "authorities_expiring": len(expiring_authorities),
+            "authorities_expired_advisory": len(advisory_expired),
+        }, score_cap_reason),
     }
+
+
+def _requirement_standing(db) -> tuple[int, int, float | None]:
+    """(Active pilots out of standing on flight requirements, active
+    requirements, the 12-month requirements score), after saving due periods
+    and recording lapses so a page load sees today's standing."""
+    today = local_today(db)
+    refresh_requirements(db, today)
+    out_of_standing, requirements_active = pilots_not_in_standing(db, today)
+    return len(out_of_standing), requirements_active, requirements_score(db, today)
 
 
 def _certification_brief(c, today) -> dict:
@@ -714,30 +749,82 @@ def _authority_brief(a, today) -> dict:
     }
 
 
+def _counted(count: int, noun: str) -> str:
+    """``count`` and ``noun``, made plural with an s unless there is one."""
+    return f"{count} {noun}" if count == 1 else f"{count} {noun}s"
+
+
+def _share(count: int, total: int, points: int) -> float:
+    """``points`` scaled by the share ``count / total``; nothing without a total."""
+    return (count / total) * points if total > 0 else 0
+
+
+def _part(area: str, points_lost: float, detail: str) -> dict:
+    return ScorePart(area=area, points_lost=points_lost, detail=detail).model_dump()
+
+
+def _requirements_part(pilots: int, out_of_standing: int, requirements_active: int) -> dict:
+    """Flight requirements only score while at least one is active; otherwise
+    there is no signal to score against."""
+    if requirements_active == 0:
+        return _part("Flight requirements", 0, "No active flight requirements")
+    return _part("Flight requirements", _share(out_of_standing, pilots, REQUIREMENT_POINTS),
+                 f"{out_of_standing} of {_counted(pilots, 'active pilot')} missed or lapsed on a flight requirement")
+
+
+def _authority_part(expiring: int, expired_advisory: int) -> dict:
+    """An expired authority flagged as not grounding the unit costs 10; one
+    inside the warning window costs 5, a nudge before the cliff. A grounding
+    expiry caps the score instead (see ``_score_payload``)."""
+    points = (10 if expired_advisory > 0 else 0) + (5 if expiring > 0 else 0)
+    return _part("Operating authority", points,
+                 f"{expired_advisory} expired (not grounding), {expiring} expiring")
+
+
+def _score_breakdown(pilots, exp_certs, vehicles, exp_regs, overdue, incidents,
+                     pilots_out_of_standing=0, requirements_active=0,
+                     authorities_expiring=0, authorities_expired_advisory=0) -> list[dict]:
+    """What each part of the compliance score takes off 100, unrounded."""
+    return [
+        _part("Certifications", _share(exp_certs, pilots, CERTIFICATION_POINTS),
+              f"{exp_certs} of {_counted(pilots, 'active pilot')} with an expired certification"),
+        _part("Registrations", _share(exp_regs, vehicles, REGISTRATION_POINTS),
+              f"{exp_regs} of {_counted(vehicles, 'active vehicle')} with an expired registration"),
+        _part("Maintenance", min(overdue * 5, 20), _counted(overdue, "overdue maintenance task")),
+        _part("Incidents", min(incidents * 10, 20), _counted(incidents, "open incident")),
+        _requirements_part(pilots, pilots_out_of_standing, requirements_active),
+        _authority_part(authorities_expiring, authorities_expired_advisory),
+    ]
+
+
 def _calc_compliance_score(pilots, exp_certs, vehicles, exp_regs, overdue, incidents,
+                           pilots_out_of_standing=0, requirements_active=0,
                            authorities_expiring=0, authorities_expired_advisory=0,
                            authority_cap=False):
-    """Simple compliance score 0-100.
+    """Simple compliance score 0-100: 100 less every part of ``_score_breakdown``.
 
     Operating authority is the one input that can override the sum: an expired
     authority the unit depends on means every flight is unauthorised, so the
     score is capped rather than merely deducted. A unit with no authorities on
-    file is unaffected."""
-    deductions = 0
-    if pilots > 0:
-        deductions += (exp_certs / pilots) * 25  # cert compliance worth 25 points
-    if vehicles > 0:
-        deductions += (exp_regs / vehicles) * 20  # reg compliance worth 20 points
-    deductions += min(overdue * 5, 20)  # maintenance worth up to 20 points
-    deductions += min(incidents * 10, 20)  # incidents worth up to 20 points
-    if authorities_expired_advisory > 0:
-        deductions += 10  # expired, but flagged as not grounding the unit
-    if authorities_expiring > 0:
-        deductions += 5  # inside the warning window: a nudge before the cliff
+    file is unaffected, same as flight requirements with none active."""
+    deductions = sum(part["points_lost"] for part in _score_breakdown(
+        pilots, exp_certs, vehicles, exp_regs, overdue, incidents,
+        pilots_out_of_standing, requirements_active, authorities_expiring, authorities_expired_advisory))
     score = max(0, round(100 - deductions))
     if authority_cap:
         score = min(score, AUTHORITY_SCORE_CAP)
     return score
+
+
+def _score_payload(inputs: dict, cap_reason: str | None) -> dict:
+    """The score and its breakdown, points rounded to one decimal. A grounding
+    authority cap (``cap_reason``) adds its own line: the points it took on top."""
+    uncapped = _calc_compliance_score(**inputs)
+    score = _calc_compliance_score(**inputs, authority_cap=cap_reason is not None)
+    breakdown = [{**part, "points_lost": round(part["points_lost"], 1)} for part in _score_breakdown(**inputs)]
+    if cap_reason is not None:
+        breakdown.append(_part("Operating authority cap", uncapped - score, cap_reason))
+    return {"compliance_score": score, "score_breakdown": breakdown}
 
 
 @router.get("/upcoming-expirations", responses=responses(401))

@@ -13,9 +13,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from sqlalchemy.orm.exc import StaleDataError
 
 from app.deps import DBSession
 from app.models.flight_requirement import (
@@ -38,14 +36,15 @@ from app.services.requirement_eval import (
     EXCUSED, MET, MISSED, PilotProgress, UnitEvalSettings, assigned_pilots, evaluate_period,
     unit_eval_settings,
 )
-from app.services.requirement_lapses import ROLLING, sync_lapses
+from app.services.requirement_lapses import ROLLING
 from app.services.requirement_notify import EMAILS_ENABLED_KEY, emails_enabled, notify_assigned
 from app.services.requirement_periods import Period, period_containing
 from app.services.requirement_results import (
-    close_due_periods, closed_watermark, open_misses, pending_periods, recalculate_period, requirements_score,
+    closed_watermark, open_misses, pending_periods, recalculate_period, requirements_score,
     saved_through, switched_off,
 )
 from app.services.requirement_rolling import RollingProgress, evaluate_rolling, rolling_window
+from app.services.requirement_standing import close_safely, refresh_requirements, sync_safely
 
 logger = logging.getLogger(__name__)
 
@@ -66,32 +65,6 @@ DERIVED_FIELDS = (*LIST_FIELDS, "current_period")
 ROLLING_CLEARED = ("recurring", "end_date")
 GRACE_KEY = "requirements_grace_days"
 FISCAL_KEY = "fiscal_year_start_month"
-
-
-def _close_safely(db: Session, today: date) -> None:
-    """Save due periods. When the scheduler saves the same period at the same
-    moment, the unique index refuses the second writer; its rows are already
-    saved, so roll back and carry on."""
-    try:
-        close_due_periods(db, today)
-    except IntegrityError:
-        db.rollback()
-
-
-def _sync_safely(db: Session, today: date, req: FlightRequirement | None = None) -> None:
-    """Record rolling lapses. A racing writer is handled as in
-    ``_close_safely``; one that changed or deleted a lapse meanwhile
-    (StaleDataError) likewise."""
-    try:
-        sync_lapses(db, today, req)
-    except (IntegrityError, StaleDataError):
-        db.rollback()
-
-
-def _refresh(db: Session, today: date) -> None:
-    """Save due periods and record lapses before a read shows results."""
-    _close_safely(db, today)
-    _sync_safely(db, today)
 
 
 def _notify_safely(db: Session, req: FlightRequirement, pilot_ids: list[int]) -> None:
@@ -250,13 +223,13 @@ def update_requirement(requirement_id: int, data: RequirementUpdate, db: DBSessi
     today = local_today(db)
     switching = edited.is_active != req.is_active
     if switching:
-        _close_safely(db, today)
+        close_safely(db, today)
     before = set(_assigned_ids(db, req))
     _apply(db, req, edited)
     req.modified_by_id = user.id
     db.commit()
     if switching and edited.is_active:
-        _close_safely(db, today)
+        close_safely(db, today)
     db.refresh(req)
     _notify_safely(db, req, [pilot_id for pilot_id in _assigned_ids(db, req) if pilot_id not in before])
     return _out(req, unit_eval_settings(db).fiscal_start_month, today)
@@ -337,7 +310,7 @@ def requirements_status(db: DBSession, user: ViewUser):
     pilot's progress; the Requirements score; and how many requirements are
     switched off."""
     today = local_today(db)
-    _refresh(db, today)
+    refresh_requirements(db, today)
     settings = unit_eval_settings(db)
     names = _pilot_names(db)
     return {
@@ -416,7 +389,7 @@ def pilot_requirements(pilot_id: int, db: DBSession, user: ViewUser):
     periods still in grace time, and their saved results, newest first; their
     standing on each rolling requirement, and their lapses, newest first."""
     today = local_today(db)
-    _refresh(db, today)
+    refresh_requirements(db, today)
     pilot = db.get(Pilot, pilot_id)
     if pilot is None:
         raise HTTPException(404, "Pilot not found")
@@ -428,7 +401,7 @@ def pilot_requirements(pilot_id: int, db: DBSession, user: ViewUser):
 @router.get("/flags", response_model=dict[int, list[FlagOut]], responses=responses(401, 403))
 def requirement_flags(db: DBSession, user: ViewUser):
     """Per pilot, the saved misses still flagged and the open lapses, with the pilot's name."""
-    _refresh(db, local_today(db))
+    refresh_requirements(db, local_today(db))
     flags = open_misses(db)
     names = {pilot.id: pilot.full_name for pilot in db.query(Pilot).filter(Pilot.id.in_(flags))}
     return {pilot_id: [{**flag, "pilot_name": names[pilot_id]} for flag in found]
@@ -537,7 +510,7 @@ def excuse_pilot(requirement_id: int, data: ExcuseIn, db: DBSession, user: Excus
     db.commit()
     if req.is_active:
         # An open lapse closes, or one opens again, at once.
-        _sync_safely(db, local_today(db), req)
+        sync_safely(db, local_today(db), req)
     return {"ok": True}
 
 
@@ -591,7 +564,7 @@ def get_requirement_settings(db: DBSession, user: ViewUser):
 @router.put("/settings", response_model=RequirementSettings, responses=responses(401, 403))
 def put_requirement_settings(data: RequirementSettings, db: DBSession, user: ManageUser):
     """Save the settings, after saving the periods due under the old ones."""
-    _close_safely(db, local_today(db))
+    close_safely(db, local_today(db))
     values = ((GRACE_KEY, str(data.grace_days)), (FISCAL_KEY, str(data.fiscal_year_start_month)),
               (EMAILS_ENABLED_KEY, "true" if data.emails_enabled else "false"))
     for key, value in values:

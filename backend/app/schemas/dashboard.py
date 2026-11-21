@@ -55,3 +55,10 @@ class PilotHours(BaseModel):
     pilot_name: str
     hours: float
     flight_count: int
+
+
+class ScorePart(BaseModel):
+    """One line of the compliance score breakdown: what an area took off 100."""
+    area: str
+    points_lost: float
+    detail: str

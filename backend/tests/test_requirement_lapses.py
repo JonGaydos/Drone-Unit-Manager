@@ -18,7 +18,7 @@ from app.models.notification_preference import NotificationPreference
 from app.models.pilot import Pilot
 from app.models.setting import Setting
 from app.routers import requirements as requirements_router
-from app.services import email_digest, local_time, requirement_notify
+from app.services import email_digest, local_time, requirement_notify, requirement_standing
 from app.services.email_digest import build_digest
 from app.services.requirement_lapses import open_lapses, sync_lapses
 from app.services.requirement_notify import notify_lapsed, send_due_reminders
@@ -328,7 +328,7 @@ def test_a_racing_lapse_sync_does_not_fail_a_page_load(client, db, admin_headers
     def racing(*_args):
         raise IntegrityError("INSERT", {}, Exception("UNIQUE constraint failed"))
 
-    monkeypatch.setattr(requirements_router, "sync_lapses", racing)
+    monkeypatch.setattr(requirement_standing, "sync_lapses", racing)
     for path in ("status", f"pilots/{pilot.id}", "flags"):
         assert client.get(f"{URL}/{path}", headers=admin_headers).status_code == 200, path
 
@@ -340,7 +340,7 @@ def test_a_lapse_changed_meanwhile_does_not_fail_a_page_load(client, db, admin_h
     def stale(*_args):
         raise StaleDataError("UPDATE statement on table 'flight_requirement_lapses' expected to update 1 row")
 
-    monkeypatch.setattr(requirements_router, "sync_lapses", stale)
+    monkeypatch.setattr(requirement_standing, "sync_lapses", stale)
     assert client.get(f"{URL}/status", headers=admin_headers).status_code == 200
 
 

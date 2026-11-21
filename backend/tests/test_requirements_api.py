@@ -14,6 +14,7 @@ from app.models.pilot import Pilot
 from app.models.setting import Setting
 from app.models.vehicle import Vehicle
 from app.routers import requirements as requirements_router
+from app.services import requirement_standing
 from app.services.requirement_results import OFF_REASON
 
 URL = "/api/requirements"
@@ -375,7 +376,7 @@ def test_a_racing_close_does_not_fail_a_page_load(client, db, admin_headers, mon
     def racing(*_args):
         raise IntegrityError("INSERT", {}, Exception("UNIQUE constraint failed"))
 
-    monkeypatch.setattr(requirements_router, "close_due_periods", racing)
+    monkeypatch.setattr(requirement_standing, "close_due_periods", racing)
     assert client.get(f"{URL}/status", headers=admin_headers).status_code == 200
     assert client.get(f"{URL}/pilots/{_pilot(db).id}", headers=admin_headers).status_code == 200
     assert client.get(f"{URL}/flags", headers=admin_headers).status_code == 200
