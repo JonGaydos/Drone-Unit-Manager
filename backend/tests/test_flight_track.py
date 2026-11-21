@@ -19,16 +19,11 @@ def _pt(lat, lon, ts_s):
 
 
 def _square():
-    """A 0.01 degree square flown at about 18 m/s, back to the start, one fix
-    every 6 seconds."""
-    corners = [(30.0, -86.0), (30.01, -86.0), (30.01, -85.99), (30.0, -85.99), (30.0, -86.0)]
-    points = [_pt(30.0, -86.0, 0)]
-    for side, ((lat1, lon1), (lat2, lon2)) in enumerate(zip(corners, corners[1:])):
-        for step in range(1, 11):
-            frac = step / 10
-            points.append(_pt(lat1 + (lat2 - lat1) * frac, lon1 + (lon2 - lon1) * frac,
-                              (side * 10 + step) * 6))
-    return points
+    """A 0.01 degree square flown at about 18 m/s, back to the start."""
+    return [
+        _pt(30.0, -86.0, 0), _pt(30.01, -86.0, 60), _pt(30.01, -85.99, 120),
+        _pt(30.0, -85.99, 180), _pt(30.0, -86.0, 240),
+    ]
 
 
 def _square_length():
@@ -67,44 +62,82 @@ def test_bad_first_fix_does_not_move_landing():
     assert (summary["landing_lat"], summary["landing_lon"]) == (30.0, -86.0)
 
 
+def _second_track():
+    """North 0.01 degree in two minutes, one fix a second."""
+    return [_pt(30.0 + 0.01 * i / 120, -86.0, i) for i in range(121)]
+
+
+def _second_track_end():
+    return pytest.approx((30.01, -86.0))
+
+
 def _gap_then_outlier():
-    """The square, a 200 s gap, one fix about 11 km off, then the real return."""
-    return _square() + [_pt(30.1, -86.0, 440), _pt(30.0001, -86.0, 441), _pt(30.0002, -86.0, 442)]
+    """The 1 Hz track, a 200 s outage, one fix about 10 km off, then the real return."""
+    return _second_track() + [_pt(30.1, -86.0, 320), _pt(30.0101, -86.0, 321), _pt(30.0102, -86.0, 322)]
 
 
 def test_outlier_after_a_gap_is_skipped():
     summary = track_summary(_gap_then_outlier())
-    assert summary["distance_m"] == pytest.approx(_square_length(), rel=0.01)
+    assert summary["distance_m"] == pytest.approx(0.0102 * DEG_M, rel=0.01)
 
 
 def test_outlier_after_a_gap_does_not_become_landing():
     summary = track_summary(_gap_then_outlier())
-    assert (summary["landing_lat"], summary["landing_lon"]) == (30.0002, -86.0)
+    assert (summary["landing_lat"], summary["landing_lon"]) == (30.0102, -86.0)
 
 
 def test_bad_final_fix_after_a_gap_adds_no_distance():
-    summary = track_summary(_square() + [_pt(30.1, -86.0, 440)])
-    assert summary["distance_m"] == pytest.approx(_square_length(), rel=0.01)
+    summary = track_summary(_second_track() + [_pt(30.1, -86.0, 320)])
+    assert summary["distance_m"] == pytest.approx(0.01 * DEG_M, rel=0.01)
 
 
 def test_bad_final_fix_after_a_gap_is_not_the_landing():
-    summary = track_summary(_square() + [_pt(30.1, -86.0, 440)])
-    assert (summary["landing_lat"], summary["landing_lon"]) == (30.0, -86.0)
+    summary = track_summary(_second_track() + [_pt(30.1, -86.0, 320)])
+    assert (summary["landing_lat"], summary["landing_lon"]) == _second_track_end()
 
 
 def _gap_then_real_pair():
-    """The square, a 200 s gap, then two agreeing fixes about 5 km away."""
-    return _square() + [_pt(30.045, -86.0, 440), _pt(30.0451, -86.0, 441)]
+    """The 1 Hz track, a 200 s outage, then two agreeing fixes about 4 km on."""
+    return _second_track() + [_pt(30.045, -86.0, 320), _pt(30.0451, -86.0, 321)]
 
 
 def test_no_distance_across_a_gap():
     summary = track_summary(_gap_then_real_pair())
-    assert summary["distance_m"] == pytest.approx(_square_length() + 0.0001 * DEG_M, rel=0.01)
+    assert summary["distance_m"] == pytest.approx(0.0101 * DEG_M, rel=0.01)
 
 
 def test_agreeing_fixes_after_a_gap_give_the_landing():
     summary = track_summary(_gap_then_real_pair())
     assert (summary["landing_lat"], summary["landing_lon"]) == (30.0451, -86.0)
+
+
+def _line_every_minute(minutes, start_lat=30.0, start_s=0):
+    """A flight north at 10 m/s with one fix a minute."""
+    return [_pt(start_lat + i * 600 / DEG_M, -86.0, start_s + i * 60) for i in range(minutes + 1)]
+
+
+def test_minute_sampling_is_measured():
+    summary = track_summary(_line_every_minute(20))
+    assert summary["distance_m"] == pytest.approx(12000, rel=0.01)
+
+
+def test_minute_sampling_lands_at_the_last_fix():
+    points = _line_every_minute(20)
+    summary = track_summary(points)
+    assert (summary["landing_lat"], summary["landing_lon"]) == (points[-1]["lat"], -86.0)
+
+
+def test_minute_sampled_zigzag_is_measured():
+    points = [_pt(30.0 + (i % 2) * 480 / DEG_M, -86.0, i * 60) for i in range(21)]
+    assert track_summary(points)["distance_m"] == pytest.approx(9600, rel=0.01)
+
+
+def test_no_distance_across_an_outage_in_minute_sampling():
+    first = _line_every_minute(10)
+    # Ten minutes without fixes, then the flight carries on 4 km further north.
+    second = _line_every_minute(10, start_lat=first[-1]["lat"] + 4000 / DEG_M, start_s=1200)
+    summary = track_summary(first + second)
+    assert summary["distance_m"] == pytest.approx(12000, rel=0.01)
 
 
 NOISE_DEG = 3 / DEG_M
@@ -287,7 +320,7 @@ def test_telemetry_sync_fills_distance_and_landing(db, mock_httpx):
         if "/telemetry" in str(request.url):
             return httpx.Response(200, json={"data": {"flight_telemetry": [
                 {"timestamp_ms": 1000, "gps_latitude": 30.72, "gps_longitude": -86.10},
-                {"timestamp_ms": 11000, "gps_latitude": 30.721, "gps_longitude": -86.10},
+                {"timestamp_ms": 61000, "gps_latitude": 30.721, "gps_longitude": -86.10},
             ]}})
         return httpx.Response(200, json={})
 

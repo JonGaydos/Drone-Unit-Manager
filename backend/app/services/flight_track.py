@@ -10,6 +10,7 @@ missing values, and does the address lookups, which are kept off imports.
 
 import logging
 import math
+import statistics
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -28,9 +29,11 @@ logger = logging.getLogger(__name__)
 EARTH_RADIUS_M = 6_371_008.8
 # A segment faster than this is a GPS jump, not flight.
 MAX_SPEED_MPS = 60.0
-# Fixes further apart in time than this have a gap between them that is not
-# measured.
-MAX_GAP_S = 30.0
+# A pause between fixes longer than this, or than GAP_INTERVALS times the
+# flight's usual interval if that is longer, is a gap that is not measured.
+# Relative to the interval so a log that records a fix a minute still counts.
+MIN_GAP_S = 30.0
+GAP_INTERVALS = 5
 # Distance counts once the craft has moved this far from the last counted fix,
 # so hovering and GPS jitter add nothing.
 MIN_MOVE_M = 5.0
@@ -104,7 +107,8 @@ class _Walk:
     at a gap or where the track carries on from a pending fix, so no distance
     is measured across either."""
 
-    def __init__(self, first):
+    def __init__(self, first, gap_s: float):
+        self.gap_s = gap_s
         self.anchor = self.landing = first
         self.pending = None
         self.segments = [[first]]
@@ -122,7 +126,7 @@ class _Walk:
 
     def _accept(self, prev, fix) -> None:
         self.anchor, self.pending = fix, None
-        if fix[2] - prev[2] > MAX_GAP_S:
+        if fix[2] - prev[2] > self.gap_s:
             # Nothing is known about the gap: no distance across it, and the
             # fix lands the flight only once a following fix agrees with it.
             self.segments.append([fix])
@@ -167,16 +171,24 @@ def _segment_length(segment: list) -> float:
     return meters
 
 
+def _gap_seconds(fixes: list) -> float:
+    """The pause that counts as a gap for this flight."""
+    intervals = [b[2] - a[2] for a, b in zip(fixes, fixes[1:]) if b[2] > a[2]]
+    if not intervals:
+        return MIN_GAP_S
+    return max(MIN_GAP_S, GAP_INTERVALS * statistics.median(intervals))
+
+
 def track_summary(points) -> dict:
     """Distance and landing fix over telemetry points in time order (dicts or
     rows with lat, lon and timestamp_ms). A jump that would need more than
-    MAX_SPEED_MPS is never measured, nor a gap longer than MAX_GAP_S, and
+    MAX_SPEED_MPS is never measured, nor a gap (see _gap_seconds), and
     smoothing plus MIN_MOVE_M keep hovering and GPS jitter from adding
     distance. No good fix gives Nones."""
     fixes = _drop_spikes([fix for fix in map(_fix, points) if fix is not None])
     if not fixes:
         return {"distance_m": None, "landing_lat": None, "landing_lon": None}
-    walk = _Walk(fixes[0])
+    walk = _Walk(fixes[0], _gap_seconds(fixes))
     for fix in fixes[1:]:
         walk.step(fix)
     distance = sum(_segment_length(segment) for segment in walk.segments)
