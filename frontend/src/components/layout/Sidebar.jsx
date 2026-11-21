@@ -33,7 +33,6 @@ const PRELOADERS = {
   '/maintenance': () => import('@/pages/MaintenancePage'),
   '/compliance': () => import('@/pages/CompliancePage'),
   '/operating-authority': () => import('@/pages/OperatingAuthorityPage'),
-  '/requirements': () => import('@/pages/FlightRequirementsPage'),
   '/alerts': () => import('@/pages/AlertsPage'),
   '/incidents': () => import('@/pages/IncidentPage'),
   '/media': () => import('@/pages/MediaPage'),

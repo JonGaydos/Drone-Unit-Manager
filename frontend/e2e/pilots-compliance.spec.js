@@ -23,7 +23,7 @@ import { gotoSection } from './helpers/app.js'
 //   - Certifications: the "Certification Matrix" tab is default. Each pilot is a row
 //     (name links to /pilots/:id); each active cert type is a column header. The
 //     seeded cert type is "E2E Part 107"; seeded pilots include "E2E Seedpilot".
-//   - Compliance: heading "Compliance Dashboard". The seeded EXPIRED certification
+//   - Compliance: heading "Compliance". The seeded EXPIRED certification
 //     (exp 2022-01-01) makes /dashboard/compliance report expired_certifications > 0,
 //     which renders a critical (red) "Expired Certifications" row in "Items Requiring
 //     Attention" and a non-zero red "Expired Certs" stat card.
@@ -91,7 +91,7 @@ test.describe('pilots + compliance journey', () => {
     await expect(page.getByRole('link', { name: 'Dashboard', exact: true })).toBeVisible({ timeout: 15_000 })
     await gotoSection(page, 'Compliance')
 
-    await expect(page.getByRole('heading', { name: 'Compliance Dashboard' })).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByRole('heading', { level: 1, name: 'Compliance', exact: true })).toBeVisible({ timeout: 15_000 })
 
     // The seeded expired cert drives the red "Expired Certs" stat card and a
     // critical "Expired Certifications" row in "Items Requiring Attention".

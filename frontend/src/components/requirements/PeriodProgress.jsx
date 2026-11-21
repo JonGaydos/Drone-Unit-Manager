@@ -1,22 +1,25 @@
 /**
  * Progress of one requirement from /api/requirements/status, shared by the
- * dashboard "This Period" tile and the Flight Requirements page: the current
+ * dashboard "This Period" tile and the Flight Requirements tab: the current
  * period's days left and met count, each pilot's progress, and the ended
- * periods still in review.
+ * periods still in review; for a rolling requirement, the current and lapsed
+ * counts and each pilot's standing with its date.
  */
 import { Link } from 'react-router-dom'
 import { formatDate } from '@/lib/utils'
 import { RequirementStatusChip } from './RequirementBadges'
-import { countText, daysLeftText, metCount, progressText } from './progress'
+import { countText, daysLeftText, metCount, progressText, rollingCounts, rollingDateText } from './progress'
 
-function PilotLine({ pilot, target }) {
+/** `date` is the rolling standing's date ("lapses on Dec 3, 2026"), shown after the chip. */
+function PilotLine({ pilot, target, date = '' }) {
   return (
-    <li className="flex items-center gap-2 text-xs">
+    <li className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
       <Link to={`/pilots/${pilot.pilot_id}`} className="text-foreground hover:underline truncate max-w-[40%]">{pilot.pilot_name}</Link>
       <span className="flex-1 min-w-0 truncate text-muted-foreground tabular-nums">
         {progressText(pilot.totals, pilot.met_by_model, target)}
       </span>
       <RequirementStatusChip status={pilot.status} />
+      {date && <span className="text-muted-foreground whitespace-nowrap tabular-nums">{date}</span>}
     </li>
   )
 }
@@ -53,4 +56,27 @@ export function PendingLines({ periods }) {
       Previous period: {countText(p.count, 'pilot')} pending review until {formatDate(p.until)}
     </p>
   ))
+}
+
+/** "3 current, 1 lapsed" for a rolling requirement's window. */
+export function RollingCounts({ rolling, className = '' }) {
+  return (
+    <p className={`text-xs text-muted-foreground whitespace-nowrap tabular-nums ${className}`}>
+      {rollingCounts(rolling.pilots)}
+    </p>
+  )
+}
+
+/** Each assigned pilot's standing on a rolling requirement; `lapsedSince` maps a
+ *  pilot id to the start of their open lapse. */
+export function RollingPilotList({ req, lapsedSince = {} }) {
+  const pilots = req.rolling?.pilots || []
+  if (pilots.length === 0) return null
+  return (
+    <ul className="space-y-1">
+      {pilots.map(p => (
+        <PilotLine key={p.pilot_id} pilot={p} target={req} date={rollingDateText(p, lapsedSince[p.pilot_id])} />
+      ))}
+    </ul>
+  )
 }

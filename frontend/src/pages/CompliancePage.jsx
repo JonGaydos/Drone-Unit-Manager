@@ -1,14 +1,17 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { api } from '@/api/client'
 import { useToast } from '@/contexts/ToastContext'
 import {
   ShieldCheck, AlertTriangle, Clock, Wrench, FileText,
-  ClipboardCheck, Loader2, ChevronRight, RefreshCw, Download, Stamp,
+  ClipboardCheck, Loader2, ChevronRight, RefreshCw, Download, Stamp, CalendarClock,
 } from 'lucide-react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 import RequirementsScore from '@/components/requirements/RequirementsScore'
+import RequirementsTab from '@/components/requirements/RequirementsTab'
+import RequirementsSetup from '@/components/requirements/RequirementsSetup'
+import ThisPeriodTile from '@/components/requirements/ThisPeriodTile'
 
 function getScoreTheme(score) {
   if (score > 80) return { color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30' }
@@ -62,6 +65,58 @@ function StatCard({ icon: Icon, label, value, color, onClick }) {
       <span className="text-2xl font-bold">{value}</span>
       <span className="text-xs text-muted-foreground text-center leading-tight">{label}</span>
     </button>
+  )
+}
+
+/** Pilots who missed the last closed period of a requirement or are lapsed on
+ *  a rolling one; opens the Flight Requirements tab. Needs requirements.view. */
+function RequirementStandingCard({ count = 0 }) {
+  const { can } = useAuth()
+  const navigate = useNavigate()
+  if (!can('requirements.view')) return null
+  return (
+    <StatCard
+      icon={CalendarClock}
+      label="Missed or lapsed"
+      value={count}
+      color={count > 0 ? 'red' : 'emerald'}
+      onClick={() => navigate('/compliance?tab=requirements')}
+    />
+  )
+}
+
+function pointsText(points) {
+  return `-${points} ${points === 1 ? 'point' : 'points'}`
+}
+
+/** Where the compliance score lost points; areas that lost none are left out. */
+function ScoreBreakdown({ score, parts = [] }) {
+  const lost = parts.filter(part => part.points_lost > 0)
+  return (
+    <section aria-labelledby="score-breakdown-title" className="bg-card border border-border rounded-xl overflow-hidden">
+      <h2 id="score-breakdown-title" className="px-4 py-3 border-b border-border text-sm font-semibold text-foreground">
+        Where the score lost points
+      </h2>
+      {lost.length === 0 && <p className="p-4 text-center text-xs text-muted-foreground">No points lost</p>}
+      {lost.length > 0 && (
+        <ul aria-label="Score breakdown" className="divide-y divide-border">
+          {lost.map(part => (
+            <li key={part.area} className="px-4 py-2.5">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-sm text-foreground">{part.area}</span>
+                <span className="text-sm font-medium text-danger tabular-nums whitespace-nowrap">{pointsText(part.points_lost)}</span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">{part.detail}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+      {score === 0 && (
+        <p className="px-4 py-2.5 border-t border-border text-xs text-muted-foreground">
+          Deductions add up to more than 100, so the score stops at 0.
+        </p>
+      )}
+    </section>
   )
 }
 
@@ -131,7 +186,9 @@ function buildAttentionItems(data) {
   return items
 }
 
-export default function CompliancePage() {
+/** The Overview tab: the score and where it lost points, the stat cards, This
+ *  Period, and the items requiring attention. A new `reloadKey` reads it again. */
+function ComplianceOverview({ reloadKey }) {
   const { can } = useAuth()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -150,7 +207,7 @@ export default function CompliancePage() {
     }
   }
 
-  useEffect(() => { void load() }, [])
+  useEffect(() => { void load() }, [reloadKey])
 
   if (loading) {
     return (
@@ -181,33 +238,7 @@ export default function CompliancePage() {
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <ShieldCheck className="w-7 h-7 text-primary" />
-          <h1 className="text-2xl font-bold text-foreground">Compliance Dashboard</h1>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {can('reports.export') && can('fleet.view') && (
-            <button
-              onClick={() => api.download('/export/equipment-checkouts/csv')}
-              className="flex items-center gap-2 px-3 py-2 text-sm bg-secondary border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {/* The equipment checkout log: there is no compliance export. */}
-              <Download className="w-4 h-4" /> Export checkouts CSV
-            </button>
-          )}
-          <button
-            onClick={load}
-            className="flex items-center gap-2 px-3 py-2 text-sm bg-secondary border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Refresh
-          </button>
-        </div>
-      </div>
-
+    <div className="space-y-6">
       {/* Score + Stats Row */}
       <div className="flex flex-col lg:flex-row items-center gap-6">
         {/* Score Circle */}
@@ -280,7 +311,13 @@ export default function CompliancePage() {
             color={data.unreviewed_flights > 0 ? 'amber' : 'emerald'}
             onClick={() => navigate('/flights')}
           />
+          <RequirementStandingCard count={data.pilots_out_of_standing} />
         </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2 items-start">
+        <ScoreBreakdown score={data.compliance_score} parts={data.score_breakdown} />
+        <ThisPeriodTile />
       </div>
 
       {/* Summary Bar */}
@@ -354,6 +391,103 @@ export default function CompliancePage() {
           </button>
         </div>
       )}
+    </div>
+  )
+}
+
+const TABS = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'requirements', label: 'Flight Requirements', view: 'requirements.view' },
+  { id: 'setup', label: 'Setup', view: 'requirements.manage' },
+]
+
+/** Old Flight Requirements links (/requirements) land on its tab here. */
+export function LegacyRequirementsRedirect() {
+  return <Navigate to="/compliance?tab=requirements" replace />
+}
+
+function ComplianceTabs({ tabs, active, onSelect }) {
+  // Arrow keys move between tabs, as a tab list does.
+  const onKeyDown = (e) => {
+    const step = { ArrowRight: 1, ArrowLeft: -1 }[e.key]
+    if (!step) return
+    const index = (tabs.findIndex(tab => tab.id === active) + step + tabs.length) % tabs.length
+    onSelect(tabs[index].id)
+    document.getElementById(`compliance-tab-${tabs[index].id}`)?.focus()
+  }
+  return (
+    <div role="tablist" aria-label="Compliance" onKeyDown={onKeyDown}
+      className="flex items-center gap-1 border-b border-border overflow-x-auto">
+      {tabs.map(tab => {
+        const selected = tab.id === active
+        return (
+          <button key={tab.id} id={`compliance-tab-${tab.id}`} type="button" role="tab" aria-selected={selected}
+            aria-controls="compliance-panel" tabIndex={selected ? 0 : -1} onClick={() => onSelect(tab.id)}
+            className={`text-sm font-medium px-3 pb-2 -mb-px border-b-2 whitespace-nowrap transition-colors ${
+              selected ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
+            {tab.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function OverviewActions({ onRefresh }) {
+  const { can } = useAuth()
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {can('reports.export') && can('fleet.view') && (
+        <button
+          onClick={() => api.download('/export/equipment-checkouts/csv')}
+          className="flex items-center gap-2 px-3 py-2 text-sm bg-secondary border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors"
+        >
+          {/* The equipment checkout log: there is no compliance export. */}
+          <Download className="w-4 h-4" /> Export checkouts CSV
+        </button>
+      )}
+      <button
+        onClick={onRefresh}
+        className="flex items-center gap-2 px-3 py-2 text-sm bg-secondary border border-border rounded-lg text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <RefreshCw className="w-4 h-4" />
+        Refresh
+      </button>
+    </div>
+  )
+}
+
+const PANELS = {
+  overview: ComplianceOverview,
+  requirements: RequirementsTab,
+  setup: RequirementsSetup,
+}
+
+/** One Compliance page with three tabs: Overview for everyone, Flight
+ *  Requirements with requirements.view and Setup with requirements.manage.
+ *  `?tab=overview|requirements|setup` links to a tab; one the user cannot see
+ *  shows the Overview. */
+export default function CompliancePage() {
+  const { can } = useAuth()
+  const [params, setParams] = useSearchParams()
+  const [reloadKey, setReloadKey] = useState(0)
+  const tabs = TABS.filter(tab => !tab.view || can(tab.view))
+  const active = tabs.find(tab => tab.id === params.get('tab'))?.id || 'overview'
+  const Panel = PANELS[active]
+
+  return (
+    <div className="p-4 md:p-6 space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <ShieldCheck className="w-7 h-7 text-primary" />
+          <h1 className="text-2xl font-bold text-foreground">Compliance</h1>
+        </div>
+        {active === 'overview' && <OverviewActions onRefresh={() => setReloadKey(k => k + 1)} />}
+      </div>
+      <ComplianceTabs tabs={tabs} active={active} onSelect={tab => setParams({ tab })} />
+      <div role="tabpanel" id="compliance-panel" aria-labelledby={`compliance-tab-${active}`}>
+        <Panel reloadKey={reloadKey} />
+      </div>
     </div>
   )
 }

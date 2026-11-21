@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { BookmarkPlus, Copy, Download, Edit2, Plus, Power, Trash2 } from 'lucide-react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
@@ -6,10 +7,11 @@ import { useToast } from '@/contexts/ToastContext'
 import { useConfirm } from '@/hooks/useConfirm'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import RequirementForm from './RequirementForm'
-import RequirementSettingsCard from './RequirementSettingsCard'
-import { SaveTemplateModal, TemplatesCard } from './TemplatesCard'
-import { PendingLines, PeriodCounts, PilotProgressList } from './PeriodProgress'
+import { SaveTemplateModal } from './TemplatesCard'
+import { PendingLines, PeriodCounts, PilotProgressList, RollingCounts, RollingPilotList } from './PeriodProgress'
 import { PERIOD_LABELS, targetText } from './RequirementSummary'
+import { lapseStarts } from './progress'
+import { useRequirementFlags } from './useRequirementFlags'
 import { duplicateOf, fromRequirement, fromTemplate, newForm, toDefinition } from './formState'
 
 const ICON_BUTTON = 'p-1.5 text-muted-foreground hover:text-foreground rounded hover:bg-accent'
@@ -23,8 +25,14 @@ function hasLocation(rows) {
     .every(v => v !== undefined && v !== null && String(v).trim() !== '')
 }
 
+/** "days", or "day" for a one-day window. */
+function rollingUnit(req) {
+  return req.span_length === 1 ? req.span_unit.slice(0, -1) : req.span_unit
+}
+
 function periodText(req) {
   if (req.period_type === 'custom') return PERIOD_LABELS.custom
+  if (req.period_type === 'rolling') return `Rolling ${req.span_length} ${rollingUnit(req)}`
   return `${PERIOD_LABELS[req.period_type]}, ${req.recurring ? 'recurring' : 'one time'}`
 }
 
@@ -65,9 +73,20 @@ function PeriodLine({ current }) {
   return <PeriodCounts current={current} />
 }
 
-/** The current period of an active requirement, as the dashboard tile shows it. */
-function RequirementProgress({ status }) {
+/** A rolling requirement's standing: the counts and each pilot's status with its date. */
+function RollingProgress({ status, flags }) {
+  return (
+    <div className="mt-2.5 pt-2.5 border-t border-border space-y-1.5">
+      <RollingCounts rolling={status.rolling} />
+      <RollingPilotList req={status} lapsedSince={lapseStarts(flags, status.requirement_id)} />
+    </div>
+  )
+}
+
+/** The current period of an active requirement, or a rolling one's window, as the dashboard tile shows it. */
+function RequirementProgress({ status, flags }) {
   if (!status) return null
+  if (status.rolling) return <RollingProgress status={status} flags={flags} />
   return (
     <div className="mt-2.5 pt-2.5 border-t border-border space-y-1.5">
       <PeriodLine current={status.current_period} />
@@ -78,7 +97,7 @@ function RequirementProgress({ status }) {
 }
 
 /** `manage` holds the manager actions, or is null for someone who may only view. */
-function RequirementRow({ req, status, manage, onDownload }) {
+function RequirementRow({ req, status, flags, manage, onDownload }) {
   return (
     <li className="px-3 py-2.5 bg-muted/30 rounded-lg">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -108,7 +127,7 @@ function RequirementRow({ req, status, manage, onDownload }) {
           )}
         </div>
       </div>
-      <RequirementProgress status={status} />
+      <RequirementProgress status={status} flags={flags} />
     </li>
   )
 }
@@ -118,7 +137,7 @@ function emptyListText(canManage) {
   return 'No flight requirements yet.'
 }
 
-function RequirementList({ requirements, statuses, loaded, manage, onNew, onDownload }) {
+function RequirementList({ requirements, statuses, flags, loaded, manage, onNew, onDownload }) {
   return (
     <section aria-labelledby="req-list-title" className="bg-card border border-border rounded-xl p-6">
       <div className="flex items-center justify-between gap-3 mb-4">
@@ -135,7 +154,7 @@ function RequirementList({ requirements, statuses, loaded, manage, onNew, onDown
       )}
       <ul className="space-y-2">
         {requirements.map(req => (
-          <RequirementRow key={req.id} req={req} status={statuses[req.id]} manage={manage} onDownload={onDownload} />
+          <RequirementRow key={req.id} req={req} status={statuses[req.id]} flags={flags} manage={manage} onDownload={onDownload} />
         ))}
       </ul>
     </section>
@@ -155,12 +174,26 @@ function useBuilderData(enabled) {
     api.get('/settings').then(rows => merge({ locationSet: hasLocation(rows) })).catch(() => {})
     api.get('/requirements/settings').then(settings => merge({ settings })).catch(() => {})
   }, [enabled])
-  return [data, setData]
+  return data
 }
 
-/** The Flight Requirements page body: the requirement list with each one's
- *  progress for everyone with requirements.view; the builder, templates and
- *  settings with requirements.manage. */
+/** A template the Setup tab sent here to start a new requirement from, taken
+ *  once: the location state is cleared so a reload does not open it again. */
+function useTemplateFromSetup(open) {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const template = location.state?.template
+  useEffect(() => {
+    if (!template) return
+    open('New requirement', fromTemplate(template))
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
+  }, [template, open, navigate, location.pathname, location.search])
+}
+
+/** The Flight Requirements tab of the Compliance page: the requirement list
+ *  with each one's progress for everyone with requirements.view; the builder,
+ *  Switch on/off and Save as template with requirements.manage. Templates and
+ *  settings are on the Setup tab. */
 export default function RequirementsTab() {
   const { can } = useAuth()
   const canManage = can('requirements.manage')
@@ -169,19 +202,16 @@ export default function RequirementsTab() {
   const [requirements, setRequirements] = useState([])
   const [statuses, setStatuses] = useState({})
   const [loaded, setLoaded] = useState(false)
-  const [templates, setTemplates] = useState([])
   const [editing, setEditing] = useState(null)
   const [templateSource, setTemplateSource] = useState(null)
-  const [data, setData] = useBuilderData(canManage)
+  const data = useBuilderData(canManage)
+  const flags = useRequirementFlags(true)
 
   const loadRequirements = useCallback(() => api.get('/requirements')
     .then(rows => { setRequirements(rows); setLoaded(true) })
     .catch(err => toast.error(err.message)), [toast])
   const loadStatuses = useCallback(() => api.get('/requirements/status')
     .then(status => setStatuses(Object.fromEntries(status.requirements.map(r => [r.requirement_id, r]))))
-    .catch(err => toast.error(err.message)), [toast])
-  const loadTemplates = useCallback(() => api.get('/requirements/templates')
-    .then(setTemplates)
     .catch(err => toast.error(err.message)), [toast])
   const refresh = () => {
     loadRequirements()
@@ -191,11 +221,11 @@ export default function RequirementsTab() {
   useEffect(() => {
     loadRequirements()
     loadStatuses()
-    if (canManage) loadTemplates()
-  }, [loadRequirements, loadStatuses, loadTemplates, canManage])
+  }, [loadRequirements, loadStatuses])
 
   // Each opening gets a new key so the form starts from its own initial state.
-  const open = (title, initial, id = null) => setEditing({ key: Date.now(), title, initial, id })
+  const open = useCallback((title, initial, id = null) => setEditing({ key: Date.now(), title, initial, id }), [])
+  useTemplateFromSetup(open)
 
   const submit = async (body) => {
     if (editing.id) await api.patch(`/requirements/${editing.id}`, body)
@@ -233,24 +263,7 @@ export default function RequirementsTab() {
 
   const saveTemplate = (name) => api.post('/requirements/templates', {
     name, settings: toDefinition(fromRequirement(templateSource)),
-  }).then(() => { toast.success('Template saved'); loadTemplates(); return true })
-    .catch(err => { toast.error(err.message); return false })
-
-  const renameTemplate = (template, name) => api.patch(`/requirements/templates/${template.id}`, { name })
-    .then(() => { loadTemplates(); return true })
-    .catch(err => { toast.error(err.message); return false })
-
-  const removeTemplate = (template) => requestConfirm({
-    title: 'Delete template',
-    message: `Delete the template "${template.name}"? Requirements made from it do not change.`,
-    confirmLabel: 'Delete',
-    onConfirm: () => api.delete(`/requirements/templates/${template.id}`)
-      .then(loadTemplates)
-      .catch(err => toast.error(err.message)),
-  })
-
-  const saveSettings = (settings) => api.put('/requirements/settings', settings)
-    .then(saved => { setData(d => ({ ...d, settings: saved })); toast.success('Requirement settings saved'); return true })
+  }).then(() => { toast.success('Template saved'); return true })
     .catch(err => { toast.error(err.message); return false })
 
   return (
@@ -274,6 +287,7 @@ export default function RequirementsTab() {
       <RequirementList
         requirements={requirements}
         statuses={statuses}
+        flags={flags}
         loaded={loaded}
         manage={canManage ? {
           onEdit: req => open(`Edit ${req.name}`, fromRequirement(req), req.id),
@@ -285,17 +299,6 @@ export default function RequirementsTab() {
         onNew={() => open('New requirement', newForm())}
         onDownload={can('reports.export') ? download : null}
       />
-      {canManage && (
-        <>
-          <TemplatesCard
-            templates={templates}
-            onUse={t => open('New requirement', fromTemplate(t))}
-            onRename={renameTemplate}
-            onDelete={removeTemplate}
-          />
-          <RequirementSettingsCard settings={data.settings} onSave={saveSettings} />
-        </>
-      )}
       {templateSource && (
         <SaveTemplateModal requirement={templateSource} onSave={saveTemplate} onClose={() => setTemplateSource(null)} />
       )}

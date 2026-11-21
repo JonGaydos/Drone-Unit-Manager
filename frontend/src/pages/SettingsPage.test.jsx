@@ -4,9 +4,14 @@ import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { withPermissions } from '@/test/permissions'
 import { renderWithProviders } from '@/test/render'
-import { Route, Routes } from 'react-router-dom'
+import { Route, Routes, useSearchParams } from 'react-router-dom'
 import { SIDEBAR_META } from '@/lib/sidebarNav'
 import SettingsPage from './SettingsPage'
+
+function RequirementsTabProbe() {
+  const [params] = useSearchParams()
+  return <p>Compliance tab {params.get('tab')}</p>
+}
 
 // Mount endpoints (useEffect):
 //   GET /settings           (array of {key, value}; .catch(console.error))
@@ -868,21 +873,21 @@ describe('SettingsPage and Flight Requirements', () => {
     expect(screen.queryByRole('button', { name: 'Flight Requirements' })).toBeNull()
   })
 
-  it('sends /settings?tab=requirements to the Flight Requirements page', async () => {
+  it('sends /settings?tab=requirements to the Flight Requirements tab of Compliance', async () => {
     mockMount()
     renderWithProviders(
       <Routes>
         <Route path="/settings" element={<SettingsPage />} />
-        <Route path="/requirements" element={<p>Requirements page</p>} />
+        <Route path="/compliance" element={<RequirementsTabProbe />} />
       </Routes>,
       { role: 'pilot', route: '/settings?tab=requirements' },
     )
-    expect(await screen.findByText('Requirements page')).toBeInTheDocument()
+    expect(await screen.findByText('Compliance tab requirements')).toBeInTheDocument()
   })
 
-  it('appends Flight Requirements to a saved sidebar config that predates it', async () => {
+  it('drops the retired Flight Requirements entry from a saved sidebar config', async () => {
     let body = null
-    const saved = SIDEBAR_META.filter(item => item.to !== '/requirements')
+    const saved = [...SIDEBAR_META, { to: '/requirements', label: 'Flight Requirements' }]
       .map((item, order) => ({ to: item.to, label: item.label, visible: true, order }))
     mockMount({ settings: () => HttpResponse.json([...SETTINGS, { key: 'sidebar_config', value: JSON.stringify(saved) }]) })
     server.use(http.put('/api/settings/bulk', async ({ request }) => {
@@ -893,8 +898,7 @@ describe('SettingsPage and Flight Requirements', () => {
     await user.click(await screen.findByRole('button', { name: /Save Sidebar Config/ }))
     await waitFor(() => expect(body).not.toBeNull())
     const config = JSON.parse(body.find(row => row.key === 'sidebar_config').value)
-    expect(config.at(-1)).toMatchObject({ to: '/requirements', visible: true, order: saved.length })
-    expect(config.slice(0, -1).map(item => item.to)).toEqual(saved.map(item => item.to))
+    expect(config.map(item => item.to)).toEqual(SIDEBAR_META.map(item => item.to))
   })
 })
 

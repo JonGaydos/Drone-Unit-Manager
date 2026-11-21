@@ -29,7 +29,6 @@ const NAV = [
   { label: 'Reports', url: '/reports', view: REPORT_KEYS },
   { label: 'Compliance', url: '/compliance' },
   { label: 'Operating Authority', url: '/operating-authority', view: 'authority.view' },
-  { label: 'Flight Requirements', url: '/requirements', view: 'requirements.view' },
   { label: 'Alerts', url: '/alerts', view: 'alerts.view' },
   { label: 'Activity Reports', url: '/incidents', view: 'incidents.view' },
   { label: 'Weather', url: '/weather' },

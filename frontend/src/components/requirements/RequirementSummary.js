@@ -15,6 +15,7 @@ export const PERIOD_LABELS = {
   span: 'Span from a start date',
   custom: 'Custom date range',
   every_n_months: 'Every N months',
+  rolling: 'Rolling window',
 }
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August',
@@ -192,13 +193,31 @@ function purposePhrase(form) {
   return form.purposes.length ? ` (purpose: ${joinList(form.purposes, 'or')})` : ''
 }
 
+/** "any 90 days", "any month". */
+function rollingWindowPhrase(form) {
+  const length = toNumber(form.span_length) ?? 1
+  return length === 1 ? `any ${spanUnit(form)}` : `any ${plural(length, spanUnit(form))}`
+}
+
+/** "All active pilots must have 1 hour on any aircraft in any 90 days, from Dec 1, 2026." */
+function describeRolling(form, pilots) {
+  const target = targetText(targetMinutesOf(form), toNumber(form.target_flights))
+  const from = form.start_date ? formatDate(form.start_date) : NO_START
+  return [
+    capitalize(whoPhrase(form, pilots)), ' must have ', target, ' ', aircraftPhrase(form), timePhrase(form),
+    purposePhrase(form), ' in ', rollingWindowPhrase(form), ', from ', from, '.',
+  ].join('')
+}
+
 /**
  * The live summary of a requirement form, for example "Every quarter, all
  * active pilots must fly 15 min on each of: X10, X2E, starting Q4 2026, no end
- * date." `pilots` names the selected pilots; `fiscalStartMonth` (1 to 12)
+ * date." A rolling window reads "All active pilots must have 1 hour on any
+ * aircraft in any 90 days, from Dec 1, 2026." `pilots` names the selected pilots; `fiscalStartMonth` (1 to 12)
  * names fiscal periods.
  */
 export function describeRequirement(form, { pilots = [], fiscalStartMonth = 10 } = {}) {
+  if (form.period_type === 'rolling') return describeRolling(form, pilots)
   const target = targetText(targetMinutesOf(form), toNumber(form.target_flights))
   return [
     periodPhrase(form, fiscalStartMonth), ', ', whoPhrase(form, pilots), ' must fly ', target, ' ',

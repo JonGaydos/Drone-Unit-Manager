@@ -162,16 +162,48 @@ describe('RequirementsTab', () => {
     expect(calls[0]).toMatchObject({ method: 'DELETE', url: '/api/requirements/5' })
   })
 
-  it('fills the form from a template without dates or pilots', async () => {
+  it('opens a template passed in the location state as a new requirement, without dates or pilots', async () => {
     mock()
-    const { user } = renderTab()
-    await user.click(await screen.findByRole('button', { name: 'New from template Night hour' }))
-    expect(screen.getByLabelText('Name')).toHaveValue('Night hour')
+    renderWithProviders(<RequirementsTab />, {
+      role: 'supervisor', route: { pathname: '/compliance', search: '?tab=requirements', state: { template: TEMPLATE } },
+    })
+    expect(await screen.findByLabelText('Name')).toHaveValue('Night hour')
     expect(screen.getByLabelText('Period')).toHaveValue('span')
     expect(screen.getByLabelText('Length')).toHaveValue(2)
     expect(screen.getByRole('radio', { name: /Night/ })).toBeChecked()
     expect(screen.getByLabelText('Starts')).toHaveValue('')
     expect(screen.getByRole('radio', { name: 'All active pilots' })).toBeChecked()
+  })
+
+  it('leaves templates and requirement settings to the Setup tab', async () => {
+    mock()
+    renderTab()
+    await screen.findByText('Quarterly models')
+    expect(screen.queryByRole('heading', { name: 'Templates' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Requirement Settings' })).toBeNull()
+  })
+
+  it('shows a rolling requirement with its window and each pilot\'s standing', async () => {
+    mock({ requirements: [{ ...REQ, period_type: 'rolling', recurring: false, span_length: 90, span_unit: 'days' }] })
+    server.use(http.get('/api/requirements/status', () => HttpResponse.json({
+      score: null, inactive_count: 0,
+      requirements: [{
+        requirement_id: 4, name: 'Quarterly models', period_type: 'rolling', target_minutes: 15, target_flights: null,
+        model_mode: 'all', current_period: null, pending_periods: [],
+        rolling: {
+          window_start: '2026-08-23', window_end: '2026-11-20',
+          pilots: [{
+            pilot_id: 1, pilot_name: 'Pat Pilot', status: 'current', totals: { '*': { minutes: 20, flights: 1 } },
+            met_by_model: { '*': true }, lapse_date: '2026-12-03', excused_until: null, excluded_no_takeoff: 0, unreviewed_in_window: 0,
+          }],
+        },
+      }],
+    })))
+    renderTab()
+    const row = (await screen.findByText('Quarterly models')).closest('li')
+    expect(within(row).getByText('Rolling 90 days')).toBeInTheDocument()
+    expect(await within(row).findByText('1 current, 0 lapsed')).toBeInTheDocument()
+    expect(within(row).getByText('lapses on Dec 3, 2026')).toBeInTheDocument()
   })
 
   it('saves a requirement as a template', async () => {
@@ -190,53 +222,12 @@ describe('RequirementsTab', () => {
     expect(calls[0].body.settings).not.toHaveProperty('end_date')
   })
 
-  it('renames and deletes a template', async () => {
-    const calls = mock()
-    const { user } = renderTab()
-    await user.click(await screen.findByRole('button', { name: 'Rename Night hour' }))
-    const input = screen.getByLabelText('New name for Night hour')
-    fireEvent.change(input, { target: { value: 'Two week night' } })
-    await user.click(screen.getByRole('button', { name: 'Save name' }))
-    await waitFor(() => expect(calls).toHaveLength(1))
-    expect(calls[0]).toMatchObject({ method: 'PATCH', url: '/api/requirements/templates/7', body: { name: 'Two week night' } })
-    await user.click(screen.getByRole('button', { name: 'Delete template Night hour' }))
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }))
-    await waitFor(() => expect(calls).toHaveLength(2))
-    expect(calls[1]).toMatchObject({ method: 'DELETE', url: '/api/requirements/templates/7' })
-  })
-
   it('disables Night when the unit location is not set', async () => {
     mock({ settings: [{ key: 'org_default_lat', value: '' }, { key: 'org_default_lon', value: '' }] })
     const { user } = renderTab()
     await screen.findByText('Quarterly models')
     await user.click(screen.getByRole('button', { name: 'New requirement' }))
     await waitFor(() => expect(screen.getByRole('radio', { name: /Night/ })).toBeDisabled())
-  })
-
-  it('saves the requirement settings', async () => {
-    const calls = mock()
-    const { user } = renderTab()
-    const grace = await screen.findByLabelText('Grace days')
-    await waitFor(() => expect(grace).toHaveValue(14))
-    fireEvent.change(grace, { target: { value: '10' } })
-    await user.selectOptions(screen.getByLabelText('Fiscal year starts in'), '7')
-    await user.click(screen.getByRole('button', { name: 'Save settings' }))
-    await waitFor(() => expect(calls).toHaveLength(1))
-    expect(calls[0]).toMatchObject({ method: 'PUT', url: '/api/requirements/settings', body: { grace_days: 10, fiscal_year_start_month: 7, emails_enabled: false } })
-  })
-
-  it('leaves requirement emails off until the box is checked, then saves it', async () => {
-    const calls = mock()
-    const { user } = renderTab()
-    const box = await screen.findByLabelText('Send requirement emails')
-    await waitFor(() => expect(screen.getByLabelText('Grace days')).toHaveValue(14))
-    expect(box).not.toBeChecked()
-    expect(screen.getByText(/assignment, a reminder before the period ends and a missed requirement/)).toBeInTheDocument()
-    expect(screen.getByText(/SMTP must be set up/)).toBeInTheDocument()
-    await user.click(box)
-    await user.click(screen.getByRole('button', { name: 'Save settings' }))
-    await waitFor(() => expect(calls).toHaveLength(1))
-    expect(calls[0].body).toMatchObject({ emails_enabled: true })
   })
 
   it('switches a requirement off after confirming, then refreshes the list', async () => {

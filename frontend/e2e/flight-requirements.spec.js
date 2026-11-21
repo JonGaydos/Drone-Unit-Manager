@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 
-// Flight requirement journey: an admin opens Flight Requirements from the
-// sidebar (under Compliance), creates a monthly requirement for all active
+// Flight requirement journey: an admin opens the Flight Requirements tab of
+// the Compliance page from the sidebar, creates a monthly requirement for all active
 // pilots, sees it in the list and on the dashboard "This Period" tile, switches
 // it off and on again from the list, then deletes it. Runs as the default admin
 // storageState. A new requirement has no saved results, so it can be deleted;
@@ -9,9 +9,10 @@ import { test, expect } from '@playwright/test'
 
 async function openRequirements(page) {
   await page.goto('/')
-  await page.getByRole('navigation').getByRole('link', { name: 'Flight Requirements', exact: true }).click()
-  await expect(page).toHaveURL(/\/requirements$/)
-  await expect(page.getByRole('heading', { level: 1, name: 'Flight Requirements', exact: true })).toBeVisible({ timeout: 15_000 })
+  await page.getByRole('navigation').getByRole('link', { name: 'Compliance', exact: true }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Compliance', exact: true })).toBeVisible({ timeout: 15_000 })
+  await page.getByRole('tab', { name: 'Flight Requirements', exact: true }).click()
+  await expect(page).toHaveURL(/\/compliance\?tab=requirements$/)
 }
 
 test('admin creates a monthly flight requirement and sees it on the dashboard', async ({ page }) => {
@@ -47,7 +48,9 @@ test('admin creates a monthly flight requirement and sees it on the dashboard', 
     await row.getByRole('button', { name: `Switch on ${name}`, exact: true }).click()
     await expect(row.getByRole('button', { name: `Switch off ${name}`, exact: true })).toBeVisible({ timeout: 15_000 })
   } finally {
+    // The old address still lands on the tab.
     await page.goto('/requirements')
+    await expect(page).toHaveURL(/\/compliance\?tab=requirements$/)
     await page.getByRole('button', { name: `Delete ${name}`, exact: true }).click()
     await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click()
     await expect(page.getByText(name, { exact: true })).toHaveCount(0)

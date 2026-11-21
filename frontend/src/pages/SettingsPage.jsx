@@ -77,8 +77,8 @@ function NoLinkedPilotBadge({ user }) {
 
 export default function SettingsPage() {
   const [searchParams] = useSearchParams()
-  // Flight Requirements was a Settings tab before it got its own page; old links still land there.
-  if (searchParams.get('tab') === 'requirements') return <Navigate to="/requirements" replace />
+  // Flight Requirements was a Settings tab before it moved to Compliance; old links still land there.
+  if (searchParams.get('tab') === 'requirements') return <Navigate to="/compliance?tab=requirements" replace />
   return <SettingsTabs />
 }
 
