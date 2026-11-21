@@ -417,3 +417,106 @@ def test_backfill_check_failure_skips_the_early_run(scheduler_db, monkeypatch):
 
     monkeypatch.setattr(sched, "SessionLocal", broken)
     assert sched._track_fill_job_kwargs() == {}
+
+
+def _done_marker(db):
+    return db.query(Setting).filter(Setting.key == flight_track.BACKFILL_DONE_KEY).first()
+
+
+def test_empty_address_is_saved_as_empty(db, telemetry_db, monkeypatch):
+    flight = _flight_with_track(db, telemetry_db)
+    monkeypatch.setattr(flight_track, "GEOCODE_INTERVAL_S", 0)
+    monkeypatch.setattr(sync_manager, "_reverse_geocode", lambda lat, lon: "")
+    flight_track.fill_missing()
+    db.expire_all()
+    assert db.get(Flight, flight.id).landing_address == ""
+
+
+def test_empty_address_is_not_looked_up_on_the_next_run(db, telemetry_db, monkeypatch):
+    _flight_with_track(db, telemetry_db)
+    monkeypatch.setattr(flight_track, "GEOCODE_INTERVAL_S", 0)
+    calls = []
+    monkeypatch.setattr(sync_manager, "_reverse_geocode", lambda lat, lon: calls.append(lat) or "")
+    flight_track.fill_missing()
+    flight_track.fill_missing()
+    assert len(calls) == 1
+
+
+def test_empty_address_does_not_count_as_found(db, telemetry_db, monkeypatch):
+    _flight_with_track(db, telemetry_db)
+    monkeypatch.setattr(flight_track, "GEOCODE_INTERVAL_S", 0)
+    monkeypatch.setattr(sync_manager, "_reverse_geocode", lambda lat, lon: "")
+    assert flight_track.fill_missing()["geocoded"] == 0
+
+
+def test_failed_lookup_is_tried_again_on_the_next_run(db, telemetry_db, monkeypatch):
+    _flight_with_track(db, telemetry_db)
+    monkeypatch.setattr(flight_track, "GEOCODE_INTERVAL_S", 0)
+    calls = []
+    monkeypatch.setattr(sync_manager, "_reverse_geocode", lambda lat, lon: calls.append(lat))
+    flight_track.fill_missing()
+    flight_track.fill_missing()
+    assert len(calls) == 2
+
+
+@pytest.fixture
+def restore_running():
+    from app.services.sync_lock import restore_active
+    restore_active.set()
+    yield restore_active
+    restore_active.clear()
+
+
+def test_fill_is_skipped_while_a_restore_runs(db, telemetry_db, geocoder, restore_running):
+    _flight_with_track(db, telemetry_db)
+    assert flight_track.fill_missing() is None
+
+
+def test_fill_during_a_restore_looks_nothing_up(db, telemetry_db, geocoder, restore_running):
+    _flight_with_track(db, telemetry_db)
+    flight_track.fill_missing()
+    assert geocoder == []
+
+
+def test_fill_during_a_restore_sets_no_done_marker(db, telemetry_db, geocoder, restore_running):
+    _flight_with_track(db, telemetry_db)
+    flight_track.fill_missing()
+    assert _done_marker(db) is None
+
+
+def test_fill_stops_between_batches_when_a_restore_starts(db, telemetry_db, monkeypatch):
+    from app.services.sync_lock import restore_active
+    for _ in range(3):
+        _flight_with_track(db, telemetry_db)
+    monkeypatch.setattr(flight_track, "GEOCODE_INTERVAL_S", 0)
+    calls = []
+
+    def lookup_then_restore(lat, lon):
+        calls.append(lat)
+        restore_active.set()
+        return "Landing spot"
+
+    monkeypatch.setattr(sync_manager, "_reverse_geocode", lookup_then_restore)
+    try:
+        flight_track.fill_missing(batch_size=1)
+    finally:
+        restore_active.clear()
+    assert len(calls) == 1
+
+
+def test_fill_stopped_by_a_restore_sets_no_done_marker(db, telemetry_db, monkeypatch):
+    from app.services.sync_lock import restore_active
+    for _ in range(3):
+        _flight_with_track(db, telemetry_db)
+    monkeypatch.setattr(flight_track, "GEOCODE_INTERVAL_S", 0)
+
+    def lookup_then_restore(lat, lon):
+        restore_active.set()
+        return "Landing spot"
+
+    monkeypatch.setattr(sync_manager, "_reverse_geocode", lookup_then_restore)
+    try:
+        flight_track.fill_missing(batch_size=1)
+    finally:
+        restore_active.clear()
+    assert _done_marker(db) is None

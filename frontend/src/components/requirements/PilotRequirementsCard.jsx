@@ -289,6 +289,15 @@ export default function PilotRequirementsCard({ pilotId, onChange }) {
       .catch(err => toast.error(err.message)),
   })
 
+  const deleteLapse = lapse => requestConfirm({
+    title: 'Delete lapse',
+    message: `Delete the lapse on ${lapse.name} from ${formatDate(lapse.lapsed_on)} to ${formatDate(lapse.recovered_on)}? Use this only when the lapse came from data that was later corrected. The delete is recorded in the audit log.`,
+    confirmLabel: 'Delete',
+    onConfirm: () => api.delete(`/requirements/${lapse.requirement_id}/lapses/${lapse.lapse_id}`)
+      .then(() => { toast.success('Lapse deleted'); reload() })
+      .catch(err => toast.error(err.message)),
+  })
+
   return (
     <section aria-labelledby={titleId} className="bg-card border border-border rounded-xl overflow-hidden">
       <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-3">
@@ -301,7 +310,7 @@ export default function PilotRequirementsCard({ pilotId, onChange }) {
       <ProgressSection title="This period" rows={data.current} when={daysLeft} targets={targets} actions={actions} />
       <ProgressSection title="In review" rows={data.pending} when={inReview} targets={targets} actions={actions} />
       <RollingSection rows={data.rolling} lapses={data.lapses} targets={targets} actions={rollingActions} />
-      <LapseHistory lapses={data.lapses} />
+      <LapseHistory lapses={data.lapses} onDelete={isAdmin ? deleteLapse : null} />
       <HistoryTable rows={data.history} actions={actions} recalculable={isAdmin} onRecalculate={recalculate} />
       {can('reports.export') && <CsvLinks requirements={requirements} onDownload={download} />}
       {excusing && <ExcuseModal period={excusing} onSubmit={excuse} onClose={() => setExcusing(null)} />}

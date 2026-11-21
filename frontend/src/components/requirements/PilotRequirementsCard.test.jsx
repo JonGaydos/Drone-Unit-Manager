@@ -261,6 +261,36 @@ describe('PilotRequirementsCard', () => {
       expect(rows[2]).toHaveTextContent('Ninety-day hourJun 10, 2026Jun 21, 2026')
     })
 
+    it('lets an admin delete a closed lapse after confirming', async () => {
+      let deleted = null
+      mock({ current: [], history: [], rolling: [ROLLING], lapses: LAPSES })
+      server.use(http.delete('/api/requirements/:id/lapses/:lapseId', ({ params }) => {
+        deleted = { id: params.id, lapseId: params.lapseId }
+        return HttpResponse.json({ ok: true })
+      }))
+      const { user } = render('admin')
+      const table = await screen.findByRole('table', { name: 'Lapse history' })
+      await user.click(within(table).getByRole('button', { name: 'Delete lapse Ninety-day hour, Jun 10, 2026' }))
+      const dialog = await screen.findByRole('dialog')
+      expect(deleted).toBeNull()
+      await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
+      await waitFor(() => expect(deleted).toEqual({ id: '2', lapseId: '3' }))
+    })
+
+    it('offers no Delete on an open lapse', async () => {
+      mock({ current: [], history: [], rolling: [ROLLING], lapses: LAPSES })
+      render('admin')
+      const table = await screen.findByRole('table', { name: 'Lapse history' })
+      expect(within(table).queryByRole('button', { name: /Nov 2, 2026/ })).toBeNull()
+    })
+
+    it('offers no lapse Delete to a supervisor', async () => {
+      mock({ current: [], history: [], rolling: [ROLLING], lapses: LAPSES })
+      render('supervisor')
+      const table = await screen.findByRole('table', { name: 'Lapse history' })
+      expect(within(table).queryByRole('button', { name: /^Delete lapse/ })).toBeNull()
+    })
+
     it('shows the Lapsed requirement badge while a lapse is open', async () => {
       mock({
         current: [], history: [], rolling: [ROLLING],

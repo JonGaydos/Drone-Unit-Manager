@@ -78,8 +78,19 @@ export function RollingSection({ rows, lapses, targets, actions }) {
   )
 }
 
-/** Every lapse the pilot has had, newest first, with the day it ended. */
-export function LapseHistory({ lapses }) {
+function LapseDeleteButton({ lapse, onDelete }) {
+  if (!lapse.recovered_on) return null
+  return (
+    <button type="button" onClick={() => onDelete(lapse)} className={SMALL_BUTTON}
+      aria-label={`Delete lapse ${lapse.name}, ${formatDate(lapse.lapsed_on)}`}>
+      Delete
+    </button>
+  )
+}
+
+/** Every lapse the pilot has had, newest first, with the day it ended.
+ *  `onDelete` (admins) adds Delete to closed lapses. */
+export function LapseHistory({ lapses, onDelete = null }) {
   if (lapses.length === 0) return null
   return (
     <div className="overflow-x-auto border-b border-border">
@@ -89,6 +100,7 @@ export function LapseHistory({ lapses }) {
             <th className="text-left px-4 py-2 text-foreground font-medium">Requirement</th>
             <th className="text-left px-4 py-2 text-foreground font-medium">Lapsed on</th>
             <th className="text-left px-4 py-2 text-foreground font-medium">Current again on</th>
+            {onDelete && <th className="px-4 py-2"><span className="sr-only">Actions</span></th>}
           </tr>
         </thead>
         <tbody>
@@ -101,6 +113,7 @@ export function LapseHistory({ lapses }) {
                   ? <span className="text-foreground">{formatDate(lapse.recovered_on)}</span>
                   : <span className="text-danger">Still lapsed</span>}
               </td>
+              {onDelete && <td className="px-4 py-2 text-right"><LapseDeleteButton lapse={lapse} onDelete={onDelete} /></td>}
             </tr>
           ))}
         </tbody>

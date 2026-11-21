@@ -22,6 +22,7 @@ from app.models.flight import Flight
 from app.models.setting import Setting
 from app.models.telemetry import TelemetryPoint
 from app.services.audit_capture import machine_run
+from app.services.sync_lock import restore_active
 
 logger = logging.getLogger(__name__)
 
@@ -283,8 +284,10 @@ def _geocode_landings(flights: list[Flight], stats: dict) -> None:
             stats["failures_in_row"] += 1
             continue
         stats["failures_in_row"] = 0
+        # A lookup that went through but found nothing is stored as "", so the
+        # flight is not looked up again every day.
+        flight.landing_address = address
         if address:
-            flight.landing_address = address
             stats["geocoded"] += 1
 
 
@@ -302,9 +305,13 @@ def _candidates(db: Session):
 
 def _fill_all(db: Session, batch_size: int) -> dict:
     total = _candidates(db).count()
-    stats = {"checked": 0, "filled": 0, "geocoded": 0, "failures_in_row": 0}
+    stats = {"checked": 0, "filled": 0, "geocoded": 0, "failures_in_row": 0, "interrupted": False}
     cursor = None
     while True:
+        if restore_active.is_set():
+            # A restore is replacing the tables; stop and finish on a later run.
+            stats["interrupted"] = True
+            return stats
         query = _candidates(db).order_by(Flight.id.desc())
         if cursor is not None:
             query = query.filter(Flight.id < cursor)
@@ -326,8 +333,12 @@ def fill_missing(batch_size: int = BATCH_SIZE) -> dict | None:
     """Fill flights still missing distance, landing location, address or
     landing time, newest first, committing each batch, so a rerun picks up
     where an interrupted one stopped. Returns the counts, or None when a run
-    is already going. A pass whose address lookups all went through sets
-    BACKFILL_DONE_KEY."""
+    is already going or a restore is running (a restore that starts mid-run
+    stops it between batches). A pass that was not stopped and whose address
+    lookups all went through sets BACKFILL_DONE_KEY."""
+    if restore_active.is_set():
+        logger.info("Track fill skipped: a restore is in progress")
+        return None
     if not _run_lock.acquire(blocking=False):
         logger.info("Track fill skipped: already running")
         return None
@@ -335,7 +346,7 @@ def fill_missing(batch_size: int = BATCH_SIZE) -> dict | None:
         with database.SessionLocal() as db:
             with machine_run(db, "track_fill", "flight"):
                 stats = _fill_all(db, batch_size)
-                finished = stats["failures_in_row"] < GEOCODE_FAILURE_LIMIT
+                finished = stats["failures_in_row"] < GEOCODE_FAILURE_LIMIT and not stats["interrupted"]
                 if finished and not backfill_done(db):
                     db.add(Setting(key=BACKFILL_DONE_KEY, value=datetime.now(timezone.utc).isoformat()))
             db.commit()
