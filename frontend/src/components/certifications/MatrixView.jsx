@@ -4,10 +4,12 @@ import { CELL_COLORS, certCell, statusColor, statusText } from './certStatus'
 import { CertStatusIcon, StatusGlyph } from './CertStatusIcon'
 
 // Pinned inside the scroll box: the corner sits above both the header row and
-// the pilot column, and every pinned cell has a solid background.
-const CORNER = 'sticky top-0 left-0 z-30 bg-card text-left px-4 py-3 font-medium text-muted-foreground min-w-[150px] border-b border-r border-border'
-const HEADER = 'sticky top-0 z-20 bg-card text-center px-3 py-3 font-medium text-muted-foreground min-w-[100px] border-b border-border'
-const PILOT = 'sticky left-0 z-10 bg-card px-4 py-2 text-foreground font-medium border-b border-r border-border'
+// the pilot column, and every pinned cell has a solid background (matrix-pin,
+// not bg-card, which is translucent or framed in some themes).
+const CORNER = 'sticky top-0 left-0 z-30 matrix-pin text-left px-4 py-3 font-medium text-muted-foreground min-w-[150px] border-b border-r border-border'
+const HEADER = 'sticky top-0 z-20 matrix-pin text-center px-3 py-3 font-medium text-muted-foreground min-w-[100px] border-b border-border'
+const PILOT = 'sticky left-0 z-10 matrix-pin px-4 py-2 text-foreground font-medium border-b border-r border-border'
+const THEAD_STYLE = { zIndex: 30 }
 const MOVE = 'p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-20 disabled:cursor-not-allowed'
 
 function TypeHeader({ ct, first, last, canManage, onReorder }) {
@@ -78,7 +80,9 @@ export function MatrixView({ rows, certTypes, emptyMessage, ctx }) {
       <Legend rows={rows} certTypes={certTypes} labels={ctx.labels} />
       <div className="bg-card border border-border rounded-xl overflow-auto max-h-[calc(100vh-16rem)]">
         <table className="w-full text-sm border-separate border-spacing-0">
-          <thead>
+          {/* A global rule makes every thead sticky at z-index 10, a stacking
+              context the pinned pilot cells would paint over; lift this one. */}
+          <thead style={THEAD_STYLE}>
             <tr>
               <th className={CORNER}>Pilot</th>
               {certTypes.map((ct, idx) => (

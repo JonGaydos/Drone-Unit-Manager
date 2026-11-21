@@ -391,6 +391,11 @@ export default function CertificationsPage() {
   const bulk = useBulkRenew(reload)
 
   const closeModal = () => { setModal(null); setEditCert(null) }
+  // Bulk renewal lives in the matrix, so leaving it drops the selection.
+  const changeView = (next) => {
+    if (next !== 'matrix') bulk.clear()
+    setView(next)
+  }
   // Runs a change, then the follow-up and a reload; a failure shows a toast.
   const run = async (change, after) => {
     try {
@@ -487,7 +492,7 @@ export default function CertificationsPage() {
 
       {tab === 'matrix' && (
         <CertViews matrix={matrix} certTypes={certTypes} filters={filters} onFiltersChange={setFilters}
-          view={view} onViewChange={setView} bulk={bulk} ctx={ctx} />
+          view={view} onViewChange={changeView} bulk={bulk} ctx={ctx} />
       )}
 
       {tab === 'types' && (

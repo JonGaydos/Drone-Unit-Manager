@@ -549,6 +549,11 @@ thead {
   background: var(--card);
 }
 
+/* Pinned matrix cells: the card tint over the page color, solid in every theme. */
+.matrix-pin {
+  background: linear-gradient(var(--card), var(--card)), var(--bg);
+}
+
 body {
   margin: 0;
   background-color: var(--bg);

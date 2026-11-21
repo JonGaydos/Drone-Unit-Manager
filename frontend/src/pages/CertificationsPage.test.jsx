@@ -388,9 +388,12 @@ describe('CertificationsPage', () => {
       mountViews()
       await screen.findByRole('link', { name: 'Ada Lovelace' })
       const corner = screen.getByRole('columnheader', { name: 'Pilot' })
-      expect(corner.className).toMatch(/sticky top-0 left-0 z-30 bg-card/)
-      expect(screen.getByRole('columnheader', { name: /Part 107/ }).className).toMatch(/sticky top-0 z-20 bg-card/)
-      expect(screen.getByRole('link', { name: 'Ada Lovelace' }).closest('td').className).toMatch(/sticky left-0 z-10 bg-card/)
+      // Pinned cells use an opaque background, not the (translucent in some themes) card.
+      expect(corner.className).toMatch(/sticky top-0 left-0 z-30 matrix-pin/)
+      expect(screen.getByRole('columnheader', { name: /Part 107/ }).className).toMatch(/sticky top-0 z-20 matrix-pin/)
+      const pilotCell = screen.getByRole('link', { name: 'Ada Lovelace' }).closest('td')
+      expect(pilotCell.className).toMatch(/sticky left-0 z-10 matrix-pin/)
+      expect(pilotCell.className).not.toMatch(/bg-card/)
       expect(screen.getByRole('table').parentElement.className).toMatch(/overflow-auto/)
     })
 
@@ -480,6 +483,30 @@ describe('CertificationsPage', () => {
       await user.click(screen.getByRole('button', { name: 'By pilot' }))
       expect(screen.queryByRole('checkbox', { name: 'Select certification for bulk renewal' })).toBeNull()
       expect(screen.queryByRole('button', { name: 'Renew selected' })).toBeNull()
+    })
+
+    it('explains By urgency when the status filter can never appear there', async () => {
+      const { user } = mountViews()
+      await chooseView(user, 'By urgency')
+      await user.selectOptions(screen.getByDisplayValue('All Statuses'), 'pending')
+      expect(screen.getByText('By urgency lists dated and current records')).toBeInTheDocument()
+      expect(screen.queryByRole('region', { name: 'Expired' })).toBeNull()
+    })
+
+    it('clears the bulk selection when leaving the matrix', async () => {
+      const { user } = mountViews()
+      await screen.findByRole('link', { name: 'Ada Lovelace' })
+      await user.click(screen.getAllByRole('checkbox', { name: 'Select certification for bulk renewal' })[0])
+      await user.click(screen.getByRole('button', { name: 'By pilot' }))
+      await user.click(screen.getByRole('button', { name: 'Matrix' }))
+      expect(screen.queryByRole('button', { name: 'Renew selected' })).toBeNull()
+    })
+
+    it('raises the matrix header above the pinned pilot column', async () => {
+      mountViews()
+      await screen.findByRole('link', { name: 'Ada Lovelace' })
+      const thead = screen.getByRole('columnheader', { name: 'Pilot' }).closest('thead')
+      expect(thead.style.zIndex).toBe('30')
     })
 
     it('remembers the chosen view', async () => {

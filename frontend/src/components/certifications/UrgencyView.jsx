@@ -1,6 +1,6 @@
 import { useId } from 'react'
 import { Link } from 'react-router-dom'
-import { URGENCY_GROUPS, groupByUrgency, statusColor } from './certStatus'
+import { URGENCY_GROUPS, groupByUrgency, statusColor, urgencyShowsStatus } from './certStatus'
 import { StatusGlyph } from './CertStatusIcon'
 
 const ITEM_TEXT = 'min-w-0 truncate text-left text-foreground'
@@ -44,6 +44,9 @@ function UrgencyGroup({ group, items, ctx }) {
 
 /** Certifications by how soon they need attention. */
 export function UrgencyView({ rows, certTypes, status, emptyMessage, ctx }) {
+  if (!urgencyShowsStatus(status)) {
+    return <p className="text-sm text-muted-foreground">By urgency lists dated and current records</p>
+  }
   if (rows.length === 0) {
     return <div className="bg-card border border-border rounded-xl px-4 py-12 text-center text-muted-foreground">{emptyMessage}</div>
   }

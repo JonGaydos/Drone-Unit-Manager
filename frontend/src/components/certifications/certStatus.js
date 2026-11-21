@@ -116,6 +116,12 @@ export const URGENCY_GROUPS = [
 ]
 
 const CURRENT_STATUSES = new Set(['complete', 'active'])
+const URGENCY_STATUSES = new Set(['expired', 'expiring', ...CURRENT_STATUSES])
+
+/** Whether a status filter can match anything in By urgency. */
+export function urgencyShowsStatus(status) {
+  return status === 'all' || URGENCY_STATUSES.has(status)
+}
 
 function urgencyGroup(cell) {
   if (cell.status === 'expired') return 'expired'
