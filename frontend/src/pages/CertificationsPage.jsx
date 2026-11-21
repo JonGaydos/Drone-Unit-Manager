@@ -1,5 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
-import { Link } from 'react-router-dom'
+import { useState, useEffect } from 'react'
 import { api, getSection } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
@@ -7,16 +6,17 @@ import { ownsPilot } from '@/lib/ownership'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Modal } from '@/components/ui/Modal'
 import { useConfirm } from '@/hooks/useConfirm'
-import { addMonths, certDisplayStatus, emptiedToNull, normalizeDateValue, todayLocal } from '@/lib/utils'
+import { addMonths, emptiedToNull, normalizeDateValue } from '@/lib/utils'
 import { CERT_STATUS_COLORS } from '@/lib/constants'
 import { sortByName, sortPilotsActiveFirst } from '@/lib/formatters'
-import { Plus, Edit, Trash2, ShieldCheck, Search, Filter, Download, ChevronLeft, ChevronRight, Loader2, Eye, EyeOff } from 'lucide-react'
+import { Plus, Download, Loader2 } from 'lucide-react'
 import DocumentUpload from '@/components/DocumentUpload'
-
-// Matrix cells show the derived state: an expiry inside the window reads
-// "expiring soon" in amber, a passed one "expired" in red.
-const CELL_COLORS = { ...CERT_STATUS_COLORS, expiring: 'bg-warning-bg text-warning' }
-const CELL_LABELS = { expiring: 'expiring soon' }
+import { DEFAULT_FILTERS, canOpenCert, reorderedTypes } from '@/components/certifications/certStatus'
+import { useCertView } from '@/components/certifications/useCertView'
+import { useBulkRenew } from '@/components/certifications/useBulkRenew'
+import { BulkRenewModal } from '@/components/certifications/BulkRenew'
+import { CertViews } from '@/components/certifications/CertViews'
+import { CertTypesGrid } from '@/components/certifications/CertTypesGrid'
 
 function CertTypeModal({ certType, onSave, onClose }) {
   const [form, setForm] = useState(certType || {
@@ -310,44 +310,100 @@ function CertDocumentsModal({ cert, folderId, onClose }) {
   )
 }
 
-export default function CertificationsPage() {
-  const [tab, setTab] = useState('matrix')
-  const [certTypes, setCertTypes] = useState([])
-  const [matrix, setMatrix] = useState([])
-  const [pilots, setPilots] = useState([])
-  const [modal, setModal] = useState(null)
+// The edit form's view of a matrix cell's record.
+function editableCert(row, ct, cert) {
+  return {
+    id: cert.id,
+    pilot_id: row.pilot_id,
+    certification_type_id: ct.id,
+    status: cert.status,
+    issue_date: cert.issue_date || '',
+    expiration_date: cert.expiration_date || '',
+    certificate_number: cert.certificate_number || '',
+    nist_level: cert.nist_level,
+    notes: cert.notes || '',
+  }
+}
+
+const TAB_ON = 'border-primary text-primary'
+const TAB_OFF = 'border-transparent text-muted-foreground hover:text-foreground'
+
+function TabButton({ active, onClick, children }) {
+  return (
+    <button onClick={onClick} className={`shrink-0 text-sm font-medium pb-2 border-b-2 transition-colors whitespace-nowrap ${active ? TAB_ON : TAB_OFF}`}>
+      {children}
+    </button>
+  )
+}
+
+function parseStatusLabels(value) {
+  if (!value) return {}
+  try { return JSON.parse(value) } catch { return {} }
+}
+
+/** Loads the page data; reload() refreshes it after a change. */
+function useCertificationsData() {
+  const [data, setData] = useState({ certTypes: [], matrix: [], pilots: [], labels: {} })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const reload = () => {
+    Promise.all([
+      api.get('/certification-types'),
+      api.get('/certifications/matrix'),
+      api.get('/pilots/options'),
+      api.get('/settings/cert_status_labels').catch(() => ({ value: '' })),
+    ]).then(([certTypes, mx, pilots, labels]) => {
+      setData({ certTypes, matrix: mx.matrix || [], pilots, labels: parseStatusLabels(labels.value) })
+    }).catch(err => setError(err.message)).finally(() => setLoading(false))
+  }
+  useEffect(() => { reload() }, [])
+  return { ...data, loading, error, reload }
+}
+
+// Documents auto-file to the Certifications folder. Auto-filing is optional:
+// with no folder list, documents simply stay unfiled.
+function useCertFolderId(canSeeFiles) {
+  const [folderId, setFolderId] = useState(null)
+  useEffect(() => {
+    getSection(canSeeFiles, '/folders', []).then(folders => {
+      const f = (Array.isArray(folders) ? folders : folders.folders || []).find(f => f.name === 'Certifications')
+      if (f) setFolderId(f.id)
+    })
+  }, [canSeeFiles])
+  return folderId
+}
+
+export default function CertificationsPage() {
+  const [tab, setTab] = useState('matrix')
+  const [view, setView] = useCertView()
+  const [filters, setFilters] = useState(DEFAULT_FILTERS)
+  const [modal, setModal] = useState(null)
+  const [editCert, setEditCert] = useState(null)
+  // Prefill for the assign modal when opened from an empty matrix cell.
+  const [assignDefaults, setAssignDefaults] = useState(null)
+  const { certTypes, matrix, pilots, labels, loading, error, reload } = useCertificationsData()
   const { can } = useAuth()
   const canManage = can('certifications.manage')
   const canSeeFiles = can('files.view')
   const toast = useToast()
   const [confirmProps, requestConfirm] = useConfirm()
+  const certFolderId = useCertFolderId(canSeeFiles)
+  const bulk = useBulkRenew(reload)
 
-  // Auto-file documents to Certifications folder
-  const [certFolderId, setCertFolderId] = useState(null)
-  useEffect(() => {
-    // Auto-filing is optional: with no folder list, documents simply stay unfiled.
-    getSection(canSeeFiles, '/folders', []).then(folders => {
-      const f = (Array.isArray(folders) ? folders : folders.folders || []).find(f => f.name === 'Certifications')
-      if (f) setCertFolderId(f.id)
-    })
-  }, [canSeeFiles])
+  const closeModal = () => { setModal(null); setEditCert(null) }
+  // Runs a change, then the follow-up and a reload; a failure shows a toast.
+  const run = async (change, after) => {
+    try {
+      await change()
+      after?.()
+      reload()
+    } catch (err) { toast.error(err.message) }
+  }
 
   // The matrix API fills an empty pilot and type pair with a placeholder whose id is null.
   const openCertCell = (row, ct, cert) => {
     if (cert?.id) {
-      setEditCert({
-        id: cert.id,
-        pilot_id: row.pilot_id,
-        certification_type_id: ct.id,
-        status: cert.status,
-        issue_date: cert.issue_date || '',
-        expiration_date: cert.expiration_date || '',
-        certificate_number: cert.certificate_number || '',
-        nist_level: cert.nist_level,
-        notes: cert.notes || '',
-      })
+      setEditCert(editableCert(row, ct, cert))
       setModal('editCert')
     } else {
       setEditCert(null)
@@ -356,195 +412,58 @@ export default function CertificationsPage() {
     }
   }
 
-  // Custom cert status labels
-  const [certStatusLabels, setCertStatusLabels] = useState({})
+  const handleSaveCertType = (data) => run(
+    () => (data.id ? api.patch(`/certification-types/${data.id}`, data) : api.post('/certification-types', data)),
+    () => setModal(null),
+  )
 
-  // Filter state
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [categoryFilter, setCategoryFilter] = useState('all')
-  const [pilotSearch, setPilotSearch] = useState('')
-  const [hideEmpty, setHideEmpty] = useState(false)
-
-  const load = () => {
-    Promise.all([
-      api.get('/certification-types'),
-      api.get('/certifications/matrix'),
-      api.get('/pilots/options'),
-      api.get('/settings/cert_status_labels').catch(() => ({ value: '' })),
-    ]).then(([ct, mx, p, labels]) => {
-      setCertTypes(ct); setMatrix(mx.matrix || []); setPilots(p)
-      if (labels.value) {
-        try { setCertStatusLabels(JSON.parse(labels.value)) } catch { /* invalid JSON */ }
-      }
-    }).catch(err => setError(err.message)).finally(() => setLoading(false))
-  }
-  useEffect(() => { load() }, [])
-
-  // Filtered cert type columns based on category filter
-  const filteredCertTypes = useMemo(() => {
-    const active = certTypes.filter(c => c.is_active)
-    if (categoryFilter === 'all') return active
-    return active.filter(c => c.category === categoryFilter)
-  }, [certTypes, categoryFilter])
-
-  // Filtered matrix rows based on status, pilot search, and hide-empty
-  const filteredMatrix = useMemo(() => {
-    let rows = matrix
-
-    // Filter by pilot name search
-    if (pilotSearch.trim()) {
-      const q = pilotSearch.toLowerCase().trim()
-      rows = rows.filter(row => row.pilot_name?.toLowerCase().includes(q))
-    }
-
-    // Filter by status: show only pilots who have at least one cert matching the status
-    if (statusFilter !== 'all') {
-      rows = rows.filter(row => {
-        const certs = row.certs || {}
-        return Object.values(certs).some(c => certDisplayStatus(c) === statusFilter)
-      })
-    }
-
-    // Hide empty: hide pilots with no certification record at all. The matrix
-    // fills every type with a placeholder (id null), so look for a real record.
-    if (hideEmpty) {
-      rows = rows.filter(row => Object.values(row.certs || {}).some(c => c?.id != null))
-    }
-
-    return rows
-  }, [matrix, statusFilter, pilotSearch, hideEmpty])
-
-  const handleSaveCertType = async (data) => {
-    try {
-      if (data.id) await api.patch(`/certification-types/${data.id}`, data)
-      else await api.post('/certification-types', data)
-      setModal(null); load()
-    } catch (err) { toast.error(err.message) }
-  }
-
-  const handleDeleteCertType = (id) => {
-    requestConfirm({
-      title: 'Delete Certification Type',
-      message: 'Are you sure you want to delete this certification type?',
-      onConfirm: async () => {
-        try { await api.delete(`/certification-types/${id}`); load() } catch (err) { toast.error(err.message) }
-      }
-    })
-  }
+  const handleDeleteCertType = (id) => requestConfirm({
+    title: 'Delete Certification Type',
+    message: 'Are you sure you want to delete this certification type?',
+    onConfirm: () => run(() => api.delete(`/certification-types/${id}`)),
+  })
 
   // Hide a cert type from the matrix (and matrix API) without deleting its
   // records; unhide restores it.
-  const handleToggleCertTypeHidden = async (ct) => {
-    try {
-      await api.patch(`/certification-types/${ct.id}`, { is_active: !ct.is_active })
-      load()
-    } catch (err) { toast.error(err.message) }
+  const handleToggleCertTypeHidden = (ct) => run(() => api.patch(`/certification-types/${ct.id}`, { is_active: !ct.is_active }))
+
+  const handleReorderCertType = (ctId, direction) => {
+    const items = reorderedTypes(certTypes, ctId, direction)
+    if (items) run(() => api.patch('/certification-types/reorder', { items }))
   }
 
-  const handleReorderCertType = async (ctId, direction) => {
-    // Work with the active cert types in their current sorted order
-    const active = [...certTypes].filter(c => c.is_active)
-    const idx = active.findIndex(c => c.id === ctId)
-    if (idx < 0) return
-    const targetIdx = direction === 'left' ? idx - 1 : idx + 1
-    if (targetIdx < 0 || targetIdx >= active.length) return
-    // Swap
-    const reordered = [...active]
-    const temp = reordered[idx]
-    reordered[idx] = reordered[targetIdx]
-    reordered[targetIdx] = temp
-    // Assign new sort_order values
-    const items = reordered.map((ct, i) => ({ id: ct.id, sort_order: i }))
-    try {
-      await api.patch('/certification-types/reorder', { items })
-      load()
-    } catch (err) { toast.error(err.message) }
-  }
+  const handleDeleteCert = (certId) => requestConfirm({
+    title: 'Remove Certification',
+    message: 'Remove this certification and its renewal history from the pilot? Attached documents are kept. This cannot be undone.',
+    onConfirm: () => run(() => api.delete(`/pilot-certifications/${certId}`), closeModal),
+  })
 
-  const [editCert, setEditCert] = useState(null)
-  // Prefill for the assign modal when opened from an empty matrix cell.
-  const [assignDefaults, setAssignDefaults] = useState(null)
+  const handleAssignCert = (data, certId) => run(
+    () => (certId ? api.patch(`/pilot-certifications/${certId}`, data) : api.post('/pilot-certifications', data)),
+    closeModal,
+  )
 
-  const handleDeleteCert = (certId) => {
-    requestConfirm({
-      title: 'Remove Certification',
-      message: 'Remove this certification and its renewal history from the pilot? Attached documents are kept. This cannot be undone.',
-      onConfirm: async () => {
-        try {
-          await api.delete(`/pilot-certifications/${certId}`)
-          setModal(null); setEditCert(null); load()
-        } catch (err) { toast.error(err.message) }
-      }
-    })
-  }
-
-  const handleAssignCert = async (data, certId) => {
-    try {
-      if (certId) {
-        await api.patch(`/pilot-certifications/${certId}`, data)
-      } else {
-        await api.post('/pilot-certifications', data)
-      }
-      setModal(null); setEditCert(null); load()
-    } catch (err) { toast.error(err.message) }
-  }
-
-  const handleRenewCert = async (certId, renewData) => {
-    try {
-      await api.post(`/pilot-certifications/${certId}/renew`, renewData)
-      toast.success('Certification renewed successfully')
-      setModal(null); setEditCert(null); load()
-    } catch (err) { toast.error(err.message) }
-  }
-
-  // Bulk renewal (e.g. a training day): multi-select certs in the matrix and
-  // renew them all with one issue date.
-  const [selectedCerts, setSelectedCerts] = useState(() => new Set())
-  const [bulkRenewOpen, setBulkRenewOpen] = useState(false)
-  const [bulkIssueDate, setBulkIssueDate] = useState('')
-  const [bulkNotes, setBulkNotes] = useState('')
-  const [bulkRenewing, setBulkRenewing] = useState(false)
-
-  const toggleCertSelection = (certId) => {
-    setSelectedCerts(prev => {
-      const next = new Set(prev)
-      if (next.has(certId)) next.delete(certId)
-      else next.add(certId)
-      return next
-    })
-  }
-
-  const handleBulkRenew = async () => {
-    if (!bulkIssueDate) { toast.error('Issue date is required'); return }
-    setBulkRenewing(true)
-    try {
-      const res = await api.post('/pilot-certifications/bulk-renew', {
-        pilot_certification_ids: [...selectedCerts],
-        issue_date: bulkIssueDate,
-        notes: bulkNotes || null,
-      })
-      toast.success(`Renewed ${res.renewed} certification(s)`)
-      setBulkRenewOpen(false); setSelectedCerts(new Set()); setBulkIssueDate(''); setBulkNotes(''); load()
-    } catch (err) {
-      toast.error(err.message)
-    } finally {
-      setBulkRenewing(false)
-    }
-  }
+  const handleRenewCert = (certId, renewData) => run(
+    () => api.post(`/pilot-certifications/${certId}/renew`, renewData),
+    () => { toast.success('Certification renewed successfully'); closeModal() },
+  )
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>
+
+  const ctx = {
+    labels, canManage, selected: bulk.selected, onToggle: bulk.toggle,
+    canOpen: (cert) => canOpenCert(cert, { canManage, canSeeFiles }),
+    onOpen: openCertCell, onReorder: handleReorderCertType,
+  }
+  const editing = modal === 'editCert' && editCert
 
   return (
     <div className="space-y-4">
       {error && <div className="bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg p-4 mb-4">{error}</div>}
       {/* Tabs */}
       <div className="flex items-center gap-4 border-b border-border pb-2 overflow-x-auto">
-        <button onClick={() => setTab('matrix')} className={`text-sm font-medium pb-2 border-b-2 transition-colors whitespace-nowrap ${tab === 'matrix' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
-          Certification Matrix
-        </button>
-        <button onClick={() => setTab('types')} className={`text-sm font-medium pb-2 border-b-2 transition-colors whitespace-nowrap ${tab === 'types' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
-          Cert Types
-        </button>
+        <TabButton active={tab === 'matrix'} onClick={() => setTab('matrix')}>Certification Matrix</TabButton>
+        <TabButton active={tab === 'types'} onClick={() => setTab('types')}>Cert Types</TabButton>
         <div className="flex-1" />
         {can('reports.export') && (
           <button
@@ -566,250 +485,23 @@ export default function CertificationsPage() {
         )}
       </div>
 
-      {/* Matrix View */}
       {tab === 'matrix' && (
-        <>
-          {/* Filter Bar */}
-          <div className="bg-card border border-border rounded-xl p-4">
-            <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-2 sm:gap-3">
-              <div className="flex items-center gap-2">
-                <Filter className="w-4 h-4 text-muted-foreground" />
-                <span className="text-sm font-medium text-muted-foreground">Filters:</span>
-              </div>
-
-              {/* Pilot Search */}
-              <div className="relative">
-                <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Search pilots..."
-                  value={pilotSearch}
-                  onChange={e => setPilotSearch(e.target.value)}
-                  className="pl-8 pr-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm w-44 focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-              </div>
-
-              {/* Status Filter */}
-              <select
-                value={statusFilter}
-                onChange={e => setStatusFilter(e.target.value)}
-                className="px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm"
-              >
-                <option value="all">All Statuses</option>
-                {Object.keys(CELL_COLORS).map(s => (
-                  <option key={s} value={s}>{CELL_LABELS[s] || s.replaceAll('_', ' ')}</option>
-                ))}
-              </select>
-
-              {/* Category Filter */}
-              <select
-                value={categoryFilter}
-                onChange={e => setCategoryFilter(e.target.value)}
-                className="px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm"
-              >
-                <option value="all">All Categories</option>
-                <option value="faa">FAA</option>
-                <option value="nist">NIST</option>
-                <option value="equipment">Equipment</option>
-                <option value="insurance">Insurance</option>
-                <option value="training">Training</option>
-                <option value="custom">Custom</option>
-              </select>
-
-              {/* Hide Empty */}
-              <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={hideEmpty}
-                  onChange={e => setHideEmpty(e.target.checked)}
-                  className="rounded border-border"
-                />{' '}
-                Hide empty
-              </label>
-
-              {/* Result count */}
-              <span className="text-xs text-muted-foreground ml-auto">
-                {filteredMatrix.length} of {matrix.length} pilots | {filteredCertTypes.length} cert columns
-              </span>
-            </div>
-          </div>
-
-          {/* Bulk renewal action bar */}
-          {canManage && selectedCerts.size > 0 && (
-            <div className="flex items-center gap-3 bg-primary/10 border border-primary/30 rounded-lg px-4 py-2">
-              <span className="text-sm font-medium text-foreground">{selectedCerts.size} selected</span>
-              <button
-                onClick={() => { setBulkIssueDate(todayLocal()); setBulkRenewOpen(true) }}
-                className="px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90"
-              >
-                Renew selected
-              </button>
-              <button onClick={() => setSelectedCerts(new Set())} className="text-sm text-muted-foreground hover:text-foreground">
-                Clear
-              </button>
-            </div>
-          )}
-
-          {/* Matrix Table */}
-          <div className="bg-card border border-border rounded-xl overflow-auto max-h-[calc(100vh-16rem)]">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/30 sticky top-0 z-20">
-                  <th className="text-left px-4 py-3 font-medium text-muted-foreground sticky left-0 bg-card z-30 min-w-[150px]">Pilot</th>
-                  {filteredCertTypes.map((ct, idx) => (
-                    <th key={ct.id} className="text-center px-3 py-3 font-medium text-muted-foreground min-w-[100px] bg-card">
-                      <div className="flex items-center justify-center gap-0.5">
-                        {canManage && (
-                          <button
-                            onClick={() => handleReorderCertType(ct.id, 'left')}
-                            disabled={idx === 0}
-                            className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-20 disabled:cursor-not-allowed"
-                            title="Move left"
-                          >
-                            <ChevronLeft className="w-3 h-3" />
-                          </button>
-                        )}
-                        <span className="text-xs">{ct.name}</span>
-                        {canManage && (
-                          <button
-                            onClick={() => handleReorderCertType(ct.id, 'right')}
-                            disabled={idx === filteredCertTypes.length - 1}
-                            className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-20 disabled:cursor-not-allowed"
-                            title="Move right"
-                          >
-                            <ChevronRight className="w-3 h-3" />
-                          </button>
-                        )}
-                      </div>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filteredMatrix.map(row => (
-                  <tr key={row.pilot_id} className="border-b border-border/50 hover:bg-accent/30">
-                    <td className="px-4 py-2 text-foreground font-medium sticky left-0 bg-card z-10">
-                      <Link to={`/pilots/${row.pilot_id}`} className="text-primary hover:underline">
-                        {row.pilot_name}
-                      </Link>
-                    </td>
-                    {filteredCertTypes.map(ct => {
-                      const cert = row.certs?.[ct.id]
-                      const status = certDisplayStatus(cert)
-                      const opensModal = canManage || (Boolean(cert?.id) && canSeeFiles)
-                      return (
-                        <td key={ct.id} className={`relative px-3 py-2 text-center ${opensModal ? 'cursor-pointer hover:bg-accent/40 transition-colors' : ''}`}
-                          tabIndex={opensModal ? 0 : undefined} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.click() } }}
-                          onClick={opensModal ? () => openCertCell(row, ct, cert) : undefined}>
-                          {canManage && cert?.id && ct.has_expiration && (
-                            <input
-                              type="checkbox"
-                              checked={selectedCerts.has(cert.id)}
-                              onClick={e => e.stopPropagation()}
-                              onKeyDown={e => e.stopPropagation()}
-                              onChange={() => toggleCertSelection(cert.id)}
-                              className="absolute top-1 left-1 rounded border-border"
-                              title="Select for bulk renewal"
-                              aria-label="Select certification for bulk renewal"
-                            />
-                          )}
-                          <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${CELL_COLORS[status] || CELL_COLORS.not_started}`}
-                            title={cert && status !== cert.status ? `Status: ${(certStatusLabels[cert.status] || cert.status).replaceAll('_', ' ')}` : undefined}>
-                            {certStatusLabels[status] || CELL_LABELS[status] || status.replaceAll('_', ' ')}
-                          </span>
-                          {cert?.expiration_date && (
-                            <div className="text-xs text-muted-foreground mt-0.5">{cert.expiration_date}</div>
-                          )}
-                        </td>
-                      )
-                    })}
-                  </tr>
-                ))}
-                {filteredMatrix.length === 0 && (
-                  <tr><td colSpan={filteredCertTypes.length + 1} className="px-4 py-12 text-center text-muted-foreground">
-                    {matrix.length === 0 ? 'No pilots or certifications configured yet' : 'No pilots match the current filters'}
-                  </td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </>
+        <CertViews matrix={matrix} certTypes={certTypes} filters={filters} onFiltersChange={setFilters}
+          view={view} onViewChange={setView} bulk={bulk} ctx={ctx} />
       )}
 
-      {/* Cert Types View */}
       {tab === 'types' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {certTypes.map(ct => (
-            <div key={ct.id} className={`bg-card border border-border rounded-xl p-4 ${ct.is_active ? '' : 'opacity-60'}`}>
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-5 h-5 text-primary" />
-                  <h3 className="font-semibold text-foreground">{ct.name}</h3>
-                  {!ct.is_active && (
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-zinc-500/15 text-zinc-400">Hidden</span>
-                  )}
-                </div>
-                {canManage && (
-                  <div className="flex gap-1">
-                    <button onClick={() => handleToggleCertTypeHidden(ct)} className="p-1 text-muted-foreground hover:text-foreground"
-                      aria-label={ct.is_active ? 'Hide' : 'Unhide'} title={ct.is_active ? 'Hide from the matrix (keeps records)' : 'Show on the matrix again'}>
-                      {ct.is_active ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-                    </button>
-                    <button onClick={() => setModal(ct)} className="p-1 text-muted-foreground hover:text-foreground" aria-label="Edit"><Edit className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => handleDeleteCertType(ct.id)} className="p-1 text-muted-foreground hover:text-destructive" aria-label="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
-                  </div>
-                )}
-              </div>
-              <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-                <p>Category: <span className="text-foreground">{ct.category}</span></p>
-                <p>Expires: <span className="text-foreground">{ct.has_expiration ? `Yes (${ct.renewal_period_months || '?'}mo)` : 'No'}</span></p>
-                {ct.description && <p className="mt-1">{ct.description}</p>}
-              </div>
-            </div>
-          ))}
-          {certTypes.length === 0 && (
-            <div className="col-span-full text-center py-12 text-muted-foreground">No certification types configured yet</div>
-          )}
-        </div>
+        <CertTypesGrid certTypes={certTypes} canManage={canManage} onToggleHidden={handleToggleCertTypeHidden}
+          onEdit={setModal} onDelete={handleDeleteCertType} />
       )}
 
       {/* Modals */}
       {modal === 'addType' && <CertTypeModal onSave={handleSaveCertType} onClose={() => setModal(null)} />}
-      {modal === 'assign' && <AssignCertModal pilots={pilots} certTypes={certTypes} defaults={assignDefaults} onSave={handleAssignCert} onClose={() => { setModal(null); setEditCert(null); setAssignDefaults(null) }} certFolderId={certFolderId} />}
-      {modal === 'editCert' && editCert && canManage && <AssignCertModal pilots={pilots} certTypes={certTypes} existingCert={editCert} onSave={handleAssignCert} onRenew={handleRenewCert} onDelete={handleDeleteCert} onClose={() => { setModal(null); setEditCert(null) }} certFolderId={certFolderId} />}
-      {modal === 'editCert' && editCert && !canManage && <CertDocumentsModal cert={editCert} folderId={certFolderId} onClose={() => { setModal(null); setEditCert(null) }} />}
-      {modal && typeof modal === 'object' && modal.name && <CertTypeModal certType={modal} onSave={handleSaveCertType} onClose={() => setModal(null)} />}
-      {bulkRenewOpen && (
-        <Modal
-          open
-          onClose={() => setBulkRenewOpen(false)}
-          title={`Renew ${selectedCerts.size} Certification${selectedCerts.size === 1 ? '' : 's'}`}
-          className="max-w-md"
-        >
-            <p className="text-sm text-muted-foreground mb-4">
-              Each selected certification is archived and replaced with a new record. Expiration is auto-calculated per certification type. Already-renewed certs are skipped.
-            </p>
-            <div className="space-y-3">
-              <div>
-                <label htmlFor="bulk-issue-date" className="block text-sm font-medium text-foreground mb-1">Issue date</label>
-                <input id="bulk-issue-date" type="date" value={bulkIssueDate} onChange={e => setBulkIssueDate(e.target.value)}
-                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
-              </div>
-              <div>
-                <label htmlFor="bulk-notes" className="block text-sm font-medium text-foreground mb-1">Notes (optional)</label>
-                <input id="bulk-notes" type="text" value={bulkNotes} onChange={e => setBulkNotes(e.target.value)}
-                  placeholder="e.g. Recurrent training day" className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm" />
-              </div>
-            </div>
-            <div className="flex gap-2 mt-4">
-              <button onClick={handleBulkRenew} disabled={!bulkIssueDate || bulkRenewing}
-                className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2">
-                {bulkRenewing ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Renew All'}
-              </button>
-              <button onClick={() => setBulkRenewOpen(false)} className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm">Cancel</button>
-            </div>
-        </Modal>
-      )}
+      {modal === 'assign' && <AssignCertModal pilots={pilots} certTypes={certTypes} defaults={assignDefaults} onSave={handleAssignCert} onClose={() => { closeModal(); setAssignDefaults(null) }} certFolderId={certFolderId} />}
+      {editing && canManage && <AssignCertModal pilots={pilots} certTypes={certTypes} existingCert={editCert} onSave={handleAssignCert} onRenew={handleRenewCert} onDelete={handleDeleteCert} onClose={closeModal} certFolderId={certFolderId} />}
+      {editing && !canManage && <CertDocumentsModal cert={editCert} folderId={certFolderId} onClose={closeModal} />}
+      {modal?.name && <CertTypeModal certType={modal} onSave={handleSaveCertType} onClose={() => setModal(null)} />}
+      {bulk.open && <BulkRenewModal bulk={bulk} />}
       <ConfirmDialog {...confirmProps} />
     </div>
   )
