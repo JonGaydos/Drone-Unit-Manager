@@ -426,8 +426,8 @@ def test_the_in_file_check_is_normalised_like_the_database_one(client, db, fleet
 def test_pilots_created_by_the_import_are_active_and_marked(client, db, fleet):
     """A new name cannot be told from a vendor rep at import time, and active is
     the safer of the two defaults: inactive would drop a real pilot's flights
-    out of currency, the dashboard, and the default view of two reports. The
-    note is what lets the admin find them again."""
+    out of flight requirements, the dashboard, and the default view of two
+    reports. The note is what lets the admin find them again."""
     import_brinc_csv(db, _csv([_row(user="Pat (Vendor) Quinn")]), geocode=False)
 
     pilot = db.query(Pilot).filter(Pilot.first_name == "Pat").one()
@@ -436,7 +436,7 @@ def test_pilots_created_by_the_import_are_active_and_marked(client, db, fleet):
 
 
 def test_the_unknown_placeholder_pilot_stays_inactive(client, db, fleet):
-    """Not a person: it can never hold a certification or satisfy currency, so
+    """Not a person: it can never hold a certification or meet a requirement, so
     it must not count towards either."""
     import_brinc_csv(db, _csv([_row(user="")]), geocode=False)
 

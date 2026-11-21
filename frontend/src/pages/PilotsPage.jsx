@@ -7,7 +7,7 @@ import { Plus, Edit, Trash2, Search, ChevronUp, ChevronDown, Download, Loader2, 
 import { Link } from 'react-router-dom'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Modal } from '@/components/ui/Modal'
-import { MissedBadge } from '@/components/requirements/RequirementBadges'
+import { RequirementFlagBadges } from '@/components/requirements/RequirementBadges'
 import { useRequirementFlags } from '@/components/requirements/useRequirementFlags'
 
 const CONTACT_FIELDS = new Set(['email', 'phone', 'phone_type', 'phone_work'])
@@ -375,7 +375,7 @@ export default function PilotsPage() {
                   }`}>
                     {p.status}
                   </span>
-                  <MissedBadge flags={requirementFlags[p.id]} className="ml-1.5" />
+                  <RequirementFlagBadges flags={requirementFlags[p.id]} className="ml-1.5" />
                 </td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex items-center justify-end gap-1">

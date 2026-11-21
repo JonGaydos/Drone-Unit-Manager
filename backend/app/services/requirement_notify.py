@@ -1,6 +1,9 @@
-"""Flight requirement emails: assignment, reminder and miss.
+"""Flight requirement emails: assignment, reminder and miss, and for rolling
+requirements a reminder before the projected lapse and a lapse email.
 
-Each email goes out at most once per requirement, pilot, period start and kind:
+Each email goes out at most once per requirement, pilot, period start and kind
+(for a rolling requirement the period start is the projected lapse date of a
+reminder, or the start of a lapse):
 a ``FlightRequirementNotice`` row is written after a successful send, and a
 pilot with a notice already gets nothing. Nothing is sent, and nothing
 recorded, unless the unit switched requirement emails on, while SMTP is not
@@ -17,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.constants import APP_TITLE
 from app.models.flight_requirement import (
-    FlightRequirement, FlightRequirementNotice, FlightRequirementResult,
+    FlightRequirement, FlightRequirementLapse, FlightRequirementNotice, FlightRequirementResult,
 )
 from app.models.pilot import Pilot
 from app.models.setting import Setting
@@ -30,6 +33,7 @@ from app.services.requirement_eval import (
     ALL_KEY, EXCUSED, MET, MISSED, PilotProgress, evaluate_period, unit_eval_settings,
 )
 from app.services.requirement_periods import Period, period_containing, periods_between
+from app.services.requirement_rolling import CURRENT, NOT_YET_DUE, RollingProgress, evaluate_rolling
 
 logger = logging.getLogger(__name__)
 
@@ -117,8 +121,11 @@ def _table(header: tuple[str, ...], rows: list[tuple[str, ...]]) -> str:
             f'<thead><tr style="background:#fafafa;">{head}</tr></thead><tbody>{body}</tbody></table>')
 
 
-def _requirement_html(req: FlightRequirement, period: Period) -> str:
-    rows = [("Requirement", req.name), ("Target", _target_text(req)), ("Period", _period_text(period))]
+def _requirement_html(req: FlightRequirement, period: Period | None) -> str:
+    """The requirement as a table; for a rolling one, its window length instead of a period."""
+    when = ("Window", f"Last {req.span_length} {req.span_unit}") if req.period_type == "rolling" else (
+        "Period", _period_text(period))
+    rows = [("Requirement", req.name), ("Target", _target_text(req)), when]
     if req.description:
         rows.append(("Details", req.description))
     return _table(("", ""), rows)
@@ -179,7 +186,10 @@ def _greeting(pilot: Pilot) -> str:
 
 
 def _assignment_period(req: FlightRequirement, fiscal_start_month: int, today: date) -> Period | None:
-    """The period running today, else the next one to start."""
+    """The period running today, else the next one to start. A rolling
+    requirement has no periods; its notice is keyed by its start date."""
+    if req.period_type == "rolling":
+        return req.start_date, req.start_date
     spec = req.to_period_spec(fiscal_start_month)
     upcoming = periods_between(spec, today, today + timedelta(days=ASSIGNMENT_LOOKAHEAD_DAYS))
     return upcoming[0] if upcoming else None
@@ -216,7 +226,7 @@ def notify_joined(db: Session, pilot_id: int) -> int:
 # Reminders
 
 
-def _totals_rows(progress: PilotProgress) -> list[tuple[str, ...]]:
+def _totals_rows(progress: PilotProgress | RollingProgress) -> list[tuple[str, ...]]:
     return [("Any aircraft" if key == ALL_KEY else key, f"{int(total['minutes'])} minutes",
              f"{total['flights']} flights") for key, total in progress.totals.items()]
 
@@ -239,11 +249,52 @@ def _remind(db: Session, req: FlightRequirement, period: Period, today: date, gr
     return sent
 
 
+def _projected_lapse(progress: RollingProgress) -> date | None:
+    """When a pilot would lapse with no new flights: a current pilot's lapse
+    date, or the day a pilot not yet due becomes due."""
+    if progress.status == CURRENT:
+        return progress.lapse_date
+    return progress.due_on if progress.status == NOT_YET_DUE else None
+
+
+def _rolling_due(req: FlightRequirement, progress: RollingProgress, today: date) -> bool:
+    lapse = _projected_lapse(progress)
+    return lapse is not None and 0 < (lapse - today).days <= req.reminder_days
+
+
+def _remind_rolling(db: Session, req: FlightRequirement, today: date, org_name: str) -> int:
+    """Remind each current or not yet due pilot whose projected lapse is
+    ``reminder_days`` or fewer days away, once per projected lapse date."""
+    due = [p for p in evaluate_rolling(db, req, today).values() if _rolling_due(req, p, today)]
+    pilots = _pilots(db, (p.pilot_id for p in due))
+    sent = 0
+    for progress in due:
+        pilot = pilots[progress.pilot_id]
+        lapse = _projected_lapse(progress)
+        body = (_paragraph(f"You lapse on {_day(lapse)} unless you fly enough before then.")
+                + _requirement_html(req, None)
+                + _paragraph("Your reviewed flights in the window:")
+                + _table(("Aircraft", "Time", "Flights"), _totals_rows(progress)))
+        html = _page(org_name, "Flight Requirement Reminder", _greeting(pilot), body)
+        sent += _send_once(db, (req.id, pilot.id, lapse), REMINDER, pilot.email,
+                           f"Flight requirement reminder: {req.name}", html)
+    return sent
+
+
+def _remind_periodic(db: Session, req: FlightRequirement, settings, today: date, org_name: str) -> int:
+    period = period_containing(req.to_period_spec(settings.fiscal_start_month), today)
+    if period is None or not 0 < (period[1] - today).days <= req.reminder_days:
+        return 0
+    return _remind(db, req, period, today, settings.grace_days, org_name)
+
+
 def send_due_reminders(db: Session, today: date) -> int:
     """Remind each assigned pilot who has not met an active requirement, and is
     not excused, once its period ends ``reminder_days`` or fewer days after
     ``today`` (and not today), so a missed run is caught up the next day. The
-    reminder notice keeps it to one per pilot per period. Returns the number sent."""
+    reminder notice keeps it to one per pilot per period. On a rolling
+    requirement, remind each current pilot ``reminder_days`` or fewer days
+    before their projected lapse, once per lapse date. Returns the number sent."""
     if not _can_send(db):
         return 0
     settings = unit_eval_settings(db)
@@ -253,9 +304,10 @@ def send_due_reminders(db: Session, today: date) -> int:
         FlightRequirement.is_active.is_(True), FlightRequirement.reminder_days > 0,
     ).order_by(FlightRequirement.id).all()
     for req in reqs:
-        period = period_containing(req.to_period_spec(settings.fiscal_start_month), today)
-        if period is not None and 0 < (period[1] - today).days <= req.reminder_days:
-            sent += _remind(db, req, period, today, settings.grace_days, org_name)
+        if req.period_type == "rolling":
+            sent += _remind_rolling(db, req, today, org_name)
+        else:
+            sent += _remind_periodic(db, req, settings, today, org_name)
     return sent
 
 
@@ -277,17 +329,23 @@ def _manager_addresses(db: Session) -> list[str]:
     return list(addresses.values())
 
 
+def _send_managers(db: Session, title: str, subject: str, body: str, org_name: str) -> int:
+    html = _page(org_name, title, "there", body)
+    return sum(email_digest.send_email(address, subject, html, db) for address in _manager_addresses(db))
+
+
+def _pilot_name(pilots: dict[int, Pilot], pilot_id: int) -> str:
+    return pilots[pilot_id].full_name if pilot_id in pilots else ""
+
+
 def _email_managers(db: Session, misses: list[FlightRequirementResult], reqs: dict[int, FlightRequirement],
                     pilots: dict[int, Pilot], org_name: str) -> int:
-    rows = [(pilots[row.pilot_id].full_name if row.pilot_id in pilots else "", reqs[row.requirement_id].name,
+    rows = [(_pilot_name(pilots, row.pilot_id), reqs[row.requirement_id].name,
              _period_text((row.period_start, row.period_end))) for row in misses]
     body = (_paragraph(f"{len(misses)} flight requirement results were saved as missed:")
             + _table(("Pilot", "Requirement", "Period"), rows))
-    sent = 0
-    for address in _manager_addresses(db):
-        html = _page(org_name, "Flight Requirements Missed", "there", body)
-        sent += email_digest.send_email(address, f"Flight requirements missed ({len(misses)})", html, db)
-    return sent
+    return _send_managers(db, "Flight Requirements Missed", f"Flight requirements missed ({len(misses)})", body,
+                          org_name)
 
 
 def _email_missed_pilot(db: Session, row: FlightRequirementResult, req: FlightRequirement, pilot: Pilot | None,
@@ -323,4 +381,50 @@ def notify_missed(db: Session, results: list[FlightRequirementResult]) -> int:
     for row, pilot_told in zip(misses, told):
         if pilot_told or managers_told:
             _record(db, _key(row), MISSED_NOTICE)
+    return sum(told) + managers_told
+
+
+# Lapses
+
+
+def _lapse_key(row: FlightRequirementLapse) -> NoticeKey:
+    return row.requirement_id, row.pilot_id, row.lapsed_on
+
+
+def _email_lapsed_pilot(db: Session, row: FlightRequirementLapse, req: FlightRequirement, pilot: Pilot | None,
+                        org_name: str) -> bool:
+    if pilot is None or not (pilot.email or "").strip():
+        return False
+    body = (_paragraph(f"As of {_day(row.lapsed_on)} you no longer meet this requirement. "
+                       "Fly the target within the window to be current again.")
+            + _requirement_html(req, None))
+    html = _page(org_name, "Flight Requirement Lapsed", _greeting(pilot), body)
+    return email_digest.send_email(pilot.email, _one_line(f"Flight requirement lapsed: {req.name}"), html, db)
+
+
+def notify_lapsed(db: Session, lapses: list[FlightRequirementLapse]) -> int:
+    """Email each pilot whose lapse in ``lapses`` started, and send every
+    active user with requirements.manage one email listing them all. A lapse
+    is announced once, as a "missed" notice keyed by its start, as for
+    ``notify_missed``. Returns the number sent."""
+    if not _can_send(db):
+        return 0
+    fresh = [row for row in lapses if not _sent_before(db, _lapse_key(row), MISSED_NOTICE)]
+    if not fresh:
+        return 0
+    org_name = _org_name(db)
+    reqs = {req.id: req for req in db.query(FlightRequirement).filter(
+        FlightRequirement.id.in_({row.requirement_id for row in fresh}))}
+    pilots = _pilots(db, {row.pilot_id for row in fresh})
+    told = [_email_lapsed_pilot(db, row, reqs[row.requirement_id], pilots.get(row.pilot_id), org_name)
+            for row in fresh]
+    rows = [(_pilot_name(pilots, row.pilot_id), reqs[row.requirement_id].name, _day(row.lapsed_on))
+            for row in fresh]
+    body = (_paragraph(f"{len(fresh)} pilots lapsed on a rolling flight requirement:")
+            + _table(("Pilot", "Requirement", "Lapsed on"), rows))
+    managers_told = _send_managers(db, "Flight Requirements Lapsed", f"Flight requirements lapsed ({len(fresh)})",
+                                   body, org_name)
+    for row, pilot_told in zip(fresh, told):
+        if pilot_told or managers_told:
+            _record(db, _lapse_key(row), MISSED_NOTICE)
     return sum(told) + managers_told

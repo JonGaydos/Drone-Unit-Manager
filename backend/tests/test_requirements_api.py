@@ -14,6 +14,7 @@ from app.models.pilot import Pilot
 from app.models.setting import Setting
 from app.models.vehicle import Vehicle
 from app.routers import requirements as requirements_router
+from app.services import requirement_standing
 from app.services.requirement_results import OFF_REASON
 
 URL = "/api/requirements"
@@ -329,10 +330,13 @@ def test_status_reports_progress_and_score(client, db, viewer_headers, admin_hea
     assert progress["totals"] == {"*": {"minutes": 45.0, "flights": 1}}
 
 
-def test_inactive_requirement_is_left_out_of_status(client, admin_headers):
+def test_inactive_requirement_is_left_out_of_status_and_counted(client, admin_headers, viewer_headers):
     req_id = _create(client, admin_headers, is_active=False)["id"]
     body = client.get(f"{URL}/status", headers=admin_headers).json()
     assert req_id not in [row["requirement_id"] for row in body["requirements"]]
+    assert body["inactive_count"] == 1
+    _create(client, admin_headers)
+    assert client.get(f"{URL}/status", headers=viewer_headers).json()["inactive_count"] == 1
 
 
 def test_pilot_page_shows_current_progress_and_history_newest_first(client, db, admin_headers):
@@ -372,7 +376,7 @@ def test_a_racing_close_does_not_fail_a_page_load(client, db, admin_headers, mon
     def racing(*_args):
         raise IntegrityError("INSERT", {}, Exception("UNIQUE constraint failed"))
 
-    monkeypatch.setattr(requirements_router, "close_due_periods", racing)
+    monkeypatch.setattr(requirement_standing, "close_due_periods", racing)
     assert client.get(f"{URL}/status", headers=admin_headers).status_code == 200
     assert client.get(f"{URL}/pilots/{_pilot(db).id}", headers=admin_headers).status_code == 200
     assert client.get(f"{URL}/flags", headers=admin_headers).status_code == 200

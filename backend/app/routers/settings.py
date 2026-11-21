@@ -11,13 +11,14 @@ from pathlib import Path
 import anyio
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from app.config import settings as app_settings
 from app.constants import LOGO_VIEW_PATH, SECRET_KEYS
 from app.deps import AdminForm, DBSession, CurrentUser, AdminUser
 from app.models.setting import Setting
 from app.responses import responses
+from app.schemas.user import Layout
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -39,6 +40,7 @@ ALLOWED_SETTING_KEYS = {
     "idle_lock_minutes",
     "sidebar_show_groups",
     "requirements_grace_days", "fiscal_year_start_month", "requirements_emails_enabled",
+    "default_dashboard_layout", "default_analytics_layout",
 }
 
 # Minutes of no input before a browser locks. One value for every role.
@@ -78,6 +80,7 @@ PUBLIC_KEYS = {
     "org_default_lat", "org_default_lon", "org_location_name",
     "idle_lock_minutes",
     "requirements_grace_days", "fiscal_year_start_month", "requirements_emails_enabled",
+    "default_dashboard_layout", "default_analytics_layout",
 }
 
 
@@ -159,9 +162,24 @@ def _check_integer_range(key: str, value: str) -> None:
         raise HTTPException(422, message)
 
 
+# The unit's default tile arrangements, stored as JSON text; empty = none set.
+LAYOUT_KEYS = {"default_dashboard_layout", "default_analytics_layout"}
+
+
+def _check_layout(key: str, value: str) -> None:
+    """Refuse a unit default layout that is not a valid tile arrangement."""
+    if key not in LAYOUT_KEYS or value == "":
+        return
+    try:
+        Layout.model_validate_json(value)
+    except ValidationError:
+        raise HTTPException(422, "Layout must be {\"order\": [tile ids], \"hidden\": [tile ids]}") from None
+
+
 def _check_value(key: str, value: str) -> None:
     """Refuse a value the key cannot hold (422)."""
     _check_idle_lock(key, value)
+    _check_layout(key, value)
     _check_integer_range(key, value)
     if key in BOOLEAN_KEYS and value not in ("true", "false"):
         raise HTTPException(422, f"{key} must be true or false")

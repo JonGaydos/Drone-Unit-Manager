@@ -12,9 +12,12 @@ import { addDays, addMonths, todayLocal } from '@/lib/utils'
 const PERIOD_FIELDS = {
   monthly_window: ['window_start_day', 'window_end_day'],
   span: ['span_length', 'span_unit'],
+  rolling: ['span_length', 'span_unit'],
   every_n_months: ['every_months'],
 }
 const ALL_PERIOD_FIELDS = ['window_start_day', 'window_end_day', 'span_length', 'span_unit', 'every_months']
+// Period types that never repeat as separate periods: a custom range runs once, a rolling window is continuous.
+const NOT_RECURRING = new Set(['custom', 'rolling'])
 // Modes whose model list is stored; "all" and "each_all_active" store none.
 const LISTED_MODES = new Set(['combined', 'each'])
 
@@ -76,7 +79,7 @@ export function toDefinition(form) {
     name: form.name.trim(),
     description: form.description.trim() || null,
     period_type: form.period_type,
-    recurring: form.period_type === 'custom' ? false : form.recurring,
+    recurring: NOT_RECURRING.has(form.period_type) ? false : form.recurring,
     ...periodFields(form),
     target_minutes: targetMinutesOf(form),
     target_flights: toNumber(form.target_flights) || null,
@@ -90,6 +93,7 @@ export function toDefinition(form) {
 }
 
 function usesEndDate(form) {
+  if (form.period_type === 'rolling') return false
   return form.period_type === 'custom' || form.recurring
 }
 
@@ -99,7 +103,7 @@ export function toBody(form) {
     ...toDefinition(form),
     start_date: form.start_date,
     // The end date field shows only for a custom or recurring period; a one-time
-    // period sends none, so a date set before switching to One time is not kept.
+    // or rolling period sends none, so a date set before switching is not kept.
     end_date: usesEndDate(form) ? form.end_date || null : null,
     pilot_ids: form.all_pilots ? [] : form.pilot_ids,
   }
@@ -148,6 +152,7 @@ export function formProblem(form) {
   if (!form.name.trim()) return 'Enter a name'
   if (!form.start_date) return 'Choose a start date'
   if (form.period_type === 'custom' && !form.end_date) return 'Choose an end date for a custom range'
+  if (form.period_type === 'rolling' && !toNumber(form.span_length)) return 'Set the window length'
   if (!targetMinutesOf(form) && !toNumber(form.target_flights)) return 'Set a target in hours and minutes, flights or both'
   if (!form.all_pilots && form.pilot_ids.length === 0) return 'Select at least one pilot'
   return null

@@ -48,6 +48,23 @@ describe('describeRequirement', () => {
   })
 })
 
+describe('describeRequirement for a rolling window', () => {
+  it('describes a rolling window from its start date', () => {
+    const text = describeRequirement(form({
+      period_type: 'rolling', recurring: false, span_length: '90', span_unit: 'days', target_hours: '1', start_date: '2026-12-01',
+    }), OPTIONS)
+    expect(text).toBe('All active pilots must have 1 hour on any aircraft in any 90 days, from Dec 1, 2026.')
+  })
+
+  it('names selected pilots, night, purposes and a single unit', () => {
+    const text = describeRequirement(form({
+      period_type: 'rolling', span_length: '1', span_unit: 'months', target_flights: '3', time_mode: 'night',
+      purposes: ['Patrol'], all_pilots: false, pilot_ids: [1], start_date: '',
+    }), { pilots: [{ id: 1, full_name: 'Pat Pilot' }], fiscalStartMonth: 10 })
+    expect(text).toBe('Pat Pilot must have 3 flights on any aircraft at night (purpose: Patrol) in any month, from (no start date yet).')
+  })
+})
+
 describe('startLabel', () => {
   it('labels fiscal periods by the fiscal year they end in', () => {
     expect(startLabel({ period_type: 'fiscal_quarter', start_date: '2026-11-19' }, 10)).toBe('Q1 FY2027')

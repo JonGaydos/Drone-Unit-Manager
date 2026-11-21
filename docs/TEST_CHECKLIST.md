@@ -299,7 +299,7 @@ Setup: create one login each for Supervisor, Pilot and Viewer (for example `<sup
 - [ ] The pilot edits a field; the flight returns to Needs Review and the review badge count goes up
 - [ ] Saving it again with no changes leaves the status alone
 - [ ] A supervisor edits a reviewed flight; the status stays reviewed
-- [ ] The pilot's currency does not count the flight until it is reviewed again; clear the review queue first and confirm currency recovers
+- [ ] The pilot's flight requirement progress does not count the flight until it is reviewed again; clear the review queue first and confirm the progress recovers
 
 ### 36.7 Viewer with a view off
 - [ ] Turn Flights View off for Viewer: the Flights nav entry, flight search results, flight charts, flight CSV export and flight report sections are gone
@@ -356,8 +356,9 @@ Setup: create one login each for Supervisor, Pilot and Viewer (for example `<sup
 | 35. Backup & Restore | | |
 | 36. Role Permissions | | |
 | 37. Release Staging Pass | | |
-| 38. Currency Rules | | |
+| 38. Rolling Requirements and the Compliance Score | | |
 | 39. Flight Requirements | | |
+| 40. Interface Changes in 3.7.0 | | |
 
 ---
 
@@ -380,37 +381,53 @@ Run on the staging instance with `TRUSTED_PROXIES` set to the proxy's address, b
 
 ---
 
-## 38. Currency Rules
+## 38. Rolling Requirements and the Compliance Score
 
-Setup: an admin, a supervisor and a viewer login. Fleet with at least two models (for example X10 and Matrice 30), one of them with a retired aircraft only. Two pilots with reviewed flights on each model.
+Setup: an admin, a supervisor, a pilot and a viewer login. Three active pilots with reviewed flights in the last 30 days, one of them added to the unit today. SMTP pointed at a test inbox for 38.5.
 
-### 38.1 Access
-- [ ] Supervisor sees Currency Rules on the Settings General tab and can create, edit and delete a rule
-- [ ] Supervisor does not see user management, backups or other admin-only cards
-- [ ] Viewer cannot open Currency Rules and direct rule writes are refused
+### 38.1 Creating a rolling requirement
+- [ ] On Compliance, Flight Requirements, New requirement offers Rolling window (the last N days, weeks or months); choosing it shows Window length and Unit, no Repeats and no end date
+- [ ] The Reminder label reads Reminder (days before a pilot would lapse)
+- [ ] The summary sentence describes the window; Save requirement adds it to the list with "N current, M lapsed"
+- [ ] A window over the API limit (more than two years in any unit) is refused with a message
 
-### 38.2 Model picker
-- [ ] A new rule starts on All aircraft, and no model chip is pressed
-- [ ] There is one chip per fleet model, labelled with its active aircraft count, for example X10 (4)
-- [ ] Picking a model turns All aircraft off; turning every model off turns All aircraft back on
-- [ ] A model with no active aircraft is not offered, unless an existing rule already uses it
-- [ ] A rule model that is not in the fleet shows as a dashed chip marked Not in fleet; clicking it removes it
-- [ ] Saved rule appears in the list with its models, or no model note for All aircraft
+### 38.2 Status and dates
+- [ ] A pilot meeting every target in the window is Current with "lapses on" the day the oldest needed flight leaves the window
+- [ ] A pilot short of the target is Lapsed with "since" the day the lapse began
+- [ ] The pilot added today is Not yet due with "due from" one window after they were added
+- [ ] A flight reviewed today counts at once (no grace days); a flight waiting for review does not count
+- [ ] Windows across a month end and a daylight saving change count the right flights
 
-### 38.3 Rule with two models
-- [ ] Create a rule with both models; a pilot's flights on either model count toward hours and flights
-- [ ] A flight on a third model does not count
-- [ ] A flight waiting for review does not count until it is reviewed
-- [ ] Editing the rule to one model drops the other model's flights from the count
+### 38.3 Excusal and lapse history
+- [ ] On the pilot page, Excuse on the rolling requirement asks for Excused until and an optional reason; the pilot shows Excused until that day and costs no points
+- [ ] Remove excusal brings the status back at once
+- [ ] A lapse is saved once when it begins and closed once when the pilot is current again; the pilot card lists it with Lapsed on and Current again on (or Still lapsed)
+- [ ] Reviewing an old flight later does not change a saved lapse
+- [ ] An admin sees Delete on a closed lapse in the lapse table; it asks for confirmation, removes the row and is in the audit log; an open lapse has no Delete; a supervisor sees no Delete
+- [ ] A lapsed pilot shows a Lapsed: line in Needs Attention, a Lapsed requirement badge on the profile and the Pilots list, and is named under Lapsed requirement on the This Period tile
 
-### 38.4 Existing rule after upgrade
-- [ ] A rule that had one typed model before the upgrade shows that model pressed in the picker
-- [ ] A rule that had no model shows All aircraft
-- [ ] Pilot currency status is the same as before the upgrade
+### 38.4 Compliance score
+- [ ] With no active requirement, Flight requirements loses no points and Where the score lost points does not list it
+- [ ] A pilot who missed the most recently closed period of a periodic requirement costs points; so does a pilot lapsed on a rolling requirement now
+- [ ] A pilot both missed and lapsed counts once; the loss is (such pilots / active pilots) x 15
+- [ ] Excused pilots do not count
+- [ ] A finished one-time requirement keeps costing points for its misses while active; switching it off removes the deduction
+- [ ] The Missed or lapsed card shows the same pilot count and opens the Flight Requirements tab
+- [ ] Certifications, registrations, maintenance, incidents and operating authority deductions and the cap are unchanged
+- [ ] The Requirements Score still shows beside the compliance score and does not change it
 
-### 38.5 Backup and restore
-- [ ] Export a backup with a two-model rule, change the rule, then restore; both models are back
-- [ ] Restore a backup taken before this feature; its rules keep their models and pilot currency is unchanged
+### 38.5 Emails and reports
+- [ ] With requirement emails on, a current pilot gets one reminder the set number of days before the projected lapse date
+- [ ] When a lapse begins, the pilot and each user who can manage requirements get one lapse email; nothing is sent on recovery
+- [ ] The digest Flight Requirements section lists pilots lapsed now
+- [ ] The Flight Requirements report (preview, PDF) and the CSV downloads include lapse records
+- [ ] The Calendar shows no Due entry for a rolling requirement
+
+### 38.6 Currency removed
+- [ ] No Currency Risk tile, Currency Status card, Currency Rules card, currency reminders or currency text anywhere in the app or manual
+- [ ] /api/currency routes return 404; the API token area list has no currency entry
+- [ ] The permission row reads Certifications (keys unchanged)
+- [ ] The Audit Log still offers send_reminders as an Action filter for older entries
 
 ---
 
@@ -418,9 +435,15 @@ Setup: an admin, a supervisor and a viewer login. Fleet with at least two models
 
 Setup: an admin, a supervisor, a pilot and a viewer login. Fleet with at least two models (for example X10 and Matrice 30). Unit default location and display time zone set. Three pilots with reviewed flights, one of them added after the test period starts. SMTP pointed at a test inbox for 39.9.
 
-### 39.1 Access and permissions
-- [ ] Supervisor sees the Flight Requirements tab in Settings and can create, edit, duplicate, save as template and delete a requirement
-- [ ] Pilot and viewer do not see the tab; direct writes to the requirement routes are refused
+### 39.1 Page location and access
+- [ ] The sidebar has one Compliance entry and no separate Flight Requirements entry; Compliance opens on the Overview tab
+- [ ] The Compliance page has Overview, Flight Requirements and Setup tabs; the arrow keys move between them; ?tab=overview, ?tab=requirements and ?tab=setup open the matching tab
+- [ ] Old links /requirements and /settings?tab=requirements open the Flight Requirements tab; Settings has no Flight Requirements tab
+- [ ] With a sidebar order saved in Settings > General before this change, the sidebar shows no Flight Requirements entry and the Sidebar Configuration list has none
+- [ ] Supervisor sees New requirement, Switch on or Switch off, edit, duplicate, save as template and delete on each row, and the Setup tab with Templates and Requirement Settings, and can use each
+- [ ] Pilot and viewer see the Flight Requirements tab with every requirement and its progress and Download CSV, but no New requirement, Switch on or off, edit, duplicate, template or delete, and no Setup tab; ?tab=setup shows the Overview; direct writes to the requirement routes are refused
+- [ ] A role with Flight requirements: View off sees only the Overview tab, with no This Period, no Requirements Score and no Missed or lapsed card
+- [ ] Calendar Due entries open the Flight Requirements tab for every role with view
 - [ ] Pilot and viewer see the dashboard This Period tile, the Compliance Requirements Score and every pilot's Flight Requirements card (view is on)
 - [ ] Pilot and viewer see no Excuse or Un-excuse buttons; a direct excuse call is refused
 - [ ] Turning Flight requirements: View off for a role hides the tile, the score, the card, the badge and the report option for that role
@@ -433,6 +456,8 @@ Setup: an admin, a supervisor, a pilot and a viewer login. Fleet with at least t
 - [ ] The model picker offers one chip per fleet model; Combined and Each separately appear with two or more models
 - [ ] Night is greyed out with a reason until the unit default location is set
 - [ ] Duplicate opens a filled form named Copy of the original; a template keeps everything except dates and pilots
+- [ ] Requirement is active is the switch right under Name and Description, on by default, with its help text; switched off, its panel turns to the warning color; it is nowhere near Reminder
+- [ ] A requirement saved with the switch off shows Inactive in the list and is missing from the dashboard tile
 
 ### 39.3 Period edges (review focus 1 and 2)
 - [ ] A flight that crosses midnight counts only its minutes inside a clock window (5:30 AM to 6:15 AM gives 30 minutes toward 12 AM to 6 AM)
@@ -459,19 +484,22 @@ Setup: an admin, a supervisor, a pilot and a viewer login. Fleet with at least t
 - [ ] After editing the target, the open period uses the new target on the dashboard tile and on the pilot card
 - [ ] Saved periods keep their old target in the history table
 - [ ] Delete is refused for a requirement with saved results; switching it off works
+- [ ] Switch off on a row asks for confirmation that names the excused months; Cancel changes nothing; confirming shows a toast, the row turns Inactive and loses its progress
+- [ ] Switch on on a row works in one click, with a toast, and the progress comes back
+- [ ] With every requirement switched off, the dashboard tile says N flight requirement(s) switched off; for a supervisor it links to the Flight Requirements tab, for a pilot it is plain text
 
 ### 39.7 Misses and the score
-- [ ] A miss shows in Needs Attention, as a Missed requirement badge on the pilots list and profile, and under Open misses on the dashboard
+- [ ] A miss shows in Needs Attention, as a Missed requirement badge on the pilots list and profile, and under Missed requirement on the This Period tile
 - [ ] Meeting the same requirement in a later period clears the flag; excusing the miss clears it; a one-time miss clears only by excusal
 - [ ] The Requirements Score is the share of saved results met in the last 12 months, leaves out excused results, and shows No results yet with none
-- [ ] The compliance score and pilot currency are unchanged by requirements
+- [ ] The compliance score counts requirements as in 38.4; the Requirements Score never changes it
 
 ### 39.8 Calendar, report and export
 - [ ] The Calendar shows one Due entry on the last day of each period
 - [ ] The Flight Requirements report matches the saved results; the requirement and pilot CSV downloads match too
 
 ### 39.9 Emails (SMTP pointed at a test inbox)
-- [ ] Requirement emails are off by default: with the switch off, nothing is sent for assignment, reminder or miss; turn on Send requirement emails in Settings > Flight Requirements first for the checks below, and nothing is sent for earlier assignments or misses
+- [ ] Requirement emails are off by default: with the switch off, nothing is sent for assignment, reminder or miss; turn on Send requirement emails under Requirement Settings on the Compliance Setup tab first for the checks below, and nothing is sent for earlier assignments or misses
 - [ ] An assignment email reaches each assigned pilot on create, activation and when a pilot is added
 - [ ] A reminder arrives the set number of days before the period ends, once per pilot per period, also if the scheduler runs twice
 - [ ] A miss email reaches the pilot and each user who can manage requirements
@@ -479,8 +507,47 @@ Setup: an admin, a supervisor, a pilot and a viewer login. Fleet with at least t
 - [ ] Nothing is sent with SMTP off or for a pilot with no email
 
 ### 39.10 Manual and pictures
-- [ ] Every topic in the Flight Requirements section opens, and its picture matches the screen
+- [ ] Every topic in the Flight Requirements and Compliance sections opens, and its picture matches the screen
+- [ ] The manual has no currency topic and no currency picture
 
 ### 39.11 Backup and restore
 - [ ] Export a backup with a clock-window requirement, a clock-window template, an excusal and a saved result; delete them; restore; all are back with the same window times
 - [ ] Restore a backup taken before this feature; the app starts and the Flight Requirements tab is empty
+- [ ] Export a backup with a rolling requirement, an excusal until a date and a lapse; delete them; restore; all are back
+- [ ] Restore a 3.6.0 backup that holds currency rules; it restores, skips the currency tables and keeps the requirements
+
+---
+
+## 40. Interface Changes in 3.7.0
+
+Setup: an admin, a supervisor and a pilot login; a few hundred flights, some with telemetry; one aircraft with an hourly operating cost.
+
+### 40.1 Fixed page header
+- [ ] On a computer, the top bar (page title, search, theme) stays in place while a long page scrolls; maps and sticky bars sit under it
+- [ ] On a phone the top bar with the menu icon stays as before
+
+### 40.2 Arranging the dashboard and Analytics
+- [ ] Edit layout gives each tile a handle and a switch; drag, keyboard (Space, arrows, Space) and touch move tiles; tiles keep their widths
+- [ ] Save keeps the layout across a reload and on another device; Cancel drops changes; Reset to default then Save returns to the unit default
+- [ ] An admin's Save as unit default shows a toast, also when the admin has their own layout (the toast says it still applies to them)
+- [ ] A user without their own layout gets the unit default; a tile the role cannot see never shows
+
+### 40.3 Flights selection bar
+- [ ] With review rights the bar is always above the table: "0 selected", the hint Select flights to use these actions, and disabled controls with a tooltip
+- [ ] Ticking rows only changes the count and enables the controls; nothing on the page moves
+- [ ] The bar stays under the fixed header while a long list scrolls; a pilot without review rights has no bar
+
+### 40.4 Certifications views
+- [ ] The Certifications tab (renamed from Certification Matrix) offers Matrix, By pilot and By urgency; the choice is remembered per device; a phone starts on By pilot
+- [ ] The matrix pins the pilot column and the header while scrolling; each cell is a status icon with the date on hover
+- [ ] Filters work in every view; bulk renewal is in the matrix only, and leaving the matrix (view or tab) clears the selection
+
+### 40.5 Flight distance, landing and cost
+- [ ] After the upgrade, the background fill starts a few minutes after boot and fills distance and landing coordinates for flights with telemetry; landing addresses follow (about 25 minutes of lookups for a large history)
+- [ ] A typed distance or landing value is never replaced; flights without telemetry stay blank
+- [ ] A landing point whose lookup finds no address is not looked up again on the next daily run; a failed lookup is retried
+- [ ] A restore started while the background fill runs stops the fill; it finishes on a later run
+- [ ] A flight with takeoff time and duration but no landing time gets landing time = takeoff + duration
+- [ ] A new synced flight gets its distance at once and its landing address after the next daily run
+- [ ] The aircraft's Hourly Operating Cost ($) gives each flight without a typed cost an estimate marked (estimated); a typed cost (even 0) wins; clearing it brings the estimate back
+- [ ] Flight Summary, Equipment Utilization and the Annual Unit Report fleet section total the costs (estimates marked (est.)); a total is blank when no flight has a cost

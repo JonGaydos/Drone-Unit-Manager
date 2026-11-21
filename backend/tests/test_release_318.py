@@ -168,14 +168,6 @@ def test_viewer_flights_csv_names_the_pilot_without_email(client, db, viewer_hea
     assert "kim@example.org" not in text
 
 
-def test_viewer_compliance_currency_list_has_no_email(client, db, viewer_headers, pilot_record):
-    from app.models.currency_rule import CurrencyRule
-    db.add(CurrencyRule(name="90-day", required_hours=1, period_days=90))
-    db.commit()
-    entries = client.get("/api/dashboard/compliance", headers=viewer_headers).json()["pilot_currency_status"]
-    assert [e["email"] for e in entries] == [None]
-
-
 # Smaller fixes ---------------------------------------------------------------------
 
 def test_mission_search_runs_in_the_database(client, db, admin_headers, pilot_record):

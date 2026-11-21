@@ -13,6 +13,46 @@ Behind a reverse proxy or tunnel, set `TRUSTED_PROXIES` before upgrading (see
 "Reverse Proxy" in the README). The login lock counts failures per address, so
 without it every visitor shares the proxy's address.
 
+## 3.7.0: what changes on upgrade
+
+- **Migration 0018 runs on start.** It adds the rolling requirement tables
+  (`flight_requirement_lapses`, `flight_requirement_excusals`), each user's
+  dashboard and analytics layout, and each aircraft's hourly operating cost.
+  It drops `currency_rules` and `currency_rule_models` with their rows. To go
+  back to 3.6.0, see `ROLLBACK.md`.
+- **Currency is removed.** Rules, status, reminders, the dashboard tile, the
+  pilot card, the Settings card and the Compliance section are gone. Flight
+  Requirements take its place. Write down any currency rule you still need
+  before upgrading and recreate it as a rolling requirement afterwards.
+- **Currency API removed.** The `/api/currency` routes and the API token area
+  entry are gone; calls return 404. The permission row "Certifications and
+  currency" is now "Certifications" (keys unchanged).
+- **Rolling requirements.** A new Rolling window period ("the last N days,
+  weeks or months"). Each pilot is Current, Lapsed, Not yet due or Excused
+  (until a date), checked daily; every lapse is saved with its start and end.
+- **Score change.** Flight requirements take currency's 15 points in the
+  compliance score: a pilot costs points when they missed the latest closed
+  period of an active requirement or are lapsed on a rolling one now (a pilot
+  counts once). Nothing is deducted while no requirement is active. The other
+  parts of the score are unchanged.
+- **Page move.** Flight Requirements and the requirement settings are tabs of
+  the Compliance page (Overview, Flight Requirements, Setup). The sidebar has
+  one Compliance entry; `/requirements` and `/settings?tab=requirements` open
+  the Flight Requirements tab.
+- **Background distance fill.** About four minutes after the first start, a
+  background job fills distance, landing coordinates and landing time from
+  stored telemetry for existing flights, then looks up landing addresses at
+  one per second (about 25 minutes for a large history). Typed values are
+  never replaced. It then runs daily, so a new flight gets its landing address
+  the next day.
+- **Hourly rates to set.** Flight cost estimates need an Hourly Operating Cost
+  on each aircraft (Fleet, edit vehicle). Until one is set, flights without a
+  typed cost show no cost.
+- **Interface.** The desktop page header stays in place while pages scroll;
+  the Dashboard and Analytics can be arranged per user (admins can save a unit
+  default); the Flights selection bar is always shown to reviewers;
+  Certifications has Matrix, By pilot and By urgency views.
+
 ## 3.6.0: what changes on upgrade
 
 - **Migrations run on start.** 0016 moves each currency rule's vehicle model

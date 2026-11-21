@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { renderWithProviders } from '@/test/render'
@@ -31,9 +31,9 @@ const HISTORY = [
   },
 ]
 
-function mock({ current = [CURRENT], pending = [], history = HISTORY, flags = {} } = {}) {
+function mock({ current = [CURRENT], pending = [], history = HISTORY, flags = {}, rolling = [], lapses = [] } = {}) {
   server.use(
-    http.get('/api/requirements/pilots/:id', () => HttpResponse.json({ pilot_id: 7, current, pending, history })),
+    http.get('/api/requirements/pilots/:id', () => HttpResponse.json({ pilot_id: 7, current, pending, history, rolling, lapses })),
     http.get('/api/requirements', () => HttpResponse.json([{ id: 1, name: 'Monthly hour', target_minutes: 60, target_flights: null }])),
     http.get('/api/requirements/flags', () => HttpResponse.json(flags)),
   )
@@ -73,7 +73,7 @@ describe('PilotRequirementsCard', () => {
   })
 
   it('shows the Missed requirement badge while a miss is flagged', async () => {
-    mock({ flags: { 7: [{ result_id: 21, requirement_id: 1, name: 'Monthly hour', period_start: '2026-09-01', period_end: '2026-09-30' }] } })
+    mock({ flags: { 7: [{ kind: 'missed', result_id: 21, requirement_id: 1, name: 'Monthly hour', period_start: '2026-09-01', period_end: '2026-09-30' }] } })
     render()
     expect(await screen.findByText('Missed requirement')).toBeInTheDocument()
   })
@@ -220,5 +220,126 @@ describe('PilotRequirementsCard', () => {
     render()
     await waitFor(() => expect(asked).toBe(true))
     expect(screen.queryByText('Flight Requirements')).toBeNull()
+  })
+  describe('rolling requirements', () => {
+    const ROLLING = {
+      requirement_id: 2, name: 'Ninety-day hour', pilot_id: 7, pilot_name: 'Pat Pilot', status: 'current',
+      totals: { '*': { minutes: 75, flights: 2 } }, met_by_model: { '*': true }, lapse_date: '2026-12-03',
+      excused_until: null, excluded_no_takeoff: 0, unreviewed_in_window: 0,
+      window_start: '2026-08-23', window_end: '2026-11-20',
+    }
+    const LAPSES = [
+      { lapse_id: 4, requirement_id: 2, name: 'Ninety-day hour', lapsed_on: '2026-11-02', recovered_on: null },
+      { lapse_id: 3, requirement_id: 2, name: 'Ninety-day hour', lapsed_on: '2026-06-10', recovered_on: '2026-06-21' },
+    ]
+
+    it('shows the window and the date the pilot would lapse', async () => {
+      mock({ current: [], history: [], rolling: [ROLLING] })
+      render()
+      const section = await screen.findByRole('region', { name: 'Rolling' })
+      expect(within(section).getByText('Ninety-day hour')).toBeInTheDocument()
+      expect(within(section).getByText(/Aug 23, 2026 to Nov 20, 2026/)).toBeInTheDocument()
+      expect(within(section).getByText('Current')).toBeInTheDocument()
+      expect(within(section).getByText('lapses on Dec 3, 2026')).toBeInTheDocument()
+    })
+
+    it('shows a lapsed pilot since the open lapse began', async () => {
+      mock({ current: [], history: [], rolling: [{ ...ROLLING, status: 'lapsed', lapse_date: null }], lapses: LAPSES })
+      render()
+      const section = await screen.findByRole('region', { name: 'Rolling' })
+      expect(within(section).getByText('Lapsed')).toBeInTheDocument()
+      expect(within(section).getByText('since Nov 2, 2026')).toBeInTheDocument()
+    })
+
+    it('lists the lapse history', async () => {
+      mock({ current: [], history: [], rolling: [ROLLING], lapses: LAPSES })
+      render()
+      const table = await screen.findByRole('table', { name: 'Lapse history' })
+      const rows = within(table).getAllByRole('row')
+      expect(rows).toHaveLength(3)
+      expect(rows[1]).toHaveTextContent('Ninety-day hourNov 2, 2026Still lapsed')
+      expect(rows[2]).toHaveTextContent('Ninety-day hourJun 10, 2026Jun 21, 2026')
+    })
+
+    it('lets an admin delete a closed lapse after confirming', async () => {
+      let deleted = null
+      mock({ current: [], history: [], rolling: [ROLLING], lapses: LAPSES })
+      server.use(http.delete('/api/requirements/:id/lapses/:lapseId', ({ params }) => {
+        deleted = { id: params.id, lapseId: params.lapseId }
+        return HttpResponse.json({ ok: true })
+      }))
+      const { user } = render('admin')
+      const table = await screen.findByRole('table', { name: 'Lapse history' })
+      await user.click(within(table).getByRole('button', { name: 'Delete lapse Ninety-day hour, Jun 10, 2026' }))
+      const dialog = await screen.findByRole('dialog')
+      expect(deleted).toBeNull()
+      await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
+      await waitFor(() => expect(deleted).toEqual({ id: '2', lapseId: '3' }))
+    })
+
+    it('offers no Delete on an open lapse', async () => {
+      mock({ current: [], history: [], rolling: [ROLLING], lapses: LAPSES })
+      render('admin')
+      const table = await screen.findByRole('table', { name: 'Lapse history' })
+      expect(within(table).queryByRole('button', { name: /Nov 2, 2026/ })).toBeNull()
+    })
+
+    it('offers no lapse Delete to a supervisor', async () => {
+      mock({ current: [], history: [], rolling: [ROLLING], lapses: LAPSES })
+      render('supervisor')
+      const table = await screen.findByRole('table', { name: 'Lapse history' })
+      expect(within(table).queryByRole('button', { name: /^Delete lapse/ })).toBeNull()
+    })
+
+    it('shows the Lapsed requirement badge while a lapse is open', async () => {
+      mock({
+        current: [], history: [], rolling: [ROLLING],
+        flags: { 7: [{ kind: 'lapsed', lapse_id: 4, requirement_id: 2, name: 'Ninety-day hour', period_start: '2026-11-02', period_end: null, pilot_name: 'Pat Pilot' }] },
+      })
+      render()
+      expect(await screen.findByText('Lapsed requirement')).toBeInTheDocument()
+      expect(screen.queryByText('Missed requirement')).toBeNull()
+    })
+
+    it('excuses a pilot until a date with a reason', async () => {
+      let sent = null
+      mock({ current: [], history: [], rolling: [ROLLING] })
+      server.use(http.post('/api/requirements/:id/excuse', async ({ request, params }) => {
+        sent = { id: params.id, body: await request.json() }
+        return HttpResponse.json({ ok: true })
+      }))
+      const { user } = render()
+      const section = await screen.findByRole('region', { name: 'Rolling' })
+      await user.click(within(section).getByRole('button', { name: 'Excuse Ninety-day hour' }))
+      const dialog = await screen.findByRole('dialog')
+      await user.click(within(dialog).getByRole('button', { name: 'Excuse' }))
+      expect(within(dialog).getByRole('alert')).toHaveTextContent('Choose the date the excusal lasts until')
+      expect(sent).toBeNull()
+      fireEvent.change(within(dialog).getByLabelText('Excused until'), { target: { value: '2099-01-31' } })
+      await user.type(within(dialog).getByLabelText('Reason (optional)'), 'Medical leave')
+      await user.click(within(dialog).getByRole('button', { name: 'Excuse' }))
+      await waitFor(() => expect(sent).toEqual({ id: '2', body: { pilot_id: 7, excused_until: '2099-01-31', reason: 'Medical leave' } }))
+    })
+
+    it('shows an excused pilot until the date and removes the excusal', async () => {
+      let sent = null
+      mock({ current: [], history: [], rolling: [{ ...ROLLING, status: 'excused', lapse_date: null, excused_until: '2027-01-31' }] })
+      server.use(http.post('/api/requirements/:id/excuse', async ({ request }) => {
+        sent = await request.json()
+        return HttpResponse.json({ ok: true })
+      }))
+      const { user } = render()
+      const section = await screen.findByRole('region', { name: 'Rolling' })
+      expect(within(section).getByText('until Jan 31, 2027')).toBeInTheDocument()
+      await user.click(within(section).getByRole('button', { name: 'Remove excusal from Ninety-day hour' }))
+      await waitFor(() => expect(sent).toEqual({ pilot_id: 7, excused_until: null }))
+    })
+
+    it('hides the rolling excuse buttons without requirements.excuse', async () => {
+      mock({ current: [], history: [], rolling: [ROLLING] })
+      render('pilot')
+      await screen.findByRole('region', { name: 'Rolling' })
+      expect(screen.queryByRole('button', { name: /xcus/ })).toBeNull()
+    })
   })
 })

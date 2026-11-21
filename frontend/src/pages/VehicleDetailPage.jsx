@@ -100,6 +100,7 @@ export default function VehicleDetailPage() {
       provider_serial: vehicle.provider_serial || '',
       faa_registration: vehicle.faa_registration || '',
       status: vehicle.status || 'active',
+      hourly_operating_cost: vehicle.hourly_operating_cost ?? '',
       notes: vehicle.notes || '',
     })
     setEditing(true)
@@ -113,7 +114,11 @@ export default function VehicleDetailPage() {
   const handleSaveEdit = async () => {
     setSaving(true)
     try {
-      const updated = await api.patch(`/vehicles/${id}`, editForm)
+      const rate = editForm.hourly_operating_cost
+      const updated = await api.patch(`/vehicles/${id}`, {
+        ...editForm,
+        hourly_operating_cost: rate === '' ? null : Number(rate),
+      })
       setVehicle(updated)
       setEditing(false)
     } catch (err) {
@@ -226,6 +231,11 @@ export default function VehicleDetailPage() {
                       {statusOptions('vehicle', editForm.status).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                   </div>
+                  <div>
+                    <label htmlFor="hourly-operating-cost" className="block text-xs font-medium text-muted-foreground mb-1">Hourly Operating Cost ($)</label>
+                    <input id="hourly-operating-cost" type="number" min="0" max="100000" step="0.01" value={editForm.hourly_operating_cost} onChange={e => setEditForm({...editForm, hourly_operating_cost: e.target.value})}
+                      className="w-full px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring" />
+                  </div>
                 </div>
                 <div>
                   <label htmlFor="notes" className="block text-xs font-medium text-muted-foreground mb-1">Notes</label>
@@ -258,6 +268,7 @@ export default function VehicleDetailPage() {
                   {vehicle.provider_serial && <span>API: {vehicle.provider_serial}</span>}
                   {vehicle.faa_registration && <span>FAA: {vehicle.faa_registration}</span>}
                   {vehicle.acquired_date && <span>Acquired: {vehicle.acquired_date}</span>}
+                  {vehicle.hourly_operating_cost != null && <span>Operating cost: ${Number(vehicle.hourly_operating_cost).toFixed(2)}/h</span>}
                 </div>
                 <span className={`inline-flex mt-2 px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[vehicle.status] || 'bg-zinc-500/15 text-zinc-400'}`}>
                   {vehicle.status || 'unknown'}

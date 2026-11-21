@@ -11,7 +11,7 @@ import app.database as database
 from app.database import Base
 from app.models import (
     ApiToken, Attachment, AuditLog, Battery, BatteryReading, CalendarEvent, CertificationType,
-    ChecklistCompletion, ChecklistTemplate, Component, Controller, CurrencyRule, CurrencyRuleModel, Dock, Document,
+    ChecklistCompletion, ChecklistTemplate, Component, Controller, Dock, Document,
     EquipmentCheckout, Flight, FlightPlan, FlightPurpose, Folder, Incident,
     MaintenanceRecord, MaintenanceSchedule, MediaFile, MissionLog, MissionLogPilot,
     NotificationPreference, OperatingAuthority, OtherEquipment, Photo, Pilot, PilotCertification,
@@ -19,8 +19,9 @@ from app.models import (
     Vehicle, VehicleRegistration,
 )
 from app.models.flight_requirement import (
-    FlightRequirement, FlightRequirementModel, FlightRequirementNotice, FlightRequirementPilot,
-    FlightRequirementPurpose, FlightRequirementResult, FlightRequirementTemplate,
+    FlightRequirement, FlightRequirementExcusal, FlightRequirementLapse, FlightRequirementModel,
+    FlightRequirementNotice, FlightRequirementPilot, FlightRequirementPurpose, FlightRequirementResult,
+    FlightRequirementTemplate,
 )
 from app.models.photo import PhotoFlight, PhotoIncident, PhotoPilot
 from app.models.role_permission import RolePermission
@@ -61,13 +62,12 @@ def parents(db, admin_user):
     photo = Photo(filename="a.jpg", original_filename="a.jpg")
     flight = Flight()
     incident = Incident(date=date(2026, 1, 1), title="I", severity="low", category="c", description="d")
-    rule = CurrencyRule(name="Parent", required_hours=1.0, period_days=30)
     requirement = FlightRequirement(name="Parent", period_type="calendar_month", start_date=date(2026, 1, 1),
                                     recurring=True, model_mode="all", time_mode="any")
     rows = {
         "requirement": requirement, "pilot": pilot, "vehicle": vehicle, "battery": battery, "template": template,
         "cert_type": cert_type, "mission": mission, "training": training, "photo": photo,
-        "flight": flight, "incident": incident, "rule": rule,
+        "flight": flight, "incident": incident,
     }
     db.add_all(rows.values())
     db.commit()
@@ -97,8 +97,6 @@ BUILDERS = {
     ChecklistTemplate: (_fixed(ChecklistTemplate, name="T", items=[]), "name", "T2"),
     Component: (_fixed(Component, name="C", component_type="motor"), "name", "C2"),
     Controller: (_fixed(Controller, serial_number="R-1"), "nickname", "Red"),
-    CurrencyRule: (_fixed(CurrencyRule, name="R", required_hours=1.0, period_days=30), "name", "R2"),
-    CurrencyRuleModel: (lambda p: CurrencyRuleModel(rule_id=p["rule"], model="X10"), "model", "X2E"),
     Dock: (_fixed(Dock, serial_number="D-1"), "name", "North"),
     Document: (_fixed(Document, entity_type="pilot", document_type="other", title="Doc", filename="d.pdf",
                           file_path="d.pdf", mime_type="application/pdf", file_size_bytes=1), "title", "Doc2"),
@@ -107,6 +105,12 @@ BUILDERS = {
     FlightPlan: (lambda p: FlightPlan(title="Plan", date_planned=datetime(2026, 1, 1), pilot_id=p["pilot"], submitted_by_id=p["user"]), "title", "Plan2"),
     FlightPurpose: (_fixed(FlightPurpose, name="Purpose"), "name", "Purpose2"),
     FlightRequirement: (lambda p: _requirement(), "name", "R2"),
+    FlightRequirementExcusal: (lambda p: FlightRequirementExcusal(
+        requirement_id=p["requirement"], pilot_id=p["pilot"], excused_until=date(2026, 2, 1)),
+        "reason", "Leave"),
+    FlightRequirementLapse: (lambda p: FlightRequirementLapse(
+        requirement_id=p["requirement"], pilot_id=p["pilot"], lapsed_on=date(2026, 1, 5)),
+        "recovered_on", date(2026, 1, 9)),
     FlightRequirementModel: (lambda p: FlightRequirementModel(requirement_id=p["requirement"], model="X10"), "model", "X2E"),
     FlightRequirementNotice: (lambda p: FlightRequirementNotice(
         requirement_id=p["requirement"], pilot_id=p["pilot"], period_start=date(2026, 1, 1),
@@ -304,21 +308,6 @@ def test_orphan_removed_from_its_parent_records_a_delete(session, db, parents):
     assert entry.changes["role"] == {"old": "pic", "new": None}
 
 
-def test_currency_rule_models_removed_from_their_rule_record_deletes(session, db):
-    rule = CurrencyRule(name="R", required_hours=1, period_days=30)
-    rule.models = [CurrencyRuleModel(model="X10"), CurrencyRuleModel(model="X2E")]
-    session.add(rule)
-    session.commit()
-    _clear_audit(db)
-
-    rule.models = []
-    session.commit()
-
-    entries = _entries(db, entity_type="currency_rule_model")
-    assert [e.action for e in entries] == ["delete", "delete"]
-    assert sorted(e.changes["model"]["old"] for e in entries) == ["X10", "X2E"]
-
-
 def test_requirement_children_removed_record_deletes(session, db):
     pilot = _pilot(session)
     req = _requirement(models=[FlightRequirementModel(model="X10")],
@@ -333,6 +322,22 @@ def test_requirement_children_removed_record_deletes(session, db):
 
     assert [e.action for e in _entries(db, entity_type="flight_requirement_model")] == ["delete"]
     assert [e.action for e in _entries(db, entity_type="flight_requirement_pilot")] == ["delete"]
+
+
+@pytest.mark.parametrize("entity_type", ["flight_requirement_lapse", "flight_requirement_excusal"])
+def test_deleting_a_requirement_records_its_lapse_and_excusal_deletes(session, db, entity_type):
+    pilot = _pilot(session)
+    req = _requirement(
+        lapses=[FlightRequirementLapse(pilot_id=pilot.id, lapsed_on=date(2026, 1, 5))],
+        excusals=[FlightRequirementExcusal(pilot_id=pilot.id, excused_until=date(2026, 2, 1))])
+    session.add(req)
+    session.commit()
+    _clear_audit(db)
+
+    session.delete(req)
+    session.commit()
+
+    assert [e.action for e in _entries(db, entity_type=entity_type)] == ["delete"]
 
 
 def test_unchanged_update_writes_nothing(session, db):

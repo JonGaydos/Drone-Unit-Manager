@@ -37,6 +37,8 @@ class Vehicle(Base):
     modified_by_id: Mapped[Optional[int]] = mapped_column(ForeignKey(USERS_ID), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, server_default=func.now(), onupdate=func.now())
+    # Cost per flight hour, for flight cost estimates; NULL = not set.
+    hourly_operating_cost: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     flights = relationship("Flight", back_populates="vehicle")
     documents = relationship("Document", back_populates="vehicle", foreign_keys="Document.vehicle_id")

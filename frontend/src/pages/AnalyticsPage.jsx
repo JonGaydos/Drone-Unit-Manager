@@ -4,6 +4,8 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { X, Filter } from 'lucide-react'
 import { FlightLocationsMap } from '@/components/FlightMap'
+import ArrangeableGrid from '@/components/layout/ArrangeableGrid'
+import { usePageLayout } from '@/components/layout/usePageLayout'
 import { localDateOf } from '@/lib/utils'
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
@@ -146,6 +148,7 @@ export default function AnalyticsPage() {
   const toast = useToast()
   const canSeeFlights = can('flights.view')
   const canSeeFleet = can('fleet.view')
+  const pageLayout = usePageLayout('analytics_layout', 'default_analytics_layout')
   // Raw data from API
   const [byPurpose, setByPurpose] = useState([])
   const [byYear, setByYear] = useState([])
@@ -372,6 +375,317 @@ export default function AnalyticsPage() {
   const renderTotalBarH = (color) => createTotalBarHRenderer(color, hasActiveFilter)
   const renderFilteredBarH = (color) => createFilteredBarHRenderer(color)
 
+  // Flights by Purpose - Horizontal Bar
+  const purposeCard = (
+    <ChartCard title="All Time Flights by Purpose">
+      <ResponsiveContainer width="100%" height={300}>
+        <BarChart data={purposeData} layout="vertical" margin={{ left: 80 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
+          <XAxis type="number" stroke="var(--muted-fg)" fontSize={12} />
+          <YAxis type="category" dataKey="purpose" stroke="var(--muted-fg)" fontSize={11} width={80} interval={0} tick={oneLineTick(24)} />
+          <Tooltip
+            {...tooltipStyle}
+            formatter={(val, name) => [val, name === 'total' ? 'Total' : 'Filtered']}
+          />
+          <Bar
+            dataKey="total"
+            shape={renderTotalBarH('#6366f1')}
+            onClick={(data) => toggleFilter('purpose', data.purpose)}
+            cursor="pointer"
+          />
+          {hasActiveFilter && (
+            <Bar
+              dataKey="filtered"
+              shape={renderFilteredBarH('#6366f1')}
+            />
+          )}
+        </BarChart>
+      </ResponsiveContainer>
+    </ChartCard>
+  )
+
+  // Flights Per Year - Vertical Bar
+  const yearCard = (
+    <ChartCard title="Flights Per Year">
+      <ResponsiveContainer width="100%" height={300}>
+        <BarChart data={yearData}>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
+          <XAxis dataKey="year" stroke="var(--muted-fg)" fontSize={12} />
+          <YAxis stroke="var(--muted-fg)" fontSize={12} />
+          <Tooltip
+            {...tooltipStyle}
+            formatter={(val, name) => [val, name === 'total' ? 'Total' : 'Filtered']}
+          />
+          <Bar
+            dataKey="total"
+            shape={renderTotalBar('#3b82f6')}
+            onClick={(data) => toggleFilter('year', data.year)}
+            cursor="pointer"
+          />
+          {hasActiveFilter && (
+            <Bar
+              dataKey="filtered"
+              shape={renderFilteredBar('#3b82f6')}
+            />
+          )}
+        </BarChart>
+      </ResponsiveContainer>
+    </ChartCard>
+  )
+
+  // Flights by Pilot - Pie/Donut with custom side legend (last names)
+  const pilotCard = (
+    <ChartCard title="Flights by Pilot">
+      <div className="flex items-center gap-3">
+        <div className="flex-1 min-w-0">
+          <ResponsiveContainer width="100%" height={300}>
+            <PieChart>
+              <Pie
+                data={byPilot}
+                dataKey="count"
+                nameKey="pilot_name"
+                cx="50%"
+                cy="50%"
+                innerRadius={50}
+                outerRadius={100}
+                labelLine={false}
+                onClick={(_, index) => toggleFilter('pilot', byPilot[index].pilot_id)}
+                cursor="pointer"
+              >
+                {byPilot.map((entry, i) => {
+                  const isSelected = filters.pilot === entry.pilot_id
+                  return (
+                    <Cell
+                      key={entry.pilot_id}
+                      fill={pilotFill(entry.pilot_id, i)}
+                      stroke={isSelected ? COLORS[i % COLORS.length] : 'none'}
+                      strokeWidth={isSelected ? 3 : 0}
+                    />
+                  )
+                })}
+              </Pie>
+              <Tooltip
+                {...tooltipStyle}
+                formatter={(val, _name, item) => {
+                  const pct = item?.payload?.percentage
+                  const suffix = pct == null ? '' : ` (${pct}%)`
+                  return [`${val}${suffix}`, item?.payload?.pilot_name ?? 'Flights']
+                }}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+        <ul className="shrink-0 w-28 max-h-[280px] overflow-y-auto pr-1 space-y-0.5 self-center">
+          {byPilot.map((entry, i) => {
+            const isSelected = filters.pilot === entry.pilot_id
+            return (
+              <li key={entry.pilot_id}>
+                <button
+                  type="button"
+                  onClick={() => toggleFilter('pilot', entry.pilot_id)}
+                  title={`${entry.pilot_name} - ${entry.percentage}%`}
+                  className={`flex items-center gap-1.5 w-full text-left px-1 py-0.5 rounded text-[11px] transition-colors hover:bg-accent/50 ${
+                    isSelected ? 'bg-accent/60 font-medium' : ''
+                  }`}
+                >
+                  <span
+                    className="inline-block w-2 h-2 rounded-full shrink-0"
+                    style={{ background: pilotFill(entry.pilot_id, i) }}
+                  />
+                  <span className="truncate text-foreground">{lastName(entry.pilot_name)}</span>
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      </div>
+    </ChartCard>
+  )
+
+  // Average Flight Duration by Year
+  const durationCard = (
+    <ChartCard title="Average Flight Duration by Year">
+      <ResponsiveContainer width="100%" height={300}>
+        <BarChart data={durationData}>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
+          <XAxis dataKey="year" stroke="var(--muted-fg)" fontSize={12} />
+          <YAxis stroke="var(--muted-fg)" fontSize={12} />
+          <Tooltip
+            {...tooltipStyle}
+            formatter={(val, name) => [
+              `${Math.round(val)}s`,
+              name === 'total' ? 'Total Avg' : 'Filtered Avg',
+            ]}
+          />
+          <Bar
+            dataKey="total"
+            shape={renderTotalBar('#10b981')}
+            onClick={(data) => toggleFilter('year', data.year)}
+            cursor="pointer"
+          />
+          {hasActiveFilter && (
+            <Bar
+              dataKey="filtered"
+              shape={renderFilteredBar('#10b981')}
+            />
+          )}
+        </BarChart>
+      </ResponsiveContainer>
+    </ChartCard>
+  )
+
+  // Monthly Flight Trends - Line
+  const monthlyCard = (
+    <ChartCard title="Monthly Flight Trends">
+      <ResponsiveContainer width="100%" height={300}>
+        <LineChart data={monthlyData}>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
+          <XAxis dataKey="label" stroke="var(--muted-fg)" fontSize={11} angle={-45} textAnchor="end" height={60} />
+          <YAxis stroke="var(--muted-fg)" fontSize={12} />
+          <Tooltip {...tooltipStyle} />
+          <Line
+            type="monotone"
+            dataKey="total"
+            stroke={hasActiveFilter ? withOpacity('#6366f1', DIM_OPACITY + 0.15) : '#6366f1'}
+            strokeWidth={2}
+            dot={{ r: 3 }}
+            name="Total"
+          />
+          {hasActiveFilter && (
+            <Line
+              type="monotone"
+              dataKey="filtered"
+              stroke="#6366f1"
+              strokeWidth={2.5}
+              dot={{ r: 4, fill: '#6366f1' }}
+              name="Filtered"
+            />
+          )}
+        </LineChart>
+      </ResponsiveContainer>
+    </ChartCard>
+  )
+
+  // Top Vehicles by Hours - Horizontal Bar
+  const vehicleCard = (
+    <ChartCard title="Top Vehicles by Flight Hours">
+      <ResponsiveContainer width="100%" height={300}>
+        <BarChart data={vehicleData} layout="vertical" margin={{ left: 100 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
+          <XAxis type="number" stroke="var(--muted-fg)" fontSize={12} />
+          <YAxis type="category" dataKey="vehicle_name" stroke="var(--muted-fg)" fontSize={11} width={100} interval={0} tick={oneLineTick(30)} />
+          <Tooltip
+            {...tooltipStyle}
+            formatter={(val, name) => [
+              `${Number(val).toFixed(1)}h`,
+              name === 'total' ? 'Total' : 'Filtered',
+            ]}
+          />
+          <Bar
+            dataKey="total"
+            shape={renderTotalBarH('#f59e0b')}
+          />
+          {hasActiveFilter && (
+            <Bar
+              dataKey="filtered"
+              shape={renderFilteredBarH('#f59e0b')}
+            />
+          )}
+        </BarChart>
+      </ResponsiveContainer>
+    </ChartCard>
+  )
+
+  // Pilot Hours Leaderboard - Table
+  const leaderboardCard = (
+    <ChartCard title="Pilot Hours Leaderboard">
+      <div className="overflow-auto max-h-[300px]">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border">
+              <th className="text-left py-2 text-muted-foreground font-medium">#</th>
+              <th className="text-left py-2 text-muted-foreground font-medium">Pilot</th>
+              <th className="text-right py-2 text-muted-foreground font-medium">Hours</th>
+              <th className="text-right py-2 text-muted-foreground font-medium">Flights</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pilotHours.map((p, i) => {
+              const isSelected = filters.pilot === p.pilot_id
+              const hasFilteredData = filteredPilotHours?.[p.pilot_name]
+              const isDimmed = hasActiveFilter && !isSelected && !hasFilteredData
+              return (
+                <tr
+                  key={p.pilot_id ?? p.pilot_name}
+                  className={`border-b border-border/50 cursor-pointer transition-colors ${
+                    isSelected
+                      ? 'bg-indigo-500/15'
+                      : 'hover:bg-accent/50'
+                  }`}
+                  style={{ opacity: isDimmed ? DIM_OPACITY + 0.15 : 1 }}
+                  onClick={() => toggleFilter('pilot', p.pilot_id)}
+                >
+                  <td className="py-2 text-muted-foreground">{i + 1}</td>
+                  <td className="py-2 text-foreground font-medium">
+                    {p.pilot_name}
+                    {isSelected && (
+                      <span className="ml-2 inline-block w-2 h-2 bg-indigo-500 rounded-full" />
+                    )}
+                  </td>
+                  <td className="py-2 text-right text-foreground">
+                    {p.hours.toFixed(1)}
+                    {hasActiveFilter && filteredPilotHours?.[p.pilot_name] && (
+                      <span className="text-indigo-400 ml-1 text-xs">
+                        ({filteredPilotHours[p.pilot_name].hours.toFixed(1)})
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-2 text-right text-muted-foreground">
+                    {p.flight_count}
+                    {hasActiveFilter && filteredPilotHours?.[p.pilot_name] && (
+                      <span className="text-indigo-400 ml-1 text-xs">
+                        ({filteredPilotHours[p.pilot_name].count})
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
+            {pilotHours.length === 0 && (
+              <tr>
+                <td colSpan={4} className="py-8 text-center text-muted-foreground">
+                  No flight data yet
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </ChartCard>
+  )
+
+  const mapCard = (
+    <div className="bg-card border border-border rounded-xl p-4">
+      <h3 className="text-lg font-semibold text-foreground mb-3">Flight Locations</h3>
+      <FlightLocationsMap flights={hasActiveFilter ? filteredFlights : allFlights} height="400px" />
+    </div>
+  )
+
+  // Each tile's id is stored in saved layouts: never rename one.
+  const tiles = [
+    { id: 'flights-by-purpose', label: 'All Time Flights by Purpose', span: 'lg:col-span-2', render: () => purposeCard },
+    { id: 'flights-per-year', label: 'Flights Per Year', span: 'lg:col-span-2', render: () => yearCard },
+    { id: 'flights-by-pilot', label: 'Flights by Pilot', span: 'lg:col-span-2', render: () => pilotCard },
+    { id: 'avg-duration', label: 'Average Flight Duration by Year', span: 'lg:col-span-3', render: () => durationCard },
+    { id: 'monthly-trends', label: 'Monthly Flight Trends', span: 'lg:col-span-3', render: () => monthlyCard },
+    { id: 'top-vehicle-hours', label: 'Top Vehicles by Flight Hours', span: 'lg:col-span-3', render: () => vehicleCard },
+    { id: 'pilot-hours', label: 'Pilot Hours Leaderboard', span: 'lg:col-span-3', render: () => leaderboardCard },
+    {
+      id: 'flight-locations', label: 'Flight Locations', span: 'lg:col-span-6',
+      visible: allFlights.some(f => f.takeoff_lat), render: () => mapCard,
+    },
+  ]
+
   return (
     <div className="space-y-6">
       {/* Active Filters Bar */}
@@ -415,296 +729,7 @@ export default function AnalyticsPage() {
         </div>
       )}
 
-      {/* Row 1: Purpose + Year + Pilot Pie */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Flights by Purpose - Horizontal Bar */}
-        <ChartCard title="All Time Flights by Purpose">
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={purposeData} layout="vertical" margin={{ left: 80 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-              <XAxis type="number" stroke="var(--muted-fg)" fontSize={12} />
-              <YAxis type="category" dataKey="purpose" stroke="var(--muted-fg)" fontSize={11} width={80} interval={0} tick={oneLineTick(24)} />
-              <Tooltip
-                {...tooltipStyle}
-                formatter={(val, name) => [val, name === 'total' ? 'Total' : 'Filtered']}
-              />
-              <Bar
-                dataKey="total"
-                shape={renderTotalBarH('#6366f1')}
-                onClick={(data) => toggleFilter('purpose', data.purpose)}
-                cursor="pointer"
-              />
-              {hasActiveFilter && (
-                <Bar
-                  dataKey="filtered"
-                  shape={renderFilteredBarH('#6366f1')}
-                />
-              )}
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        {/* Flights Per Year - Vertical Bar */}
-        <ChartCard title="Flights Per Year">
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={yearData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-              <XAxis dataKey="year" stroke="var(--muted-fg)" fontSize={12} />
-              <YAxis stroke="var(--muted-fg)" fontSize={12} />
-              <Tooltip
-                {...tooltipStyle}
-                formatter={(val, name) => [val, name === 'total' ? 'Total' : 'Filtered']}
-              />
-              <Bar
-                dataKey="total"
-                shape={renderTotalBar('#3b82f6')}
-                onClick={(data) => toggleFilter('year', data.year)}
-                cursor="pointer"
-              />
-              {hasActiveFilter && (
-                <Bar
-                  dataKey="filtered"
-                  shape={renderFilteredBar('#3b82f6')}
-                />
-              )}
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        {/* Flights by Pilot - Pie/Donut with custom side legend (last names) */}
-        <ChartCard title="Flights by Pilot">
-          <div className="flex items-center gap-3">
-            <div className="flex-1 min-w-0">
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={byPilot}
-                    dataKey="count"
-                    nameKey="pilot_name"
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={100}
-                    labelLine={false}
-                    onClick={(_, index) => toggleFilter('pilot', byPilot[index].pilot_id)}
-                    cursor="pointer"
-                  >
-                    {byPilot.map((entry, i) => {
-                      const isSelected = filters.pilot === entry.pilot_id
-                      return (
-                        <Cell
-                          key={entry.pilot_id}
-                          fill={pilotFill(entry.pilot_id, i)}
-                          stroke={isSelected ? COLORS[i % COLORS.length] : 'none'}
-                          strokeWidth={isSelected ? 3 : 0}
-                        />
-                      )
-                    })}
-                  </Pie>
-                  <Tooltip
-                    {...tooltipStyle}
-                    formatter={(val, _name, item) => {
-                      const pct = item?.payload?.percentage
-                      const suffix = pct == null ? '' : ` (${pct}%)`
-                      return [`${val}${suffix}`, item?.payload?.pilot_name ?? 'Flights']
-                    }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <ul className="shrink-0 w-28 max-h-[280px] overflow-y-auto pr-1 space-y-0.5 self-center">
-              {byPilot.map((entry, i) => {
-                const isSelected = filters.pilot === entry.pilot_id
-                return (
-                  <li key={entry.pilot_id}>
-                    <button
-                      type="button"
-                      onClick={() => toggleFilter('pilot', entry.pilot_id)}
-                      title={`${entry.pilot_name} - ${entry.percentage}%`}
-                      className={`flex items-center gap-1.5 w-full text-left px-1 py-0.5 rounded text-[11px] transition-colors hover:bg-accent/50 ${
-                        isSelected ? 'bg-accent/60 font-medium' : ''
-                      }`}
-                    >
-                      <span
-                        className="inline-block w-2 h-2 rounded-full shrink-0"
-                        style={{ background: pilotFill(entry.pilot_id, i) }}
-                      />
-                      <span className="truncate text-foreground">{lastName(entry.pilot_name)}</span>
-                    </button>
-                  </li>
-                )
-              })}
-            </ul>
-          </div>
-        </ChartCard>
-      </div>
-
-      {/* Row 2: Avg Duration + Monthly Trends */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Average Flight Duration by Year */}
-        <ChartCard title="Average Flight Duration by Year">
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={durationData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-              <XAxis dataKey="year" stroke="var(--muted-fg)" fontSize={12} />
-              <YAxis stroke="var(--muted-fg)" fontSize={12} />
-              <Tooltip
-                {...tooltipStyle}
-                formatter={(val, name) => [
-                  `${Math.round(val)}s`,
-                  name === 'total' ? 'Total Avg' : 'Filtered Avg',
-                ]}
-              />
-              <Bar
-                dataKey="total"
-                shape={renderTotalBar('#10b981')}
-                onClick={(data) => toggleFilter('year', data.year)}
-                cursor="pointer"
-              />
-              {hasActiveFilter && (
-                <Bar
-                  dataKey="filtered"
-                  shape={renderFilteredBar('#10b981')}
-                />
-              )}
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        {/* Monthly Flight Trends - Line */}
-        <ChartCard title="Monthly Flight Trends">
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={monthlyData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-              <XAxis dataKey="label" stroke="var(--muted-fg)" fontSize={11} angle={-45} textAnchor="end" height={60} />
-              <YAxis stroke="var(--muted-fg)" fontSize={12} />
-              <Tooltip {...tooltipStyle} />
-              <Line
-                type="monotone"
-                dataKey="total"
-                stroke={hasActiveFilter ? withOpacity('#6366f1', DIM_OPACITY + 0.15) : '#6366f1'}
-                strokeWidth={2}
-                dot={{ r: 3 }}
-                name="Total"
-              />
-              {hasActiveFilter && (
-                <Line
-                  type="monotone"
-                  dataKey="filtered"
-                  stroke="#6366f1"
-                  strokeWidth={2.5}
-                  dot={{ r: 4, fill: '#6366f1' }}
-                  name="Filtered"
-                />
-              )}
-            </LineChart>
-          </ResponsiveContainer>
-        </ChartCard>
-      </div>
-
-      {/* Row 3: Vehicle Hours + Pilot Leaderboard */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Top Vehicles by Hours - Horizontal Bar */}
-        <ChartCard title="Top Vehicles by Flight Hours">
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={vehicleData} layout="vertical" margin={{ left: 100 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-              <XAxis type="number" stroke="var(--muted-fg)" fontSize={12} />
-              <YAxis type="category" dataKey="vehicle_name" stroke="var(--muted-fg)" fontSize={11} width={100} interval={0} tick={oneLineTick(30)} />
-              <Tooltip
-                {...tooltipStyle}
-                formatter={(val, name) => [
-                  `${Number(val).toFixed(1)}h`,
-                  name === 'total' ? 'Total' : 'Filtered',
-                ]}
-              />
-              <Bar
-                dataKey="total"
-                shape={renderTotalBarH('#f59e0b')}
-              />
-              {hasActiveFilter && (
-                <Bar
-                  dataKey="filtered"
-                  shape={renderFilteredBarH('#f59e0b')}
-                />
-              )}
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        {/* Pilot Hours Leaderboard - Table */}
-        <ChartCard title="Pilot Hours Leaderboard">
-          <div className="overflow-auto max-h-[300px]">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="text-left py-2 text-muted-foreground font-medium">#</th>
-                  <th className="text-left py-2 text-muted-foreground font-medium">Pilot</th>
-                  <th className="text-right py-2 text-muted-foreground font-medium">Hours</th>
-                  <th className="text-right py-2 text-muted-foreground font-medium">Flights</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pilotHours.map((p, i) => {
-                  const isSelected = filters.pilot === p.pilot_id
-                  const hasFilteredData = filteredPilotHours?.[p.pilot_name]
-                  const isDimmed = hasActiveFilter && !isSelected && !hasFilteredData
-                  return (
-                    <tr
-                      key={p.pilot_id ?? p.pilot_name}
-                      className={`border-b border-border/50 cursor-pointer transition-colors ${
-                        isSelected
-                          ? 'bg-indigo-500/15'
-                          : 'hover:bg-accent/50'
-                      }`}
-                      style={{ opacity: isDimmed ? DIM_OPACITY + 0.15 : 1 }}
-                      onClick={() => toggleFilter('pilot', p.pilot_id)}
-                    >
-                      <td className="py-2 text-muted-foreground">{i + 1}</td>
-                      <td className="py-2 text-foreground font-medium">
-                        {p.pilot_name}
-                        {isSelected && (
-                          <span className="ml-2 inline-block w-2 h-2 bg-indigo-500 rounded-full" />
-                        )}
-                      </td>
-                      <td className="py-2 text-right text-foreground">
-                        {p.hours.toFixed(1)}
-                        {hasActiveFilter && filteredPilotHours?.[p.pilot_name] && (
-                          <span className="text-indigo-400 ml-1 text-xs">
-                            ({filteredPilotHours[p.pilot_name].hours.toFixed(1)})
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-2 text-right text-muted-foreground">
-                        {p.flight_count}
-                        {hasActiveFilter && filteredPilotHours?.[p.pilot_name] && (
-                          <span className="text-indigo-400 ml-1 text-xs">
-                            ({filteredPilotHours[p.pilot_name].count})
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
-                {pilotHours.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="py-8 text-center text-muted-foreground">
-                      No flight data yet
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </ChartCard>
-      </div>
-
-      {allFlights.some(f => f.takeoff_lat) && (
-        <div className="bg-card border border-border rounded-xl p-4">
-          <h3 className="text-lg font-semibold text-foreground mb-3">Flight Locations</h3>
-          <FlightLocationsMap flights={hasActiveFilter ? filteredFlights : allFlights} height="400px" />
-        </div>
-      )}
+      <ArrangeableGrid tiles={tiles} className="grid-cols-1 lg:grid-cols-6" {...pageLayout} />
     </div>
   )
 }

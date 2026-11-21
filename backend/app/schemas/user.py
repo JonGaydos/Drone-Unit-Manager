@@ -1,8 +1,8 @@
 import re
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Annotated, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, StringConstraints, field_validator
 
 # Conservative email shape check. EmailStr is intentionally NOT used here
 # because the email-validator package is not installed.
@@ -63,6 +63,33 @@ class UserUpdate(BaseModel):
     _validate_name = field_validator("display_name")(_validate_display_name)
 
 
+# A dashboard or analytics tile id, as the frontend names its tiles.
+TileId = Annotated[str, StringConstraints(min_length=1, max_length=50, pattern=r"^[a-z0-9-]+$")]
+
+
+def _unique_ids(ids: list[str]) -> list[str]:
+    if len(set(ids)) != len(ids):
+        raise ValueError("tile ids must not repeat")
+    return ids
+
+
+class Layout(BaseModel):
+    """A tile arrangement: tile ids in display order, and the ids switched off."""
+    order: list[TileId] = Field(max_length=50)
+    hidden: list[TileId] = Field(max_length=50)
+
+    model_config = {"extra": "forbid"}
+
+    _check_unique = field_validator("order", "hidden")(_unique_ids)
+
+
+class ProfileUpdate(UserUpdate):
+    """What a user may change on their own account. The layouts are only
+    accepted here, so no one can arrange another user's pages."""
+    dashboard_layout: Optional[Layout] = None
+    analytics_layout: Optional[Layout] = None
+
+
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str = Field(min_length=8, max_length=255)
@@ -82,6 +109,8 @@ class UserOut(BaseModel):
     pilot_id: Optional[int] = None
     email: Optional[str] = None
     created_at: datetime
+    dashboard_layout: Optional[dict] = None
+    analytics_layout: Optional[dict] = None
     # Resolved values, filled in on the signed-in user's own responses only.
     permissions: dict[str, str] = Field(default_factory=dict)
 

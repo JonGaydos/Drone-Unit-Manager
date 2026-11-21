@@ -11,6 +11,11 @@ export const handlers = [
   }),
   http.get('/api/settings/idle_lock_minutes', () =>
     HttpResponse.json({ key: 'idle_lock_minutes', value: '30' })),
+  // No unit default layout for the Dashboard and Analytics.
+  http.get('/api/settings/default_dashboard_layout', () =>
+    HttpResponse.json({ key: 'default_dashboard_layout', value: '' })),
+  http.get('/api/settings/default_analytics_layout', () =>
+    HttpResponse.json({ key: 'default_analytics_layout', value: '' })),
   // The Audit Log user filter's choices.
   http.get('/api/audit/users', () => HttpResponse.json([])),
   // Settings > General shows every user's digest preferences card.
@@ -19,15 +24,13 @@ export const handlers = [
     categories: ['expiring_certs'], email_override: null,
   })),
   http.get('/api/notifications/log', () => HttpResponse.json([])),
-  // The currency rule picker's fleet models.
-  http.get('/api/currency/models', () => HttpResponse.json([])),
   // Settings > Flight Requirements: definitions, fleet models, templates and settings.
   http.get('/api/requirements', () => HttpResponse.json([])),
   http.get('/api/requirements/models', () => HttpResponse.json([])),
   http.get('/api/requirements/templates', () => HttpResponse.json([])),
   http.get('/api/requirements/settings', () => HttpResponse.json({ grace_days: 14, fiscal_year_start_month: 10, emails_enabled: false })),
   // Requirement progress on the dashboard, Compliance, Pilots and pilot pages.
-  http.get('/api/requirements/status', () => HttpResponse.json({ score: null, requirements: [] })),
+  http.get('/api/requirements/status', () => HttpResponse.json({ score: null, requirements: [], inactive_count: 0 })),
   http.get('/api/requirements/flags', () => HttpResponse.json({})),
   http.get('/api/requirements/pilots/:id', ({ params }) =>
     HttpResponse.json({ pilot_id: Number(params.id), current: [], pending: [], history: [] })),

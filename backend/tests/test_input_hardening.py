@@ -5,7 +5,6 @@ import csv
 import io
 import logging
 from datetime import date, datetime
-from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import httpx
@@ -20,7 +19,6 @@ from app.models.mission_log import MissionLog
 from app.models.pilot import Pilot
 from app.models.setting import Setting
 from app.models.vehicle import Vehicle
-from app.routers.currency import _reminder_html
 from app.routers.export import _csv_safe
 from app.services import sync_manager
 from app.services.sync_manager import SyncManager
@@ -45,18 +43,6 @@ def _seed(db, *rows):
     for r in rows:
         db.refresh(r)
     return rows
-
-
-# ---- reminder email -------------------------------------------------------
-
-def test_reminder_html_escapes_all_text():
-    pilot = SimpleNamespace(first_name="<b>Al</b>", full_name="x")
-    rules = [{"rule_name": "<img src=x>", "actual_hours": "<i>1</i>",
-              "required_hours": "<u>2</u>", "period_days": "<s>3</s>"}]
-    html = _reminder_html(pilot, rules, "<script>org</script>", "<a href=x>intro</a>")
-    for raw in ("<b>Al", "<img", "<i>1", "<u>2", "<s>3", "<script>", "<a href"):
-        assert raw not in html
-    assert "&lt;script&gt;org" in html
 
 
 # ---- ADS-B ----------------------------------------------------------------
@@ -149,20 +135,6 @@ def test_csv_guard_covers_spaced_formula():
     assert _csv_safe("  @cmd") == "'  @cmd"
     assert _csv_safe(" hello") == " hello"
     assert _csv_safe("   ") == "   "
-
-
-def test_reminder_subject_collapses_whitespace(monkeypatch):
-    from app.routers.currency import _send_one_reminder
-    import app.services.email_digest as ed
-    sent = {}
-    monkeypatch.setattr(ed, "send_email", lambda to, subj, html, db: sent.update(subject=subj) or True)
-    monkeypatch.setattr("app.routers.currency._evaluate_currency", lambda rules, flights: [{
-        "is_current": False, "rule_name": "r", "actual_hours": 0, "required_hours": 1, "period_days": 30}])
-    pilot = SimpleNamespace(first_name="A", full_name="A B", email="a@x.org")
-    assert _send_one_reminder(pilot, [], [], "Unit\r\nBcc: evil@x.org", "", None)[0] == "sent"
-    assert "\n" not in sent["subject"]
-    assert "\r" not in sent["subject"]
-    assert sent["subject"].endswith("Unit Bcc: evil@x.org")
 
 
 def test_fixed_error_adds_http_status_only():

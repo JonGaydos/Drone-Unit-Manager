@@ -66,9 +66,9 @@ describe('ThisPeriodTile', () => {
   })
 
   it('names the pilots with an open miss', async () => {
-    mock({ flags: { 3: [{ result_id: 9, requirement_id: 1, name: 'Quarterly models', period_start: '2026-04-01', period_end: '2026-06-30', pilot_name: 'Pat Pilot' }] } })
+    mock({ flags: { 3: [{ kind: 'missed', result_id: 9, requirement_id: 1, name: 'Quarterly models', period_start: '2026-04-01', period_end: '2026-06-30', pilot_name: 'Pat Pilot' }] } })
     renderWithProviders(<ThisPeriodTile />, { role: 'pilot' })
-    const line = await screen.findByText(/Open misses/)
+    const line = await screen.findByText(/Missed requirement/)
     expect(within(line.closest('p')).getByRole('link', { name: 'Pat Pilot' })).toHaveAttribute('href', '/pilots/3')
   })
 
@@ -80,9 +80,67 @@ describe('ThisPeriodTile', () => {
   })
 
   it('shows an empty state when there are no active requirements', async () => {
-    mock({ status: { score: null, requirements: [] } })
+    mock({ status: { score: null, requirements: [], inactive_count: 0 } })
     renderWithProviders(<ThisPeriodTile />, { role: 'pilot' })
     expect(await screen.findByText('No active flight requirements')).toBeInTheDocument()
-    expect(screen.queryByText(/Open misses/)).toBeNull()
+    expect(screen.queryByText(/Missed requirement/)).toBeNull()
+  })
+
+  it('says how many requirements are switched off when none is active, with a link for managers', async () => {
+    mock({ status: { score: null, requirements: [], inactive_count: 2 } })
+    const { unmount } = renderWithProviders(<ThisPeriodTile />, { role: 'supervisor' })
+    const link = await screen.findByRole('link', { name: '2 flight requirements switched off' })
+    expect(link).toHaveAttribute('href', '/compliance?tab=requirements')
+    expect(screen.queryByText('No active flight requirements')).toBeNull()
+    unmount()
+
+    mock({ status: { score: null, requirements: [], inactive_count: 1 } })
+    renderWithProviders(<ThisPeriodTile />, { role: 'pilot' })
+    expect(await screen.findByText('1 flight requirement switched off')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /switched off/ })).toBeNull()
+  })
+  describe('a rolling requirement', () => {
+    const rollingPilot = (id, name, status, extra) => ({
+      pilot_id: id, pilot_name: name, status, totals: { '*': { minutes: 30, flights: 1 } }, met_by_model: { '*': false },
+      lapse_date: null, excused_until: null, excluded_no_takeoff: 0, unreviewed_in_window: 0, ...extra,
+    })
+    const ROLLING = {
+      requirement_id: 2, name: 'Ninety-day hour', period_type: 'rolling', target_minutes: 60, target_flights: null,
+      model_mode: 'all', current_period: null, pending_periods: [],
+      rolling: {
+        window_start: '2026-08-23', window_end: '2026-11-20',
+        pilots: [
+          rollingPilot(3, 'Pat Pilot', 'current', { lapse_date: '2026-12-03', totals: { '*': { minutes: 75, flights: 2 } } }),
+          rollingPilot(4, 'Sam Flyer', 'lapsed'),
+          rollingPilot(5, 'Lee Rotor', 'not_yet_due'),
+          rollingPilot(6, 'Kim Wing', 'excused', { excused_until: '2027-01-31' }),
+        ],
+      },
+    }
+    const LAPSE = {
+      kind: 'lapsed', result_id: null, lapse_id: 3, requirement_id: 2, name: 'Ninety-day hour',
+      period_start: '2026-11-02', period_end: null, pilot_name: 'Sam Flyer',
+    }
+
+    it('counts current and lapsed pilots and gives each pilot\'s standing', async () => {
+      mock({ status: { score: null, requirements: [ROLLING] }, flags: { 4: [LAPSE] } })
+      renderWithProviders(<ThisPeriodTile />, { role: 'pilot' })
+      const req = await screen.findByRole('listitem', { name: 'Ninety-day hour' })
+      expect(within(req).getByText('1 current, 1 lapsed')).toBeInTheDocument()
+      expect(within(req).getByText('lapses on Dec 3, 2026')).toBeInTheDocument()
+      expect(await within(req).findByText('since Nov 2, 2026')).toBeInTheDocument()
+      expect(within(req).getByText('Not yet due')).toBeInTheDocument()
+      expect(within(req).getByText('until Jan 31, 2027')).toBeInTheDocument()
+      expect(within(req).getByText('Current')).toBeInTheDocument()
+      expect(within(req).getByText('Lapsed')).toBeInTheDocument()
+    })
+
+    it('labels an open lapse Lapsed requirement', async () => {
+      mock({ status: { score: null, requirements: [ROLLING] }, flags: { 4: [LAPSE] } })
+      renderWithProviders(<ThisPeriodTile />, { role: 'pilot' })
+      const line = await screen.findByText(/Lapsed requirement/)
+      expect(within(line.closest('p')).getByRole('link', { name: 'Sam Flyer' })).toHaveAttribute('href', '/pilots/4')
+      expect(screen.queryByText(/Missed requirement/)).toBeNull()
+    })
   })
 })

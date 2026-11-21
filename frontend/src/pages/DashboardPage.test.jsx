@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { screen, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
@@ -50,14 +50,10 @@ const POPULATED = {
     { source: 'schedule', id: 1, name: 'Prop replacement', days_remaining: 12, due_date: '2026-07-01' },
   ],
   compliance: {
-    compliance_score: 92, pilots_current: 6, total_pilots: 7,
-    currency_rules_active: 1, expired_certifications: 0, overdue_maintenance: 1,
-    pilots_lapsed: 1,
+    compliance_score: 92, total_pilots: 7,
+    expired_certifications: 0, overdue_maintenance: 1,
     operating_authorities_tracked: 1, expired_authorities: [], expiring_authorities: [],
     score_cap_reason: null,
-    pilot_currency_status: [
-      { pilot_id: 5, pilot_name: 'Lapsed Larry', is_current: false, earliest_expires_date: null },
-    ],
     expiring_certifications: [
       { pilot_id: 9, days_remaining: 12 },
     ],
@@ -90,7 +86,7 @@ describe('DashboardPage', () => {
     renderWithProviders(<DashboardPage />, { role: 'admin' })
 
     // Hero compliance summary.
-    expect(await screen.findByText(/6 of 7 pilots current/)).toBeInTheDocument()
+    expect(await screen.findByText(/7 active pilots/)).toBeInTheDocument()
     // Stat tiles.
     expect(screen.getByText('Flights (30d)')).toBeInTheDocument()
     expect(screen.getByText('Pilots Flying (30d)')).toBeInTheDocument()
@@ -172,7 +168,6 @@ describe('DashboardPage', () => {
 
     // Key tiles are present as text, proving the page mounted fully.
     expect(screen.getByText(/Recent Flights/)).toBeInTheDocument()
-    expect(screen.getByText('Currency Risk')).toBeInTheDocument()
     expect(screen.getByText('Activity by Month')).toBeInTheDocument()
   })
 
@@ -201,16 +196,9 @@ describe('DashboardPage', () => {
   })
 
   // The countdown badges are the page's whole at-a-glance signal: how long is
-  // left, and whether that is fine, close, or already blown. Three tiles share
-  // one palette, so a change to any of them has to keep all three honest.
+  // left, and whether that is fine, close, or already blown. Two tiles share
+  // one palette, so a change to either has to keep both honest.
   describe('countdown badges', () => {
-    const inDays = (n) => {
-      const d = new Date()
-      d.setHours(12, 0, 0, 0)
-      d.setDate(d.getDate() + n)
-      return d.toISOString().slice(0, 10)
-    }
-
     const badgeFor = (label) => screen.getByText(label).className
 
     const due = (id, name, days) => ({ source: 'schedule', id, name, days_remaining: days })
@@ -275,68 +263,14 @@ describe('DashboardPage', () => {
       expect(badgeFor('20d')).toContain('amber')
       expect(badgeFor('90d')).toContain('blue')
     })
-
-    // The page used to parse "YYYY-MM-DD" as UTC midnight, which is the
-    // previous day for anyone west of Greenwich, so every countdown read a day
-    // short. Pilot currency is where that arithmetic still happens on the
-    // client: maintenance and certificates are handed a day count by the API.
-    it('counts a currency expiry from the local calendar day, not the UTC one', async () => {
-      mockDashboard({
-        ...POPULATED,
-        compliance: {
-          ...POPULATED.compliance,
-          pilot_currency_status: [
-            { pilot_id: 1, pilot_name: 'Due today', is_current: true, earliest_expires_date: inDays(0) },
-            { pilot_id: 2, pilot_name: 'Due in thirty', is_current: true, earliest_expires_date: inDays(30) },
-          ],
-        },
-      })
-      renderWithProviders(<DashboardPage />, { role: 'admin' })
-
-      expect(await screen.findByText('0d')).toBeInTheDocument()
-      expect(screen.getByText('30d')).toBeInTheDocument()
-    })
-
-    it('reads a pilot as lapsed, expiring, or current', async () => {
-      mockDashboard({
-        ...POPULATED,
-        compliance: {
-          ...POPULATED.compliance,
-          pilot_currency_status: [
-            { pilot_id: 1, pilot_name: 'Lapsed Larry', is_current: false, earliest_expires_date: null },
-            { pilot_id: 2, pilot_name: 'Soon Sam', is_current: true, earliest_expires_date: inDays(9) },
-          ],
-        },
-      })
-      renderWithProviders(<DashboardPage />, { role: 'admin' })
-
-      expect(await screen.findByText('LAPSED')).toBeInTheDocument()
-      expect(badgeFor('LAPSED')).toContain('red')
-      expect(badgeFor('9d')).toContain('amber')
-    })
   })
 
-  describe('currency risk tile', () => {
-    it('points at settings when no currency rule is configured', async () => {
-      mockDashboard({
-        ...POPULATED,
-        compliance: { ...POPULATED.compliance, currency_rules_active: 0 },
-      })
-      renderWithProviders(<DashboardPage />, { role: 'admin' })
-
-      expect(await screen.findByText(/No rules defined/)).toBeInTheDocument()
-      expect(screen.getByRole('link', { name: 'Set up rules' })).toBeInTheDocument()
-    })
-
-    it('says everyone is current when the rules exist and nobody is failing', async () => {
-      mockDashboard({
-        ...POPULATED,
-        compliance: { ...POPULATED.compliance, pilot_currency_status: [] },
-      })
-      renderWithProviders(<DashboardPage />, { role: 'admin' })
-
-      expect(await screen.findByText('All pilots current')).toBeInTheDocument()
-    })
+  it('has no Currency Risk tile and no currency note in the hero', async () => {
+    mockDashboard(POPULATED)
+    renderWithProviders(<DashboardPage />, { role: 'admin' })
+    expect(await screen.findByText(/7 active pilots/)).toBeInTheDocument()
+    expect(screen.queryByText('Currency Risk')).toBeNull()
+    expect(screen.queryByText(/currency/i)).toBeNull()
   })
 
   // "1 expired cert", not "1 expired certs". The negative lookahead matters:
@@ -364,14 +298,14 @@ describe('DashboardPage', () => {
       http.get('/api/flights', () => { asked.push('flights'); return HttpResponse.json({ flights: [] }) }),
     )
     renderWithProviders(<DashboardPage />, { role: 'pilot', permissions: { 'flights.view': 'no' } })
-    expect(await screen.findByText(/6 of 7 pilots current/)).toBeInTheDocument()
+    expect(await screen.findByText(/7 active pilots/)).toBeInTheDocument()
     expect(asked).toEqual([])
   })
 
   it('hides the location control without fleet.location', async () => {
     mockDashboard(POPULATED)
     renderWithProviders(<DashboardPage />, { role: 'viewer' })
-    await screen.findByText(/6 of 7 pilots current/)
+    await screen.findByText(/7 active pilots/)
     expect(screen.queryByText('Set location…')).toBeNull()
   })
 
@@ -398,7 +332,7 @@ describe('DashboardPage', () => {
       http.get('/api/requirements/flags', () => { asked.push('flags'); return HttpResponse.json({}) }),
     )
     renderWithProviders(<DashboardPage />, { role: 'viewer', permissions: { 'requirements.view': 'no' } })
-    await screen.findByText(/6 of 7 pilots current/)
+    await screen.findByText(/7 active pilots/)
     expect(screen.queryByRole('heading', { name: 'This Period' })).toBeNull()
     expect(asked).toEqual([])
   })
@@ -407,5 +341,106 @@ describe('DashboardPage', () => {
     mockDashboard({ ...POPULATED, locations: [{ vehicle_id: 1, label: 'Falcon', location_text: 'Base' }] })
     renderWithProviders(<DashboardPage />, { role: 'pilot' })
     expect(await screen.findByLabelText('Set location for Falcon')).toBeInTheDocument()
+  })
+
+  describe('arranging', () => {
+    const SAVED = { order: ['locations', 'recent-flights'], hidden: ['activity'] }
+
+    function headings() {
+      return screen.getAllByRole('heading', { level: 3 }).map(h => h.textContent.trim())
+    }
+
+    it("shows the user's own layout", async () => {
+      mockDashboard(POPULATED)
+      renderWithProviders(<DashboardPage />, { user: { id: 1, username: 'p', role: 'pilot', dashboard_layout: SAVED } })
+      await screen.findByText(/7 active pilots/)
+      expect(headings().slice(0, 2)).toEqual(['Locations', 'Recent Flights'])
+      expect(screen.queryByRole('heading', { name: /Activity by Month/ })).toBeNull()
+    })
+
+    it('uses the unit default without a layout of their own', async () => {
+      mockDashboard(POPULATED)
+      server.use(http.get('/api/settings/default_dashboard_layout', () =>
+        HttpResponse.json({ key: 'default_dashboard_layout', value: JSON.stringify({ order: ['top-vehicles'], hidden: [] }) })))
+      renderWithProviders(<DashboardPage />, { role: 'pilot' })
+      await screen.findByText(/7 active pilots/)
+      await vi.waitFor(() => expect(headings()[0]).toBe('Top Vehicles (30d)'))
+    })
+
+    it('saves the arrangement to the account', async () => {
+      const bodies = []
+      mockDashboard(POPULATED)
+      server.use(http.patch('/api/auth/me', async ({ request }) => {
+        const body = await request.json()
+        bodies.push(body)
+        return HttpResponse.json({ id: 1, username: 'p', role: 'pilot', ...body })
+      }))
+      const { user } = renderWithProviders(<DashboardPage />, { role: 'pilot' })
+      await screen.findByText(/7 active pilots/)
+      await user.click(screen.getByRole('button', { name: 'Edit layout' }))
+      await user.click(screen.getByRole('switch', { name: 'Show Locations' }))
+      await user.click(screen.getByRole('button', { name: 'Save' }))
+      await screen.findByRole('button', { name: 'Edit layout' })
+      expect(bodies).toHaveLength(1)
+      expect(bodies[0].dashboard_layout.hidden).toEqual(['locations'])
+      expect(screen.queryByRole('heading', { name: 'Locations' })).toBeNull()
+    })
+
+    it('lets an admin save the unit default', async () => {
+      const puts = []
+      mockDashboard(POPULATED)
+      server.use(http.put('/api/settings', async ({ request }) => {
+        puts.push(await request.json())
+        return HttpResponse.json({ ok: true })
+      }))
+      const { user } = renderWithProviders(<DashboardPage />, { role: 'admin' })
+      await screen.findByText(/7 active pilots/)
+      await user.click(screen.getByRole('button', { name: 'Edit layout' }))
+      await user.click(screen.getByRole('button', { name: 'Save as unit default' }))
+      await screen.findByRole('button', { name: 'Edit layout' })
+      expect(puts[0].key).toBe('default_dashboard_layout')
+      expect(JSON.parse(puts[0].value).order).toContain('this-period')
+    })
+
+    it('confirms the unit default with a toast', async () => {
+      mockDashboard(POPULATED)
+      server.use(http.put('/api/settings', () => HttpResponse.json({ ok: true })))
+      const { user } = renderWithProviders(<DashboardPage />, { role: 'admin' })
+      await screen.findByText(/7 active pilots/)
+      await user.click(screen.getByRole('button', { name: 'Edit layout' }))
+      await user.click(screen.getByRole('button', { name: 'Save as unit default' }))
+      expect(await screen.findByText('Saved as the unit default')).toBeInTheDocument()
+    })
+
+    it('tells an admin with their own layout that it still applies to them', async () => {
+      mockDashboard(POPULATED)
+      server.use(http.put('/api/settings', () => HttpResponse.json({ ok: true })))
+      const { user } = renderWithProviders(<DashboardPage />, {
+        user: { id: 1, username: 'a', role: 'admin', dashboard_layout: SAVED },
+      })
+      await screen.findByText(/7 active pilots/)
+      await user.click(screen.getByRole('button', { name: 'Edit layout' }))
+      await user.click(screen.getByRole('button', { name: 'Save as unit default' }))
+      expect(await screen.findByText(/Your own layout still applies to you/)).toBeInTheDocument()
+    })
+
+    it('offers no unit default to a pilot', async () => {
+      mockDashboard(POPULATED)
+      const { user } = renderWithProviders(<DashboardPage />, { role: 'pilot' })
+      await screen.findByText(/7 active pilots/)
+      await user.click(screen.getByRole('button', { name: 'Edit layout' }))
+      expect(screen.queryByRole('button', { name: 'Save as unit default' })).toBeNull()
+    })
+
+    it('keeps This Period off without requirements.view, even when editing', async () => {
+      mockDashboard(POPULATED)
+      const { user } = renderWithProviders(<DashboardPage />, {
+        role: 'viewer', permissions: { 'requirements.view': 'no' },
+      })
+      await screen.findByText(/7 active pilots/)
+      await user.click(screen.getByRole('button', { name: 'Edit layout' }))
+      expect(screen.queryByRole('switch', { name: 'Show This Period' })).toBeNull()
+      expect(screen.getByRole('switch', { name: 'Show Locations' })).toBeInTheDocument()
+    })
   })
 })

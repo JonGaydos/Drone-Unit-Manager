@@ -1,7 +1,8 @@
 """Flight requirements: definitions, each pilot's progress, excusals, templates and settings.
 
 Read routes that show results save the periods whose grace time has ended
-first, so a page never shows a period as pending once it should be saved.
+first, so a page never shows a period as pending once it should be saved, and
+record rolling lapses first, so a lapse shows from the first page that sees it.
 """
 
 import logging
@@ -12,13 +13,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.deps import DBSession
 from app.models.flight_requirement import (
-    FlightRequirement, FlightRequirementModel, FlightRequirementPilot, FlightRequirementPurpose,
-    FlightRequirementResult, FlightRequirementTemplate,
+    FlightRequirement, FlightRequirementExcusal, FlightRequirementLapse, FlightRequirementModel,
+    FlightRequirementPilot, FlightRequirementPurpose, FlightRequirementResult, FlightRequirementTemplate,
 )
 from app.models.pilot import Pilot
 from app.models.setting import Setting
@@ -36,12 +36,15 @@ from app.services.requirement_eval import (
     EXCUSED, MET, MISSED, PilotProgress, UnitEvalSettings, assigned_pilots, evaluate_period,
     unit_eval_settings,
 )
+from app.services.requirement_lapses import ROLLING
 from app.services.requirement_notify import EMAILS_ENABLED_KEY, emails_enabled, notify_assigned
 from app.services.requirement_periods import Period, period_containing
 from app.services.requirement_results import (
-    close_due_periods, closed_watermark, open_misses, pending_periods, recalculate_period, requirements_score,
+    closed_watermark, open_misses, pending_periods, recalculate_period, requirements_score,
     saved_through, switched_off,
 )
+from app.services.requirement_rolling import RollingProgress, evaluate_rolling, rolling_window
+from app.services.requirement_standing import close_safely, refresh_requirements, sync_safely
 
 logger = logging.getLogger(__name__)
 
@@ -57,18 +60,11 @@ TEMPLATE_NOT_FOUND = "Template not found"
 LIST_FIELDS = ("models", "purposes", "pilot_ids")
 SCALAR_FIELDS = tuple(name for name in RequirementIn.model_fields if name not in LIST_FIELDS)
 DERIVED_FIELDS = (*LIST_FIELDS, "current_period")
+# Cleared from the stored definition when an edit turns a requirement rolling or
+# back, so the edit need not send them: rolling has neither, periodic recurs by default.
+ROLLING_CLEARED = ("recurring", "end_date")
 GRACE_KEY = "requirements_grace_days"
 FISCAL_KEY = "fiscal_year_start_month"
-
-
-def _close_safely(db: Session, today: date) -> None:
-    """Save due periods. When the scheduler saves the same period at the same
-    moment, the unique index refuses the second writer; its rows are already
-    saved, so roll back and carry on."""
-    try:
-        close_due_periods(db, today)
-    except IntegrityError:
-        db.rollback()
 
 
 def _notify_safely(db: Session, req: FlightRequirement, pilot_ids: list[int]) -> None:
@@ -135,8 +131,13 @@ def _edited(req: FlightRequirement, data: RequirementUpdate) -> RequirementIn:
     current = {name: getattr(req, name) for name in SCALAR_FIELDS}
     current.update(models=_ordered(req.models, "model"), purposes=_ordered(req.purposes, "purpose"),
                    pilot_ids=_ordered(req.pilots, "pilot_id"))
+    changes = data.model_dump(exclude_unset=True)
+    period_type = changes.get("period_type", req.period_type)
+    if period_type != req.period_type and ROLLING in (period_type, req.period_type):
+        for name in ROLLING_CLEARED:
+            current.pop(name)
     try:
-        return RequirementIn.model_validate({**current, **data.model_dump(exclude_unset=True)})
+        return RequirementIn.model_validate({**current, **changes})
     except ValidationError as e:
         raise RequestValidationError([
             {**error, "loc": ("body", *error["loc"])}
@@ -222,13 +223,13 @@ def update_requirement(requirement_id: int, data: RequirementUpdate, db: DBSessi
     today = local_today(db)
     switching = edited.is_active != req.is_active
     if switching:
-        _close_safely(db, today)
+        close_safely(db, today)
     before = set(_assigned_ids(db, req))
     _apply(db, req, edited)
     req.modified_by_id = user.id
     db.commit()
     if switching and edited.is_active:
-        _close_safely(db, today)
+        close_safely(db, today)
     db.refresh(req)
     _notify_safely(db, req, [pilot_id for pilot_id in _assigned_ids(db, req) if pilot_id not in before])
     return _out(req, unit_eval_settings(db).fiscal_start_month, today)
@@ -236,9 +237,10 @@ def update_requirement(requirement_id: int, data: RequirementUpdate, db: DBSessi
 
 @router.delete("/{requirement_id}", responses=responses(401, 403, 404, 409))
 def delete_requirement(requirement_id: int, db: DBSession, user: ManageUser):
-    """Delete a requirement with no saved results; one with history is switched off instead."""
+    """Delete a requirement with no saved results or lapses; one with history is switched off instead."""
     req = _get_requirement(db, requirement_id)
-    if saved_through(db, req.id) is not None:
+    has_lapses = db.query(FlightRequirementLapse.id).filter_by(requirement_id=req.id).first() is not None
+    if has_lapses or saved_through(db, req.id) is not None:
         raise HTTPException(409, "This requirement has saved results. Switch it off instead.")
     db.delete(req)
     db.commit()
@@ -252,7 +254,7 @@ def _pilot_names(db: Session) -> dict[int, str]:
     return {pilot.id: pilot.full_name for pilot in db.query(Pilot)}
 
 
-def _progress_out(progress: PilotProgress, name: str) -> dict:
+def _progress_out(progress: PilotProgress | RollingProgress, name: str) -> dict:
     return {**vars(progress), "pilot_name": name}
 
 
@@ -272,29 +274,49 @@ def _period_progress(db: Session, req: FlightRequirement, period: Period, settin
             "pilots": [_progress_out(p, names.get(p.pilot_id, "")) for p in progress.values()]}
 
 
+def _window(req: FlightRequirement, today: date) -> dict:
+    start, end = rolling_window(today, req.span_length, req.span_unit)
+    return {"window_start": start, "window_end": end}
+
+
+def _rolling_progress(db: Session, req: FlightRequirement, today: date, names: dict[int, str]) -> dict:
+    progress = evaluate_rolling(db, req, today)
+    return {**_window(req, today), "pilots": [_progress_out(p, names.get(p.pilot_id, "")) for p in progress.values()]}
+
+
 def _requirement_status(db: Session, req: FlightRequirement, settings: UnitEvalSettings, today: date,
                         names: dict[int, str]) -> dict:
-    current = _current(req, settings.fiscal_start_month, today)
-    return {
-        "requirement_id": req.id, "name": req.name, "target_minutes": req.target_minutes,
-        "target_flights": req.target_flights, "model_mode": req.model_mode,
-        "current_period": _period_progress(db, req, current, settings, today, names) if current else None,
-        "pending_periods": [_period_progress(db, req, period, settings, today, names)
-                            for period in pending_periods(db, req, settings, today)],
+    """A periodic requirement's current and pending periods; a rolling one's window, with no periods."""
+    row = {
+        "requirement_id": req.id, "name": req.name, "period_type": req.period_type,
+        "target_minutes": req.target_minutes, "target_flights": req.target_flights, "model_mode": req.model_mode,
+        "current_period": None, "pending_periods": [], "rolling": None,
     }
+    if req.period_type == ROLLING:
+        row["rolling"] = _rolling_progress(db, req, today, names)
+        return row
+    current = _current(req, settings.fiscal_start_month, today)
+    if current:
+        row["current_period"] = _period_progress(db, req, current, settings, today, names)
+    row["pending_periods"] = [_period_progress(db, req, period, settings, today, names)
+                              for period in pending_periods(db, req, settings, today)]
+    return row
 
 
 @router.get("/status", response_model=StatusOut, responses=responses(401, 403))
 def requirements_status(db: DBSession, user: ViewUser):
     """The current period of each active requirement, and the periods still in
-    their grace time, with every assigned pilot's progress; and the Requirements score."""
+    their grace time, or for a rolling one today's window, with every assigned
+    pilot's progress; the Requirements score; and how many requirements are
+    switched off."""
     today = local_today(db)
-    _close_safely(db, today)
+    refresh_requirements(db, today)
     settings = unit_eval_settings(db)
     names = _pilot_names(db)
     return {
         "score": requirements_score(db, today),
         "requirements": [_requirement_status(db, req, settings, today, names) for req in _active_requirements(db)],
+        "inactive_count": db.query(FlightRequirement).filter(FlightRequirement.is_active.is_(False)).count(),
     }
 
 
@@ -322,6 +344,29 @@ def _pilot_progress(db: Session, pilot: Pilot, settings: UnitEvalSettings, today
     return [row for row in current if row is not None], pending
 
 
+def _pilot_rolling(db: Session, pilot: Pilot, today: date) -> list[dict]:
+    """The pilot's standing on each active rolling requirement assigned to them."""
+    rows = []
+    for req in _active_requirements(db):
+        progress = evaluate_rolling(db, req, today).get(pilot.id) if req.period_type == ROLLING else None
+        if progress is not None:
+            rows.append({**_progress_out(progress, pilot.full_name), "requirement_id": req.id, "name": req.name,
+                         **_window(req, today)})
+    return rows
+
+
+def _pilot_lapses(db: Session, pilot_id: int) -> list[dict]:
+    rows = (
+        db.query(FlightRequirementLapse, FlightRequirement.name)
+        .join(FlightRequirement, FlightRequirement.id == FlightRequirementLapse.requirement_id)
+        .filter(FlightRequirementLapse.pilot_id == pilot_id)
+        .order_by(FlightRequirementLapse.lapsed_on.desc(), FlightRequirement.name)
+        .all()
+    )
+    return [{"lapse_id": row.id, "requirement_id": row.requirement_id, "name": name, "lapsed_on": row.lapsed_on,
+             "recovered_on": row.recovered_on} for row, name in rows]
+
+
 def _pilot_history(db: Session, pilot_id: int) -> list[dict]:
     rows = (
         db.query(FlightRequirementResult, FlightRequirement.name)
@@ -341,20 +386,22 @@ def _pilot_history(db: Session, pilot_id: int) -> list[dict]:
 @router.get("/pilots/{pilot_id}", response_model=PilotRequirementsOut, responses=responses(401, 403, 404))
 def pilot_requirements(pilot_id: int, db: DBSession, user: ViewUser):
     """One pilot's progress in each active requirement's current period and in
-    periods still in grace time, and their saved results, newest first."""
+    periods still in grace time, and their saved results, newest first; their
+    standing on each rolling requirement, and their lapses, newest first."""
     today = local_today(db)
-    _close_safely(db, today)
+    refresh_requirements(db, today)
     pilot = db.get(Pilot, pilot_id)
     if pilot is None:
         raise HTTPException(404, "Pilot not found")
     current, pending = _pilot_progress(db, pilot, unit_eval_settings(db), today)
-    return {"pilot_id": pilot.id, "current": current, "pending": pending, "history": _pilot_history(db, pilot.id)}
+    return {"pilot_id": pilot.id, "current": current, "pending": pending, "history": _pilot_history(db, pilot.id),
+            "rolling": _pilot_rolling(db, pilot, today), "lapses": _pilot_lapses(db, pilot.id)}
 
 
 @router.get("/flags", response_model=dict[int, list[FlagOut]], responses=responses(401, 403))
 def requirement_flags(db: DBSession, user: ViewUser):
-    """Per pilot, the saved misses still flagged, with the pilot's name."""
-    _close_safely(db, local_today(db))
+    """Per pilot, the saved misses still flagged and the open lapses, with the pilot's name."""
+    refresh_requirements(db, local_today(db))
     flags = open_misses(db)
     names = {pilot.id: pilot.full_name for pilot in db.query(Pilot).filter(Pilot.id.in_(flags))}
     return {pilot_id: [{**flag, "pilot_name": names[pilot_id]} for flag in found]
@@ -413,12 +460,31 @@ def _excuse_open(db: Session, req: FlightRequirement, data: ExcuseIn, user: User
     row.excused_reason = data.reason if data.excused else None
 
 
-@router.post("/{requirement_id}/excuse", responses=responses(401, 403, 404))
-def excuse_pilot(requirement_id: int, data: ExcuseIn, db: DBSession, user: ExcuseUser):
+def _excuse_rolling(db: Session, req: FlightRequirement, data: ExcuseIn, user: User) -> None:
+    """Excuse a pilot from a rolling requirement through a date, or remove the excusal."""
+    if "excused_until" not in data.model_fields_set:
+        raise HTTPException(422, "Set excused_until, or null to remove the excusal")
+    row = db.query(FlightRequirementExcusal).filter_by(requirement_id=req.id, pilot_id=data.pilot_id).first()
+    if data.excused_until is None:
+        if row is not None:
+            db.delete(row)
+        return
+    if data.excused_until < local_today(db):
+        raise HTTPException(422, "An excusal must last until today or later")
+    if data.pilot_id not in {pilot.id for pilot in assigned_pilots(db, req)}:
+        raise HTTPException(422, "That pilot is not assigned to this requirement")
+    if row is None:
+        row = FlightRequirementExcusal(requirement_id=req.id, pilot_id=data.pilot_id)
+        db.add(row)
+    row.excused_until = data.excused_until
+    row.reason = data.reason
+    row.excused_by_id = user.id
+
+
+def _excuse_period(db: Session, req: FlightRequirement, data: ExcuseIn, user: User) -> None:
     """Excuse or un-excuse a pilot for one period, open or saved."""
-    req = _get_requirement(db, requirement_id)
-    if db.get(Pilot, data.pilot_id) is None:
-        raise HTTPException(404, "Pilot not found")
+    if data.period_start is None or data.excused is None:
+        raise HTTPException(422, "Set period_start and excused")
     saved = db.query(FlightRequirementResult).filter(
         FlightRequirementResult.requirement_id == req.id, FlightRequirementResult.pilot_id == data.pilot_id,
         FlightRequirementResult.period_start == data.period_start, FlightRequirementResult.saved_at.isnot(None),
@@ -427,6 +493,39 @@ def excuse_pilot(requirement_id: int, data: ExcuseIn, db: DBSession, user: Excus
         _excuse_saved(saved, data, user)
     else:
         _excuse_open(db, req, data, user)
+
+
+@router.post("/{requirement_id}/excuse", responses=responses(401, 403, 404))
+def excuse_pilot(requirement_id: int, data: ExcuseIn, db: DBSession, user: ExcuseUser):
+    """Excuse or un-excuse a pilot: for one period, open or saved, or from a
+    rolling requirement until a date."""
+    req = _get_requirement(db, requirement_id)
+    if db.get(Pilot, data.pilot_id) is None:
+        raise HTTPException(404, "Pilot not found")
+    if req.period_type != ROLLING:
+        _excuse_period(db, req, data, user)
+        db.commit()
+        return {"ok": True}
+    _excuse_rolling(db, req, data, user)
+    db.commit()
+    if req.is_active:
+        # An open lapse closes, or one opens again, at once.
+        sync_safely(db, local_today(db), req)
+    return {"ok": True}
+
+
+@router.delete("/{requirement_id}/lapses/{lapse_id}", responses=responses(401, 403, 404, 422))
+def delete_lapse(requirement_id: int, lapse_id: int, db: DBSession, user: ManageUser):
+    """Delete a closed lapse record caused by data later corrected. Admins
+    only; the delete is audited. An open lapse would only open again."""
+    if user.role != "admin":
+        raise HTTPException(403, "Only an admin can delete a lapse")
+    lapse = db.get(FlightRequirementLapse, lapse_id)
+    if lapse is None or lapse.requirement_id != requirement_id:
+        raise HTTPException(404, "Lapse not found")
+    if lapse.recovered_on is None:
+        raise HTTPException(422, "Only a closed lapse can be deleted")
+    db.delete(lapse)
     db.commit()
     return {"ok": True}
 
@@ -465,7 +564,7 @@ def get_requirement_settings(db: DBSession, user: ViewUser):
 @router.put("/settings", response_model=RequirementSettings, responses=responses(401, 403))
 def put_requirement_settings(data: RequirementSettings, db: DBSession, user: ManageUser):
     """Save the settings, after saving the periods due under the old ones."""
-    _close_safely(db, local_today(db))
+    close_safely(db, local_today(db))
     values = ((GRACE_KEY, str(data.grace_days)), (FISCAL_KEY, str(data.fiscal_year_start_month)),
               (EMAILS_ENABLED_KEY, "true" if data.emails_enabled else "false"))
     for key, value in values:

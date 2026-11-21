@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Navigate, useSearchParams } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Modal } from '@/components/ui/Modal'
-import FleetModelPicker from '@/components/FleetModelPicker'
 import RolePermissionsGrid from '@/components/settings/RolePermissionsGrid'
 import DigestPreferencesCard from '@/components/settings/DigestPreferencesCard'
 import { useConfirm } from '@/hooks/useConfirm'
@@ -18,7 +17,6 @@ import { SIDEBAR_META, GROUP_ORDER } from '@/lib/sidebarNav'
 
 const IntegrationsContent = React.lazy(() => import('@/pages/IntegrationsPage'))
 const ApiTokensSection = React.lazy(() => import('@/components/ApiTokensSection'))
-const RequirementsTab = React.lazy(() => import('@/components/requirements/RequirementsTab'))
 
 const DEFAULT_PLACES = ['North', 'Central', 'South']
 
@@ -36,8 +34,9 @@ function parseJsonSetting(raw, fallback) {
   try { return JSON.parse(raw) } catch { return fallback }
 }
 
-// Merge a saved sidebar config over the shared nav metadata: new items appear,
-// saved visibility/order win, and each item keeps its group (so the editor can
+// Merge a saved sidebar config over the shared nav metadata: new items are
+// appended after the saved ones (as the sidebar shows them), saved
+// visibility/order win, and each item keeps its group (so the editor can
 // present the same grouping the sidebar renders). Returns defaults for a missing
 // or invalid config.
 function buildSidebarItems(rawConfig) {
@@ -51,7 +50,7 @@ function buildSidebarItems(rawConfig) {
     return {
       ...item,
       visible: existing ? existing.visible !== false : true,
-      order: existing ? existing.order : i,
+      order: existing ? existing.order : parsed.length + i,
     }
   }).sort((a, b) => a.order - b.order)
 }
@@ -77,7 +76,14 @@ function NoLinkedPilotBadge({ user }) {
 }
 
 export default function SettingsPage() {
-  // A tab can be linked to, e.g. /settings?tab=requirements.
+  const [searchParams] = useSearchParams()
+  // Flight Requirements was a Settings tab before it moved to Compliance; old links still land there.
+  if (searchParams.get('tab') === 'requirements') return <Navigate to="/compliance?tab=requirements" replace />
+  return <SettingsTabs />
+}
+
+function SettingsTabs() {
+  // A tab can be linked to, e.g. /settings?tab=users.
   const [searchParams] = useSearchParams()
   const [requestedTab, setRequestedTab] = useState(() => searchParams.get('tab') || 'general')
   const [settings, setSettings] = useState({})
@@ -133,20 +139,6 @@ export default function SettingsPage() {
   const [savingSidebar, setSavingSidebar] = useState(false)
   const [showSidebarGroups, setShowSidebarGroups] = useState(true)
   const [draggedIdx, setDraggedIdx] = useState(null)
-
-  // Currency rules state
-  const canManageCurrency = can('certifications.manage')
-  const [currencyRules, setCurrencyRules] = useState([])
-  const [fleetModels, setFleetModels] = useState(null)
-  const [fleetModelsFailed, setFleetModelsFailed] = useState(false)
-  const [editingRule, setEditingRule] = useState(null)
-  const [savingRule, setSavingRule] = useState(false)
-  const ruleSubmitLabel = editingRule?.id ? 'Save' : 'Create'
-  const [ruleForm, setRuleForm] = useState({
-    name: '', description: '', vehicle_models: [],
-    required_hours: 5, period_days: 90,
-    required_flights: '', is_active: true,
-  })
 
   // Certification status labels state
   const [certLabels, setCertLabels] = useState({})
@@ -401,82 +393,7 @@ export default function SettingsPage() {
       api.get('/auth/users').then(setUsers).catch(console.error)
       api.get('/pilots').then(setPilots).catch(console.error)
     }
-    if (canManageCurrency) {
-      api.get('/currency/rules').then(setCurrencyRules).catch(console.error)
-      api.get('/currency/models').then(setFleetModels).catch(err => {
-        console.error(err)
-        setFleetModelsFailed(true)
-      })
-    }
-  }, [isAdmin, canManageCurrency])
-
-  const openNewRule = () => {
-    setRuleForm({ name: '', description: '', vehicle_models: [], required_hours: 5, period_days: 90, required_flights: '', is_active: true })
-    setEditingRule({})
-  }
-
-  const openEditRule = (rule) => {
-    setRuleForm({
-      name: rule.name || '',
-      description: rule.description || '',
-      vehicle_models: rule.vehicle_models || [],
-      required_hours: rule.required_hours,
-      period_days: rule.period_days,
-      required_flights: rule.required_flights ?? '',
-      is_active: rule.is_active,
-    })
-    setEditingRule(rule)
-  }
-
-  const handleSaveRule = async () => {
-    if (!ruleForm.name?.trim()) { toast.error('Name is required'); return }
-    const hrs = Number.parseFloat(ruleForm.required_hours)
-    const days = Number.parseInt(ruleForm.period_days, 10)
-    if (!hrs || hrs <= 0) { toast.error('Required hours must be > 0'); return }
-    if (!days || days <= 0 || days > 3650) { toast.error('Period must be 1 to 3650 days'); return }
-    setSavingRule(true)
-    try {
-      const payload = {
-        name: ruleForm.name.trim(),
-        description: ruleForm.description?.trim() || null,
-        vehicle_models: ruleForm.vehicle_models,
-        required_hours: hrs,
-        period_days: days,
-        required_flights: ruleForm.required_flights === '' || ruleForm.required_flights == null ? null : Number.parseInt(ruleForm.required_flights, 10),
-        is_active: ruleForm.is_active,
-      }
-      if (editingRule?.id) {
-        await api.patch(`/currency/rules/${editingRule.id}`, payload)
-      } else {
-        await api.post('/currency/rules', payload)
-      }
-      setCurrencyRules(await api.get('/currency/rules'))
-      setEditingRule(null)
-      toast.success(editingRule?.id ? 'Rule updated' : 'Rule created')
-    } catch (err) {
-      toast.error(err.message)
-    } finally {
-      setSavingRule(false)
-    }
-  }
-
-  const handleDeleteRule = (rule) => {
-    requestConfirm({
-      title: 'Delete currency rule?',
-      message: `Delete "${rule.name}"? Pilot currency status calculations will stop using this rule.`,
-      confirmLabel: 'Delete',
-      confirmVariant: 'danger',
-      onConfirm: async () => {
-        try {
-          await api.delete(`/currency/rules/${rule.id}`)
-          setCurrencyRules(prev => prev.filter(r => r.id !== rule.id))
-          toast.success('Rule deleted')
-        } catch (err) {
-          toast.error(err.message)
-        }
-      },
-    })
-  }
+  }, [isAdmin])
 
   const handleAddUser = async (e) => {
     e.preventDefault()
@@ -631,7 +548,6 @@ export default function SettingsPage() {
     ...(isAdmin ? [{ id: 'users', label: 'Users' }] : []),
     ...(isAdmin ? [{ id: 'integrations', label: 'Integrations' }] : []),
     ...(isAdmin ? [{ id: 'api-tokens', label: 'API Tokens' }] : []),
-    ...(can('requirements.manage') ? [{ id: 'requirements', label: 'Flight Requirements' }] : []),
   ]
   // A linked or remembered tab the user cannot see falls back to General.
   const activeTab = TABS.some(tab => tab.id === requestedTab) ? requestedTab : 'general'
@@ -1184,65 +1100,6 @@ export default function SettingsPage() {
     )
   }
 
-  const renderCurrencyRules = () => {
-    if (!canManageCurrency) return null
-    return (
-        <div className="bg-card border border-border rounded-xl p-6">
-          <div className="flex items-center justify-between mb-1">
-            <h3 className="text-lg font-semibold text-foreground">Currency Rules</h3>
-            <button
-              onClick={openNewRule}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:opacity-90"
-            >
-              <UserPlus className="w-3.5 h-3.5" /> New Rule
-            </button>
-          </div>
-          <p className="text-sm text-muted-foreground mb-4">
-            Define how many flight hours (and optionally how many flights) pilots must log within a rolling period to stay current. Each rule appears on the pilot detail page's Currency Status section. Choose the models a rule covers from your fleet. With no model selected, the rule applies to all aircraft.
-          </p>
-          {currencyRules.length === 0 ? (
-            <p className="text-sm text-muted-foreground italic px-3 py-4 bg-muted/30 rounded-lg text-center">
-              No rules defined yet. Without rules, every pilot shows as "current" by default. Click <strong>New Rule</strong> to add your first one (e.g. "5 hours per 90 days").
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {currencyRules.map(r => (
-                <div key={r.id} className="flex items-center gap-3 px-3 py-2 bg-muted/30 rounded-lg">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground">
-                      {r.name}
-                      {!r.is_active && <span className="ml-2 text-xs text-muted-foreground">(inactive)</span>}
-                    </p>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {r.required_hours}h
-                      {r.required_flights ? ` and ${r.required_flights} flights` : ''}
-                      {' '}per {r.period_days} days
-                      {r.vehicle_models?.length > 0 && ` · ${r.vehicle_models.join(', ')} only`}
-                      {r.description && ` · ${r.description}`}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => openEditRule(r)}
-                    className="p-1.5 text-muted-foreground hover:text-foreground rounded hover:bg-accent/30"
-                    title="Edit rule"
-                  >
-                    <Edit2 className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteRule(r)}
-                    className="p-1.5 text-red-400 hover:text-red-300 rounded hover:bg-red-500/10"
-                    title="Delete rule"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-    )
-  }
-
   const renderChangePassword = () => (
     <div className="bg-card border border-border rounded-xl p-6">
       <form onSubmit={handleChangePassword}>
@@ -1539,93 +1396,6 @@ export default function SettingsPage() {
     )
   }
 
-  const renderCurrencyModal = () => {
-    if (!editingRule) return null
-    return (
-        <Modal open onClose={() => setEditingRule(null)} title={editingRule.id ? 'Edit Currency Rule' : 'New Currency Rule'} className="max-w-md">
-            <div className="space-y-3">
-              <div>
-                <label htmlFor="rule-name" className="block text-sm font-medium text-foreground mb-1">Name</label>
-                <input
-                  id="rule-name" type="text" value={ruleForm.name}
-                  onChange={e => setRuleForm({ ...ruleForm, name: e.target.value })}
-                  placeholder="e.g. Quarterly currency"
-                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-              </div>
-              <div>
-                <label htmlFor="rule-desc" className="block text-sm font-medium text-foreground mb-1">Description (optional)</label>
-                <input
-                  id="rule-desc" type="text" value={ruleForm.description}
-                  onChange={e => setRuleForm({ ...ruleForm, description: e.target.value })}
-                  placeholder="Short note shown next to the rule"
-                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-              </div>
-              <div>
-                <span id="rule-models-label" className="block text-sm font-medium text-foreground mb-1">Vehicle models</span>
-                <FleetModelPicker
-                  models={fleetModels}
-                  loadError={fleetModelsFailed}
-                  labelledBy="rule-models-label"
-                  value={ruleForm.vehicle_models}
-                  onChange={vehicle_models => setRuleForm({ ...ruleForm, vehicle_models })}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label htmlFor="rule-hours" className="block text-sm font-medium text-foreground mb-1">Required hours</label>
-                  <input
-                    id="rule-hours" type="number" step="0.5" min="0" value={ruleForm.required_hours}
-                    onChange={e => setRuleForm({ ...ruleForm, required_hours: e.target.value })}
-                    className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="rule-days" className="block text-sm font-medium text-foreground mb-1">Period (days)</label>
-                  <input
-                    id="rule-days" type="number" min="1" max="3650" value={ruleForm.period_days}
-                    onChange={e => setRuleForm({ ...ruleForm, period_days: e.target.value })}
-                    className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                  />
-                </div>
-              </div>
-              <div>
-                <label htmlFor="rule-flights" className="block text-sm font-medium text-foreground mb-1">Minimum flights (optional)</label>
-                <input
-                  id="rule-flights" type="number" min="0" value={ruleForm.required_flights}
-                  onChange={e => setRuleForm({ ...ruleForm, required_flights: e.target.value })}
-                  placeholder="Leave blank if only hours matter"
-                  className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-              </div>
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox" checked={ruleForm.is_active}
-                  onChange={() => setRuleForm({ ...ruleForm, is_active: !ruleForm.is_active })}
-                  className="w-4 h-4 rounded border-border text-primary focus:ring-ring"
-                />
-                <span className="text-sm text-foreground">Active (include in pilot currency calculations)</span>
-              </label>
-              <div className="flex gap-2 pt-2">
-                <button
-                  onClick={handleSaveRule} disabled={savingRule}
-                  className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {savingRule ? <Loader2 className="w-4 h-4 animate-spin" /> : ruleSubmitLabel}
-                </button>
-                <button
-                  onClick={() => setEditingRule(null)}
-                  className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg text-sm hover:opacity-90"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-        </Modal>
-    )
-  }
-
   const renderEditUserModal = () => {
     if (!editUser) return null
     return (
@@ -1713,13 +1483,6 @@ export default function SettingsPage() {
       {/* Users Tab */}
       {renderUsersTab()}
 
-      {/* Flight Requirements Tab */}
-      {activeTab === 'requirements' && (
-        <React.Suspense fallback={<div className="flex items-center justify-center h-32"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>}>
-          <RequirementsTab />
-        </React.Suspense>
-      )}
-
       {/* General Tab */}
       {activeTab === 'general' && (
       <div className="space-y-6 max-w-2xl">
@@ -1736,13 +1499,11 @@ export default function SettingsPage() {
       {renderAutomatedBackups()}
       {renderSaveButton()}
       {renderApiDocs()}
-      {renderCurrencyRules()}
       {renderSidebarConfig()}
 
       </div>
       )}
 
-      {renderCurrencyModal()}
       {renderEditUserModal()}
 
       <ConfirmDialog {...confirmProps} />

@@ -114,6 +114,16 @@ describe('Sidebar Fleet Health link', () => {
   })
 })
 
+describe('Sidebar Compliance entry', () => {
+  it('has one Compliance entry and no separate Flight Requirements entry', async () => {
+    authAs('viewer')
+    renderWithProviders(<Sidebar mobileOpen={false} onMobileClose={() => {}} />, { role: 'viewer' })
+
+    expect(await screen.findByRole('link', { name: /Compliance/ })).toHaveAttribute('href', '/compliance')
+    expect(screen.queryByRole('link', { name: /Flight Requirements/ })).toBeNull()
+  })
+})
+
 describe('Sidebar active route', () => {
   it('marks the link for the current route active', async () => {
     authAs('admin')

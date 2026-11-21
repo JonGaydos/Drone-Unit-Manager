@@ -27,7 +27,7 @@ from app.services import permissions as permissions_service
 from app.services.audit_capture import set_actor
 from app.database import get_db
 from app.models.user import User
-from app.schemas.user import LoginRequest, LoginResponse, UserOut, UserCreate, UserUpdate, ChangePasswordRequest, AdminResetPasswordRequest, SetupRequest
+from app.schemas.user import LoginRequest, LoginResponse, UserOut, UserCreate, UserUpdate, ProfileUpdate, ChangePasswordRequest, AdminResetPasswordRequest, SetupRequest
 from app.responses import responses
 
 logger = logging.getLogger(__name__)
@@ -627,7 +627,7 @@ def get_me(user: Annotated[User, Depends(get_current_user)], db: DBSession):
 
 
 @router.patch("/me", response_model=UserOut, responses=responses(403))
-def update_me(data: UserUpdate, user: Annotated[User, Depends(get_current_user)], db: DBSession):
+def update_me(data: ProfileUpdate, user: Annotated[User, Depends(get_current_user)], db: DBSession):
     """Update the current user's own profile (theme, email). Only an admin may
     change a display name; sending the current one back is accepted."""
     from app.services.audit import compute_changes, log_action
@@ -639,6 +639,11 @@ def update_me(data: UserUpdate, user: Annotated[User, Depends(get_current_user)]
     changes = compute_changes(user, updates, ["display_name", "email"])
     for key, value in updates.items():
         setattr(user, key, value)
+    # Layouts are display preferences too; a sent null clears one back to the default.
+    for field in ("dashboard_layout", "analytics_layout"):
+        if field in data.model_fields_set:
+            layout = getattr(data, field)
+            setattr(user, field, layout.model_dump() if layout else None)
     if changes:
         log_action(db, user.id, user.display_name, "update", "user", user.id, user.display_name, changes=changes)
     db.commit()

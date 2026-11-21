@@ -65,7 +65,7 @@ def redact_audit_changes(changes):
 
 def redact_audit_details(details: str | None) -> str | None:
     """An audit entry's details with any email address hidden, such as the
-    recipients of a currency reminder."""
+    recipients of a reminder email."""
     if not details:
         return details
     return "".join(CONTACT_HIDDEN if "@" in part else part for part in _ADDRESS_BOUNDARY.split(details))

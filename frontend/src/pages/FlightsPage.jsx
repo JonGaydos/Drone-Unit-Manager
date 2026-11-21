@@ -9,6 +9,7 @@ import { Plus, Search, CheckCircle, ChevronUp, ChevronDown, Pencil, X, Check, Do
 import { Link } from 'react-router-dom'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Modal } from '@/components/ui/Modal'
+import { OperatingCost } from '@/components/OperatingCost'
 
 const FLIGHT_NUMBER_FIELDS = ['takeoff_lat', 'takeoff_lon', 'landing_lat', 'landing_lon', 'distance_m', 'operating_cost']
 
@@ -324,6 +325,8 @@ export default function FlightsPage() {
   // Bulk selection (needs flights.review): a Set of selected flight ids + action state.
   const [selectedIds, setSelectedIds] = useState(() => new Set())
   const [bulkBusy, setBulkBusy] = useState(false)
+  const bulkControlsOff = bulkBusy || selectedIds.size === 0
+  const bulkReason = selectedIds.size === 0 ? 'Select flights first' : undefined
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
   // The flight a row's delete control is asking to confirm.
   const [deleteTarget, setDeleteTarget] = useState(null)
@@ -622,26 +625,28 @@ export default function FlightsPage() {
         </div>
       </div>
 
-      {canReview && selectedIds.size > 0 && (
-        <div className="flex items-center gap-3 flex-wrap bg-primary/10 border border-primary/30 rounded-lg px-4 py-2">
+      {canReview && (
+        <div className="sticky top-14 lg:top-16 z-30 flex items-center gap-3 flex-wrap bg-card border border-primary/30 rounded-lg px-4 py-2">
           <span className="text-sm font-medium text-foreground">{selectedIds.size} selected</span>
-          {canBulkEdit && <select disabled={bulkBusy} value="" aria-label="Reassign pilot for selected flights"
+          {/* Kept in place (only hidden) once rows are ticked, so the bar does not reflow. */}
+          <span className={`text-xs text-muted-foreground ${selectedIds.size > 0 ? 'invisible' : ''}`}>Select flights to use these actions</span>
+          {canBulkEdit && <select disabled={bulkControlsOff} title={bulkReason} value="" aria-label="Reassign pilot for selected flights"
             onChange={e => { if (e.target.value) confirmBulkPilot(Number.parseInt(e.target.value, 10)) }}
             className="max-w-64 truncate px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm">
             <option value="">Reassign pilot…</option>
             {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
           </select>}
-          {canBulkEdit && <select disabled={bulkBusy} value="" aria-label="Set purpose for selected flights"
+          {canBulkEdit && <select disabled={bulkControlsOff} title={bulkReason} value="" aria-label="Set purpose for selected flights"
             onChange={e => { if (e.target.value) confirmBulkPurpose(e.target.value) }}
             className="max-w-64 truncate px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm">
             <option value="">Set purpose…</option>
             {sortByName(purposes, 'name').map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
           </select>}
-          <button disabled={bulkBusy} onClick={confirmBulkReviewed}
+          <button disabled={bulkControlsOff} title={bulkReason} onClick={confirmBulkReviewed}
             className="px-3 py-1 bg-emerald-600 text-white rounded text-sm font-medium hover:opacity-90 disabled:opacity-50">Mark reviewed</button>
-          {canBulkDelete && <button disabled={bulkBusy} onClick={() => setShowBulkDeleteConfirm(true)}
+          {canBulkDelete && <button disabled={bulkControlsOff} title={bulkReason} onClick={() => setShowBulkDeleteConfirm(true)}
             className="px-3 py-1 bg-destructive text-destructive-foreground rounded text-sm font-medium hover:opacity-90 disabled:opacity-50">Delete</button>}
-          <button disabled={bulkBusy} onClick={() => setSelectedIds(new Set())} className="ml-auto text-sm text-muted-foreground hover:text-foreground">Clear</button>
+          <button disabled={bulkControlsOff} title={bulkReason} onClick={() => setSelectedIds(new Set())} className="ml-auto text-sm text-muted-foreground hover:text-foreground">Clear</button>
         </div>
       )}
 
@@ -673,6 +678,7 @@ export default function FlightsPage() {
               <th className="text-right px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none" onClick={() => toggleSort('duration_seconds')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('duration_seconds'))() } }} tabIndex={0}>
                 Duration<SortIndicator column="duration_seconds" sortKey={sortKey} sortDir={sortDir} />
               </th>
+              <th className="text-right px-4 py-3 font-medium text-muted-foreground hidden lg:table-cell">Cost</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden lg:table-cell">Location</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none" onClick={() => toggleSort('review_status')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('review_status'))() } }} tabIndex={0}>
                 Status<SortIndicator column="review_status" sortKey={sortKey} sortDir={sortDir} />
@@ -705,6 +711,7 @@ export default function FlightsPage() {
                 </td>
                 <td className="px-4 py-3 text-foreground hidden md:table-cell">{f.purpose || <span className="text-amber-400">None</span>}</td>
                 <td className="px-4 py-3 text-right text-foreground">{formatDuration(f.duration_seconds)}</td>
+                <td className="px-4 py-3 text-right text-foreground whitespace-nowrap hidden lg:table-cell"><OperatingCost flight={f} /></td>
                 <td className="px-4 py-3 text-foreground truncate max-w-[200px] hidden lg:table-cell">{f.takeoff_address || '—'}</td>
                 <td className="px-4 py-3">
                   <div className="flex flex-col gap-0.5 items-start">
@@ -760,7 +767,7 @@ export default function FlightsPage() {
                 </td>
               </tr>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={canReview ? 10 : 9} className="px-4 py-12 text-center text-muted-foreground">No flights found</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={canReview ? 11 : 10} className="px-4 py-12 text-center text-muted-foreground">No flights found</td></tr>}
           </tbody>
         </table>
         </div>
@@ -854,6 +861,7 @@ function FlightEditRow({ f, editForm, setEditForm, pilots, purposes, onSave, onC
         <input type="number" min="0" value={editForm.duration_seconds} onChange={e => setEditForm({...editForm, duration_seconds: e.target.value})}
           className="w-20 px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm text-right" placeholder="sec" />
       </td>
+      <td className="px-4 py-2 text-right whitespace-nowrap hidden lg:table-cell text-foreground"><OperatingCost flight={f} /></td>
       <td className="px-4 py-2 hidden lg:table-cell text-foreground">{f.takeoff_address || '—'}</td>
       <td className="px-4 py-2">
         <div className="flex flex-col gap-0.5 items-start">

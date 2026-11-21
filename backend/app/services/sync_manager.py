@@ -1148,6 +1148,7 @@ class SyncManager:
         many flights returned telemetry points."""
         from app.models.telemetry import TelemetryPoint
         from app.database import TelemetrySessionLocal
+        from app.services.flight_track import fill_track_fields
 
         creds = _build_creds(db, "skydio")
         if not creds.api_token:
@@ -1180,6 +1181,7 @@ class SyncManager:
                     _store_telemetry_points(flight, telemetry_data, TelemetrySessionLocal, TelemetryPoint)
                 flight.telemetry_synced = True
                 flight.has_telemetry = bool(telemetry_data)
+                fill_track_fields(flight)
                 # Count only flights that returned points; one with none is
                 # still marked checked so it stops taking a slot.
                 if telemetry_data:

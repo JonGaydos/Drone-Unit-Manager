@@ -19,9 +19,7 @@ from app.models.user import User
 from app.routers.auth import require_permission
 from app.models.pilot import Pilot
 from app.models.flight import Flight
-from app.models.currency_rule import CurrencyRule
 from app.models.certification import PilotCertification, CertificationType
-from app.routers.currency import _pilot_currency
 from app.schemas.pilot import PilotCreate, PilotUpdate, PilotOut, PilotStats
 from app.responses import responses
 from app.services import permissions as permissions_service
@@ -105,7 +103,7 @@ def get_pilot_stats(pilot_id: int, db: DBSession, user: ViewUser, _flights: Flig
 
 @router.get("/{pilot_id}/needs-attention", responses=responses(401, 404))
 def get_pilot_needs_attention(pilot_id: int, db: DBSession, user: ViewUser, _certifications: CertificationsViewUser):
-    """Aggregate a pilot's lapsed currency and expired/expiring certifications.
+    """Aggregate a pilot's expired/expiring certifications and missed requirements.
 
     Single source of truth for the Pilot Detail "Needs Attention" card.
     """
@@ -114,17 +112,6 @@ def get_pilot_needs_attention(pilot_id: int, db: DBSession, user: ViewUser, _cer
         raise HTTPException(status_code=404, detail=PILOT_NOT_FOUND)
 
     items = []
-
-    # Currency: any active rule the pilot is not current on.
-    rules = db.query(CurrencyRule).filter(CurrencyRule.is_active.is_(True)).all()
-    rule_results = _pilot_currency(pilot, rules, db)
-    for r in rule_results:
-        if not r["is_current"]:
-            items.append({
-                "level": "red",
-                "category": "currency",
-                "text": f"Currency lapsed: {r['rule_name']}",
-            })
 
     # Certifications: expired or expiring within 30 days.
     certs = db.query(
@@ -161,11 +148,16 @@ def get_pilot_needs_attention(pilot_id: int, db: DBSession, user: ViewUser, _cer
     return {"count": len(items), "items": items}
 
 
+def _requirement_text(flag: dict) -> str:
+    if flag["kind"] == "lapsed":
+        return f"Lapsed: {flag['name']} since {flag['period_start']}"
+    return f"Missed requirement: {flag['name']} ({flag['period_start']} to {flag['period_end']})"
+
+
 def _requirement_items(db, pilot_id: int) -> list[dict]:
-    """One red item per saved requirement miss still open for the pilot."""
-    return [{"level": "red", "category": "requirement",
-             "text": f"Missed requirement: {miss['name']} ({miss['period_start']} to {miss['period_end']})"}
-            for miss in open_misses(db, [pilot_id]).get(pilot_id, [])]
+    """One red item per saved requirement miss still open for the pilot, and per open lapse."""
+    return [{"level": "red", "category": "requirement", "text": _requirement_text(flag)}
+            for flag in open_misses(db, [pilot_id]).get(pilot_id, [])]
 
 
 def _check_badge_free(db, badge: str | None, pilot_id: int | None = None) -> None:
@@ -338,7 +330,8 @@ def merge_pilots(target_id: int, data: PilotMergeRequest, db: DBSession, admin: 
     from app.models.equipment_checkout import EquipmentCheckout
     from app.models.flight_approval import FlightPlan
     from app.models.flight_requirement import (
-        FlightRequirementNotice, FlightRequirementPilot, FlightRequirementResult,
+        FlightRequirementExcusal, FlightRequirementLapse, FlightRequirementNotice, FlightRequirementPilot,
+        FlightRequirementResult,
     )
     from app.models.incident import Incident
     from app.models.maintenance_schedule import MaintenanceSchedule
@@ -384,6 +377,8 @@ def merge_pilots(target_id: int, data: PilotMergeRequest, db: DBSession, admin: 
         + reassign(FlightRequirementPilot, "pilot_id", ["requirement_id"])
         + reassign(FlightRequirementResult, "pilot_id", ["requirement_id", "period_start"])
         + reassign(FlightRequirementNotice, "pilot_id", ["requirement_id", "period_start", "kind"])
+        + reassign(FlightRequirementLapse, "pilot_id", ["requirement_id", "lapsed_on"])
+        + reassign(FlightRequirementExcusal, "pilot_id", ["requirement_id"])
     )
 
     if not target.email and source.email:

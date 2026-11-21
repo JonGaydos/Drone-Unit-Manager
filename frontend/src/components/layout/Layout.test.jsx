@@ -72,4 +72,22 @@ describe('Layout', () => {
     expect(content).not.toHaveClass('md:pl-60')
     expect(screen.getByRole('button', { name: 'Toggle sidebar' })).toHaveClass('lg:flex')
   })
+
+  it('keeps the desktop header fixed above content and below modals, phone bar unchanged', async () => {
+    renderWithProviders(
+      <Routes>
+        <Route element={<Layout />}>
+          <Route path="/" element={<div>Child page content</div>} />
+        </Route>
+      </Routes>,
+      { role: 'admin' },
+    )
+    await screen.findByText('Child page content')
+
+    const wrapper = screen.getByRole('banner').parentElement
+    expect(wrapper).toHaveClass('hidden', 'lg:block', 'sticky', 'top-0', 'z-40')
+    expect(screen.getByRole('banner')).toHaveClass('bg-sidebar', 'border-b')
+    const menuBar = screen.getByRole('button', { name: 'Open menu' }).parentElement
+    expect(menuBar).toHaveClass('lg:hidden', 'fixed', 'top-0', 'z-40')
+  })
 })

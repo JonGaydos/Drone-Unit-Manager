@@ -21,6 +21,7 @@ from app.services.permissions import can
 from app.models.flight import Flight
 from app.models.pilot import Pilot
 from app.services.flight_scope import counted_flight_clause, counted_only
+from app.services.operating_cost import estimate_operating_cost, flight_cost_sql, format_cost
 from app.services.requirement_results import overall_totals, per_model_text
 from app.models.vehicle import Vehicle
 from app.models.certification import CertificationType, PilotCertification
@@ -29,7 +30,7 @@ from app.models.operating_authority import (
     OperatingAuthority, authority_status,
 )
 from app.models.battery import Battery
-from app.models.flight_requirement import FlightRequirement, FlightRequirementResult
+from app.models.flight_requirement import FlightRequirement, FlightRequirementLapse, FlightRequirementResult
 from app.models.maintenance import MaintenanceRecord
 from app.models.setting import Setting
 from app.models.user import User
@@ -686,8 +687,21 @@ def _flight_summary_row(f) -> dict:
         "purpose": f.purpose or "—",
         "duration_min": round((f.duration_seconds or 0) / 60, 1),
         "location": f.takeoff_address or "—",
+        "cost": format_cost(*_flight_cost(f)),
         "_links": {"pilot": f.pilot_id, "vehicle": f.vehicle_id},
     }
+
+
+COST_BASIS = "Entered costs, else hours x aircraft hourly rate"
+COL_COST = "Cost ($)"
+
+
+def _flight_cost(f) -> tuple[float | None, bool]:
+    """A flight's shown cost and whether it is an estimate (typed cost wins)."""
+    if f.operating_cost is not None:
+        return f.operating_cost, False
+    estimate = estimate_operating_cost(f)
+    return estimate, estimate is not None
 
 
 def _flight_summary(config: ReportConfig, db: Session):
@@ -705,6 +719,8 @@ def _flight_summary(config: ReportConfig, db: Session):
     total_seconds = sum(f.duration_seconds or 0 for f in flights)
 
     rows = [_flight_summary_row(f) for f in flights]
+    costs = [_flight_cost(f) for f in flights]
+    known = [c for c, _ in costs if c is not None]
 
     return {
         "report_type": "flight_summary",
@@ -712,9 +728,14 @@ def _flight_summary(config: ReportConfig, db: Session):
         "summary": {
             "total_flights": len(flights),
             "total_hours": round(total_seconds / 3600, 1),
+            # Typed costs plus estimates from aircraft hourly rates.
+            # Blank when no flight has a cost at all.
+            "total_cost": format_cost(sum(known) if known else None),
+            "estimated_cost_flights": sum(1 for _, est in costs if est),
+            "cost_basis": COST_BASIS,
             "date_range": f"{config.date_from or 'All'} to {config.date_to or 'Present'}",
         },
-        "columns": ["Date", "Pilot", "Vehicle", "Purpose", "Duration (min)", "Location"],
+        "columns": ["Date", "Pilot", "Vehicle", "Purpose", "Duration (min)", "Location", COL_COST],
         "rows": rows,
     }
 
@@ -800,13 +821,17 @@ def _equipment_utilization(config: ReportConfig, db: Session):
         Vehicle.id, Vehicle.manufacturer, Vehicle.model, Vehicle.nickname, Vehicle.serial_number,
         func.count(Flight.id).label("flights"),
         func.coalesce(func.sum(Flight.duration_seconds), 0).label("seconds"),
+        func.sum(flight_cost_sql()).label("cost"),
     ).select_from(Vehicle).outerjoin(Flight, and_(*join_conditions))
 
     if config.vehicle_ids:
         q = q.filter(Vehicle.id.in_(config.vehicle_ids))
 
     rows = []
+    total_cost = None  # stays blank when no flight has a cost
     for r in q.group_by(Vehicle.id).order_by(func.sum(Flight.duration_seconds).desc()).all():
+        if r.cost is not None:
+            total_cost = (total_cost or 0.0) + r.cost
         name = f"{r.manufacturer} {r.model}"
         if r.nickname:
             name += f" ({r.nickname})"
@@ -815,6 +840,7 @@ def _equipment_utilization(config: ReportConfig, db: Session):
             "serial": r.serial_number,
             "flights": r.flights,
             "hours": round(r.seconds / 3600, 1),
+            "cost": format_cost(r.cost),
             "_links": {"vehicle": r.id},
         })
 
@@ -830,9 +856,11 @@ def _equipment_utilization(config: ReportConfig, db: Session):
         "summary": {
             "total_vehicles": len(rows),
             "total_hours": round(sum(r["hours"] for r in rows), 1),
+            "total_cost": format_cost(total_cost),
             "date_range": f"{config.date_from or 'All'} to {config.date_to or 'Present'}",
+            "cost_basis": COST_BASIS,
         },
-        "columns": ["Vehicle", "Serial", "Flights", "Hours"],
+        "columns": ["Vehicle", "Serial", "Flights", "Hours", COL_COST],
         "rows": rows,
     }
 
@@ -962,8 +990,31 @@ def _pilot_certifications(config: ReportConfig, db: Session):
     }
 
 
+def _lapses_in_range(config: ReportConfig, db: Session) -> list:
+    """Rolling requirement lapses that overlap the date range, with the requirement's name and the pilot."""
+    query = db.query(FlightRequirementLapse, FlightRequirement.name, Pilot).join(
+        FlightRequirement, FlightRequirement.id == FlightRequirementLapse.requirement_id).join(
+        Pilot, Pilot.id == FlightRequirementLapse.pilot_id)
+    if config.date_from:
+        query = query.filter(or_(FlightRequirementLapse.recovered_on.is_(None),
+                                 FlightRequirementLapse.recovered_on >= config.date_from))
+    if config.date_to:
+        query = query.filter(FlightRequirementLapse.lapsed_on <= config.date_to)
+    if config.pilot_ids:
+        query = query.filter(FlightRequirementLapse.pilot_id.in_(config.pilot_ids))
+    return query.order_by(FlightRequirementLapse.lapsed_on, FlightRequirement.name,
+                          Pilot.last_name, Pilot.first_name).all()
+
+
+def _lapse_row(lapse: FlightRequirementLapse, name: str, pilot: Pilot) -> dict:
+    period = f"{lapse.lapsed_on} to {lapse.recovered_on}" if lapse.recovered_on else f"Since {lapse.lapsed_on}"
+    return {"requirement": name, "period": period, "pilot": pilot.full_name, "status": "lapsed",
+            "minutes": "", "flights": "", "per_model": ""}
+
+
 def _flight_requirements(config: ReportConfig, db: Session):
-    """Saved requirement results whose period ended in the date range."""
+    """Saved requirement results whose period ended in the date range, then
+    the rolling requirement lapses that overlap it."""
     query = db.query(FlightRequirementResult, FlightRequirement.name, Pilot).join(
         FlightRequirement, FlightRequirement.id == FlightRequirementResult.requirement_id).join(
         Pilot, Pilot.id == FlightRequirementResult.pilot_id).filter(
@@ -989,17 +1040,21 @@ def _flight_requirements(config: ReportConfig, db: Session):
             "flights": overall["flights"],
             "per_model": per_model_text(result.totals),
         })
+    lapses = _lapses_in_range(config, db)
+    rows.extend(_lapse_row(*found_lapse) for found_lapse in lapses)
     statuses = [result.status for result, _, _ in found]
     met, missed = statuses.count("met"), statuses.count("missed")
     return {
         "report_type": "flight_requirements",
         "title": "Flight Requirements Report",
         "summary": {
-            "requirements": len({result.requirement_id for result, _, _ in found}),
+            "requirements": len({result.requirement_id for result, _, _ in found}
+                                | {lapse.requirement_id for lapse, _, _ in lapses}),
             "results": len(found),
             "met": met,
             "missed": missed,
             "excused": statuses.count("excused"),
+            "lapsed": len(lapses),
             "score": f"{round(100 * met / (met + missed))}%" if met + missed else "-",
         },
         "columns": ["Requirement", "Period", "Pilot", "Status", "Minutes", "Flights", "Per model"],
@@ -1670,31 +1725,48 @@ def _annual_personnel_section(db: Session, flights, missions, trainings, pilots_
     }
 
 
-def _annual_fleet_section(flights, vehicles_by_id: dict, active_vehicles: int) -> dict:
-    """Section 4: flights and hours per aircraft that flew in the period."""
+def _annual_vehicle_stats(flights) -> dict:
+    """Flights, seconds and summed cost (None when no flight has one) per aircraft."""
     vehicle_stats = {}
     for f in flights:
         if f.vehicle_id:
-            s = vehicle_stats.setdefault(f.vehicle_id, {"flights": 0, "secs": 0})
+            s = vehicle_stats.setdefault(f.vehicle_id, {"flights": 0, "secs": 0, "cost": None})
             s["flights"] += 1
             s["secs"] += f.duration_seconds or 0
+            cost, _ = _flight_cost(f)
+            if cost is not None:
+                s["cost"] = (s["cost"] or 0.0) + cost
+    return vehicle_stats
+
+
+def _annual_fleet_section(flights, vehicles_by_id: dict, active_vehicles: int) -> dict:
+    """Section 4: flights, hours and operating cost per aircraft that flew in
+    the period. Cost follows Equipment Utilization: typed costs, else estimates."""
+    vehicle_stats = _annual_vehicle_stats(flights)
     rows = []
+    total_cost = None
     for vid, s in vehicle_stats.items():
         v = vehicles_by_id.get(vid)
         if not v:
             continue
+        if s["cost"] is not None:
+            total_cost = (total_cost or 0.0) + s["cost"]
         rows.append({
             "vehicle": f"{v.manufacturer} {v.model}" + (f" ({v.nickname})" if v.nickname else ""),
             "status": v.status,
             "flights": s["flights"],
             "hours": round(s["secs"] / 3600, 1),
+            "cost": format_cost(s["cost"]),
         })
     rows.sort(key=lambda r: r["hours"], reverse=True)
     return {
         "title": "Fleet Utilization",
         "type": "table",
-        "summary": {"active_aircraft": active_vehicles, "aircraft_flown": len(vehicle_stats)},
-        "columns": ["Vehicle", "Status", "Flights", "Hours"],
+        "summary": {
+            "active_aircraft": active_vehicles, "aircraft_flown": len(vehicle_stats),
+            "total_cost": format_cost(total_cost), "cost_basis": COST_BASIS,
+        },
+        "columns": ["Vehicle", "Status", "Flights", "Hours", COL_COST],
         "rows": rows,
     }
 

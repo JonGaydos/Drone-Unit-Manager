@@ -24,6 +24,13 @@ describe('AirspacePage', () => {
     expect(await screen.findByTestId('leaflet-stub')).toBeInTheDocument()
   })
 
+  it('isolates the map area so overlays stay under the fixed page header', async () => {
+    mockSettings()
+    renderWithProviders(<AirspacePage />, { role: 'admin' })
+    const map = await screen.findByTestId('leaflet-stub')
+    expect(map.parentElement.parentElement).toHaveClass('relative', 'isolate')
+  })
+
   it('shows the initial "click the map" prompt and control bar', async () => {
     mockSettings(() => HttpResponse.json([
       { key: 'org_default_lat', value: '38.9' },

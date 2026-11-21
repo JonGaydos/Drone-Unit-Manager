@@ -1,7 +1,6 @@
 """Batch 8 maintenance and compliance correctness: completed tasks stop
 showing as overdue, retired equipment stops counting, alerts are per aircraft,
-currency reads only the flights that can count, a fuller health check, and
-the small fixes that came with them."""
+a fuller health check, and the small fixes that came with them."""
 
 import sqlite3
 from datetime import date, timedelta
@@ -15,14 +14,11 @@ import app.config
 from app.models.alert import Alert
 from app.models.battery import Battery
 from app.models.controller import Controller
-from app.models.currency_rule import CurrencyRule
 from app.models.flight import Flight
 from app.models.maintenance import MaintenanceRecord
 from app.models.maintenance_schedule import MaintenanceSchedule
-from app.models.pilot import Pilot
 from app.models.telemetry import TelemetryPoint
 from app.models.vehicle import Vehicle
-from app.routers.currency import flights_by_pilot
 from app.services.scheduler import check_maintenance_schedules
 from app.services.sync_manager import _find_equipment_by_serial
 
@@ -176,27 +172,6 @@ def test_same_task_on_a_second_aircraft_still_raises_its_alert(db):
     check_maintenance_schedules(db)
     alerts = db.query(Alert).filter(Alert.type == "maintenance_due").all()
     assert sorted(x.entity_id for x in alerts) == sorted([a.id, b.id])
-
-
-# 4. Currency reads only flights that can count ------------------------------------
-
-def test_currency_loads_only_flights_inside_the_longest_period(db):
-    pilot = Pilot(first_name="Kim", last_name="Ray", status="active")
-    db.add(pilot)
-    db.commit()
-    db.add_all([
-        Flight(pilot_id=pilot.id, date=date.today() - timedelta(days=10), duration_seconds=600,
-               review_status="reviewed"),
-        Flight(pilot_id=pilot.id, date=date.today() - timedelta(days=400), duration_seconds=600,
-               review_status="reviewed"),
-    ])
-    rules = [CurrencyRule(name="90-day", required_hours=1, period_days=90),
-             CurrencyRule(name="180-day", required_hours=1, period_days=180)]
-    db.add_all(rules)
-    db.commit()
-    loaded = flights_by_pilot(db, [pilot.id], rules)
-    assert [f.date for f in loaded[pilot.id]] == [date.today() - timedelta(days=10)]
-    assert flights_by_pilot(db, [pilot.id], []) == {}
 
 
 # 5. Health ------------------------------------------------------------------------------

@@ -101,4 +101,32 @@ describe('AnalyticsPage', () => {
     expect(await screen.findByText(/Pilot: Jane Doe/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Clear Filters' })).toBeInTheDocument()
   })
+
+  it("arranges the charts by the user's own layout", async () => {
+    mockMount()
+    renderWithProviders(<AnalyticsPage />, {
+      user: { id: 1, username: 'p', role: 'pilot', analytics_layout: { order: ['pilot-hours', 'gone'], hidden: ['flights-per-year'] } },
+    })
+    await screen.findByText('Pilot Hours Leaderboard')
+    const titles = screen.getAllByRole('heading', { level: 3 }).map(h => h.textContent)
+    expect(titles[0]).toBe('Pilot Hours Leaderboard')
+    expect(titles).not.toContain('Flights Per Year')
+  })
+
+  it('saves the arrangement as analytics_layout', async () => {
+    const bodies = []
+    mockMount()
+    server.use(http.patch('/api/auth/me', async ({ request }) => {
+      const body = await request.json()
+      bodies.push(body)
+      return HttpResponse.json({ id: 1, username: 'p', role: 'pilot', ...body })
+    }))
+    const { user } = renderWithProviders(<AnalyticsPage />, { role: 'pilot' })
+    await screen.findByText('Pilot Hours Leaderboard')
+    await user.click(screen.getByRole('button', { name: 'Edit layout' }))
+    await user.click(screen.getByRole('switch', { name: 'Show Monthly Flight Trends' }))
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await screen.findByRole('button', { name: 'Edit layout' })
+    expect(bodies[0].analytics_layout.hidden).toEqual(['monthly-trends'])
+  })
 })

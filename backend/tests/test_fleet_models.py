@@ -3,7 +3,7 @@
 from app.models.vehicle import Vehicle
 from app.services.fleet_models import fleet_models, normalize_model
 
-MODELS_URL = "/api/currency/models"
+MODELS_URL = "/api/requirements/models"
 
 
 def _add(db, serial, model, status="active"):

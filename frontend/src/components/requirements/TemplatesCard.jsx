@@ -56,7 +56,7 @@ function TemplateRow({ template, onUse, onRename, onDelete }) {
 export function TemplatesCard({ templates, onUse, onRename, onDelete }) {
   return (
     <section aria-labelledby="req-templates-title" className="bg-card border border-border rounded-xl p-6">
-      <h3 id="req-templates-title" className="text-lg font-semibold text-foreground mb-1">Templates</h3>
+      <h2 id="req-templates-title" className="text-lg font-semibold text-foreground mb-1">Templates</h2>
       <p className="text-sm text-muted-foreground mb-4">
         A template keeps every setting except the dates and pilots. Changing or deleting one never changes requirements made from it.
       </p>

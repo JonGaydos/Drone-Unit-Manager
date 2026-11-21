@@ -157,5 +157,68 @@ describe('RequirementForm', () => {
     await waitFor(() => expect(onSubmit).toHaveBeenCalled())
     expect(onSubmit.mock.calls[0][0].purposes).toEqual([])
   })
-})
 
+  it('puts the Active switch first, with Name and Description, away from the Reminder', () => {
+    setup()
+    const active = screen.getByRole('switch', { name: 'Requirement is active' })
+    expect(active).toHaveAttribute('aria-checked', 'true')
+    expect(active).toHaveAccessibleDescription(
+      'Inactive requirements are kept but do not track progress, show on the dashboard or send emails.')
+    const firstSection = screen.getByLabelText('Name').closest('[data-form-section]')
+    expect(firstSection).toContainElement(active)
+    expect(firstSection).toContainElement(screen.getByLabelText('Description (optional)'))
+    expect(firstSection).not.toContainElement(screen.getByLabelText('Period'))
+    const reminderSection = screen.getByLabelText('Reminder (days before the period ends)').closest('[data-form-section]')
+    expect(reminderSection).not.toContainElement(active)
+    expect(screen.queryByRole('checkbox', { name: 'Active' })).toBeNull()
+  })
+
+  it('saves a requirement switched off from the Active switch', async () => {
+    const { onSubmit, user } = setup({ initial: { ...newForm(), name: 'Off', target_flights: '1', start_date: '2026-10-01' } })
+    const active = screen.getByRole('switch', { name: 'Requirement is active' })
+    await user.click(active)
+    expect(active).toHaveAttribute('aria-checked', 'false')
+    await user.click(screen.getByRole('button', { name: 'Save requirement' }))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled())
+    expect(onSubmit.mock.calls[0][0].is_active).toBe(false)
+  })
+  describe('a rolling window', () => {
+    it('asks for the window length and unit, and hides Repeats and the end date', async () => {
+      const { user } = setup()
+      await user.selectOptions(screen.getByLabelText('Period'), 'rolling')
+      expect(screen.getByLabelText('Window length')).toBeInTheDocument()
+      expect(screen.getByLabelText('Unit')).toBeInTheDocument()
+      expect(screen.queryByRole('radio', { name: 'Recurring' })).toBeNull()
+      expect(screen.queryByLabelText(/^Ends/)).toBeNull()
+      expect(screen.getByLabelText('Reminder (days before a pilot would lapse)')).toBeInTheDocument()
+    })
+
+    it.each([['days', '730'], ['weeks', '104'], ['months', '24']])('limits a window in %s to %s', async (unit, max) => {
+      const { user } = setup()
+      await user.selectOptions(screen.getByLabelText('Period'), 'rolling')
+      await user.selectOptions(screen.getByLabelText('Unit'), unit)
+      expect(screen.getByLabelText('Window length')).toHaveAttribute('max', max)
+    })
+
+    it('sends a rolling body with no recurring flag and no end date', async () => {
+      const { onSubmit, user } = setup({ initial: { ...newForm(), name: 'Ninety', recurring: true, end_date: '2027-01-01', start_date: '2026-12-01' } })
+      await user.selectOptions(screen.getByLabelText('Period'), 'rolling')
+      fireEvent.change(screen.getByLabelText('Window length'), { target: { value: '90' } })
+      await user.selectOptions(screen.getByLabelText('Unit'), 'days')
+      fireEvent.change(screen.getByLabelText('Hours'), { target: { value: '1' } })
+      expect(screen.getByText('All active pilots must have 1 hour on any aircraft in any 90 days, from Dec 1, 2026.')).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Save requirement' }))
+      await waitFor(() => expect(onSubmit).toHaveBeenCalled())
+      expect(onSubmit.mock.calls[0][0]).toMatchObject({
+        period_type: 'rolling', recurring: false, span_length: 90, span_unit: 'days', end_date: null, start_date: '2026-12-01',
+      })
+    })
+
+    it('asks for the window length before saving', async () => {
+      const { onSubmit, user } = setup({ initial: { ...newForm(), name: 'R', target_flights: '1', period_type: 'rolling' } })
+      await user.click(screen.getByRole('button', { name: 'Save requirement' }))
+      expect(screen.getByRole('alert')).toHaveTextContent('Set the window length')
+      expect(onSubmit).not.toHaveBeenCalled()
+    })
+  })
+})

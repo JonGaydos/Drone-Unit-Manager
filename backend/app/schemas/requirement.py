@@ -9,7 +9,7 @@ from app.services.fleet_models import normalize_model
 
 PeriodType = Literal[
     "calendar_month", "calendar_quarter", "calendar_year", "fiscal_quarter", "fiscal_year",
-    "monthly_window", "span", "custom", "every_n_months",
+    "monthly_window", "span", "custom", "every_n_months", "rolling",
 ]
 ModelMode = Literal["all", "combined", "each", "each_all_active"]
 TimeMode = Literal["any", "clock", "night"]
@@ -19,7 +19,7 @@ Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max
 ModelName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 PurposeName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
 WindowDay = Annotated[int, Field(ge=1, le=31)]
-SpanLength = Annotated[int, Field(ge=1, le=365)]
+SpanLength = Annotated[int, Field(ge=1, le=730)]  # 365 at most except for rolling; see SPAN_MAX
 EveryMonths = Annotated[int, Field(ge=1, le=24)]
 TargetMinutes = Annotated[int, Field(ge=1, le=100000)]
 TargetFlights = Annotated[int, Field(ge=1, le=10000)]
@@ -32,8 +32,12 @@ MAX_ITEMS = 50
 PERIOD_FIELDS = {
     "monthly_window": ("window_start_day", "window_end_day"),
     "span": ("span_length", "span_unit"),
+    "rolling": ("span_length", "span_unit"),
     "every_n_months": ("every_months",),
 }
+# Longest span: two years for a rolling window, else 365 of any unit.
+SPAN_MAX = 365
+ROLLING_SPAN_MAX = {"days": 730, "weeks": 104, "months": 24}
 ALL_PERIOD_FIELDS = ("window_start_day", "window_end_day", "span_length", "span_unit", "every_months")
 # Fewest models each mode takes. A single model is stored as combined, since the
 # Combined or Each separately choice only appears with two or more.
@@ -98,6 +102,20 @@ class RequirementDefinition(BaseModel):
         for name in ALL_PERIOD_FIELDS:
             if name not in needed:
                 setattr(self, name, None)
+        if self.period_type == "rolling":
+            self._check_rolling()
+        elif self.span_length is not None and self.span_length > SPAN_MAX:
+            raise ValueError(f"A span is at most {SPAN_MAX} {self.span_unit}")
+
+    def _check_rolling(self) -> None:
+        """A rolling window is always continuous. Recurring defaults to true for
+        the other types, so it is refused only when sent as true."""
+        if self.recurring and "recurring" in self.model_fields_set:
+            raise ValueError("A rolling requirement is not recurring")
+        self.recurring = False
+        longest = ROLLING_SPAN_MAX[self.span_unit]
+        if self.span_length > longest:
+            raise ValueError(f"A rolling window is at most {longest} {self.span_unit}")
 
     def _check_time_window(self) -> None:
         if self.time_mode != "clock":
@@ -129,6 +147,8 @@ class RequirementIn(RequirementDefinition):
     def _check_dates(self):
         if self.period_type == "custom" and self.end_date is None:
             raise ValueError("A custom period needs an end date")
+        if self.period_type == "rolling" and self.end_date is not None:
+            raise ValueError("A rolling requirement has no end date")
         if self.end_date is not None and self.end_date < self.start_date:
             raise ValueError("The end date cannot be before the start date")
         return self
@@ -217,19 +237,40 @@ class PeriodProgressOut(PeriodOut):
     pilots: list[PilotProgressOut]
 
 
+class RollingProgressOut(BaseModel):
+    pilot_id: int
+    pilot_name: str
+    status: str  # current, lapsed, not_yet_due, excused
+    totals: dict[str, dict]
+    met_by_model: dict[str, bool]
+    lapse_date: Optional[date] = None  # while current: the first day the window falls short
+    excused_until: Optional[date] = None
+    excluded_no_takeoff: int
+    unreviewed_in_window: int
+
+
+class RollingWindowOut(BaseModel):
+    window_start: date
+    window_end: date
+    pilots: list[RollingProgressOut]
+
+
 class RequirementStatusOut(BaseModel):
     requirement_id: int
     name: str
+    period_type: str
     target_minutes: Optional[int] = None
     target_flights: Optional[int] = None
     model_mode: str
-    current_period: Optional[PeriodProgressOut] = None
+    current_period: Optional[PeriodProgressOut] = None  # None for a rolling requirement
     pending_periods: list[PeriodProgressOut]  # ended, inside their grace time, oldest first
+    rolling: Optional[RollingWindowOut] = None  # a rolling requirement's window today
 
 
 class StatusOut(BaseModel):
     score: Optional[float] = None
     requirements: list[RequirementStatusOut]
+    inactive_count: int = 0
 
 
 class PilotPeriodOut(PilotProgressOut):
@@ -254,17 +295,38 @@ class HistoryRowOut(BaseModel):
     switched_off: bool = False  # excused because the requirement was off; cannot be un-excused
 
 
+class PilotRollingOut(RollingProgressOut):
+    requirement_id: int
+    name: str
+    window_start: date
+    window_end: date
+
+
+class LapseOut(BaseModel):
+    lapse_id: int
+    requirement_id: int
+    name: str
+    lapsed_on: date
+    recovered_on: Optional[date] = None  # None while still lapsed
+
+
 class PilotRequirementsOut(BaseModel):
     pilot_id: int
     current: list[PilotPeriodOut]
     pending: list[PilotPeriodOut]  # ended, inside their grace time, oldest first
     history: list[HistoryRowOut]
+    rolling: list[PilotRollingOut] = []  # standing on each active rolling requirement
+    lapses: list[LapseOut] = []  # newest first
 
 
 class ExcuseIn(BaseModel):
+    """A periodic excusal sends ``period_start`` and ``excused``; a rolling one
+    sends ``excused_until`` (today or later), or null to remove the excusal."""
+
     pilot_id: int
-    period_start: date
-    excused: bool
+    period_start: Optional[date] = None
+    excused: Optional[bool] = None
+    excused_until: Optional[date] = None
     reason: Optional[str] = Field(None, max_length=500)
 
 
@@ -277,11 +339,13 @@ class RecalculateOut(BaseModel):
 
 
 class FlagOut(BaseModel):
-    result_id: int
+    kind: str  # missed (a saved result) or lapsed (an open lapse)
+    result_id: Optional[int] = None
+    lapse_id: Optional[int] = None
     requirement_id: int
     name: str
-    period_start: date
-    period_end: date
+    period_start: date  # the lapse's start for a lapse
+    period_end: Optional[date] = None  # None for a lapse
     pilot_name: str
 
 

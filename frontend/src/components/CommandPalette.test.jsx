@@ -94,4 +94,12 @@ describe('CommandPalette', () => {
     expect(screen.queryByRole('button', { name: /Pilots/ })).toBeNull()
     expect(screen.getByRole('button', { name: /Fleet Health/ })).toBeInTheDocument()
   })
+
+  it('has no separate Flight Requirements entry', async () => {
+    const { user } = renderPalette({ role: 'viewer' })
+    await user.keyboard('{Control>}k{/Control}')
+    await user.type(await screen.findByPlaceholderText(/Search pilots/), 'compliance')
+    expect(await screen.findByRole('button', { name: /Compliance/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Flight Requirements/ })).toBeNull()
+  })
 })

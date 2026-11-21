@@ -246,7 +246,7 @@ export default function AirspacePage() {
       </div>
 
       {/* Map */}
-      <div className="relative" style={{ height: 'calc(100vh - 230px)', minHeight: '400px' }}>
+      <div className="relative isolate" style={{ height: 'calc(100vh - 230px)', minHeight: '400px' }}>
         <div className="rounded-xl overflow-hidden border border-border h-full relative z-0">
           <MapContainer
             center={mapCenter}

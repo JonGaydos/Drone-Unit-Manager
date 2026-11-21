@@ -14,7 +14,7 @@ const PILOTS = [
   ['Riley', 'Chen'], ['Morgan', 'Patel'], ['Casey', 'Nguyen'],
 ]
 const VEHICLES = [
-  { manufacturer: 'Skydio', model: 'X10', nickname: 'Demo One' },
+  { manufacturer: 'Skydio', model: 'X10', nickname: 'Demo One', hourly_operating_cost: 85 },
   { manufacturer: 'DJI', model: 'Matrice 30', nickname: 'Demo Two' },
   { manufacturer: 'Autel', model: 'EVO II', nickname: 'Demo Three' },
 ]
@@ -138,6 +138,8 @@ export async function seedDemo(request, adminToken) {
       takeoff_address: LOCATIONS[i % 2],
       landing_address: LOCATIONS[i % 2],
       max_altitude_m: 60 + (i % 5) * 10,
+      // Normally worked out from telemetry; set here so the flight page shows it.
+      distance_m: 900 + 150 * i,
   })))
   await Promise.all(flights.slice(3).map(flight => attempt('review flight', () => api(request, A).patch(
     `/flights/${flight.id}/review-status`, { review_status: 'reviewed' },
@@ -159,6 +161,17 @@ export async function seedDemo(request, adminToken) {
     ...requirementBase, name: 'Demo proficiency flight', period_type: 'custom',
     start_date: day(-70), end_date: day(-45), target_flights: 1,
   }, 'requirement'), skipped)
+  // A rolling window: Riley Chen has two reviewed flights in it and is current,
+  // the others are new to the unit (not yet due) and Casey Nguyen is excused.
+  await attempt('rolling requirement', async () => {
+    const rolling = await post(request, A, '/requirements', {
+      ...requirementBase, name: 'Demo 30-day proficiency', period_type: 'rolling',
+      span_length: 30, span_unit: 'days', start_date: day(-60), target_flights: 2,
+    }, 'requirement')
+    await post(request, A, `/requirements/${rolling.id}/excuse`, {
+      pilot_id: pilots[5].id, excused_until: day(21), reason: 'Demo leave',
+    }, 'rolling excusal')
+  }, skipped)
 
   // Certifications: current, expiring and expired.
   const part107 = await createCertType(request, A, {

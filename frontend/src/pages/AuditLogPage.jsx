@@ -9,7 +9,7 @@ import { getDisplayTimezone } from '@/lib/utils'
 const ENTITY_TYPES = [
   '', 'alert', 'api_token', 'attachment', 'audit_log', 'auth', 'backup', 'battery', 'battery_reading',
   'calendar_event', 'certification_type', 'checklist_completion', 'checklist_template',
-  'component', 'controller', 'currency', 'currency_rule', 'currency_rule_model', 'dock', 'document', 'equipment',
+  'component', 'controller', 'dock', 'document', 'equipment',
   'flight', 'flight_plan', 'flight_purpose', 'flight_requirement', 'flight_requirement_model',
   'flight_requirement_notice', 'flight_requirement_pilot', 'flight_requirement_purpose',
   'flight_requirement_result', 'flight_requirement_template', 'folder', 'incident', 'maintenance',
@@ -21,6 +21,8 @@ const ENTITY_TYPES = [
   'vehicle_registration',
 ]
 
+// send_reminders is no longer written (currency was removed in 3.7.0) but
+// older audit rows still carry it, so it stays as a filter.
 const ACTIONS = [
   '', 'alert_check', 'approve', 'backup', 'battery_repair', 'bulk_approve', 'bulk_delete',
   'bulk_update', 'cancel', 'checkin', 'checkout', 'cleanup', 'close_periods', 'complete', 'create', 'deactivate',

@@ -5,7 +5,6 @@ from collections import Counter
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models.currency_rule import CurrencyRule, CurrencyRuleModel
 from app.models.vehicle import Vehicle
 
 
@@ -37,16 +36,3 @@ def fleet_models(db: Session) -> list[dict]:
         name = min(spelled.items(), key=lambda item: (-item[1], item[0]))[0]
         result.append({"name": name, "aircraft": counts[key][0], "retired": counts[key][1]})
     return sorted(result, key=lambda m: m["name"].casefold())
-
-
-def backfill_rule_models(db: Session) -> int:
-    """Give each rule that has a vehicle_model but no model rows one row with
-    the trimmed value. Used when restoring a backup made before the models
-    table existed. Returns the number of rows added."""
-    added = 0
-    for rule in db.query(CurrencyRule).all():
-        name = (rule.vehicle_model or "").strip()
-        if name and not rule.models:
-            db.add(CurrencyRuleModel(rule_id=rule.id, model=name))
-            added += 1
-    return added

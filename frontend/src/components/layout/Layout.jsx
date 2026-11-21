@@ -71,7 +71,7 @@ export function Layout() {
 
       <Sidebar mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} />
       <div className={`transition-all duration-300 ${sidebarCollapsed ? 'lg:pl-16' : 'lg:pl-60'}`}>
-        <div className="hidden lg:block">
+        <div className="hidden lg:block sticky top-0 z-40">
           <TopBar title={title} />
         </div>
         <main className="p-4 md:p-6 pt-18 lg:pt-6">

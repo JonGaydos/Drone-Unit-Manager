@@ -254,10 +254,26 @@ describe('AuditLogPage', () => {
       ]))
       expect(optionsOf('Entity Type')).toEqual(expect.arrayContaining([
         'photo_pilot', 'photo_flight', 'photo_incident', 'mission_log_pilot', 'training_log_pilot',
-        'role_permissions', 'currency_rule_model',
+        'role_permissions',
         'flight_requirement', 'flight_requirement_model', 'flight_requirement_pilot', 'flight_requirement_purpose',
         'flight_requirement_result', 'flight_requirement_template', 'flight_requirement_notice',
       ]))
+    })
+
+    it('offers no currency entity type', async () => {
+      server.use(http.get('/api/audit', () => HttpResponse.json({ total: 0, logs: [] })))
+      const { user } = renderWithProviders(<AuditLogPage />, { role: 'admin' })
+      await user.click(await screen.findByRole('button', { name: /Filters/ }))
+      const optionsOf = label => within(screen.getByLabelText(label)).getAllByRole('option').map(o => o.value)
+      expect(optionsOf('Entity Type').filter(v => v.startsWith('currency'))).toEqual([])
+    })
+
+    it('keeps send_reminders as an action filter for older audit rows', async () => {
+      server.use(http.get('/api/audit', () => HttpResponse.json({ total: 0, logs: [] })))
+      const { user } = renderWithProviders(<AuditLogPage />, { role: 'admin' })
+      await user.click(await screen.findByRole('button', { name: /Filters/ }))
+      const actions = within(screen.getByLabelText('Action')).getAllByRole('option').map(o => o.value)
+      expect(actions).toContain('send_reminders')
     })
 
     it('offers the newer actions and entity types as filters', async () => {

@@ -260,8 +260,6 @@ def test_options_sorted_with_inactive(client, db, viewer_headers):
     ("certifications.view", "/api/pilot-certifications"),
     ("certifications.view", "/api/pilot-equipment-quals"),
     ("certifications.view", "/api/certifications/matrix"),
-    ("certifications.view", "/api/currency/rules"),
-    ("certifications.view", "/api/currency/status"),
     ("authority.view", "/api/operating-authorities"),
     ("registrations.view", REGISTRATIONS_URL),
     (FILES_VIEW, FOLDERS_URL),
@@ -304,7 +302,6 @@ def test_registrations_manage_grantable(client, db, admin_headers, supervisor_he
 @pytest.mark.parametrize("key,method,url,body", [
     ("certifications.manage", "post", CERT_TYPES_URL, {"name": "Part 107"}),
     ("authority.manage", "post", "/api/operating-authorities", {}),
-    ("certifications.manage", "post", "/api/currency/rules", {}),
 ])
 def test_manage_keys_grantable(client, admin_headers, pilot_headers, supervisor_headers, key, method, url, body):
     assert getattr(client, method)(url, headers=pilot_headers, json=body).status_code == 403

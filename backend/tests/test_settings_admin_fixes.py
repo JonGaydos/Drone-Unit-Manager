@@ -322,45 +322,6 @@ def test_preferences_refuse_null_on_required_fields(client, db, pilot_headers, f
     assert resp.status_code == 400, resp.text
 
 
-# --- G-5: reminders to unknown or inactive pilots -----------------------------------
-
-REMINDERS_URL = "/api/currency/send-reminders"
-
-
-@pytest.fixture
-def reminder_setup(db):
-    """SMTP on, one active rule, an active lapsed pilot and an inactive one."""
-    from app.models.currency_rule import CurrencyRule
-    from app.models.pilot import Pilot
-    db.add(Setting(key="smtp_enabled", value="true"))
-    db.add(CurrencyRule(name="Monthly hour", required_hours=1, period_days=30, is_active=True))
-    active = Pilot(first_name="Robin", last_name="Vale", status="active", email="robin@example.test")
-    gone = Pilot(first_name="Sam", last_name="Reed", status="inactive", email="sam@example.test")
-    db.add_all([active, gone])
-    db.commit()
-    return active, gone
-
-
-def test_reminders_count_unknown_and_inactive_pilots(client, db, admin_headers, reminder_setup, monkeypatch):
-    from app.services import email_digest
-    active, gone = reminder_setup
-    monkeypatch.setattr(email_digest, "send_email", lambda *a, **k: True)
-    resp = client.post(REMINDERS_URL, headers=admin_headers,
-                       json={"pilot_ids": [active.id, gone.id, 99999]})
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert body["sent"] == 1
-    assert body["skipped_inactive"] == 1
-    assert body["not_found"] == 1
-
-
-def test_reminders_to_all_report_no_unknown_or_inactive(client, db, admin_headers, reminder_setup, monkeypatch):
-    from app.services import email_digest
-    monkeypatch.setattr(email_digest, "send_email", lambda *a, **k: True)
-    body = client.post(REMINDERS_URL, headers=admin_headers, json={}).json()
-    assert body["sent"] == 1 and body["skipped_inactive"] == 0 and body["not_found"] == 0
-
-
 # --- G-7: SMTP test emails are rate-limited like test digests ---------------------
 
 def test_smtp_test_is_rate_limited(client, db, admin_user, admin_headers, monkeypatch):
@@ -370,61 +331,6 @@ def test_smtp_test_is_rate_limited(client, db, admin_user, admin_headers, monkey
     monkeypatch.setattr(email_digest, "send_email", lambda *a, **k: True)
     codes = [client.post("/api/settings/smtp/test", headers=admin_headers).status_code for _ in range(4)]
     assert codes == [200, 200, 200, 429]
-
-
-# --- G-6: the reminder intro has the dialog's length cap ----------------------------
-
-def test_reminder_message_is_capped(client, db, admin_headers, reminder_setup):
-    resp = client.post(REMINDERS_URL, headers=admin_headers, json={"custom_message": "x" * 2001})
-    assert resp.status_code == 422
-
-
-# --- G-8: reminders run as a background job with progress -----------------------------
-
-def _wait_for_job(client, headers, job_id):
-    import time
-    deadline = time.time() + 10
-    while time.time() < deadline:
-        job = client.get(f"/api/currency/jobs/{job_id}", headers=headers).json()
-        if job["status"] != "running":
-            return job
-        time.sleep(0.02)
-    raise AssertionError("reminder job did not finish")
-
-
-def test_reminders_start_runs_a_job_with_progress(client, db, admin_headers, reminder_setup, monkeypatch):
-    from app.models.audit_log import AuditLog
-    from app.services import email_digest
-    sent_to = []
-    monkeypatch.setattr(email_digest, "send_email", lambda to, *a, **k: sent_to.append(to) or True)
-    resp = client.post(f"{REMINDERS_URL}/start", headers=admin_headers,
-                       json={"custom_message": "Book a flight"})
-    assert resp.status_code == 200, resp.text
-    job = _wait_for_job(client, admin_headers, resp.json()["job_id"])
-    assert job["status"] == "done", job
-    assert job["result"]["sent"] == 1
-    assert job["progress"] == {"done": 1, "total": 1}
-    assert sent_to == ["robin@example.test"]
-    db.expire_all()
-    assert db.query(AuditLog).filter(AuditLog.action == "send_reminders").count() == 1
-
-
-def test_reminders_start_refuses_up_front_when_smtp_is_off(client, db, admin_headers, reminder_setup):
-    db.query(Setting).filter(Setting.key == "smtp_enabled").delete()
-    db.commit()
-    assert client.post(f"{REMINDERS_URL}/start", headers=admin_headers, json={}).status_code == 503
-
-
-def test_reminder_jobs_need_certifications_manage(client, db, pilot_headers):
-    assert client.post(f"{REMINDERS_URL}/start", headers=pilot_headers, json={}).status_code == 403
-    assert client.get("/api/currency/jobs/abc", headers=pilot_headers).status_code == 403
-
-
-def test_reminder_job_route_hides_other_jobs(client, db, admin_headers):
-    from app.services import jobs
-    other = jobs.start("sync", lambda: {"n": 1})
-    assert client.get(f"/api/currency/jobs/{other}", headers=admin_headers).status_code == 404
-    assert client.get("/api/currency/jobs/missing", headers=admin_headers).status_code == 404
 
 
 # --- F-01: an admin cannot change their own role or active flag -----------------------

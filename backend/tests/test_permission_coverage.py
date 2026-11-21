@@ -309,18 +309,7 @@ EXPECTED_ROUTE_KEYS = {
     "PATCH /api/pilot-equipment-quals/{peq_id}": {CERTIFICATIONS_MANAGE},
     "DELETE /api/pilot-equipment-quals/{peq_id}": {CERTIFICATIONS_MANAGE},
     "GET /api/certifications/matrix": {CERTIFICATIONS_VIEW},
-    # currency
-    "GET /api/currency/models": {CERTIFICATIONS_MANAGE},
-    "GET /api/currency/rules": {CERTIFICATIONS_VIEW},
-    "GET /api/currency/status": {CERTIFICATIONS_VIEW},
-    "GET /api/currency/status/{pilot_id}": {CERTIFICATIONS_VIEW},
-    "POST /api/currency/rules": {CERTIFICATIONS_MANAGE},
-    "PATCH /api/currency/rules/{rule_id}": {CERTIFICATIONS_MANAGE},
-    "DELETE /api/currency/rules/{rule_id}": {CERTIFICATIONS_MANAGE},
-    "POST /api/currency/send-reminders": {CERTIFICATIONS_MANAGE},
-    "POST /api/currency/send-reminders/start": {CERTIFICATIONS_MANAGE},
-    "GET /api/currency/jobs/{job_id}": {CERTIFICATIONS_MANAGE},
-    # flight requirements; recalculate also checks for an admin inside the handler
+    # flight requirements; recalculate and lapse delete also check for an admin inside the handler
     "GET /api/requirements": {REQUIREMENTS_VIEW},
     "POST /api/requirements": {REQUIREMENTS_MANAGE},
     "PATCH /api/requirements/{requirement_id}": {REQUIREMENTS_MANAGE},
@@ -330,6 +319,7 @@ EXPECTED_ROUTE_KEYS = {
     "GET /api/requirements/flags": {REQUIREMENTS_VIEW},
     "POST /api/requirements/{requirement_id}/excuse": {"requirements.excuse"},
     "POST /api/requirements/{requirement_id}/recalculate": {REQUIREMENTS_MANAGE},
+    "DELETE /api/requirements/{requirement_id}/lapses/{lapse_id}": {REQUIREMENTS_MANAGE},
     "GET /api/requirements/models": {REQUIREMENTS_MANAGE},
     "GET /api/requirements/settings": {REQUIREMENTS_VIEW},
     "PUT /api/requirements/settings": {REQUIREMENTS_MANAGE},

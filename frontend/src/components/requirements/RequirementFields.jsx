@@ -24,8 +24,13 @@ const PERIOD_OPTIONS = [
   ['span', 'Span from a start date'],
   ['custom', 'Custom date range'],
   ['every_n_months', 'Every N months from a start date'],
+  ['rolling', 'Rolling window (the last N days, weeks or months)'],
 ]
 const NAMED_PERIODS = new Set(['calendar_month', 'calendar_quarter', 'calendar_year', 'fiscal_quarter', 'fiscal_year'])
+// A rolling window may look back up to two years in any unit (the API's limit).
+const ROLLING_MAX = { days: 730, weeks: 104, months: 24 }
+// Types with no Repeats choice: a custom range runs once, a rolling window is continuous.
+const NO_REPEATS = new Set(['custom', 'rolling'])
 const NIGHT_REASON = 'Set the unit default location in Settings, General, to use night.'
 
 function NumberField({ id, label, value, onChange, min, max }) {
@@ -65,6 +70,54 @@ export function BasicsFields({ form, update }) {
   )
 }
 
+// Track and thumb of the Active switch, on and off; the panel turns to a
+// warning tone when off, so a requirement switched off by mistake stands out.
+const ACTIVE_TONES = {
+  on: { panel: 'border-border bg-muted/30', track: 'bg-primary', thumb: 'translate-x-4 bg-primary-foreground', hint: 'text-muted-foreground' },
+  off: { panel: 'border-warning bg-warning-bg', track: 'bg-secondary border border-border', thumb: 'translate-x-0.5 bg-muted-foreground', hint: 'text-warning' },
+}
+
+export function ActiveField({ form, update }) {
+  const tone = ACTIVE_TONES[form.is_active ? 'on' : 'off']
+  return (
+    <div className={`flex items-start gap-3 rounded-lg border px-4 py-3 ${tone.panel}`}>
+      <button id="req-active" type="button" role="switch" aria-checked={form.is_active} aria-describedby="req-active-hint"
+        onClick={() => update(f => ({ is_active: !f.is_active }))}
+        className={`mt-0.5 inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${tone.track}`}>
+        <span aria-hidden="true" className={`h-4 w-4 rounded-full shadow-sm transition-transform ${tone.thumb}`} />
+      </button>
+      <div className="min-w-0">
+        <label htmlFor="req-active" className="block text-sm font-medium text-foreground cursor-pointer select-none">
+          Requirement is active
+        </label>
+        <p id="req-active-hint" className={`text-xs mt-0.5 ${tone.hint}`}>
+          Inactive requirements are kept but do not track progress, show on the dashboard or send emails.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+/** Length and unit: of each period for a span, of the window for a rolling requirement. */
+function SpanFields({ form, update }) {
+  const rolling = form.period_type === 'rolling'
+  return (
+    <>
+      <NumberField id="req-span-length" label={rolling ? 'Window length' : 'Length'} min={1}
+        max={rolling ? ROLLING_MAX[form.span_unit] : 365} value={form.span_length}
+        onChange={v => update({ span_length: v })} />
+      <div>
+        <label htmlFor="req-span-unit" className={LABEL}>Unit</label>
+        <select id="req-span-unit" value={form.span_unit} onChange={e => update({ span_unit: e.target.value })} className={INPUT}>
+          <option value="days">Days</option>
+          <option value="weeks">Weeks</option>
+          <option value="months">Months</option>
+        </select>
+      </div>
+    </>
+  )
+}
+
 function PeriodDetailFields({ form, update }) {
   if (form.period_type === 'monthly_window') {
     return (
@@ -76,22 +129,7 @@ function PeriodDetailFields({ form, update }) {
       </>
     )
   }
-  if (form.period_type === 'span') {
-    return (
-      <>
-        <NumberField id="req-span-length" label="Length" min={1} max={365} value={form.span_length}
-          onChange={v => update({ span_length: v })} />
-        <div>
-          <label htmlFor="req-span-unit" className={LABEL}>Unit</label>
-          <select id="req-span-unit" value={form.span_unit} onChange={e => update({ span_unit: e.target.value })} className={INPUT}>
-            <option value="days">Days</option>
-            <option value="weeks">Weeks</option>
-            <option value="months">Months</option>
-          </select>
-        </div>
-      </>
-    )
-  }
+  if (form.period_type === 'span' || form.period_type === 'rolling') return <SpanFields form={form} update={update} />
   if (form.period_type === 'every_n_months') {
     return (
       <NumberField id="req-every" label="Every (months)" min={1} max={24} value={form.every_months}
@@ -101,12 +139,15 @@ function PeriodDetailFields({ form, update }) {
   return null
 }
 
+function startHintOf(periodType) {
+  if (periodType === 'rolling') return 'Tracking starts on this day. A rolling window has no end date.'
+  return NAMED_PERIODS.has(periodType) ? 'Any day in the first period.' : 'The first day of the first period.'
+}
+
 function DateFields({ form, update }) {
   const custom = form.period_type === 'custom'
-  const showEnd = custom || form.recurring
-  const startHint = NAMED_PERIODS.has(form.period_type)
-    ? 'Any day in the first period.'
-    : 'The first day of the first period.'
+  const showEnd = custom || (form.recurring && form.period_type !== 'rolling')
+  const startHint = startHintOf(form.period_type)
   return (
     <>
       <div>
@@ -136,7 +177,7 @@ export function PeriodFields({ form, update }) {
             {PERIOD_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
         </div>
-        {form.period_type !== 'custom' && (
+        {!NO_REPEATS.has(form.period_type) && (
           <fieldset className={FIELDSET}>
             <legend className={LEGEND}>Repeats</legend>
             <div className="flex gap-4 py-2">
@@ -288,17 +329,14 @@ export function PilotField({ form, update, pilots }) {
 
 export function ReminderFields({ form, update }) {
   return (
-    <div className="grid gap-3 sm:grid-cols-2 sm:items-end">
+    <div className="grid gap-3 sm:grid-cols-2">
       <div>
-        <label htmlFor="req-reminder" className={LABEL}>Reminder (days before the period ends)</label>
+        <label htmlFor="req-reminder" className={LABEL}>
+          {form.period_type === 'rolling' ? 'Reminder (days before a pilot would lapse)' : 'Reminder (days before the period ends)'}
+        </label>
         <input id="req-reminder" type="number" inputMode="numeric" min={0} max={60} value={form.reminder_days}
           onChange={e => update({ reminder_days: e.target.value })} className={INPUT} />
       </div>
-      <label className="flex items-center gap-2 py-2 text-sm text-foreground cursor-pointer select-none">
-        <input type="checkbox" checked={form.is_active} onChange={() => update(f => ({ is_active: !f.is_active }))}
-          className="w-4 h-4 rounded border-border text-primary focus:ring-ring" />
-        <span>Active</span>
-      </label>
     </div>
   )
 }

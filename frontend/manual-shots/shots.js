@@ -64,6 +64,14 @@ function formShot(file, route, { open, height, before, fields = {}, after }) {
   }
 }
 
+// The top `height` pixels of a tall element, for a picture of where it starts.
+const topOf = (locator, height) => ({
+  screenshot: async (options) => {
+    const box = await locator.boundingBox()
+    return locator.page().screenshot({ ...options, clip: { x: box.x, y: box.y, width: box.width, height: Math.min(height, box.height) } })
+  },
+})
+
 // Add one crew row to a mission or training log dialog.
 const addCrew = (role, hours) => async (dialog) => {
   await dialog.getByRole('button', { name: '+ Add Pilot' }).click()
@@ -74,7 +82,7 @@ const addCrew = (role, hours) => async (dialog) => {
 
 // Open the expiring certification of Jordan Ellis from the matrix.
 const openJordanCert = (page) =>
-  page.getByRole('row', { name: /Jordan Ellis/ }).locator('td').filter({ hasText: 'expiring soon' }).first().click()
+  page.getByRole('button', { name: /^Jordan Ellis, .*: expiring soon/ }).first().click()
 
 export const SHOTS = [
   {
@@ -85,7 +93,19 @@ export const SHOTS = [
   {
     file: 'dashboard-overview.png',
     route: '/',
+    // Tall enough that the whole grid fits under the fixed page header.
+    prepare: (page) => page.setViewportSize({ width: 1280, height: 1700 }),
     target: (page) => page.locator('div.grid.auto-rows-min'),
+  },
+  {
+    file: 'dashboard-arranging.png',
+    route: '/',
+    prepare: async (page) => {
+      await page.getByRole('button', { name: 'Edit layout', exact: true }).click()
+      await page.getByRole('button', { name: 'Save as unit default', exact: true }).waitFor()
+      await page.waitForTimeout(SETTLE_MS)
+    },
+    target: (page) => topOf(page.locator('main div.space-y-3').filter({ has: page.getByRole('button', { name: 'Save as unit default' }) }).last(), 520),
   },
   {
     file: 'analytics-filtering.png',
@@ -153,6 +173,16 @@ export const SHOTS = [
     file: 'flights-viewing-flights.png',
     route: '/flights',
     target: (page) => page.locator('div.flex.flex-wrap.items-end.gap-3').first(),
+  },
+  {
+    file: 'flights-flight-detail.png',
+    route: '/flights',
+    prepare: async (page) => {
+      await page.locator('tbody tr').first().getByRole('link').first().click()
+      await page.getByRole('heading', { name: /^Flight on / }).waitFor()
+      await page.getByText('(estimated)').waitFor()
+    },
+    target: (page) => cardOf(page.getByRole('heading', { name: /^Flight on / })),
   },
   formShot('flights-adding-flights-manually.png', '/flights', {
     open: 'Add Flight',
@@ -222,6 +252,7 @@ export const SHOTS = [
       '#field-model': 'X10',
       '#field-nickname': 'Demo Four',
       '#field-acquired_date': isoDay(-30),
+      '#field-hourly_operating_cost': '85',
     },
   }),
   formShot('fleet-battery-readings.png', '/fleet', {
@@ -291,32 +322,23 @@ export const SHOTS = [
     },
     target: (page) => cardOf(page.getByRole('heading', { name: 'Needs Attention' })),
   },
-  formShot('pilots-pilot-currency.png', '/settings', {
-    open: 'New Rule',
-    fields: {
-      '#rule-name': 'Demo quarterly currency',
-      '#rule-desc': 'Demo rule for the manual',
-      '#rule-hours': '5',
-      '#rule-days': '90',
-      '#rule-flights': '3',
-    },
-    after: (dialog) => dialog.getByRole('button', { name: /^X10 \(\d+\)$/ }).click(),
-  }),
   {
-    file: 'flight-requirements-requirements-tab.png',
-    route: '/settings',
+    file: 'flight-requirements-requirements-page.png',
+    route: '/compliance?tab=requirements',
     prepare: async (page) => {
-      await page.getByRole('button', { name: 'Flight Requirements', exact: true }).click()
-      await page.getByText('Demo monthly flight time', { exact: true }).waitFor()
+      const list = page.locator('section[aria-labelledby="req-list-title"]')
+      await list.getByText('Demo monthly flight time', { exact: true }).waitFor()
+      await list.getByText(/days? left/).first().waitFor()
     },
     target: (page) => page.locator('section[aria-labelledby="req-list-title"]'),
   },
   {
     file: 'flight-requirements-creating-a-requirement.png',
-    route: '/settings',
+    route: '/compliance?tab=requirements',
     prepare: async (page) => {
       await page.setViewportSize({ width: 1280, height: 1900 }) // tall enough to show the whole form
-      await page.getByRole('button', { name: 'Flight Requirements', exact: true }).click()
+      // The form sits below the list; let the fixed page header scroll away so it does not cover the form.
+      await page.addStyleTag({ content: '.sticky.top-0 { position: static !important; }' })
       await page.getByRole('button', { name: 'New requirement', exact: true }).click()
       const form = page.getByRole('form', { name: 'New requirement' })
       await form.getByLabel('Name', { exact: true }).fill('Demo quarterly model time')
@@ -338,6 +360,15 @@ export const SHOTS = [
     target: (page) => page.getByRole('region', { name: 'This Period' }),
   },
   {
+    file: 'flight-requirements-rolling-requirements.png',
+    route: '/',
+    prepare: async (page) => {
+      await page.getByRole('region', { name: 'This Period' }).getByRole('listitem', { name: 'Demo 30-day proficiency' })
+        .getByText(/current, \d+ lapsed/).waitFor()
+    },
+    target: (page) => page.getByRole('region', { name: 'This Period' }).getByRole('listitem', { name: 'Demo 30-day proficiency' }),
+  },
+  {
     file: 'flight-requirements-excusing-and-misses.png',
     route: '/pilots',
     prepare: async (page) => {
@@ -355,6 +386,26 @@ export const SHOTS = [
     },
     target: (page) => cardOf(page.locator('table')),
   },
+  {
+    file: 'certifications-by-pilot.png',
+    route: '/certifications',
+    prepare: async (page) => {
+      await page.getByRole('button', { name: 'By pilot', exact: true }).click()
+      await page.getByLabel('Hide empty').check()
+      await page.getByRole('listitem', { name: 'Avery Brooks' }).waitFor()
+    },
+    target: (page) => page.getByRole('listitem', { name: 'Avery Brooks' }).locator('xpath=..'),
+  },
+  {
+    file: 'certifications-by-urgency.png',
+    route: '/certifications',
+    prepare: async (page) => {
+      await page.setViewportSize({ width: 1280, height: 1400 }) // tall enough to show every group
+      await page.getByRole('button', { name: 'By urgency', exact: true }).click()
+      await page.getByRole('region', { name: 'Expired' }).waitFor()
+    },
+    target: (page) => page.getByRole('region', { name: 'Expired' }).locator('xpath=..'),
+  },
   formShot('certifications-editing-a-certification.png', '/certifications', {
     height: 1000,
     before: openJordanCert,
@@ -371,10 +422,21 @@ export const SHOTS = [
     file: 'compliance-compliance-score.png',
     route: '/compliance',
     prepare: async (page) => {
-      await page.getByRole('heading', { name: 'Compliance Dashboard' }).waitFor()
+      await page.getByRole('heading', { level: 1, name: 'Compliance', exact: true }).waitFor()
+      await page.getByText('Compliance Score', { exact: true }).waitFor()
       await page.waitForTimeout(1500) // let the score ring finish drawing
     },
-    target: (page) => page.locator('div.space-y-6').filter({ has: page.getByRole('heading', { name: 'Compliance Dashboard' }) }).last().locator('xpath=./div[2]'),
+    target: (page) => page.getByRole('tabpanel').locator('xpath=./div/div[1]'),
+  },
+  {
+    file: 'compliance-setup-tab.png',
+    route: '/compliance?tab=setup',
+    prepare: async (page) => {
+      await page.setViewportSize({ width: 1280, height: 1100 }) // tall enough to show both cards
+      await page.getByRole('heading', { name: 'Requirement Settings' }).waitFor()
+      await page.waitForTimeout(SETTLE_MS)
+    },
+    target: (page) => page.locator('main').getByRole('tabpanel'),
   },
   formShot('operating-authority-operating-authority.png', '/operating-authority', {
     open: 'Add Authority',

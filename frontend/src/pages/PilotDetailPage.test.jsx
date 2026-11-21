@@ -11,7 +11,6 @@ import PilotDetailPage from './PilotDetailPage'
 //   GET /pilots/:id/stats
 //   GET /flights?pilot_id=:id
 //   GET /pilot-certifications?pilot_id=:id      (.catch -> [])
-//   GET /currency/status/:id                    (.catch -> null)
 //   GET /dashboard/analytics/pilot-performance/:id (.catch -> null)
 //   GET /pilots/:id/needs-attention             (.catch -> null)
 //   GET /documents?...              (DocumentUpload)
@@ -26,7 +25,6 @@ function mockMount(overrides = {}) {
     stats: () => HttpResponse.json({ total_flights: 12, total_flight_hours: 3, avg_flight_duration_seconds: 600 }),
     flights: () => HttpResponse.json({ flights: [] }),
     certs: () => HttpResponse.json([]),
-    currency: () => HttpResponse.json(null),
     performance: () => HttpResponse.json(null),
     needsAttention: () => HttpResponse.json({ items: [] }),
     folders: () => HttpResponse.json([]),
@@ -39,7 +37,6 @@ function mockMount(overrides = {}) {
     http.get('/api/pilots/:id', base.pilot),
     http.get('/api/flights', base.flights),
     http.get('/api/pilot-certifications', base.certs),
-    http.get('/api/currency/status/:id', base.currency),
     http.get('/api/dashboard/analytics/pilot-performance/:id', base.performance),
     http.get('/api/folders', base.folders),
     http.get('/api/documents', base.documents),
@@ -65,20 +62,12 @@ describe('PilotDetailPage', () => {
     expect(screen.getByText('Badge: A-1')).toBeInTheDocument()
   })
 
-  it('shows each rule\'s models, or All when the list is empty', async () => {
-    const rule = { is_current: true, actual_hours: 1, required_hours: 5, period_days: 90, status: 'current' }
-    mockMount({
-      currency: () => HttpResponse.json({
-        is_current: true,
-        rules: [
-          { ...rule, rule_id: 1, rule_name: 'Typed', vehicle_models: ['X10', 'X2E'] },
-          { ...rule, rule_id: 2, rule_name: 'Open', vehicle_models: [] },
-        ],
-      }),
-    })
+  it('has no Currency Status card and says all clear without currency', async () => {
+    mockMount()
     render()
-    expect(await screen.findByText('X10, X2E')).toBeInTheDocument()
-    expect(screen.getByText('All')).toBeInTheDocument()
+    expect(await screen.findByText(/All clear/)).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Currency Status' })).toBeNull()
+    expect(screen.queryByText(/currency/i)).toBeNull()
   })
 
   it('shows empty states for flights and certifications', async () => {
@@ -95,13 +84,13 @@ describe('PilotDetailPage', () => {
       needsAttention: () => HttpResponse.json({
         items: [
           { level: 'red', text: 'Part 107 expired' },
-          { level: 'amber', text: 'Night currency lapses in 10 days' },
+          { level: 'amber', text: 'Part 107 expires in 10 days' },
         ],
       }),
     })
     render()
     expect(await screen.findByText('Part 107 expired')).toBeInTheDocument()
-    expect(screen.getByText('Night currency lapses in 10 days')).toBeInTheDocument()
+    expect(screen.getByText('Part 107 expires in 10 days')).toBeInTheDocument()
     expect(screen.queryByText(/\[object Object\]/)).toBeNull()
   })
 
@@ -229,7 +218,7 @@ describe('PilotDetailPage', () => {
 
   it('stays rendered with the pilot when secondary requests 500', async () => {
     const boom = () => HttpResponse.json({ detail: 'boom' }, { status: 500 })
-    mockMount({ stats: boom, flights: boom, certs: boom, currency: boom, performance: boom, needsAttention: boom, folders: boom })
+    mockMount({ stats: boom, flights: boom, certs: boom, performance: boom, needsAttention: boom, folders: boom })
     render()
     expect(await screen.findByRole('heading', { name: 'Ada Lovelace' })).toBeInTheDocument()
     expect(screen.queryByText('Pilot not found')).toBeNull()
@@ -258,7 +247,7 @@ describe('PilotDetailPage', () => {
       }], pending: [], history: [],
     }
 
-    it('shows the card below Currency Status with requirements.view', async () => {
+    it('shows the card with requirements.view', async () => {
       mockMount()
       server.use(http.get('/api/requirements/pilots/:id', () => HttpResponse.json(PROGRESS)))
       render()

@@ -14,6 +14,41 @@ export const STATUS_LABELS = {
   pending_review: 'Pending review',
   missed: 'Missed',
   excused: 'Excused',
+  current: 'Current',
+  lapsed: 'Lapsed',
+  not_yet_due: 'Not yet due',
+}
+
+// The date beside a rolling status: when a current pilot would lapse, since
+// when a lapsed one has been lapsed, until when an excusal lasts and from
+// when a pilot not yet due can lapse.
+const ROLLING_DATES = {
+  current: (row) => row.lapse_date && `lapses on ${formatDate(row.lapse_date)}`,
+  lapsed: (row, since) => since && `since ${formatDate(since)}`,
+  excused: (row) => row.excused_until && `until ${formatDate(row.excused_until)}`,
+  not_yet_due: (row) => row.due_on && `due from ${formatDate(row.due_on)}`,
+}
+
+/** "lapses on Dec 3, 2026", "since Nov 2, 2026" (with `since`, the open lapse's
+ *  start), "until Jan 31, 2027", or "" when there is no date to give. */
+export function rollingDateText(row, since = null) {
+  return ROLLING_DATES[row.status]?.(row, since) || ''
+}
+
+/** "3 current, 1 lapsed" for a rolling window's pilots. */
+export function rollingCounts(pilots) {
+  const count = status => pilots.filter(p => p.status === status).length
+  return `${count('current')} current, ${count('lapsed')} lapsed`
+}
+
+/** The start of each pilot's open lapse on a requirement, by pilot id, from /requirements/flags. */
+export function lapseStarts(flags, requirementId) {
+  const starts = {}
+  for (const [pilotId, list] of Object.entries(flags || {})) {
+    const lapse = list.find(f => f.kind === 'lapsed' && f.requirement_id === requirementId)
+    if (lapse) starts[pilotId] = lapse.period_start
+  }
+  return starts
 }
 
 /** "1 flight", "3 flights". */
