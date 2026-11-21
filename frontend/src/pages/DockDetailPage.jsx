@@ -177,7 +177,7 @@ export default function DockDetailPage() {
             <MapPin className="w-4 h-4 text-primary" />
             <h3 className="font-semibold text-foreground">Location</h3>
           </div>
-          <div style={{ height: 300 }}>
+          <div className="relative z-0" style={{ height: 300 }}>
             <MapContainer center={[Number(dock.lat), Number(dock.lon)]} zoom={15} style={{ height: '100%', width: '100%' }} scrollWheelZoom={true}>
               <TileLayer
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'

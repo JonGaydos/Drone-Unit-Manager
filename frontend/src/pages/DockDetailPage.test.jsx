@@ -47,6 +47,13 @@ describe('DockDetailPage', () => {
     expect(screen.getByRole('heading', { name: 'Location' })).toBeInTheDocument()
   })
 
+  it('isolates the map so it stays under the fixed page header', async () => {
+    mockMount()
+    render()
+    const maps = await screen.findAllByTestId('leaflet-stub')
+    expect(maps[0].parentElement).toHaveClass('relative', 'z-0')
+  })
+
   it('omits the map and shows the empty maintenance state without coords', async () => {
     mockMount({ dock: () => HttpResponse.json({ ...DOCK, lat: null, lon: null }) })
     render()
