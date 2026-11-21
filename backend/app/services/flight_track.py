@@ -28,6 +28,14 @@ logger = logging.getLogger(__name__)
 EARTH_RADIUS_M = 6_371_008.8
 # A segment faster than this is a GPS jump, not flight.
 MAX_SPEED_MPS = 60.0
+# Fixes further apart in time than this have a gap between them that is not
+# measured.
+MAX_GAP_S = 30.0
+# Distance counts once the craft has moved this far from the last counted fix,
+# so hovering and GPS jitter add nothing.
+MIN_MOVE_M = 5.0
+# Fixes are averaged over this many seconds either side before measuring.
+SMOOTH_WINDOW_S = 2.0
 BATCH_SIZE = 50
 # Nominatim's usage policy: at most one request per second.
 GEOCODE_INTERVAL_S = 1.0
@@ -88,27 +96,92 @@ def _drop_spikes(fixes: list) -> list:
     return kept
 
 
+class _Walk:
+    """Walks the fixes, keeping the accepted ones in segments and the landing fix.
+
+    ``anchor`` is the last accepted fix (the speed rule measures from it) and
+    ``pending`` a rejected fix that the next one may agree with. A segment ends
+    at a gap or where the track carries on from a pending fix, so no distance
+    is measured across either."""
+
+    def __init__(self, first):
+        self.anchor = self.landing = first
+        self.pending = None
+        self.segments = [[first]]
+
+    def step(self, fix) -> None:
+        if _possible(self.anchor, fix):
+            self._accept(self.anchor, fix)
+        elif self.pending is not None and _possible(self.pending, fix):
+            # Two fixes agree with each other but not with the anchor: the
+            # anchor was the bad one, so carry on from them.
+            self.segments.append([self.pending])
+            self._accept(self.pending, fix)
+        else:
+            self.pending = fix
+
+    def _accept(self, prev, fix) -> None:
+        self.anchor, self.pending = fix, None
+        if fix[2] - prev[2] > MAX_GAP_S:
+            # Nothing is known about the gap: no distance across it, and the
+            # fix lands the flight only once a following fix agrees with it.
+            self.segments.append([fix])
+            return
+        self.landing = fix
+        self.segments[-1].append(fix)
+
+
+def _smoothed(segment: list) -> list:
+    """Each fix replaced by the mean of the fixes within SMOOTH_WINDOW_S of it,
+    which averages GPS jitter away without moving a steady track. The window
+    narrows towards the ends so it stays even, and the end fixes stay put."""
+    out = []
+    lo = hi = 0
+    sum_lat = sum_lon = 0.0
+    first, last = segment[0][2], segment[-1][2]
+    for fix in segment:
+        half = min(SMOOTH_WINDOW_S, fix[2] - first, last - fix[2])
+        while hi < len(segment) and segment[hi][2] <= fix[2] + half:
+            sum_lat += segment[hi][0]
+            sum_lon += segment[hi][1]
+            hi += 1
+        while segment[lo][2] < fix[2] - half:
+            sum_lat -= segment[lo][0]
+            sum_lon -= segment[lo][1]
+            lo += 1
+        count = hi - lo
+        out.append((sum_lat / count, sum_lon / count))
+    return out
+
+
+def _segment_length(segment: list) -> float:
+    """Length of a smoothed segment, counted only in moves of MIN_MOVE_M or more."""
+    points = _smoothed(segment)
+    counted = points[0]
+    meters = 0.0
+    for point in points[1:]:
+        step = haversine_m(counted[0], counted[1], point[0], point[1])
+        if step >= MIN_MOVE_M:
+            meters += step
+            counted = point
+    return meters
+
+
 def track_summary(points) -> dict:
     """Distance and landing fix over telemetry points in time order (dicts or
     rows with lat, lon and timestamp_ms). A jump that would need more than
-    MAX_SPEED_MPS is never measured. When two fixes in a row agree with each
-    other but not with the last good fix, that fix was the bad one, and the
-    track carries on from them. No good fix gives Nones."""
+    MAX_SPEED_MPS is never measured, nor a gap longer than MAX_GAP_S, and
+    smoothing plus MIN_MOVE_M keep hovering and GPS jitter from adding
+    distance. No good fix gives Nones."""
     fixes = _drop_spikes([fix for fix in map(_fix, points) if fix is not None])
     if not fixes:
         return {"distance_m": None, "landing_lat": None, "landing_lon": None}
-    anchor, pending = fixes[0], None
-    distance = 0.0
+    walk = _Walk(fixes[0])
     for fix in fixes[1:]:
-        if _possible(anchor, fix):
-            distance += haversine_m(anchor[0], anchor[1], fix[0], fix[1])
-            anchor, pending = fix, None
-        elif pending is not None and _possible(pending, fix):
-            distance += haversine_m(pending[0], pending[1], fix[0], fix[1])
-            anchor, pending = fix, None
-        else:
-            pending = fix
-    return {"distance_m": round(distance, 1), "landing_lat": anchor[0], "landing_lon": anchor[1]}
+        walk.step(fix)
+    distance = sum(_segment_length(segment) for segment in walk.segments)
+    return {"distance_m": round(distance, 1),
+            "landing_lat": walk.landing[0], "landing_lon": walk.landing[1]}
 
 
 def _load_points(telemetry_db: Session, flight_id: int):

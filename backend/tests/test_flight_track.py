@@ -1,5 +1,6 @@
 """Flight distance and landing location worked out from GPS telemetry."""
 import math
+import random
 from datetime import datetime
 
 import pytest
@@ -18,11 +19,16 @@ def _pt(lat, lon, ts_s):
 
 
 def _square():
-    """A 0.01 degree square flown at about 18 m/s, back to the start."""
-    return [
-        _pt(30.0, -86.0, 0), _pt(30.01, -86.0, 60), _pt(30.01, -85.99, 120),
-        _pt(30.0, -85.99, 180), _pt(30.0, -86.0, 240),
-    ]
+    """A 0.01 degree square flown at about 18 m/s, back to the start, one fix
+    every 6 seconds."""
+    corners = [(30.0, -86.0), (30.01, -86.0), (30.01, -85.99), (30.0, -85.99), (30.0, -86.0)]
+    points = [_pt(30.0, -86.0, 0)]
+    for side, ((lat1, lon1), (lat2, lon2)) in enumerate(zip(corners, corners[1:])):
+        for step in range(1, 11):
+            frac = step / 10
+            points.append(_pt(lat1 + (lat2 - lat1) * frac, lon1 + (lon2 - lon1) * frac,
+                              (side * 10 + step) * 6))
+    return points
 
 
 def _square_length():
@@ -63,7 +69,7 @@ def test_bad_first_fix_does_not_move_landing():
 
 def _gap_then_outlier():
     """The square, a 200 s gap, one fix about 11 km off, then the real return."""
-    return _square() + [_pt(30.1, -86.0, 440), _pt(30.0001, -86.0, 441)]
+    return _square() + [_pt(30.1, -86.0, 440), _pt(30.0001, -86.0, 441), _pt(30.0002, -86.0, 442)]
 
 
 def test_outlier_after_a_gap_is_skipped():
@@ -73,7 +79,63 @@ def test_outlier_after_a_gap_is_skipped():
 
 def test_outlier_after_a_gap_does_not_become_landing():
     summary = track_summary(_gap_then_outlier())
-    assert (summary["landing_lat"], summary["landing_lon"]) == (30.0001, -86.0)
+    assert (summary["landing_lat"], summary["landing_lon"]) == (30.0002, -86.0)
+
+
+def test_bad_final_fix_after_a_gap_adds_no_distance():
+    summary = track_summary(_square() + [_pt(30.1, -86.0, 440)])
+    assert summary["distance_m"] == pytest.approx(_square_length(), rel=0.01)
+
+
+def test_bad_final_fix_after_a_gap_is_not_the_landing():
+    summary = track_summary(_square() + [_pt(30.1, -86.0, 440)])
+    assert (summary["landing_lat"], summary["landing_lon"]) == (30.0, -86.0)
+
+
+def _gap_then_real_pair():
+    """The square, a 200 s gap, then two agreeing fixes about 5 km away."""
+    return _square() + [_pt(30.045, -86.0, 440), _pt(30.0451, -86.0, 441)]
+
+
+def test_no_distance_across_a_gap():
+    summary = track_summary(_gap_then_real_pair())
+    assert summary["distance_m"] == pytest.approx(_square_length() + 0.0001 * DEG_M, rel=0.01)
+
+
+def test_agreeing_fixes_after_a_gap_give_the_landing():
+    summary = track_summary(_gap_then_real_pair())
+    assert (summary["landing_lat"], summary["landing_lon"]) == (30.0451, -86.0)
+
+
+NOISE_DEG = 3 / DEG_M
+
+
+def _noisy_line(count, step_deg, interval_s):
+    rng = random.Random(1)
+    lon_noise = NOISE_DEG / math.cos(math.radians(30))
+    return [_pt(30.0 + i * step_deg + rng.gauss(0, NOISE_DEG), -86.0 + rng.gauss(0, lon_noise), i * interval_s)
+            for i in range(count)]
+
+
+def test_noise_at_one_hertz_within_five_percent():
+    summary = track_summary(_noisy_line(301, 0.0001, 1))
+    assert summary["distance_m"] == pytest.approx(300 * 0.0001 * DEG_M, rel=0.05)
+
+
+def test_noise_at_ten_hertz_within_fifteen_percent():
+    summary = track_summary(_noisy_line(301, 0.00001, 0.1))
+    assert summary["distance_m"] == pytest.approx(300 * 0.00001 * DEG_M, rel=0.15)
+
+
+def test_noisy_hover_adds_almost_nothing():
+    summary = track_summary(_noisy_line(500, 0, 0.2))
+    assert summary["distance_m"] < 50
+
+
+def test_fast_flight_is_measured():
+    step = 550 / DEG_M
+    summary = track_summary([_pt(30.0 + i * step, -86.0, i * 10) for i in range(11)])
+    assert summary["distance_m"] == pytest.approx(5500, rel=0.01)
 
 
 def test_bad_coordinates_are_skipped():
@@ -225,7 +287,7 @@ def test_telemetry_sync_fills_distance_and_landing(db, mock_httpx):
         if "/telemetry" in str(request.url):
             return httpx.Response(200, json={"data": {"flight_telemetry": [
                 {"timestamp_ms": 1000, "gps_latitude": 30.72, "gps_longitude": -86.10},
-                {"timestamp_ms": 61000, "gps_latitude": 30.721, "gps_longitude": -86.10},
+                {"timestamp_ms": 11000, "gps_latitude": 30.721, "gps_longitude": -86.10},
             ]}})
         return httpx.Response(200, json={})
 
