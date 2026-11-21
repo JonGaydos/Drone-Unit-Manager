@@ -101,9 +101,16 @@ def _gap_then_real_pair():
     return _second_track() + [_pt(30.045, -86.0, 320), _pt(30.0451, -86.0, 321)]
 
 
-def test_no_distance_across_a_gap():
+def test_confirmed_fix_after_a_pause_counts_the_straight_line():
     summary = track_summary(_gap_then_real_pair())
-    assert summary["distance_m"] == pytest.approx(0.0101 * DEG_M, rel=0.01)
+    assert summary["distance_m"] == pytest.approx(0.0451 * DEG_M, rel=0.01)
+
+
+def test_outage_in_a_second_track_counts_the_straight_line():
+    # Two minutes without fixes while the craft moves about 1 km north.
+    after = [_pt(30.019 + 0.0001 * i, -86.0, 240 + i) for i in range(30)]
+    summary = track_summary(_second_track() + after)
+    assert summary["distance_m"] == pytest.approx((0.019 + 0.0029) * DEG_M, rel=0.01)
 
 
 def test_agreeing_fixes_after_a_gap_give_the_landing():
@@ -132,12 +139,36 @@ def test_minute_sampled_zigzag_is_measured():
     assert track_summary(points)["distance_m"] == pytest.approx(9600, rel=0.01)
 
 
-def test_no_distance_across_an_outage_in_minute_sampling():
+def test_outage_in_minute_sampling_counts_the_straight_line():
     first = _line_every_minute(10)
     # Ten minutes without fixes, then the flight carries on 4 km further north.
     second = _line_every_minute(10, start_lat=first[-1]["lat"] + 4000 / DEG_M, start_s=1200)
     summary = track_summary(first + second)
-    assert summary["distance_m"] == pytest.approx(12000, rel=0.01)
+    assert summary["distance_m"] == pytest.approx(16000, rel=0.01)
+
+
+def _mixed_rate(fast_fixes, slow_fixes):
+    """North at 10 m/s: fast_fixes one a second, then slow_fixes one a minute."""
+    fast = [_pt(30.0 + i * 10 / DEG_M, -86.0, i) for i in range(fast_fixes)]
+    end_lat, end_s = fast[-1]["lat"], fast_fixes - 1
+    slow = [_pt(end_lat + i * 600 / DEG_M, -86.0, end_s + i * 60) for i in range(1, slow_fixes + 1)]
+    return fast + slow
+
+
+def test_second_then_minute_sampling_is_measured():
+    summary = track_summary(_mixed_rate(301, 10))
+    assert summary["distance_m"] == pytest.approx(9000, rel=0.05)
+
+
+def test_second_then_minute_sampling_lands_at_the_last_fix():
+    points = _mixed_rate(301, 10)
+    summary = track_summary(points)
+    assert summary["landing_lat"] == points[-1]["lat"]
+
+
+def test_hundred_fast_fixes_then_thirty_slow_ones():
+    summary = track_summary(_mixed_rate(100, 30))
+    assert summary["distance_m"] == pytest.approx(990 + 18000, rel=0.05)
 
 
 NOISE_DEG = 3 / DEG_M

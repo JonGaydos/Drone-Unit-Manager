@@ -10,7 +10,6 @@ missing values, and does the address lookups, which are kept off imports.
 
 import logging
 import math
-import statistics
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -29,11 +28,11 @@ logger = logging.getLogger(__name__)
 EARTH_RADIUS_M = 6_371_008.8
 # A segment faster than this is a GPS jump, not flight.
 MAX_SPEED_MPS = 60.0
-# A pause between fixes longer than this, or than GAP_INTERVALS times the
-# flight's usual interval if that is longer, is a gap that is not measured.
-# Relative to the interval so a log that records a fix a minute still counts.
-MIN_GAP_S = 30.0
-GAP_INTERVALS = 5
+# A fix after a pause longer than this, and longer than PAUSE_FACTOR times
+# the interval before it, is held until a following fix agrees with it. A log
+# that records a fix a minute has no pauses, since its first step sets the rhythm.
+MIN_PAUSE_S = 30.0
+PAUSE_FACTOR = 2
 # Distance counts once the craft has moved this far from the last counted fix,
 # so hovering and GPS jitter add nothing.
 MIN_MOVE_M = 5.0
@@ -100,39 +99,56 @@ def _drop_spikes(fixes: list) -> list:
 
 
 class _Walk:
-    """Walks the fixes, keeping the accepted ones in segments and the landing fix.
+    """Walks the fixes, keeping the accepted ones in stretches and the landing fix.
 
-    ``anchor`` is the last accepted fix (the speed rule measures from it) and
-    ``pending`` a rejected fix that the next one may agree with. A segment ends
-    at a gap or where the track carries on from a pending fix, so no distance
-    is measured across either."""
+    ``anchor`` is the last accepted fix (the speed rule measures from it).
+    ``held`` is a fix after a pause, accepted only once a following fix agrees
+    with it, so a bad fix at the end of a gap is never measured or landed on.
+    ``rejected`` is a fix the speed rule turned down; if the next fix agrees
+    with it, the anchor was the bad one and the track carries on from them.
+    Each stretch is (joined, fixes): joined stretches are measured from the
+    end of the one before; a new stretch starts after more than
+    SMOOTH_WINDOW_S without fixes, or unjoined after a bad anchor."""
 
-    def __init__(self, first, gap_s: float):
-        self.gap_s = gap_s
+    def __init__(self, first):
         self.anchor = self.landing = first
-        self.pending = None
-        self.segments = [[first]]
+        self.interval = None
+        self.held = self.rejected = None
+        self.stretches = [(False, [first])]
 
     def step(self, fix) -> None:
-        if _possible(self.anchor, fix):
-            self._accept(self.anchor, fix)
-        elif self.pending is not None and _possible(self.pending, fix):
-            # Two fixes agree with each other but not with the anchor: the
-            # anchor was the bad one, so carry on from them.
-            self.segments.append([self.pending])
-            self._accept(self.pending, fix)
+        held, self.held = self.held, None
+        if held is not None and _possible(held, fix):
+            self._join(held)
+            self._join(fix)
+        elif _possible(self.anchor, fix):
+            self._take(fix)
+        elif self.rejected is not None and _possible(self.rejected, fix):
+            self.stretches.append((False, [self.rejected]))
+            self.anchor, self.interval = self.rejected, None
+            self._join(fix)
         else:
-            self.pending = fix
+            self.rejected = fix
 
-    def _accept(self, prev, fix) -> None:
-        self.anchor, self.pending = fix, None
-        if fix[2] - prev[2] > self.gap_s:
-            # Nothing is known about the gap: no distance across it, and the
-            # fix lands the flight only once a following fix agrees with it.
-            self.segments.append([fix])
-            return
-        self.landing = fix
-        self.segments[-1].append(fix)
+    def _take(self, fix) -> None:
+        interval = fix[2] - self.anchor[2]
+        # The first step after a start sets the rhythm, so it is never a pause.
+        paused = (interval > MIN_PAUSE_S and self.interval is not None
+                  and interval > PAUSE_FACTOR * self.interval)
+        if paused:
+            self.held, self.rejected = fix, None
+        else:
+            self._join(fix)
+
+    def _join(self, fix) -> None:
+        interval = fix[2] - self.anchor[2]
+        if interval > SMOOTH_WINDOW_S:
+            self.stretches.append((True, [fix]))
+        else:
+            self.stretches[-1][1].append(fix)
+        self.anchor = self.landing = fix
+        self.interval = interval
+        self.rejected = None
 
 
 def _smoothed(segment: list) -> list:
@@ -171,27 +187,34 @@ def _segment_length(segment: list) -> float:
     return meters
 
 
-def _gap_seconds(fixes: list) -> float:
-    """The pause that counts as a gap for this flight."""
-    intervals = [b[2] - a[2] for a, b in zip(fixes, fixes[1:]) if b[2] > a[2]]
-    if not intervals:
-        return MIN_GAP_S
-    return max(MIN_GAP_S, GAP_INTERVALS * statistics.median(intervals))
+def _distance(stretches: list) -> float:
+    """Total of each stretch's length and of the joins between them, a join
+    counting only when it is at least MIN_MOVE_M."""
+    meters = 0.0
+    previous_end = None
+    for joined, fixes in stretches:
+        if joined and previous_end is not None:
+            step = haversine_m(previous_end[0], previous_end[1], fixes[0][0], fixes[0][1])
+            if step >= MIN_MOVE_M:
+                meters += step
+        meters += _segment_length(fixes)
+        previous_end = fixes[-1]
+    return meters
 
 
 def track_summary(points) -> dict:
     """Distance and landing fix over telemetry points in time order (dicts or
     rows with lat, lon and timestamp_ms). A jump that would need more than
-    MAX_SPEED_MPS is never measured, nor a gap (see _gap_seconds), and
-    smoothing plus MIN_MOVE_M keep hovering and GPS jitter from adding
-    distance. No good fix gives Nones."""
+    MAX_SPEED_MPS is never measured, nor a fix after a pause that nothing after
+    it confirms, and smoothing plus MIN_MOVE_M keep hovering and GPS jitter
+    from adding distance. No good fix gives Nones."""
     fixes = _drop_spikes([fix for fix in map(_fix, points) if fix is not None])
     if not fixes:
         return {"distance_m": None, "landing_lat": None, "landing_lon": None}
-    walk = _Walk(fixes[0], _gap_seconds(fixes))
+    walk = _Walk(fixes[0])
     for fix in fixes[1:]:
         walk.step(fix)
-    distance = sum(_segment_length(segment) for segment in walk.segments)
+    distance = _distance(walk.stretches)
     return {"distance_m": round(distance, 1),
             "landing_lat": walk.landing[0], "landing_lon": walk.landing[1]}
 
