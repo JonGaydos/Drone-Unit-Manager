@@ -138,6 +138,8 @@ class FlightOut(BaseModel):
     attachment_right: str | None = None
     carrier: str | None = None
     operating_cost: float | None = None
+    # Hours x the aircraft's hourly rate when no cost was typed; never stored.
+    operating_cost_estimate: float | None = None
     has_telemetry: bool = False
     telemetry_synced: bool = False
     review_status: str = "needs_review"

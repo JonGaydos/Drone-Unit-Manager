@@ -295,7 +295,7 @@ def update_vehicle(vehicle_id: int, data: VehicleUpdate, db: DBSession, admin: M
         Vehicle.serial_number == new_serial, Vehicle.id != vehicle_id
     ).first():
         raise HTTPException(status_code=400, detail="Vehicle with this serial number already exists")
-    changes = compute_changes(vehicle, update_data, ["nickname", "status", "manufacturer", "model", "serial_number"])
+    changes = compute_changes(vehicle, update_data, ["nickname", "status", "manufacturer", "model", "serial_number", "hourly_operating_cost"])
     set_fields_with_lifecycle(vehicle, update_data)
     if changes:
         log_action(db, admin.id, admin.display_name, "update", "vehicle", vehicle.id, vehicle.nickname or f"{vehicle.manufacturer} {vehicle.model}", changes=changes)

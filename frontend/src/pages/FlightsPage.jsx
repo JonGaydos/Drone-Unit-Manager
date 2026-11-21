@@ -9,6 +9,7 @@ import { Plus, Search, CheckCircle, ChevronUp, ChevronDown, Pencil, X, Check, Do
 import { Link } from 'react-router-dom'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Modal } from '@/components/ui/Modal'
+import { OperatingCost } from '@/components/OperatingCost'
 
 const FLIGHT_NUMBER_FIELDS = ['takeoff_lat', 'takeoff_lon', 'landing_lat', 'landing_lon', 'distance_m', 'operating_cost']
 
@@ -675,6 +676,7 @@ export default function FlightsPage() {
               <th className="text-right px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none" onClick={() => toggleSort('duration_seconds')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('duration_seconds'))() } }} tabIndex={0}>
                 Duration<SortIndicator column="duration_seconds" sortKey={sortKey} sortDir={sortDir} />
               </th>
+              <th className="text-right px-4 py-3 font-medium text-muted-foreground hidden lg:table-cell">Cost</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden lg:table-cell">Location</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none" onClick={() => toggleSort('review_status')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('review_status'))() } }} tabIndex={0}>
                 Status<SortIndicator column="review_status" sortKey={sortKey} sortDir={sortDir} />
@@ -707,6 +709,7 @@ export default function FlightsPage() {
                 </td>
                 <td className="px-4 py-3 text-foreground hidden md:table-cell">{f.purpose || <span className="text-amber-400">None</span>}</td>
                 <td className="px-4 py-3 text-right text-foreground">{formatDuration(f.duration_seconds)}</td>
+                <td className="px-4 py-3 text-right text-foreground whitespace-nowrap hidden lg:table-cell"><OperatingCost flight={f} /></td>
                 <td className="px-4 py-3 text-foreground truncate max-w-[200px] hidden lg:table-cell">{f.takeoff_address || '—'}</td>
                 <td className="px-4 py-3">
                   <div className="flex flex-col gap-0.5 items-start">
@@ -762,7 +765,7 @@ export default function FlightsPage() {
                 </td>
               </tr>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={canReview ? 10 : 9} className="px-4 py-12 text-center text-muted-foreground">No flights found</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={canReview ? 11 : 10} className="px-4 py-12 text-center text-muted-foreground">No flights found</td></tr>}
           </tbody>
         </table>
         </div>
@@ -856,6 +859,7 @@ function FlightEditRow({ f, editForm, setEditForm, pilots, purposes, onSave, onC
         <input type="number" min="0" value={editForm.duration_seconds} onChange={e => setEditForm({...editForm, duration_seconds: e.target.value})}
           className="w-20 px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm text-right" placeholder="sec" />
       </td>
+      <td className="px-4 py-2 text-right whitespace-nowrap hidden lg:table-cell text-foreground"><OperatingCost flight={f} /></td>
       <td className="px-4 py-2 hidden lg:table-cell text-foreground">{f.takeoff_address || '—'}</td>
       <td className="px-4 py-2">
         <div className="flex flex-col gap-0.5 items-start">

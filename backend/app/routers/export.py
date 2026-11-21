@@ -303,7 +303,7 @@ def export_vehicles_csv(db: DBSession, user: ExportUser, _view: FleetView):
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(["Serial", "Manufacturer", "Model", "Nickname", "FAA Reg", "Status", "Flights", "Hours",
-                     "Acquired", "Decommissioned"])
+                     "Acquired", "Decommissioned", "Hourly Operating Cost"])
     for v in vehicles:
         flights, hours = totals.get(v.id, (0, 0.0)) if totals is not None else ("", None)
         writer.writerow([
@@ -311,6 +311,7 @@ def export_vehicles_csv(db: DBSession, user: ExportUser, _view: FleetView):
             _csv_safe(v.nickname or ""), _csv_safe(current_regs.get(v.id) or v.faa_registration or ""),
             _csv_safe(v.status), flights, round(hours, 1) if hours is not None else "",
             v.acquired_date or "", v.decommissioned_date or "",
+            "" if v.hourly_operating_cost is None else f"{v.hourly_operating_cost:.2f}",
         ])
     output.seek(0)
     return StreamingResponse(

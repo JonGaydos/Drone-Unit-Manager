@@ -318,4 +318,28 @@ describe('FlightDetailPage', () => {
     await user.click(screen.getByRole('button', { name: 'Edit' }))
     expect(await screen.findByLabelText('Case #')).toBeInTheDocument()
   })
+
+  describe('operating cost', () => {
+    it('marks a cost worked out from the hourly rate as estimated', async () => {
+      mockMount({ flight: () => HttpResponse.json({ ...FLIGHT, operating_cost: null, operating_cost_estimate: 12.5 }) })
+      render()
+      expect(await screen.findByText('$12.50')).toBeInTheDocument()
+      expect(screen.getByText('(estimated)')).toBeInTheDocument()
+    })
+
+    it('shows a typed cost without the estimated marker', async () => {
+      mockMount({ flight: () => HttpResponse.json({ ...FLIGHT, operating_cost: 40 }) })
+      render()
+      expect(await screen.findByText('$40.00')).toBeInTheDocument()
+      expect(screen.queryByText('(estimated)')).toBeNull()
+    })
+
+    it('edits only the typed cost, leaving the field empty when the cost is estimated', async () => {
+      mockMount({ flight: () => HttpResponse.json({ ...FLIGHT, operating_cost: null, operating_cost_estimate: 12.5 }) })
+      const { user } = render()
+      await screen.findByText('$12.50')
+      await user.click(screen.getByRole('button', { name: 'Edit' }))
+      expect(await screen.findByLabelText('Operating Cost ($)')).toHaveValue(null)
+    })
+  })
 })

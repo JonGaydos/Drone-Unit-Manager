@@ -411,4 +411,20 @@ describe('FleetPage', () => {
     const options = [...within(dialog).getByLabelText('Status').options].map(o => o.value)
     expect(options).toEqual(['active', 'online', 'offline', 'maintenance', 'retired', 'damaged'])
   })
+
+  it('sends the hourly operating cost from the vehicle modal as a number', async () => {
+    let body = null
+    mockVehicles()
+    server.use(http.patch('/api/vehicles/1', async ({ request }) => {
+      body = await request.json()
+      return HttpResponse.json({ id: 1 })
+    }))
+    const { user } = renderWithProviders(<FleetPage />, { role: 'admin' })
+    const row = (await screen.findByRole('link', { name: 'Falcon' })).closest('tr')
+    await user.click(within(row).getByRole('button', { name: 'Edit' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.type(within(dialog).getByLabelText('Hourly Operating Cost ($)'), '85.5')
+    await user.click(within(dialog).getByRole('button', { name: 'Update' }))
+    await waitFor(() => expect(body?.hourly_operating_cost).toBe(85.5))
+  })
 })

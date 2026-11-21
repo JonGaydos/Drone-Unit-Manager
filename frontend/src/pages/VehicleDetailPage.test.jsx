@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { screen, fireEvent } from '@testing-library/react'
+import { screen, fireEvent, waitFor } from '@testing-library/react'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { withPermissions } from '@/test/permissions'
@@ -163,5 +163,27 @@ describe('VehicleDetailPage', () => {
     render()
     expect(await screen.findByText('Next Due: 2027-01-01')).toBeInTheDocument()
     expect(screen.getByText(/REG-CURRENT \| Registered: 2024-01-01/)).toBeInTheDocument()
+  })
+
+  it('shows the hourly operating cost', async () => {
+    mockMount({ vehicle: () => HttpResponse.json({ ...VEHICLE, hourly_operating_cost: 42 }) })
+    render()
+    expect(await screen.findByText('Operating cost: $42.00/h')).toBeInTheDocument()
+  })
+
+  it('saves a cleared hourly operating cost as null', async () => {
+    let body = null
+    mockMount({ vehicle: () => HttpResponse.json({ ...VEHICLE, hourly_operating_cost: 42 }) })
+    server.use(http.patch('/api/vehicles/:id', async ({ request }) => {
+      body = await request.json()
+      return HttpResponse.json({ ...VEHICLE, hourly_operating_cost: null })
+    }))
+    const { user } = render()
+    await screen.findByText('Operating cost: $42.00/h')
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.clear(screen.getByLabelText('Hourly Operating Cost ($)'))
+    await user.click(screen.getByRole('button', { name: /Save/ }))
+    await waitFor(() => expect(body).not.toBeNull())
+    expect(body.hourly_operating_cost).toBeNull()
   })
 })

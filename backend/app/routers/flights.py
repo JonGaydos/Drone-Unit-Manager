@@ -18,6 +18,7 @@ from app.routers.auth import require_permission
 from app.responses import responses
 from app.services.audit import log_action
 from app.services.audit_capture import update_recorded
+from app.services.operating_cost import estimate_operating_cost
 from app.services.flight_delete import delete_flights, purge_flight_telemetry
 from app.services.flight_track import fill_track_fields
 from app.services import permissions as permissions_service
@@ -92,6 +93,7 @@ def _flight_to_out(flight: Flight) -> FlightOut:
         "pilot_name": pilot_name,
         "vehicle_name": vehicle_name,
         "can_refresh": can_refresh,
+        "operating_cost_estimate": estimate_operating_cost(flight),
     })
 
 

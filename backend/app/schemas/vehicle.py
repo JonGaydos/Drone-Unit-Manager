@@ -1,11 +1,13 @@
 from datetime import datetime, date
 from typing import Annotated, Optional
 
-from pydantic import BaseModel, StringConstraints, field_validator
+from pydantic import BaseModel, Field, StringConstraints, field_validator
 
 # Required text (serial number, manufacturer, model, location place): trimmed,
 # never blank, at most the 100 characters their columns hold.
 RequiredText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+# Hourly operating cost: optional, 0 to 100000.
+HourlyRate = Annotated[Optional[float], Field(ge=0, le=100000)]
 
 
 class VehicleCreate(BaseModel):
@@ -19,6 +21,7 @@ class VehicleCreate(BaseModel):
     acquired_date: Optional[date] = None
     decommissioned_date: Optional[date] = None
     notes: Optional[str] = None
+    hourly_operating_cost: HourlyRate = None
 
 
 class VehicleUpdate(BaseModel):
@@ -33,6 +36,7 @@ class VehicleUpdate(BaseModel):
     decommissioned_date: Optional[date] = None
     photo_url: Optional[str] = None
     notes: Optional[str] = None
+    hourly_operating_cost: HourlyRate = None
 
     @field_validator("serial_number", "manufacturer", "model", "status")
     @classmethod
@@ -60,6 +64,7 @@ class VehicleOut(BaseModel):
     decommissioned_date: Optional[date] = None
     photo_url: Optional[str] = None
     notes: Optional[str] = None
+    hourly_operating_cost: Optional[float] = None
     created_at: datetime
     updated_at: datetime
 

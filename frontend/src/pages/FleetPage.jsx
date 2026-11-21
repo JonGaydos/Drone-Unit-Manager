@@ -105,6 +105,9 @@ function EquipmentModal({ title, record, fields, onSave, onClose, vehicleModels 
                   id={`field-${f.key}`}
                   type={f.type || 'text'}
                   required={f.required}
+                  min={f.min}
+                  max={f.max}
+                  step={f.step}
                   value={form[f.key] ?? ''}
                   onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}
                   className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-ring text-sm"
@@ -271,6 +274,7 @@ const TAB_CONFIGS = {
       { key: 'nickname', label: 'Nickname' },
       ...LIFECYCLE_FIELDS,
       { key: 'status', label: 'Status', type: 'select', options: EQUIPMENT_STATUSES.vehicle },
+      { key: 'hourly_operating_cost', label: 'Hourly Operating Cost ($)', type: 'number', min: 0, max: 100000, step: '0.01' },
       { key: 'notes', label: 'Notes' },
     ],
   },

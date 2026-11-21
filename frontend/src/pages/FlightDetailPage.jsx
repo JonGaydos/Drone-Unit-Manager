@@ -10,6 +10,7 @@ import { ArrowLeft, MapPin, Save, RefreshCw, Loader2, Download } from 'lucide-re
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
 import { FlightPathMap } from '@/components/FlightMap'
 import LinkedPhotos from '@/components/LinkedPhotos'
+import { OperatingCost } from '@/components/OperatingCost'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
@@ -481,7 +482,7 @@ function FlightCoreFields({ editing, canReassign, flight, editForm, setEditForm,
 
       <EditableField editing={editing} label="Operating Cost" editLabel="Operating Cost ($)" htmlFor="operating-cost"
         input={<input id="operating-cost" type="number" step="0.01" min="0" value={editForm.operating_cost} onChange={e => set({ operating_cost: e.target.value })} className={CONTROL} />}
-        display={<p className="text-sm text-foreground">{flight.operating_cost == null ? '—' : `$${Number(flight.operating_cost).toFixed(2)}`}</p>}
+        display={<p className="text-sm text-foreground"><OperatingCost flight={flight} /></p>}
       />
     </>
   )

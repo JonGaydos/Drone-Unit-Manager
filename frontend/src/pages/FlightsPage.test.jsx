@@ -633,4 +633,15 @@ describe('FlightsPage', () => {
       expect(select).toHaveClass('max-w-64', 'truncate')
     }
   })
+
+  it('shows each flight cost, marking estimates', async () => {
+    mockMount({ flights: () => HttpResponse.json({ flights: [
+      { ...FLIGHTS[0], operating_cost: 25 },
+      { ...FLIGHTS[1], operating_cost: null, operating_cost_estimate: 7.5 },
+    ], total: 2, total_pages: 1 }) })
+    renderWithProviders(<FlightsPage />, { role: 'admin' })
+    const estimated = (await screen.findByText('$7.50')).closest('td')
+    expect(within(estimated).getByText('(estimated)')).toBeInTheDocument()
+    expect(within(screen.getByText('$25.00').closest('td')).queryByText('(estimated)')).toBeNull()
+  })
 })

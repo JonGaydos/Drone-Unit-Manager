@@ -21,6 +21,7 @@ from app.services.permissions import can
 from app.models.flight import Flight
 from app.models.pilot import Pilot
 from app.services.flight_scope import counted_flight_clause, counted_only
+from app.services.operating_cost import estimate_operating_cost, flight_cost_sql, format_cost
 from app.services.requirement_results import overall_totals, per_model_text
 from app.models.vehicle import Vehicle
 from app.models.certification import CertificationType, PilotCertification
@@ -686,8 +687,20 @@ def _flight_summary_row(f) -> dict:
         "purpose": f.purpose or "—",
         "duration_min": round((f.duration_seconds or 0) / 60, 1),
         "location": f.takeoff_address or "—",
+        "cost": format_cost(*_flight_cost(f)),
         "_links": {"pilot": f.pilot_id, "vehicle": f.vehicle_id},
     }
+
+
+COST_BASIS = "Entered costs, else hours x aircraft hourly rate"
+
+
+def _flight_cost(f) -> tuple[float | None, bool]:
+    """A flight's shown cost and whether it is an estimate (typed cost wins)."""
+    if f.operating_cost is not None:
+        return f.operating_cost, False
+    estimate = estimate_operating_cost(f)
+    return estimate, estimate is not None
 
 
 def _flight_summary(config: ReportConfig, db: Session):
@@ -705,6 +718,7 @@ def _flight_summary(config: ReportConfig, db: Session):
     total_seconds = sum(f.duration_seconds or 0 for f in flights)
 
     rows = [_flight_summary_row(f) for f in flights]
+    costs = [_flight_cost(f) for f in flights]
 
     return {
         "report_type": "flight_summary",
@@ -712,9 +726,13 @@ def _flight_summary(config: ReportConfig, db: Session):
         "summary": {
             "total_flights": len(flights),
             "total_hours": round(total_seconds / 3600, 1),
+            # Typed costs plus estimates from aircraft hourly rates.
+            "total_cost": format_cost(sum(c for c, _ in costs if c is not None)),
+            "estimated_cost_flights": sum(1 for _, est in costs if est),
+            "cost_basis": COST_BASIS,
             "date_range": f"{config.date_from or 'All'} to {config.date_to or 'Present'}",
         },
-        "columns": ["Date", "Pilot", "Vehicle", "Purpose", "Duration (min)", "Location"],
+        "columns": ["Date", "Pilot", "Vehicle", "Purpose", "Duration (min)", "Location", "Cost ($)"],
         "rows": rows,
     }
 
@@ -800,13 +818,16 @@ def _equipment_utilization(config: ReportConfig, db: Session):
         Vehicle.id, Vehicle.manufacturer, Vehicle.model, Vehicle.nickname, Vehicle.serial_number,
         func.count(Flight.id).label("flights"),
         func.coalesce(func.sum(Flight.duration_seconds), 0).label("seconds"),
+        func.sum(flight_cost_sql()).label("cost"),
     ).select_from(Vehicle).outerjoin(Flight, and_(*join_conditions))
 
     if config.vehicle_ids:
         q = q.filter(Vehicle.id.in_(config.vehicle_ids))
 
     rows = []
+    total_cost = 0.0  # an aircraft with no flights has no cost to add
     for r in q.group_by(Vehicle.id).order_by(func.sum(Flight.duration_seconds).desc()).all():
+        total_cost += r.cost or 0
         name = f"{r.manufacturer} {r.model}"
         if r.nickname:
             name += f" ({r.nickname})"
@@ -815,6 +836,7 @@ def _equipment_utilization(config: ReportConfig, db: Session):
             "serial": r.serial_number,
             "flights": r.flights,
             "hours": round(r.seconds / 3600, 1),
+            "cost": format_cost(r.cost),
             "_links": {"vehicle": r.id},
         })
 
@@ -830,9 +852,11 @@ def _equipment_utilization(config: ReportConfig, db: Session):
         "summary": {
             "total_vehicles": len(rows),
             "total_hours": round(sum(r["hours"] for r in rows), 1),
+            "total_cost": format_cost(total_cost),
             "date_range": f"{config.date_from or 'All'} to {config.date_to or 'Present'}",
+            "cost_basis": COST_BASIS,
         },
-        "columns": ["Vehicle", "Serial", "Flights", "Hours"],
+        "columns": ["Vehicle", "Serial", "Flights", "Hours", "Cost ($)"],
         "rows": rows,
     }
 
