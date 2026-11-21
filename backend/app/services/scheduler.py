@@ -28,6 +28,7 @@ MAINTENANCE_ALERT_JOB_ID = "maintenance_alerts"
 MAINTENANCE_ALERT_HOUR = 6
 TELEMETRY_SYNC_JOB_ID = "skydio_telemetry_sync"
 REQUIREMENTS_DAILY_JOB_ID = "requirements_daily"
+TRACK_FILL_JOB_ID = "track_fill"
 # Misses saved this many days back are emailed if not yet announced, wherever
 # they were saved (this job, or a page load or edit that closed the period).
 MISS_SWEEP_DAYS = 14
@@ -189,6 +190,33 @@ def _run_requirements_daily():
     reminders = _requirements_step("reminders", remind, 0)
     logger.info("Flight requirements daily job: %d results saved, %d miss emails, %d lapses opened, "
                 "%d lapse emails, %d reminders", saved, miss_emails, opened, lapse_emails, reminders)
+
+
+def _run_track_fill():
+    """Fill distance, landing location and landing time from telemetry for
+    flights still missing them (scheduled daily, and once after an upgrade)."""
+    from app.services import flight_track
+    try:
+        result = flight_track.fill_missing()
+        if result is not None:
+            logger.info("Track fill: %d flights checked, %d filled, %d addresses found",
+                        result["checked"], result["filled"], result["geocoded"])
+    except Exception:
+        logger.exception("Track fill failed")
+
+
+def _track_fill_job_kwargs() -> dict:
+    """Daily, and also a few minutes after boot until a full pass has finished
+    once, so existing flights are filled without waiting a day."""
+    from app.services.flight_track import backfill_done
+    kwargs = {}
+    db = SessionLocal()
+    try:
+        if not backfill_done(db):
+            kwargs["next_run_time"] = datetime.now() + timedelta(minutes=4)
+    finally:
+        db.close()
+    return kwargs
 
 
 def _run_scheduled_telemetry_sync():
@@ -434,6 +462,15 @@ def start_scheduler():
         max_instances=1,
         # Also shortly after boot; each email goes out once, so a rerun is safe.
         next_run_time=datetime.now() + timedelta(minutes=3),
+    )
+
+    _scheduler.add_job(
+        _run_track_fill,
+        trigger=CronTrigger(hour=MAINTENANCE_ALERT_HOUR - 2, minute=30),
+        id=TRACK_FILL_JOB_ID,
+        replace_existing=True,
+        max_instances=1,
+        **_track_fill_job_kwargs(),
     )
 
     if interval_minutes:

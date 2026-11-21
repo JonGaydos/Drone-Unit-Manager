@@ -804,6 +804,9 @@ def import_flight_log(
             db.rollback()
             raise
 
+    from app.services.flight_track import fill_track_fields
+    fill_track_fields(db, flight, telemetry_db)
+
     db.commit()
     db.refresh(flight)
     logger.info("Imported flight %d with %d telemetry points from %s",

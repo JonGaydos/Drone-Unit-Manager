@@ -19,6 +19,7 @@ from app.responses import responses
 from app.services.audit import log_action
 from app.services.audit_capture import update_recorded
 from app.services.flight_delete import delete_flights, purge_flight_telemetry
+from app.services.flight_track import fill_track_fields
 from app.services import permissions as permissions_service
 from app.services.local_time import display_zone, local_flight_date
 from app.schemas.flight import (
@@ -588,6 +589,7 @@ def refresh_flight_from_api(flight_id: int, db: DBSession, admin: AdminUser):
     if telemetry_points > 0:
         flight.telemetry_synced = True
         flight.has_telemetry = True
+        fill_track_fields(db, flight)
 
     db.commit()
 
