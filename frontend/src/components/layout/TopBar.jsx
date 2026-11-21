@@ -29,7 +29,7 @@ export function TopBar({ title }) {
   }, [])
 
   return (
-    <header className="h-16 border-b border-border bg-sidebar/80 backdrop-blur-sm flex items-center justify-between gap-4 px-6 sticky top-0 z-30">
+    <header className="h-16 border-b border-border bg-sidebar flex items-center justify-between gap-4 px-6">
       <h1 className="text-lg font-semibold text-foreground shrink-0">{title}</h1>
 
       <button
