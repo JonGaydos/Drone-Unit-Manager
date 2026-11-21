@@ -324,6 +324,8 @@ export default function FlightsPage() {
   // Bulk selection (needs flights.review): a Set of selected flight ids + action state.
   const [selectedIds, setSelectedIds] = useState(() => new Set())
   const [bulkBusy, setBulkBusy] = useState(false)
+  const bulkControlsOff = bulkBusy || selectedIds.size === 0
+  const bulkReason = selectedIds.size === 0 ? 'Select flights first' : undefined
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
   // The flight a row's delete control is asking to confirm.
   const [deleteTarget, setDeleteTarget] = useState(null)
@@ -622,26 +624,26 @@ export default function FlightsPage() {
         </div>
       </div>
 
-      {canReview && selectedIds.size > 0 && (
-        <div className="flex items-center gap-3 flex-wrap bg-primary/10 border border-primary/30 rounded-lg px-4 py-2">
+      {canReview && (
+        <div className="sticky top-14 lg:top-16 z-30 flex items-center gap-3 flex-wrap bg-card border border-primary/30 rounded-lg px-4 py-2">
           <span className="text-sm font-medium text-foreground">{selectedIds.size} selected</span>
-          {canBulkEdit && <select disabled={bulkBusy} value="" aria-label="Reassign pilot for selected flights"
+          {canBulkEdit && <select disabled={bulkControlsOff} title={bulkReason} value="" aria-label="Reassign pilot for selected flights"
             onChange={e => { if (e.target.value) confirmBulkPilot(Number.parseInt(e.target.value, 10)) }}
             className="max-w-64 truncate px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm">
             <option value="">Reassign pilot…</option>
             {sortPilotsActiveFirst(pilots).map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
           </select>}
-          {canBulkEdit && <select disabled={bulkBusy} value="" aria-label="Set purpose for selected flights"
+          {canBulkEdit && <select disabled={bulkControlsOff} title={bulkReason} value="" aria-label="Set purpose for selected flights"
             onChange={e => { if (e.target.value) confirmBulkPurpose(e.target.value) }}
             className="max-w-64 truncate px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm">
             <option value="">Set purpose…</option>
             {sortByName(purposes, 'name').map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
           </select>}
-          <button disabled={bulkBusy} onClick={confirmBulkReviewed}
+          <button disabled={bulkControlsOff} title={bulkReason} onClick={confirmBulkReviewed}
             className="px-3 py-1 bg-emerald-600 text-white rounded text-sm font-medium hover:opacity-90 disabled:opacity-50">Mark reviewed</button>
-          {canBulkDelete && <button disabled={bulkBusy} onClick={() => setShowBulkDeleteConfirm(true)}
+          {canBulkDelete && <button disabled={bulkControlsOff} title={bulkReason} onClick={() => setShowBulkDeleteConfirm(true)}
             className="px-3 py-1 bg-destructive text-destructive-foreground rounded text-sm font-medium hover:opacity-90 disabled:opacity-50">Delete</button>}
-          <button disabled={bulkBusy} onClick={() => setSelectedIds(new Set())} className="ml-auto text-sm text-muted-foreground hover:text-foreground">Clear</button>
+          <button disabled={bulkControlsOff} title={bulkReason} onClick={() => setSelectedIds(new Set())} className="ml-auto text-sm text-muted-foreground hover:text-foreground">Clear</button>
         </div>
       )}
 

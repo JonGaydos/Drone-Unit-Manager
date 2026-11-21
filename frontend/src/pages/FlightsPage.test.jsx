@@ -47,7 +47,7 @@ function mockMount(overrides = {}) {
 async function selectEveryRow() {
   const { user } = renderWithProviders(<FlightsPage />, { role: 'supervisor' })
   await user.click(await screen.findByLabelText('Select all flights on this page'))
-  await screen.findByText(/\d+ selected/)
+  await screen.findByText(/[1-9]\d* selected/)
   return user
 }
 
@@ -274,6 +274,61 @@ describe('FlightsPage', () => {
     renderWithProviders(<FlightsPage />, { role: 'supervisor' })
     expect(await screen.findByRole('link', { name: 'Jane Doe' })).toBeInTheDocument()
     expect(screen.getByLabelText('Select all flights on this page')).toBeInTheDocument()
+  })
+
+  describe('selection bar', () => {
+    const bulkControls = () => [
+      screen.getByLabelText('Reassign pilot for selected flights'),
+      screen.getByLabelText('Set purpose for selected flights'),
+      screen.getByRole('button', { name: 'Mark reviewed' }),
+      screen.getByRole('button', { name: 'Delete' }),
+    ]
+
+    it('is present with nothing selected, with every control disabled and explained', async () => {
+      mockMount()
+      renderWithProviders(<FlightsPage />, { role: 'supervisor' })
+      await screen.findByRole('link', { name: 'Jane Doe' })
+      expect(screen.getByText('0 selected')).toBeInTheDocument()
+      for (const control of bulkControls()) {
+        expect(control).toBeDisabled()
+        expect(control).toHaveAttribute('title', 'Select flights first')
+      }
+    })
+
+    it('ticking a row enables the controls without adding anything above the table', async () => {
+      mockMount()
+      const { user } = renderWithProviders(<FlightsPage />, { role: 'supervisor' })
+      await screen.findByRole('link', { name: 'Jane Doe' })
+      const bar = screen.getByText('0 selected').parentElement
+      const before = bar.parentElement.children.length
+      await user.click(screen.getAllByRole('checkbox')[1])
+      expect(await screen.findByText('1 selected')).toBeInTheDocument()
+      expect(bar.parentElement.children).toHaveLength(before)
+      for (const control of bulkControls()) expect(control).toBeEnabled()
+    })
+
+    it('clearing the selection disables the controls again', async () => {
+      mockMount()
+      const user = await selectEveryRow()
+      await user.click(screen.getByRole('button', { name: 'Clear' }))
+      expect(await screen.findByText('0 selected')).toBeInTheDocument()
+      for (const control of bulkControls()) expect(control).toBeDisabled()
+    })
+
+    it('sticks below the fixed header', async () => {
+      mockMount()
+      renderWithProviders(<FlightsPage />, { role: 'supervisor' })
+      await screen.findByRole('link', { name: 'Jane Doe' })
+      const bar = screen.getByText('0 selected').parentElement
+      expect(bar).toHaveClass('sticky', 'top-14', 'lg:top-16', 'z-30')
+    })
+
+    it('is not shown to a user without review', async () => {
+      mockMount()
+      renderWithProviders(<FlightsPage />, { role: 'pilot' })
+      await screen.findByRole('link', { name: 'Jane Doe' })
+      expect(screen.queryByText('0 selected')).toBeNull()
+    })
   })
 
   it('hides the row delete control from a default pilot', async () => {
