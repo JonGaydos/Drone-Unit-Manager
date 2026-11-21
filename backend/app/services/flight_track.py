@@ -31,6 +31,9 @@ MAX_SPEED_MPS = 60.0
 BATCH_SIZE = 50
 # Nominatim's usage policy: at most one request per second.
 GEOCODE_INTERVAL_S = 1.0
+# Lookups failing this many times in a row means the service is unreachable;
+# the rest of the run skips addresses and the pass does not count as finished.
+GEOCODE_FAILURE_LIMIT = 5
 # Set once a full backfill pass finishes, so startup does not run it again.
 BACKFILL_DONE_KEY = "track_backfill_done"
 
@@ -64,26 +67,48 @@ def _fix(point):
     return lat, lon, ts / 1000
 
 
+def _possible(a, b) -> bool:
+    """Whether a craft could get from fix a to fix b without passing MAX_SPEED_MPS."""
+    elapsed = b[2] - a[2]
+    return haversine_m(a[0], a[1], b[0], b[1]) <= MAX_SPEED_MPS * (elapsed if elapsed > 0 else 1.0)
+
+
+def _drop_spikes(fixes: list) -> list:
+    """Drop single fixes that jump out of the track and back. A long gap can
+    make the jump out look possible, so a fix goes when either side of it is
+    impossible while its neighbours are possible without it."""
+    kept = fixes[:1]
+    for i in range(1, len(fixes) - 1):
+        prev, fix, nxt = kept[-1], fixes[i], fixes[i + 1]
+        out_and_back = not (_possible(prev, fix) and _possible(fix, nxt))
+        if not (out_and_back and _possible(prev, nxt)):
+            kept.append(fix)
+    if len(fixes) > 1:
+        kept.append(fixes[-1])
+    return kept
+
+
 def track_summary(points) -> dict:
     """Distance and landing fix over telemetry points in time order (dicts or
-    rows with lat, lon and timestamp_ms). A point that would need more than
-    MAX_SPEED_MPS from the last good fix is skipped. No good fix gives Nones."""
-    last = None
-    distance = 0.0
-    for point in points:
-        fix = _fix(point)
-        if fix is None:
-            continue
-        if last is not None:
-            meters = haversine_m(last[0], last[1], fix[0], fix[1])
-            elapsed = fix[2] - last[2]
-            if meters > MAX_SPEED_MPS * (elapsed if elapsed > 0 else 1.0):
-                continue
-            distance += meters
-        last = fix
-    if last is None:
+    rows with lat, lon and timestamp_ms). A jump that would need more than
+    MAX_SPEED_MPS is never measured. When two fixes in a row agree with each
+    other but not with the last good fix, that fix was the bad one, and the
+    track carries on from them. No good fix gives Nones."""
+    fixes = _drop_spikes([fix for fix in map(_fix, points) if fix is not None])
+    if not fixes:
         return {"distance_m": None, "landing_lat": None, "landing_lon": None}
-    return {"distance_m": round(distance, 1), "landing_lat": last[0], "landing_lon": last[1]}
+    anchor, pending = fixes[0], None
+    distance = 0.0
+    for fix in fixes[1:]:
+        if _possible(anchor, fix):
+            distance += haversine_m(anchor[0], anchor[1], fix[0], fix[1])
+            anchor, pending = fix, None
+        elif pending is not None and _possible(pending, fix):
+            distance += haversine_m(pending[0], pending[1], fix[0], fix[1])
+            anchor, pending = fix, None
+        else:
+            pending = fix
+    return {"distance_m": round(distance, 1), "landing_lat": anchor[0], "landing_lon": anchor[1]}
 
 
 def _load_points(telemetry_db: Session, flight_id: int):
@@ -137,18 +162,22 @@ def _geocode(lat: float, lon: float) -> str | None:
             _last_geocode = time.monotonic()
 
 
-def _geocode_landings(db: Session, flights: list[Flight]) -> int:
-    """Look up landing addresses. Call with nothing pending, so the requests
-    hold no write lock."""
-    found = 0
+def _geocode_landings(flights: list[Flight], stats: dict) -> None:
+    """Look up landing addresses, counting found ones and failures in a row in
+    ``stats``. Call with nothing pending, so the requests hold no write lock."""
     for flight in flights:
+        if stats["failures_in_row"] >= GEOCODE_FAILURE_LIMIT:
+            return
         if flight.landing_address or flight.landing_lat is None or flight.landing_lon is None:
             continue
         address = _geocode(flight.landing_lat, flight.landing_lon)
+        if address is None:
+            stats["failures_in_row"] += 1
+            continue
+        stats["failures_in_row"] = 0
         if address:
             flight.landing_address = address
-            found += 1
-    return found
+            stats["geocoded"] += 1
 
 
 def _candidates(db: Session):
@@ -165,7 +194,7 @@ def _candidates(db: Session):
 
 def _fill_all(db: Session, batch_size: int) -> dict:
     total = _candidates(db).count()
-    stats = {"checked": 0, "filled": 0, "geocoded": 0}
+    stats = {"checked": 0, "filled": 0, "geocoded": 0, "failures_in_row": 0}
     cursor = None
     while True:
         query = _candidates(db).order_by(Flight.id.desc())
@@ -178,7 +207,7 @@ def _fill_all(db: Session, batch_size: int) -> dict:
         with database.TelemetrySessionLocal() as tdb:
             stats["filled"] += sum(fill_track_fields(db, f, tdb) for f in batch)
         db.commit()
-        stats["geocoded"] += _geocode_landings(db, batch)
+        _geocode_landings(batch, stats)
         db.commit()
         stats["checked"] += len(batch)
         logger.info("Track fill: %d of %d flights checked, %d filled, %d addresses found",
@@ -189,7 +218,8 @@ def fill_missing(batch_size: int = BATCH_SIZE) -> dict | None:
     """Fill flights still missing distance, landing location, address or
     landing time, newest first, committing each batch, so a rerun picks up
     where an interrupted one stopped. Returns the counts, or None when a run
-    is already going. A finished pass sets BACKFILL_DONE_KEY."""
+    is already going. A pass whose address lookups all went through sets
+    BACKFILL_DONE_KEY."""
     if not _run_lock.acquire(blocking=False):
         logger.info("Track fill skipped: already running")
         return None
@@ -197,7 +227,8 @@ def fill_missing(batch_size: int = BATCH_SIZE) -> dict | None:
         with database.SessionLocal() as db:
             with machine_run(db, "track_fill", "flight"):
                 stats = _fill_all(db, batch_size)
-                if not backfill_done(db):
+                finished = stats["failures_in_row"] < GEOCODE_FAILURE_LIMIT
+                if finished and not backfill_done(db):
                     db.add(Setting(key=BACKFILL_DONE_KEY, value=datetime.now(timezone.utc).isoformat()))
             db.commit()
         return stats

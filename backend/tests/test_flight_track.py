@@ -49,6 +49,33 @@ def test_gps_jump_is_skipped():
     assert summary["distance_m"] == pytest.approx(_square_length(), rel=0.01)
 
 
+def test_bad_first_fix_is_skipped():
+    points = [_pt(30.1, -86.0, -1)] + _square()
+    summary = track_summary(points)
+    assert summary["distance_m"] == pytest.approx(_square_length(), rel=0.01)
+
+
+def test_bad_first_fix_does_not_move_landing():
+    points = [_pt(30.1, -86.0, -1)] + _square()
+    summary = track_summary(points)
+    assert (summary["landing_lat"], summary["landing_lon"]) == (30.0, -86.0)
+
+
+def _gap_then_outlier():
+    """The square, a 200 s gap, one fix about 11 km off, then the real return."""
+    return _square() + [_pt(30.1, -86.0, 440), _pt(30.0001, -86.0, 441)]
+
+
+def test_outlier_after_a_gap_is_skipped():
+    summary = track_summary(_gap_then_outlier())
+    assert summary["distance_m"] == pytest.approx(_square_length(), rel=0.01)
+
+
+def test_outlier_after_a_gap_does_not_become_landing():
+    summary = track_summary(_gap_then_outlier())
+    assert (summary["landing_lat"], summary["landing_lon"]) == (30.0001, -86.0)
+
+
 def test_bad_coordinates_are_skipped():
     points = [_pt(500, 500, 0), _pt(0, 0, 1)] + _square() + [_pt(91, 10, 300)]
     summary = track_summary(points)
@@ -92,6 +119,19 @@ def test_fill_keeps_typed_values(db, telemetry_db):
     assert flight.distance_m == 1234.0
     assert (flight.landing_lat, flight.landing_lon) == (31.5, -87.5)
     assert flight.landing_time == datetime(2026, 1, 1, 10, 30)
+
+
+def test_fill_keeps_typed_landing_address(db, telemetry_db, geocoder):
+    flight = _flight_with_track(db, telemetry_db, landing_address="Typed address")
+    flight_track.fill_missing()
+    db.expire_all()
+    assert db.get(Flight, flight.id).landing_address == "Typed address"
+
+
+def test_track_without_gps_fix_stays_blank(db, telemetry_db):
+    flight = _flight_with_track(db, telemetry_db, points=[_pt(None, None, 0), _pt(500, 500, 1)])
+    assert fill_track_fields(db, flight) is False
+    assert (flight.distance_m, flight.landing_lat, flight.landing_lon) == (None, None, None)
 
 
 def test_fill_landing_time_from_takeoff_and_duration(db):
@@ -229,3 +269,25 @@ def test_scheduler_waits_for_daily_run_after_backfill(db, scheduler_db):
         assert job.next_run_time.timestamp() - datetime.now().timestamp() > 300
     finally:
         sched.stop_scheduler()
+
+
+def test_geocoding_stops_after_repeated_failures(db, telemetry_db, monkeypatch):
+    for _ in range(8):
+        _flight_with_track(db, telemetry_db)
+    monkeypatch.setattr(flight_track, "GEOCODE_INTERVAL_S", 0)
+    calls = []
+    monkeypatch.setattr(sync_manager, "_reverse_geocode", lambda lat, lon: calls.append(lat))
+    result = flight_track.fill_missing(batch_size=3)
+    assert len(calls) == flight_track.GEOCODE_FAILURE_LIMIT
+    assert result["filled"] == 8
+    assert db.query(Setting).filter(Setting.key == flight_track.BACKFILL_DONE_KEY).first() is None
+
+
+def test_backfill_check_failure_skips_the_early_run(scheduler_db, monkeypatch):
+    sched = scheduler_db
+
+    def broken():
+        raise RuntimeError("database unavailable")
+
+    monkeypatch.setattr(sched, "SessionLocal", broken)
+    assert sched._track_fill_job_kwargs() == {}

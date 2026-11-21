@@ -209,14 +209,18 @@ def _track_fill_job_kwargs() -> dict:
     """Daily, and also a few minutes after boot until a full pass has finished
     once, so existing flights are filled without waiting a day."""
     from app.services.flight_track import backfill_done
-    kwargs = {}
-    db = SessionLocal()
+    try:
+        db = SessionLocal()
+    except Exception:
+        return {}
     try:
         if not backfill_done(db):
-            kwargs["next_run_time"] = datetime.now() + timedelta(minutes=4)
+            return {"next_run_time": datetime.now() + timedelta(minutes=4)}
+    except Exception:
+        logger.exception("Could not check whether the track fill has run")
     finally:
         db.close()
-    return kwargs
+    return {}
 
 
 def _run_scheduled_telemetry_sync():
