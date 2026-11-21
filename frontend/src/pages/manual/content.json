@@ -75,7 +75,8 @@
         "notes": [
           "You only see pages your role can view. If a page you expect is missing, ask an admin to check your role.",
           "A red number beside **Flights** counts flights that still need review. An amber number beside **Flight Plans** counts plans waiting for approval.",
-          "Admins can reorder or hide sidebar items, and turn the group headings on or off, in **Settings**, on the **General** tab, in the **Sidebar Configuration** card. Choose **Save Sidebar Config** to keep the changes."
+          "Admins can reorder or hide sidebar items, and turn the group headings on or off, in **Settings**, on the **General** tab, in the **Sidebar Configuration** card. Choose **Save Sidebar Config** to keep the changes.",
+          "On a computer, the bar at the top with the page title, search and theme stays in place while the page scrolls. On a phone the top bar with the menu icon stays in place too."
         ]
       },
       {
@@ -243,7 +244,7 @@
           "**Supervisors and admins only**: reviewing flights and bulk actions, approving or denying flight plans, resolving and deleting incidents, maintenance schedules, fleet management, deleting checkouts, adding, deleting or merging pilots, certifications, checklist templates, restoring documents and legal hold, folders, alerts, operating authority, and sending the email digest to another address.",
           "**Pilots and supervisors**: completing maintenance tasks, updating a vehicle's location, checking equipment in and out, completing checklists, seeing pilot email and phone, and generating reports.",
           "**Admins only**: vehicle registrations management and the audit log.",
-          "A flight added by hand always starts as **Needs Review**. If someone without review rights edits a reviewed flight, it goes back to the review queue. Only reviewed flights count toward pilot currency."
+          "A flight added by hand always starts as **Needs Review**. If someone without review rights edits a reviewed flight, it goes back to the review queue. Only reviewed flights count toward flight requirements."
         ]
       },
       {
@@ -277,8 +278,8 @@
         "summary": "The dashboard is the first page you see after you sign in. It gathers the numbers a unit checks every day: how compliant you are, what flew recently, and what needs attention. Click a card to open the page behind it.",
         "image": {
           "src": "/manual-pictures/dashboard-overview.png",
-          "alt": "The dashboard with the compliance score at the top, four 30-day cards, recent flights and the attention cards",
-          "caption": "The dashboard: compliance score, 30-day cards, recent flights and the lists that need attention."
+          "alt": "The dashboard with the compliance score at the top, four 30-day cards, recent flights, the attention cards, This Period and Locations",
+          "caption": "The dashboard: compliance score, 30-day cards, recent flights, the lists that need attention and This Period."
         },
         "steps": [
           "Choose **Dashboard** in the sidebar, or sign in. It is the home page.",
@@ -289,22 +290,21 @@
         ],
         "notes": [
           "A card is empty when your role cannot see that kind of record. An admin can change this under **Settings**.",
-          "Everything on the page is read-only, except the location list on the **Locations** card (see \"Drone locations on the dashboard\")."
+          "Everything on the page is read-only, except the location list on the **Locations** card (see \"Drone locations on the dashboard\") and the layout (see \"Arranging the dashboard and Analytics\")."
         ]
       },
       {
         "id": "compliance-score",
         "title": "The compliance score",
-        "summary": "The big number at the top is the unit's compliance score out of 100. It sums up how well pilots, certifications, maintenance and operating authorities are being kept up to date.",
+        "summary": "The big number at the top is the unit's compliance score out of 100. It sums up how well certifications, registrations, maintenance, incidents, flight requirements and operating authorities are being kept up to date.",
         "steps": [
           "Read the number. Green is 80 or more, amber is 60 to 79, red is below 60.",
-          "Read the line beside it: pilots who are current, expired certifications, overdue maintenance and the state of your operating authorities.",
+          "Read the line beside it: active pilots, expired certifications, overdue maintenance and the state of your operating authorities.",
           "If a red line appears under the summary, it explains what is holding the score down.",
-          "Choose **Open compliance dashboard** to see the detail."
+          "Choose **Open compliance dashboard** to open the **Compliance** page with the detail."
         ],
         "notes": [
-          "The score and the counts cover the whole unit. The names in the lists below them follow what your role may see.",
-          "If no currency rules exist yet, the line says **(no currency rules)**. Set rules up so the count means something."
+          "The score and the counts cover the whole unit. The names in the lists below them follow what your role may see."
         ]
       },
       {
@@ -325,16 +325,15 @@
       {
         "id": "attention-cards",
         "title": "Cards that need attention",
-        "summary": "Four cards point at work that is late or about to be. Check them at the start of each shift.",
+        "summary": "Three cards point at work that is late or about to be. Check them at the start of each shift.",
         "steps": [
-          "**Currency Risk** lists up to five pilots whose currency has lapsed or ends within 30 days, and shows how many are lapsed. A red **LAPSED** badge means they are not current now. A day count means days left. Click a name to open the pilot.",
           "**Needs Review** shows how many flights are waiting for a supervisor. Choose **Open** to see them in Flights. When none are waiting it says **Queue is clear**.",
           "**Maintenance Due** lists the most overdue items first. Red means overdue, amber means due within 7 days. Click one to open Maintenance.",
           "**Cert Expirations** lists certifications that end within 90 days, soonest first. Amber means 30 days or less. Click one to open the pilot."
         ],
         "notes": [
-          "If your unit has no currency rules, **Currency Risk** says **No rules defined** and links to **Set up rules**.",
-          "A certification that is already expired is not on **Cert Expirations**. It is counted in the top panel instead."
+          "A certification that is already expired is not on **Cert Expirations**. It is counted in the top panel instead.",
+          "Pilots who missed a flight requirement or are lapsed on a rolling one are named at the bottom of the **This Period** tile. See \"Progress on the dashboard\"."
         ]
       },
       {
@@ -345,6 +344,29 @@
           "**Recent Flights** shows the latest ten. Each row has the flight number or short code, the pilot, the drone, the purpose and the duration. Click a row to open the flight. Choose **All** to see every flight.",
           "**Activity by Month** is a bar chart of flights for up to the last 12 months. Hover a bar for its count. Choose **Analytics** for the full charts.",
           "**Top Pilots (30d)** and **Top Vehicles (30d)** rank by flight hours. Click a name to open that pilot or vehicle."
+        ]
+      },
+      {
+        "id": "arranging-the-dashboard",
+        "title": "Arranging the dashboard and Analytics",
+        "summary": "Each person can put the dashboard tiles in their own order and switch tiles off. The charts on **Analytics** are arranged the same way.",
+        "image": {
+          "src": "/manual-pictures/dashboard-arranging.png",
+          "alt": "The dashboard in edit mode with Reset to default, Save as unit default, Cancel and Save at the top, and a bar with a drag handle and an on/off switch above each tile",
+          "caption": "Edit mode: drag a tile by its handle, or switch it off."
+        },
+        "steps": [
+          "Choose **Edit layout** at the top right of the **Dashboard** or of **Analytics**.",
+          "Each tile gets a bar with a handle (the six dots) and a switch. Drag a tile by its handle to a new place. Tiles keep their widths and snap into the grid.",
+          "With a keyboard, focus the handle, press Space, move the tile with the arrow keys and press Space again to drop it.",
+          "Use the switch on a tile to switch it off. It stays in edit mode, greyed out, so you can switch it on again later.",
+          "Choose **Save** to keep the layout, or **Cancel** to drop the changes.",
+          "To go back to the unit default, choose **Reset to default** and then **Save**."
+        ],
+        "notes": [
+          "Your layout is saved to your account, so it follows you to every computer and phone.",
+          "Admins also get **Save as unit default**. It sets the layout for everyone who has not saved their own, and the one **Reset to default** returns to. A message confirms it. An admin who has a layout of their own keeps seeing it; the message says so.",
+          "A tile your role cannot see never shows, whatever the layout says. A tile added in a later version appears at the end, switched on."
         ]
       },
       {
@@ -422,7 +444,8 @@
         ],
         "notes": [
           "A **Flight Locations** map appears at the bottom only when some flights have a recorded take-off point.",
-          "You need permission to view flights to open Analytics. The vehicle chart also needs permission to view the fleet. Both are on by default for every role."
+          "You need permission to view flights to open Analytics. The vehicle chart also needs permission to view the fleet. Both are on by default for every role.",
+          "Choose **Edit layout** to put the charts in your own order or switch some off. See \"Arranging the dashboard and Analytics\"."
         ]
       },
       {
@@ -739,10 +762,11 @@
         "notes": [
           "Each page holds 100 flights. The line at the bottom, such as \"Showing 1-100 of 250 flights\", tells you where you are.",
           "Filters, search and sorting cover every flight, not only the page on screen. Changing one takes you back to page 1.",
-          "The **Vehicle**, **Purpose** and **Location** columns are hidden on a narrow screen. Open the flight to see them.",
+          "The **Vehicle** and **Purpose** columns are hidden on a narrow screen, and **Cost** and **Location** on a medium one. Open the flight to see them.",
           "Click a flight ID to open the flight, a pilot name to open the pilot, or a vehicle name to open the vehicle.",
           "The small line under the status reads \"Telemetry ✓\" when the flight path is stored, \"Telemetry pending\" while it can still be fetched, and \"No telemetry\" when there is none to fetch. Flights you enter by hand show nothing there. Telemetry means the recorded track of the flight: position, height, speed and battery.",
-          "Everyone can see flights by default, including viewers."
+          "Everyone can see flights by default, including viewers.",
+          "**Cost** shows the cost typed on the flight. Without one it shows an estimate from the aircraft's hourly operating cost, marked **(estimated)**. A dash means there is neither."
         ]
       },
       {
@@ -768,7 +792,8 @@
           "If you fill in **Date** or **Duration (seconds)** as well as the times, they must agree. The date must be the takeoff date, and the duration must match the time between takeoff and landing to within a minute. Otherwise the app refuses to save. Leave them empty to avoid this.",
           "A flight you add by hand always starts as **Needs Review**, whoever adds it.",
           "To log a flight that is much like an earlier one, choose the copy icon (**Duplicate**) at the end of that row. The pilot, vehicle, purpose, takeoff address and equipment are filled in. The date, times and duration are left empty.",
-          "Supervisors and pilots can add flights by default. Viewers cannot, and do not see the button. An admin can change this under **Settings**."
+          "Supervisors and pilots can add flights by default. Viewers cannot, and do not see the button. An admin can change this under **Settings**.",
+          "For a flight with telemetry, leave **Distance (m)** and the landing boxes empty: the app fills them from the recorded track. Leave **Operating Cost ($)** empty to use the estimate from the aircraft's hourly operating cost."
         ]
       },
       {
@@ -777,14 +802,14 @@
         "summary": "Flights that come in from a drone provider, and flights added by hand, wait as **Needs Review** until someone checks them. Reviewing means checking the pilot, purpose and details are right and marking the flight **Reviewed**.",
         "image": {
           "src": "/manual-pictures/flights-reviewing-flights.png",
-          "alt": "The bar that appears when flights are selected, with Reassign pilot, Set purpose, Mark reviewed, Delete and Clear",
-          "caption": "The bar for working on several selected flights at once."
+          "alt": "The selection bar above the flights list with 2 selected, Reassign pilot, Set purpose, Mark reviewed, Delete and Clear",
+          "caption": "The selection bar for working on several flights at once."
         },
         "steps": [
           "To review one flight, click the **Needs Review** badge in its row. It turns to **Reviewed**. Click it again to send it back.",
           "To fix details at the same time, choose the pencil icon (**Edit**) at the end of the row. Change the **Date**, pilot, **Purpose** or **Duration** and choose the check mark to save, or the X to cancel.",
           "To review everything on the page, choose **Approve Page** (it shows how many flights it covers) and confirm.",
-          "To change several flights, tick their boxes (the box in the heading selects the whole page). A bar shows how many are selected.",
+          "To change several flights, use the selection bar above the list. With nothing ticked it reads **0 selected** and **Select flights to use these actions**, and its controls are greyed out. Tick the flights (the box in the heading selects the whole page) and the bar shows how many are selected.",
           "In that bar, pick **Reassign pilot…** or **Set purpose…**, or choose **Mark reviewed**. A message shows exactly what will change. Confirm to go ahead.",
           "To remove flights, choose **Delete** in the bar, or the trash icon on one row, and confirm."
         ],
@@ -795,7 +820,8 @@
           "If someone who cannot review changes a flight that is already **Reviewed**, it goes back to **Needs Review**.",
           "Deleting a flight also removes its telemetry. It cannot be undone.",
           "The number beside **Flights** in the sidebar shows how many flights wait for review.",
-          "An admin can change who may review, edit and delete under **Settings**."
+          "An admin can change who may review, edit and delete under **Settings**.",
+          "The selection bar stays just under the page header while you scroll a long list, so it is always in reach."
         ]
       },
       {
@@ -818,8 +844,17 @@
           "In edit mode, people who can review also get a **Status** box and a **Unit totals** box. Untick **Counts** for a flight that should not count in your unit's totals, such as a vendor demo. A flight left out shows a **Not counted** badge.",
           "**Max Altitude** and **Max Speed** come from the recorded track and cannot be edited.",
           "The **Photos** card at the bottom lists photos linked to the flight. **Attach photos** adds photos from the Media page. Supervisors and admins can attach and detach by default.",
-          "Pilots can edit only their own flights by default, so **Edit** may be missing on others."
-        ]
+          "Pilots can edit only their own flights by default, so **Edit** may be missing on others.",
+          "**Distance** and the landing location come from the recorded track. Distance is the length of the track, with bad GPS fixes and impossible jumps left out. **Landing Coordinates** is the last good fix, and the **Landing** address is looked up from it.",
+          "Distance, landing coordinates and landing time are filled in when telemetry arrives. Address lookups run in the background once a day, so a new flight can get its landing address the next day. A value someone typed in is never replaced, and a flight without telemetry stays empty.",
+          "When a flight has a **Takeoff Time** and a duration but no **Landing Time**, the landing time is filled in as takeoff plus duration.",
+          "**Operating Cost** shows the cost typed on the flight. Without one it shows an estimate, the flight hours times the aircraft's **Hourly Operating Cost**, marked **(estimated)**. A typed cost always wins, even 0. The estimate is worked out each time it is shown, so a changed hourly rate also changes the estimates of past flights. To go back to the estimate, empty **Operating Cost ($)** and save."
+        ],
+        "image": {
+          "src": "/manual-pictures/flights-flight-detail.png",
+          "alt": "The details card of a demo flight with pilot, vehicle, purpose, duration, takeoff and landing places, distance in metres and an operating cost marked estimated",
+          "caption": "The details card of a flight, with its distance and an estimated operating cost."
+        }
       },
       {
         "id": "exporting-flights",
@@ -1058,13 +1093,14 @@
           "Each badge number can belong to one pilot only.",
           "**Merge** moves every flight, log, certification and record from one pilot to the other, then removes the first. It cannot be undone.",
           "**Deactivate** does not delete anything. The pilot is marked inactive, and drops off the Certifications matrix and out of the compliance counts. Flights stay on record. Set **Status** back to **Active** in the edit dialog to bring the pilot back.",
-          "**Counts towards unit totals** (supervisors and admins only) is a separate switch. Turn it off for a vendor or guest operator: their flights stay on record but leave the unit's numbers."
+          "**Counts towards unit totals** (supervisors and admins only) is a separate switch. Turn it off for a vendor or guest operator: their flights stay on record but leave the unit's numbers.",
+          "A **Missed requirement** or **Lapsed requirement** badge beside a pilot means they have an open miss on a flight requirement or are lapsed on a rolling one. Hover the badge to see which."
         ]
       },
       {
         "id": "pilot-profiles",
         "title": "The pilot profile",
-        "summary": "A pilot's profile page gathers their details, flight totals, certifications and currency in one place.",
+        "summary": "A pilot's profile page gathers their details, flight totals, certifications and flight requirements in one place.",
         "image": {
           "src": "/manual-pictures/pilots-pilot-profiles.png",
           "alt": "The profile card of a demo pilot with initials, name, email, a personal cell number and an active status badge",
@@ -1074,14 +1110,14 @@
           "On **Pilots**, click the pilot's name.",
           "The card at the top shows the photo (or initials), name, email, **Personal Cell**, **Work Cell**, badge number, status and notes.",
           "Below it you see **Total Flights**, **Flight Hours** and **Avg Duration**, then tiles for training hours, mission hours and incidents, and the **Flights by Month** and **Flights by Purpose** charts.",
-          "Further down are **Needs Attention**, **Recent Flights** (the latest 20), **Certifications**, **Currency Status** and **Documents**.",
+          "Further down are **Needs Attention**, **Recent Flights** (the latest 20), **Certifications**, **Flight Requirements** and **Documents**.",
           "Click **Back to Pilots** to return to the list."
         ],
         "notes": [
           "You only see the parts you may view. For example, someone without access to flights does not see the flight totals, charts or **Recent Flights**.",
           "Only admins can add or replace the photo. Click the small camera on the photo and choose an image file. The photo shows on this page. The list shows initials.",
           "Email and phone numbers are hidden from roles without contact access (viewers by default).",
-          "The **Currency Status** card appears only when at least one active currency rule exists."
+          "The **Flight Requirements** card shows only to people who may view flight requirements. See \"Excusing a pilot and missed requirements\" and \"Rolling requirements\"."
         ]
       },
       {
@@ -1101,36 +1137,9 @@
         ]
       },
       {
-        "id": "pilot-currency",
-        "title": "Pilot currency",
-        "summary": "Currency means a pilot has flown enough recently. A currency rule sets the flight hours (and, if you want, the number of flights) a pilot must log within a number of days, for example 5 hours in 90 days.",
-        "image": {
-          "src": "/manual-pictures/pilots-pilot-currency.png",
-          "alt": "The New Currency Rule dialog with a name, one fleet model picked, required hours, period in days and minimum flights filled in",
-          "caption": "The New Currency Rule dialog in Settings."
-        },
-        "steps": [
-          "Open **Settings** (supervisors and admins) and scroll to **Currency Rules** on the **General** tab.",
-          "Click **New Rule**.",
-          "Enter a **Name**. Add a **Description (optional)** if you like.",
-          "Enter **Required hours** and **Period (days)**. Add **Minimum flights (optional)** if the rule also needs a number of flights.",
-          "Under **Vehicle models**, leave **All aircraft** on to count every aircraft. Or click one or more models to count only flights on those. Each model comes from your fleet and shows how many active aircraft it has, for example **X10 (4)**. With several models picked, a flight on any of them counts.",
-          "Leave **Active (include in pilot currency calculations)** ticked and click **Create**.",
-          "To change or remove a rule, use the pencil or bin next to it in the list. Editing saves with **Save**."
-        ],
-        "notes": [
-          "Once a rule is active, every pilot page shows a **Currency Status** card. Each row shows the hours and flights flown against the rule, **Current** or **Lapsed**, and an **Expires** date: the day the pilot would lapse if they did not fly again.",
-          "A pilot is **Lapsed** if any active rule is not met. With no active rules everyone counts as current.",
-          "Only reviewed flights count, from every source. A flight waiting for review, including one sent back to the queue after an edit, does not count until a supervisor reviews it. A pilot can show as lapsed while flights wait for review.",
-          "A rule can look back up to 3650 days.",
-          "A model that is no longer in your fleet shows with a dashed outline and **Not in fleet**. No aircraft has that model, so it counts no flights. Click it to remove it, then pick the right model.",
-          "Lapsed pilots appear in **Needs Attention** on their page and on the **Compliance** page."
-        ]
-      },
-      {
         "id": "needs-attention",
         "title": "Needs Attention",
-        "summary": "The **Needs Attention** card on a pilot page lists what that pilot should fix: lapsed currency and certifications that are expired or about to expire.",
+        "summary": "The **Needs Attention** card on a pilot page lists what that pilot should fix: missed or lapsed flight requirements and certifications that are expired or about to expire.",
         "image": {
           "src": "/manual-pictures/pilots-needs-attention.png",
           "alt": "The Needs Attention card of a demo pilot listing a certification that expires soon, with the number of items in the header",
@@ -1138,7 +1147,7 @@
         },
         "steps": [
           "Open the pilot's page and find the **Needs Attention** card.",
-          "Each line is one item. Red lines are lapsed currency or an expired certification. Amber lines are certifications expiring within 30 days, with the days left.",
+          "Each line is one item. Red lines are an expired certification, a missed requirement (**Missed requirement:**) or a lapsed rolling requirement (**Lapsed:**). Amber lines are certifications expiring within 30 days, with the days left.",
           "The number in the card header is how many items there are."
         ],
         "notes": [
@@ -1157,15 +1166,15 @@
       {
         "id": "what-requirements-are",
         "title": "What flight requirements are",
-        "summary": "A flight requirement is an assignment for a fixed period, such as 1 hour in October or 15 minutes on each aircraft type every quarter. It is separate from currency, which asks whether a pilot is legal to fly right now.",
+        "summary": "A flight requirement says how much a pilot must fly. It can cover a fixed period, such as 1 hour in October or 15 minutes on each aircraft type every quarter, or a rolling window, such as 2 flights in the last 30 days.",
         "steps": [
-          "Open **Flight Requirements** in the sidebar, under **Compliance**. Everyone who may view requirements sees the list there, with each requirement's current period: the days left, how many pilots have met it and each pilot's progress. Supervisors and admins set requirements up on the same page.",
-          "Everyone who may view requirements sees the progress. The **This Period** tile on the **Dashboard** shows it for the whole unit. The **Flight Requirements** card on each pilot page shows it for one pilot.",
-          "Each pilot has one status for each period: **On track**, **Met**, **Pending review**, **Missed** or **Excused**."
+          "Open **Compliance** in the sidebar and choose the **Flight Requirements** tab. Everyone who may view requirements sees the list there, with the progress of each requirement. Supervisors and admins create and change requirements on the same tab, and keep templates and settings on the **Setup** tab.",
+          "Everyone who may view requirements sees the progress. The **This Period** tile on the **Dashboard** and on the **Overview** tab of **Compliance** shows it for the whole unit. The **Flight Requirements** card on each pilot page shows it for one pilot.",
+          "On a period requirement each pilot has one status for each period: **On track**, **Met**, **Pending review**, **Missed** or **Excused**. On a rolling requirement each pilot is **Current**, **Lapsed**, **Not yet due** or **Excused** (see \"Rolling requirements\")."
         ],
         "notes": [
           "**On track** means the target is not met yet and the period is still open. **Met** means the target is reached. **Pending review** means the period ended without the target met and the grace days are still running. **Missed** means the grace days ended without the target met. **Excused** means a supervisor excused the pilot for that period.",
-          "Currency rules do not change. Requirements never change the currency of a pilot or the compliance score.",
+          "Flight requirements count toward the compliance score, up to 15 points. See \"History and the score\".",
           "Only flights that are reviewed and that count toward unit totals count toward a requirement. A flight waiting for review does not count until a supervisor reviews it.",
           "Seeing requirements needs **Flight requirements: View**. Creating and editing them needs **Manage**. Excusing a pilot needs **Excuse**. Supervisors have all three by default. An admin can change this under **Role Permissions**."
         ]
@@ -1173,34 +1182,61 @@
       {
         "id": "creating-a-requirement",
         "title": "Creating a requirement",
-        "summary": "The builder on the **Flight Requirements** page sets the period, the target, the aircraft, the time of day, the flight purposes and the pilots. A summary at the bottom says the result in plain words before you save.",
+        "summary": "The builder on the **Flight Requirements** tab of the **Compliance** page sets the period, the target, the aircraft, the time of day, the flight purposes and the pilots. A summary at the bottom says the result in plain words before you save.",
         "image": {
           "src": "/manual-pictures/flight-requirements-creating-a-requirement.png",
           "alt": "The New requirement form with a name, a calendar quarter period, 15 minutes as the target, two aircraft models set to each separately, and a summary sentence at the bottom",
           "caption": "The requirement builder with its live summary."
         },
         "steps": [
-          "Open **Flight Requirements** in the sidebar, under **Compliance**, and click **New requirement**.",
+          "Open **Compliance**, choose the **Flight Requirements** tab and click **New requirement**.",
           "Enter a **Name**. Add a **Description (optional)** if you like.",
           "Leave **Requirement is active** on, just below the name. An inactive requirement is kept but does not track progress, show on the dashboard or send emails, and its panel changes to the warning color so it stands out.",
-          "Pick the **Period** (see the list below) and choose **One time** or **Recurring** under **Repeats**. Set **Starts**. For a recurring requirement, **Ends (optional)** stops it after a date.",
+          "Pick the **Period** (see the list below) and choose **One time** or **Recurring** under **Repeats**. A custom range and a rolling window have no **Repeats** choice. Set **Starts**. For a recurring requirement, **Ends (optional)** stops it after a date.",
           "Under **Target**, enter **Hours** and **Minutes**, **Flights**, or both. Both must be met when you set both.",
           "Choose the aircraft, the time of day and the flight purposes. The next topics explain them.",
           "Under **Applies to**, leave **All active pilots** on, or choose **Selected pilots** and tick the pilots.",
-          "Set **Reminder (days before the period ends)**. The default is 7. Use 0 for no reminder. It does not switch the requirement off.",
+          "Set **Reminder (days before the period ends)** (on a rolling requirement, **Reminder (days before a pilot would lapse)**). The default is 7. Use 0 for no reminder. It does not switch the requirement off.",
           "Read the **Summary**. Click **Save requirement**."
         ],
         "notes": [
           "**Calendar month**, **Calendar quarter** and **Calendar year** follow the calendar. For example, 1 hour in October is a one-time **Calendar month** that starts in October.",
-          "**Fiscal quarter** and **Fiscal year** follow the fiscal year. It starts in October unless you change **Fiscal year starts in** under **Requirement Settings**.",
+          "**Fiscal quarter** and **Fiscal year** follow the fiscal year. It starts in October unless you change **Fiscal year starts in** under **Requirement Settings** on the **Setup** tab.",
           "**Monthly window (day X to day Y)** runs from a start day to an end day of the month, for example the 19th to the 5th. When the end day is earlier, the window ends in the following month. A day past the end of a short month means that month's last day. A recurring window repeats every month.",
           "**Span from a start date** is a length in days, weeks or months from a start date, such as the next 3 months or the next two weeks. It can repeat.",
           "**Custom date range** is one fixed range with a start and an end. It does not repeat.",
           "**Every N months from a start date** repeats on that schedule, for example every 4 months.",
+          "**Rolling window (the last N days, weeks or months)** always looks back from today. Set the **Window length** and the **Unit**. See \"Rolling requirements\".",
           "For a calendar or fiscal period, **Starts** can be any day in the first period. For the other types it is the first day.",
           "An example of each: 1 hour in the next 3 months is a **Span** of 3 months. 15 minutes on each aircraft type per quarter is a recurring **Calendar quarter** with each model set to **Each separately**.",
           "Editing a requirement applies from the current period on. Periods that are already saved never change.",
           "If you leave the target empty, the name empty or the dates incomplete, the form says what to fix and does not save."
+        ]
+      },
+      {
+        "id": "rolling-requirements",
+        "title": "Rolling requirements",
+        "summary": "A rolling requirement asks for flying inside a window that moves with the calendar, such as 2 flights in the last 30 days. The app checks every assigned pilot each day and saves each lapse.",
+        "image": {
+          "src": "/manual-pictures/flight-requirements-rolling-requirements.png",
+          "alt": "A demo 30-day rolling requirement on the This Period tile with one pilot current and the date they would lapse, four lapsed with the date each lapse began, and one excused until a date",
+          "caption": "A rolling requirement on the This Period tile."
+        },
+        "steps": [
+          "In the builder, set **Period** to **Rolling window (the last N days, weeks or months)**.",
+          "Enter the **Window length** and pick the **Unit** (**Days**, **Weeks** or **Months**). **Starts** is the day tracking begins. A rolling window has no end date.",
+          "Set the target, aircraft, time of day, purposes and pilots as for any requirement, and click **Save requirement**.",
+          "Read each pilot's status on the **Flight Requirements** tab, on the **This Period** tile and on the pilot page. The tile shows a count such as **3 current, 1 lapsed**."
+        ],
+        "notes": [
+          "**Current** means every target is met inside the window. The date beside it (**lapses on**) is the day the pilot lapses if they do not fly again, when the oldest flight they still need leaves the window.",
+          "**Lapsed** means a target is not met. The date beside it (**since**) is the day the lapse began.",
+          "**Not yet due** is for a pilot added after tracking began. They cannot lapse until one full window has passed since they were added, or since the requirement started if that is later. The date beside it (**due from**) says when.",
+          "**Excused** means a supervisor excused the pilot until a date, for leave or an injury. On the pilot page, click **Excuse** on the rolling requirement, choose **Excused until**, add a **Reason (optional)** and click **Excuse**. While excused the pilot is neither current nor lapsed and costs no points. **Remove excusal** ends it early.",
+          "There are no grace days. A flight counts as soon as it is reviewed.",
+          "Each lapse is saved with the day it began and the day the pilot was current again. The pilot page lists them in a table with **Lapsed on** and **Current again on** (or **Still lapsed**). Reviews made later never change a saved lapse.",
+          "A lapsed pilot gets a **Lapsed:** line in **Needs Attention** and a **Lapsed requirement** badge on the pilot page and in the **Pilots** list, and the **This Period** tile names them under **Lapsed requirement**.",
+          "The **Calendar** shows no deadline for a rolling requirement, because there is none."
         ]
       },
       {
@@ -1244,25 +1280,25 @@
       {
         "id": "progress-and-the-dashboard",
         "title": "Progress on the dashboard",
-        "summary": "The **This Period** tile on the **Dashboard** shows each active requirement with the days left, how many pilots have met it and each pilot's progress.",
+        "summary": "The **This Period** tile on the **Dashboard**, also shown on the **Overview** tab of **Compliance**, lists each active requirement with its progress and each pilot's status.",
         "image": {
           "src": "/manual-pictures/flight-requirements-progress-and-the-dashboard.png",
-          "alt": "The This Period tile with a monthly requirement, days left, how many demo pilots have met it and each pilot's minutes flown against the target",
+          "alt": "The This Period tile with a rolling requirement showing each demo pilot's status and date, and a monthly requirement with days left, how many pilots have met it and each pilot's minutes flown against the target",
           "caption": "The This Period tile on the Dashboard."
         },
         "steps": [
           "Open **Dashboard** and find **This Period**.",
-          "Each requirement shows the days left and a count such as **0/6 met**.",
-          "Each line shows a pilot, the time or flights flown against the target, and the status. For a requirement on each model, the line shows each model, for example **X10 12/15m**.",
+          "A period requirement shows the days left and a count such as **0/6 met**. A rolling requirement shows a count such as **3 current, 1 lapsed**.",
+          "Each line shows a pilot, the time or flights flown against the target, and the status. For a requirement on each model, the line shows each model, for example **X10 12/15m**. On a rolling requirement the status has a date beside it, such as **lapses on** or **since**.",
           "Click a pilot's name to open the pilot page."
         ],
         "notes": [
           "The score at the top right of the tile is the **Requirements score**. See \"History and the score\".",
           "A period that has ended but is still inside its grace days shows as **Previous period**, with the number of pilots **pending review** and the date it runs until.",
-          "**Open misses** at the bottom names the pilots flagged for a miss.",
-          "The tile shows only to people who may view requirements. It says **No active flight requirements** when none exist. When every requirement is switched off, it says how many are switched off instead, and for supervisors and admins that line opens the **Flight Requirements** page.",
-          "The **Calendar** shows one entry on the last day of each period, titled **Due:** and the requirement's name. Periods themselves are not drawn.",
-          "**Reports** has a **Flight Requirements** report of saved results, by period and pilot, with the unit logo. A requirement's results and one pilot's history also download as CSV."
+          "**Missed requirement** at the bottom names the pilots with an open miss, and **Lapsed requirement** the pilots lapsed on a rolling requirement now.",
+          "The tile shows only to people who may view requirements. It says **No active flight requirements** when none exist. When every requirement is switched off, it says how many are switched off instead, and for supervisors and admins that line opens the **Flight Requirements** tab.",
+          "The **Calendar** shows one entry on the last day of each period, titled **Due:** and the requirement's name. Periods themselves are not drawn, and a rolling requirement has no entry.",
+          "**Reports** has a **Flight Requirements** report of saved results, by period and pilot, and the lapses of rolling requirements, with the unit logo. A requirement's results and one pilot's history also download as CSV."
         ]
       },
       {
@@ -1283,39 +1319,41 @@
           "Excusing needs **Flight requirements: Excuse**. The buttons do not show without it.",
           "A pilot added to the unit after a period started is excused for that period automatically. A supervisor can remove it with **Un-excuse**.",
           "Months a requirement was switched off are saved as excused, with the reason **Requirement was switched off**.",
-          "A miss flags the pilot. The pilot page shows a line in **Needs Attention** and a **Missed requirement** badge, the **Pilots** list shows the same badge, and the **Dashboard** lists the pilot under **Open misses**.",
+          "A miss flags the pilot. The pilot page shows a line in **Needs Attention** and a **Missed requirement** badge, the **Pilots** list shows the same badge, and the **This Period** tile lists the pilot under **Missed requirement**.",
           "The flag clears when the pilot meets the same requirement in a later period, or when a supervisor excuses the miss.",
           "A one-time requirement has no later period, so its miss clears only by excusal.",
           "A flag never changes whether the pilot is active.",
-          "The card also lists flights left out because they have no takeoff time, and flights still awaiting review in the period."
+          "The card also lists flights left out because they have no takeoff time, and flights still awaiting review in the period.",
+          "A rolling requirement is excused until a date instead of for a period. See \"Rolling requirements\"."
         ]
       },
       {
         "id": "history-and-the-score",
-        "title": "History and the Requirements score",
-        "summary": "Every finished period is saved for each pilot. The Requirements score is the share of those saved results that were met over the last 12 months.",
+        "title": "History and the score",
+        "summary": "Every finished period is saved for each pilot. Flight requirements count toward the compliance score, and the separate Requirements score is the share of saved results met over the last 12 months.",
         "steps": [
           "Open a pilot page. Under the **Flight Requirements** card, the history table lists past periods with what was flown and the result.",
           "Click **Download CSV** to save one pilot's history for a requirement.",
-          "Open **Compliance** to see the **Requirements Score** next to the compliance score. It also shows on the **Dashboard** tile."
+          "Open **Compliance**. The **Overview** tab shows the **Requirements Score** next to the compliance score. It also shows on the **This Period** tile."
         ],
         "notes": [
-          "A period stays **Pending review** for the grace days after it ends. The default is 14. Admins and supervisors can change it, and the **Fiscal year starts in** month, under **Requirement Settings** on the **Flight Requirements** page.",
+          "A period stays **Pending review** for the grace days after it ends. The default is 14. Admins and supervisors can change it, and the **Fiscal year starts in** month, under **Requirement Settings** on the **Setup** tab of **Compliance**.",
           "During the grace days a flight that is reviewed late still counts. The pilot's card and the dashboard list the flights still awaiting review, so they can be reviewed in time.",
           "When the grace days end, the result is saved with the hours and flights, the status and a copy of the target. It never changes after that, even if the requirement is edited or an old flight is reviewed again. Only an admin can recalculate one period, and that is recorded in the audit log.",
           "The score counts saved results that are **Met** out of all saved results whose period ended in the last 12 months. **Excused** results are left out, and so are periods still open or pending review.",
           "With no saved results in the last 12 months, the score says **No results yet**.",
-          "The score is separate from the compliance score. The compliance score does not change.",
+          "The Requirements score is separate and never changes the compliance score.",
+          "In the compliance score, flight requirements are worth up to 15 points. A pilot costs points when they missed the most recently closed period of any active period requirement, or are lapsed on any active rolling requirement now. A pilot counts once, however many requirements they missed. The points lost are the share of active pilots affected, times 15. Excused pilots do not count, and nothing is lost while no requirement is active.",
           "A requirement with saved results cannot be deleted. Switch it off instead with **Switch off** in the list."
         ]
       },
       {
         "id": "requirement-emails",
         "title": "Requirement emails",
-        "summary": "The app can email pilots when a requirement is assigned, before a period ends and when a period is missed. These emails are off until a supervisor or admin turns them on, and they need email sending to be set up.",
+        "summary": "The app can email pilots when a requirement is assigned, before a period ends or a pilot would lapse, when a period is missed and when a lapse begins. These emails are off until a supervisor or admin turns them on, and they need email sending to be set up.",
         "steps": [
           "An admin sets up email once. See \"Setting up email sending\".",
-          "Open **Flight Requirements** in the sidebar. In **Requirement Settings**, tick **Send requirement emails** and choose **Save settings**. It is off until you do. Nothing is sent for earlier assignments or misses when you turn it on.",
+          "Open **Compliance** and choose the **Setup** tab. In **Requirement Settings**, tick **Send requirement emails** and choose **Save settings**. It is off until you do. Nothing is sent for earlier assignments or misses when you turn it on.",
           "Set **Reminder (days before the period ends)** on each requirement. The default is 7. Use 0 to switch the reminder off.",
           "To get the digest section, open **Email Digest** on the **General** tab and tick **Flight Requirements** under **Include**. It is not ticked until you choose it."
         ],
@@ -1323,7 +1361,8 @@
           "**Assignment**: each assigned pilot is emailed when a requirement is created or activated, or when they are added to it.",
           "**Reminder**: pilots who have not met the target are emailed the set number of days before the period ends. Each pilot gets one reminder for each period.",
           "**Miss**: when a period is saved as **Missed**, the pilot and every user who can manage requirements are emailed.",
-          "**Digest**: the **Flight Requirements** section holds progress, periods pending review and recent misses. It does not depend on the **Send requirement emails** switch, and only people who ticked it receive it.",
+          "**Rolling**: a current pilot is reminded the set number of days before they would lapse. When a lapse begins, the pilot and every user who can manage requirements are emailed. Nothing is sent when the pilot is current again.",
+          "**Digest**: the **Flight Requirements** section holds progress, periods pending review, recent misses and the pilots lapsed now. It does not depend on the **Send requirement emails** switch, and only people who ticked it receive it.",
           "A person without an email address on file is skipped. Nothing is sent when **Send requirement emails** is off or email is not set up."
         ]
       },
@@ -1333,13 +1372,13 @@
         "summary": "Reuse a requirement's settings instead of filling the builder in again. Duplicate copies one requirement. A template keeps the settings under a name.",
         "image": {
           "src": "/manual-pictures/flight-requirements-requirements-page.png",
-          "alt": "The Requirements list on the Flight Requirements page with two demo requirements, each with a Switch off button, edit, duplicate, save as template, download and delete buttons, and the current month's progress for each demo pilot",
-          "caption": "The requirement list on the Flight Requirements page."
+          "alt": "The Requirements list on the Flight Requirements tab with three demo requirements, each with a Switch off button, edit, duplicate, save as template, download and delete buttons, and each demo pilot's progress or status",
+          "caption": "The requirement list on the Flight Requirements tab."
         },
         "steps": [
-          "On the **Flight Requirements** page, click the **Duplicate** icon on a requirement. The builder opens filled in as a new requirement named **Copy of** and the old name. Change what you need and save.",
+          "On the **Flight Requirements** tab, click the **Duplicate** icon on a requirement. The builder opens filled in as a new requirement named **Copy of** and the old name. Change what you need and save.",
           "To keep the settings, click the **Save as template** icon, enter a **Template name** and click **Save template**.",
-          "Under **Templates**, click **New from template** to open the builder filled in. Use the pencil to rename a template and the bin to delete it.",
+          "On the **Setup** tab, under **Templates**, click **New from template** to open the builder filled in. Use the pencil to rename a template and the bin to delete it.",
           "To change a requirement, click the **Edit** icon. To remove one, click the **Delete** icon and confirm.",
           "To stop a requirement without deleting it, click **Switch off** and confirm. It stops tracking progress, leaves the dashboard and sends no emails, and the months it stays off are saved as excused. Click **Switch on** to start it again."
         ],
@@ -1347,7 +1386,7 @@
           "A template keeps every setting except the start date, the end date and the selected pilots.",
           "Changing or deleting a template never changes requirements made from it.",
           "**Delete** is refused once a requirement has saved results. Switch it off instead.",
-          "**New requirement**, **Switch on**, **Switch off**, the edit, duplicate, template and delete icons, **Templates** and **Requirement Settings** show only to people with **Flight requirements: Manage**. Everyone else with **View** sees the list and the progress. **Requirement Settings** holds **Grace days**, **Fiscal year starts in** and **Send requirement emails**."
+          "**New requirement**, **Switch on**, **Switch off**, the edit, duplicate, template and delete icons, and the **Setup** tab with **Templates** and **Requirement Settings** show only to people with **Flight requirements: Manage**. Everyone else with **View** sees the list and the progress. **Requirement Settings** holds **Grace days**, **Fiscal year starts in** and **Send requirement emails**."
         ]
       }
     ]
@@ -1387,14 +1426,14 @@
         "summary": "Use this when you buy or are issued a new aircraft, or when a detail of an existing one changes. The other tabs work the same way, with their own fields.",
         "image": {
           "src": "/manual-pictures/fleet-adding-a-vehicle.png",
-          "alt": "The Add Vehicle dialog with serial number, manufacturer, model, nickname, acquired date and status filled in",
+          "alt": "The Add Vehicle dialog with serial number, API serial, manufacturer, model, nickname, dates, status, hourly operating cost and notes",
           "caption": "The Add Vehicle dialog."
         },
         "steps": [
           "On **Fleet**, open the **Vehicles** tab and choose **Add Vehicle**.",
           "Fill in **Serial Number**, **Manufacturer** and **Model**. A star marks the boxes you must fill in.",
           "Add a **Nickname** if you want one. The nickname is what shows in lists and menus.",
-          "Optional: **API Serial**, **Acquired Date**, **Decommissioned Date**, **Status** and **Notes**.",
+          "Optional: **API Serial**, **Acquired Date**, **Decommissioned Date**, **Status**, **Hourly Operating Cost ($)** and **Notes**.",
           "Choose **Add Vehicle**.",
           "To change a vehicle later, choose the pencil icon on its row in the list, change the boxes and choose **Update**. You can also edit on the vehicle's own page (see **The vehicle page**)."
         ],
@@ -1404,7 +1443,8 @@
           "The **Status** choices for a vehicle are **Active**, **Maintenance**, **Retired** and **Damaged**. Setting **Retired** or **Damaged** fills in **Decommissioned Date** with today if you left it empty. It also ends the vehicle's maintenance schedules, so they stop showing as overdue.",
           "**Decommissioned Date** cannot be earlier than **Acquired Date**.",
           "An optional box that you empty in an edit is cleared on the record. The required boxes (**Serial Number**, **Manufacturer**, **Model**) cannot be left empty.",
-          "The FAA registration is not part of this form. Add it on the vehicle's page, in the **FAA Registration** card."
+          "The FAA registration is not part of this form. Add it on the vehicle's page, in the **FAA Registration** card.",
+          "**Hourly Operating Cost ($)** is what an hour of flight costs on this aircraft. A flight without a typed cost shows an estimate from it, marked **(estimated)**, and reports add the costs up. Changing the rate changes the estimates of past flights too."
         ]
       },
       {
@@ -1413,7 +1453,7 @@
         "summary": "Open a vehicle to see its flight history, equipment, registration, components and documents in one place.",
         "steps": [
           "On **Fleet**, click a vehicle's name.",
-          "The top shows the photo, the name, the serial number, the **API** serial, the **FAA** registration text, the acquired date and the status.",
+          "The top shows the photo, the name, the serial number, the **API** serial, the **FAA** registration text, the acquired date, the hourly operating cost and the status.",
           "Four cards show **Total Flights**, **Total Hours**, **Last Flight** and **Active Batteries**.",
           "**Equipment History** has four tabs: **Batteries**, **Controllers**, **Sensors** and **Mounted Accessories**.",
           "**Flight History** lists the vehicle's 50 most recent flights. Click a date to open the flight, or a name to open the pilot.",
@@ -1664,27 +1704,69 @@
       },
       {
         "id": "certification-matrix",
-        "title": "The certification matrix",
-        "summary": "The matrix is a grid of pilots down the side and certification types across the top. Each cell shows one pilot's status for one certification, so you can see gaps at a glance.",
+        "title": "The Matrix view",
+        "summary": "The **Certifications** tab has three views: **Matrix**, **By pilot** and **By urgency**. The matrix is a grid of pilots down the side and certification types across the top, with one status icon for each pilot and certification, so you can see gaps at a glance.",
         "image": {
           "src": "/manual-pictures/certifications-certification-matrix.png",
-          "alt": "The certification matrix with demo pilots down the side and certification types across the top, cells coloured green, amber and red with expiry dates",
-          "caption": "The matrix: green is fine, amber is expiring soon, red is expired."
+          "alt": "The certification matrix with demo pilots down the side, certification types across the top and a coloured status icon in each cell",
+          "caption": "The matrix: green is fine, amber is expiring soon, red is expired, grey is not started."
         },
         "steps": [
-          "Open **Certifications**. The **Certification Matrix** tab is the first one.",
-          "Read each cell: a coloured status and, below it, the expiry date.",
+          "Open **Certifications**. The **Certifications** tab is the first one.",
+          "Choose **Matrix** in the view switch at the top.",
+          "Read each cell: a coloured status icon. Hover over it to see the status and the expiry date. The key under the grid explains each icon.",
           "Narrow the grid with **Search pilots...**, the status list (**All Statuses**), the category list (**All Categories**) or the **Hide empty** box. The count at the right shows how many pilots and columns you see.",
           "Click a pilot's name to open their profile."
         ],
         "notes": [
-          "Amber **expiring soon** means the expiry date is within 90 days. Red **expired** means the date has passed. Green means complete or active. Grey means not started, not issued or not eligible.",
+          "Amber (a warning sign) **expiring soon** means the expiry date is within 90 days. Red (a cross) **expired** means the date has passed. Green (a tick) means complete or active. Grey means not started, not issued or not eligible.",
           "The matrix lists active pilots only. Deactivated pilots are not shown.",
           "A renewed certification does not show. The cell shows the newer record.",
           "**Hide empty** hides pilots who have no certification record at all.",
           "Supervisors and admins see arrows in each column heading to move the column left or right.",
           "The status list keeps pilots who have at least one cell with that status. All their columns still show.",
-          "**Export CSV** needs the permission to export reports."
+          "**Export CSV** needs the permission to export reports.",
+          "The pilot column and the row of certification names stay in place while you scroll the grid.",
+          "The page remembers your view on each device. A phone starts on **By pilot**, a computer on **Matrix**."
+        ]
+      },
+      {
+        "id": "by-pilot-view",
+        "title": "The By pilot view",
+        "summary": "One card for each pilot, with each certification as a coloured chip and its date. It is the easiest view on a phone.",
+        "image": {
+          "src": "/manual-pictures/certifications-by-pilot.png",
+          "alt": "Cards for demo pilots, each listing their certifications as green, amber, red or grey chips with expiry dates",
+          "caption": "By pilot: one card for each pilot."
+        },
+        "steps": [
+          "Open **Certifications** and choose **By pilot** in the view switch.",
+          "Read each chip: the certification name, its status colour and the expiry date.",
+          "Click a chip to open the certification, as you would a matrix cell. Click a pilot's name to open their profile."
+        ],
+        "notes": [
+          "The search, status, category and **Hide empty** filters work here too.",
+          "Bulk renewal is only in the **Matrix** view."
+        ]
+      },
+      {
+        "id": "by-urgency-view",
+        "title": "The By urgency view",
+        "summary": "A list of certifications ordered by how soon they need action: **Expired**, **Expiring within 30 days**, **Expiring within 60 days**, **Expiring within 90 days**, then **Current**.",
+        "image": {
+          "src": "/manual-pictures/certifications-by-urgency.png",
+          "alt": "The By urgency view with groups for expired, expiring within 30, 60 and 90 days and current certifications, each line naming a demo pilot, a certification and a date",
+          "caption": "By urgency: the most urgent certifications first."
+        },
+        "steps": [
+          "Open **Certifications** and choose **By urgency** in the view switch.",
+          "Work down from **Expired**. Each line names the pilot, the certification and the date. The number at the right of each heading counts the lines.",
+          "Click the status icon at the start of a line to open the certification."
+        ],
+        "notes": [
+          "Records with no expiry date are listed under **Current**. Records not started, not issued or not eligible are left out.",
+          "If the status list is set to a status this view does not list, the page says **By urgency lists dated and current records**.",
+          "Bulk renewal is only in the **Matrix** view."
         ]
       },
       {
@@ -1692,7 +1774,7 @@
         "title": "Assigning a certification",
         "summary": "Assign a certification to a pilot when they first hold it, or to start tracking one they are working toward.",
         "steps": [
-          "On the matrix tab, click **Assign Cert**.",
+          "On the **Certifications** tab, click **Assign Cert**.",
           "Pick the **Pilot** and the **Certification**.",
           "Choose the **Status**.",
           "Fill in **Issue Date**, **Expiration Date** and **Certificate Number** if you have them. A **NIST Level** field shows for NIST types.",
@@ -1700,7 +1782,7 @@
         ],
         "notes": [
           "Supervisors and admins only.",
-          "You can also click a grey **not started** cell on the matrix. It opens this same dialog with that pilot and certification already filled in.",
+          "You can also click a grey **not started** icon on the matrix. It opens this same dialog with that pilot and certification already filled in.",
           "A cell with no record opens nothing for people who cannot manage certifications.",
           "A pilot can hold one current record per certification. A second one is refused with a message to edit or renew the existing one.",
           "The expiry date cannot be before the issue date.",
@@ -1758,7 +1840,7 @@
         "title": "Renewing several at once",
         "summary": "After a training day, renew many certifications with one issue date.",
         "steps": [
-          "On the matrix, tick the small box in each cell you want to renew.",
+          "In the **Matrix** view, tick the small box in each cell you want to renew.",
           "In the bar that appears (for example **3 selected**), click **Renew selected**.",
           "Check **Issue date** (it starts as today), add **Notes (optional)**, and click **Renew All**.",
           "**Clear** unticks everything without renewing."
@@ -1766,7 +1848,8 @@
         "notes": [
           "Supervisors and admins only. Cells for types that never expire have no box.",
           "Each certification gets its own new expiry date from its type's renewal period. A type with no renewal period gets no expiry date.",
-          "Records that are already renewed are skipped."
+          "Records that are already renewed are skipped.",
+          "Changing to another view or to the **Cert Types** tab clears the ticked boxes."
         ]
       },
       {
@@ -1984,28 +2067,31 @@
     "topics": [
       {
         "id": "compliance-score",
-        "title": "The compliance dashboard",
-        "summary": "The **Compliance** page shows how well the unit is keeping up with its paperwork and upkeep, as one score out of 100 with the problems behind it.",
+        "title": "The Compliance page and its score",
+        "summary": "The **Compliance** page has three tabs: **Overview**, **Flight Requirements** and **Setup**. **Overview** shows how well the unit is keeping up with its paperwork, upkeep and flying, as one score out of 100 with the problems behind it.",
         "image": {
           "src": "/manual-pictures/compliance-compliance-score.png",
-          "alt": "The Compliance Dashboard with a score circle and coloured cards for expired certifications, registrations, maintenance and incidents",
+          "alt": "The Overview tab of the Compliance page with the compliance score, the Requirements score and coloured cards for certifications, registrations, authorities, maintenance, incidents, approvals, unreviewed flights and missed or lapsed requirements",
           "caption": "The compliance score and the cards behind it."
         },
         "steps": [
-          "Open **Compliance** in the sidebar.",
+          "Open **Compliance** in the sidebar. It opens on **Overview**.",
           "Read the **Compliance Score**. It is green above 80, amber above 60 and red at 60 or below.",
-          "Click any card (for example **Expired Certs**, **Expired Registrations**, **Overdue Maintenance** or **Open Incidents**) to go to the page where you fix it.",
-          "The summary bar shows **Active Pilots**, **Active Vehicles**, **Cert Compliance**, **Reg Compliance** and **Currency Compliance**.",
+          "Click any card (**Expired Certs**, **Expiring Soon**, **Expired Registrations**, **Expired Authorities**, **Overdue Maintenance**, **Open Incidents**, **Pending Approvals**, **Unreviewed Flights** or **Missed or lapsed**) to go to the page where you fix it. **Missed or lapsed** opens the **Flight Requirements** tab.",
+          "Read **Where the score lost points**. Each line names an area, the points it lost and why. Areas that lost nothing are left out.",
+          "Read **This Period** beside it for the progress on each flight requirement.",
+          "The summary bar shows **Active Pilots**, **Active Vehicles**, **Cert Compliance** and **Reg Compliance**.",
           "Click **Refresh** to reload the numbers."
         ],
         "notes": [
           "Everyone can open this page. The names in the lists follow what you may view, so a role without certification access sees the counts but not the pilot names.",
-          "The score starts at 100 and loses points for: expired certifications (up to 25), expired FAA registrations (up to 20), overdue maintenance (5 each, up to 20), open or investigating incidents (10 each, up to 20), pilots out of currency (up to 15), and operating authorities that are expiring or expired.",
-          "Currency counts only when at least one active currency rule exists. With no rules **Currency Compliance** shows a dash.",
+          "The score starts at 100 and loses points for: expired certifications (up to 25), expired FAA registrations (up to 20), overdue maintenance (5 each, up to 20), open or investigating incidents (10 each, up to 20), flight requirements (up to 15), and operating authorities that are expiring or expired.",
+          "Flight requirements: a pilot costs points when they missed the most recently closed period of an active requirement, or are lapsed on an active rolling requirement now. A pilot counts once. The points lost are the share of active pilots affected, times 15. Excused pilots do not count, and nothing is lost while no requirement is active. **Missed or lapsed** shows how many pilots that is.",
           "Only active pilots and active vehicles are counted.",
           "An expired operating authority that grounds the unit caps the score at 50, and the reason shows under the score. See **Operating Authority**.",
           "**Export checkouts CSV** downloads the equipment checkout log (it needs report export and fleet access). **Generate Compliance Report** opens **Reports** for people who may generate reports.",
-          "The **Requirements Score** shows beside the compliance score. It is separate and never changes the compliance score. See \"History and the score\"."
+          "The **Requirements Score** shows beside the compliance score. It is separate and never changes the compliance score. See \"History and the score\".",
+          "**Flight Requirements** shows to people who may view flight requirements, and **Setup** to people who may manage them. Old links to the Flight Requirements page open the **Flight Requirements** tab."
         ]
       },
       {
@@ -2019,25 +2105,27 @@
         ],
         "notes": [
           "The order is: grounding authority, critical (expired certifications, expired registrations, other expired authorities), high, medium, low.",
-          "Lines cover expiring certifications, expiring authorities, overdue maintenance, open incidents, unreviewed flights, pending flight plans and pilots out of currency or close to it.",
+          "Lines cover expired and expiring certifications, expired registrations, expired and expiring authorities, overdue maintenance, open incidents, unreviewed flights and pending flight plans. Missed and lapsed flight requirements show on the **This Period** tile and the **Missed or lapsed** card instead.",
           "When the list is empty the page says **All Clear**."
         ]
       },
       {
-        "id": "currency-reminders",
-        "title": "Pilot currency and reminders",
-        "summary": "The **Pilot Currency Status** section shows who is lapsed or close to lapsing, and lets a supervisor email them a reminder.",
+        "id": "setup-tab",
+        "title": "The Setup tab",
+        "summary": "The **Setup** tab holds the flight requirement templates and **Requirement Settings**. It shows to people who may manage flight requirements.",
+        "image": {
+          "src": "/manual-pictures/compliance-setup-tab.png",
+          "alt": "The Setup tab with an empty Templates card and the Requirement Settings card with grace days, fiscal year start, Send requirement emails and Save settings",
+          "caption": "The Setup tab of the Compliance page."
+        },
         "steps": [
-          "Scroll to **Pilot Currency Status**. The header shows how many pilots are lapsed out of the total.",
-          "Use the list to choose **Lapsed + Expiring 30d**, **Lapsed only** or **All pilots**.",
-          "Each row has a badge: **LAPSED**, the days left (amber within 14 days, blue within 30) or **CURRENT**, plus how many hours and flights the pilot has against each rule. Click a row to open the pilot.",
-          "Click **Show all** to see more than the first eight rows.",
-          "To email lapsed pilots, click **Send Reminders**, add an optional **Message to pilots (optional)**, and click **Send**."
+          "Open **Compliance** and choose **Setup**.",
+          "Under **Templates**, click **New from template** to start a requirement from a template. Use the pencil to rename a template and the bin to delete it.",
+          "Under **Requirement Settings**, set **Grace days** and **Fiscal year starts in**, and tick **Send requirement emails** if you want emails.",
+          "Click **Save settings**."
         ],
         "notes": [
-          "**Send Reminders** is for supervisors and admins by default. It emails every lapsed pilot who has an email address on file. The result message tells you how many were sent, skipped for no email, or failed. The unit needs email set up first (see **Settings**).",
-          "A row shows **no email** when the pilot has no address, or when you do not have contact access.",
-          "With no currency rules the section says **No currency rules defined** and offers **Open Settings**. See Pilot currency to add one."
+          "See \"Templates and duplicating\", \"History and the score\" and \"Requirement emails\" under Flight Requirements."
         ]
       }
     ]
@@ -2367,20 +2455,21 @@
         "title": "What each report holds",
         "summary": "Pick the report that answers your question.",
         "steps": [
-          "**Flight Summary**: every flight in the date range.",
+          "**Flight Summary**: every flight in the date range, with its cost and a total.",
           "**Pilot Hours**: flight hours for each pilot.",
-          "**Equipment Utilization**: how much each vehicle was used.",
+          "**Equipment Utilization**: how much each vehicle was used, and what its flights cost.",
           "**Pilot Certifications**: where each pilot stands on certifications today.",
           "**Battery Status**: battery health and use today.",
           "**Maintenance History**: maintenance records in the date range.",
           "**Pilot Activity Summary**: a summary of each pilot's activity.",
-          "**Annual Unit Report**: a yearly summary of the whole program.",
-          "**Flight Requirements**: the saved results of each requirement, by period and pilot, for periods that ended in the date range.",
+          "**Annual Unit Report**: a yearly summary of the whole program. Its **Fleet Utilization** section includes each aircraft's cost.",
+          "**Flight Requirements**: the saved results of each requirement, by period and pilot, for periods that ended in the date range, and the lapses of rolling requirements.",
           "**Per-Pilot Annual Review**: a yearly review for each pilot. Choose **PDF** for one combined file, or **Download PDF Pack (one per pilot)** for a zip file with one PDF per pilot."
         ],
         "notes": [
           "A report appears in the list only if you can see all the data it uses. The Annual Unit Report needs the most.",
-          "Annual reports default to the current year when you set no dates."
+          "Annual reports default to the current year when you set no dates.",
+          "Costs are the costs typed on flights, else estimates from each aircraft's hourly operating cost. An estimated row is marked **(est.)**. A total stays empty when no flight has a cost."
         ]
       },
       {
@@ -2408,16 +2497,16 @@
         "summary": "Settings holds the choices that apply to the whole unit. Everyone can open it to manage their own profile. Admins see much more.",
         "steps": [
           "Choose **Settings** in the sidebar.",
-          "The **General** tab holds **My Profile**, **Change Password** and **Email Digest** for everyone. For admins it also holds **Organization**, **Certification Status Labels**, **Weather Thresholds**, **Mission / Flight Purposes**, **Drone Locations**, **Default Location**, **Backup & Restore**, **Automated Backups**, **Currency Rules** (also open to supervisors) and **Sidebar Configuration**.",
+          "The **General** tab holds **My Profile**, **Change Password** and **Email Digest** for everyone. For admins it also holds **Organization**, **Certification Status Labels**, **Weather Thresholds**, **Mission / Flight Purposes**, **Drone Locations**, **Default Location**, **Backup & Restore**, **Automated Backups** and **Sidebar Configuration**.",
           "The **Users** tab is for admins. It holds **User Management** and **Role Permissions**.",
           "The **Integrations** tab is for admins. It holds the Skydio connection, email sending and flight log import.",
           "The **API Tokens** tab is for admins. It holds the keys for other programs.",
-          "Flight requirements are not on the Settings page. Open **Flight Requirements** in the sidebar, under **Compliance**."
+          "Flight requirements are not on the Settings page. Open **Compliance** and use the **Flight Requirements** and **Setup** tabs."
         ],
         "notes": [
           "Choose **Save Settings** at the bottom of the **General** tab to keep changes to the **Organization**, **Weather Thresholds** and similar cards. Some cards have their own save button.",
           "A line saying **Unsaved changes** shows beside **Save Settings** until you save.",
-          "Other topics cover the cards that belong to a feature: **Certification Status Labels** under Certifications, **Weather Thresholds** under Weather, **Currency Rules** under Pilots and **Drone Locations** under Drone Locations.",
+          "Other topics cover the cards that belong to a feature: **Certification Status Labels** under Certifications, **Weather Thresholds** under Weather and **Drone Locations** under Drone Locations.",
           "If your server has it turned on, everyone sees an **API Documentation** link at the bottom of the **General** tab. It is for people who write programs."
         ]
       },
