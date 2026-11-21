@@ -502,6 +502,15 @@ describe('CertificationsPage', () => {
       expect(screen.queryByRole('button', { name: 'Renew selected' })).toBeNull()
     })
 
+    it('clears the bulk selection when leaving the Certifications tab', async () => {
+      const { user } = mountViews()
+      await screen.findByRole('link', { name: 'Ada Lovelace' })
+      await user.click(screen.getAllByRole('checkbox', { name: 'Select certification for bulk renewal' })[0])
+      await user.click(screen.getByRole('button', { name: 'Cert Types' }))
+      await user.click(screen.getByRole('button', { name: 'Certifications' }))
+      expect(screen.queryByRole('button', { name: 'Renew selected' })).toBeNull()
+    })
+
     it('raises the matrix header above the pinned pilot column', async () => {
       mountViews()
       await screen.findByRole('link', { name: 'Ada Lovelace' })

@@ -48,12 +48,15 @@ export function usePageLayout(field, settingKey) {
     try {
       await api.put('/settings', { key: settingKey, value: JSON.stringify(layout) })
       setDefaultLayout(layout)
-      toast.success('Saved as the unit default')
+      // An admin with a layout of their own keeps seeing it, so say why the page did not change.
+      toast.success(user?.[field]
+        ? 'Saved as the unit default. Your own layout still applies to you; use Reset to default to switch to it.'
+        : 'Saved as the unit default')
     } catch (err) {
       toast.error(err.message)
       throw err
     }
-  }, [settingKey, toast])
+  }, [settingKey, toast, user, field])
 
   return { layout: user?.[field] ?? null, defaultLayout, onSave, onSaveDefault, canSetDefault: isAdmin }
 }

@@ -307,6 +307,17 @@ describe('FlightsPage', () => {
       for (const control of bulkControls()) expect(control).toBeEnabled()
     })
 
+    it('says how to use the bar while nothing is selected', async () => {
+      mockMount()
+      const { user } = renderWithProviders(<FlightsPage />, { role: 'supervisor' })
+      await screen.findByRole('link', { name: 'Jane Doe' })
+      const hint = screen.getByText('Select flights to use these actions')
+      expect(hint).not.toHaveClass('invisible')
+      await user.click(screen.getAllByRole('checkbox')[1])
+      await screen.findByText('1 selected')
+      expect(hint).toHaveClass('invisible')
+    })
+
     it('clearing the selection disables the controls again', async () => {
       mockMount()
       const user = await selectEveryRow()

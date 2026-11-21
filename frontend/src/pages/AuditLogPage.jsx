@@ -21,13 +21,15 @@ const ENTITY_TYPES = [
   'vehicle_registration',
 ]
 
+// send_reminders is no longer written (currency was removed in 3.7.0) but
+// older audit rows still carry it, so it stays as a filter.
 const ACTIONS = [
   '', 'alert_check', 'approve', 'backup', 'battery_repair', 'bulk_approve', 'bulk_delete',
   'bulk_update', 'cancel', 'checkin', 'checkout', 'cleanup', 'close_periods', 'complete', 'create', 'deactivate',
   'delete', 'deny', 'digest', 'disconnect', 'dismiss', 'dismiss_all', 'enrich_flights',
   'enrich_run', 'export', 'hold', 'import', 'link', 'login', 'login_blocked', 'login_failed',
   'logout', 'merge', 'password_change', 'password_reset', 'purge', 'reactivate', 'read', 'recalculate',
-  'release_hold', 'reset', 'restore', 'restore_held_item', 'retire', 'send_notices', 'send_test',
+  'release_hold', 'reset', 'restore', 'restore_held_item', 'retire', 'send_notices', 'send_reminders', 'send_test',
   'setup', 'sync', 'sync_deep', 'sync_run', 'telemetry_sync', 'unapprove', 'unlink', 'update',
   'upload', 'view',
 ]

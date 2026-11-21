@@ -56,3 +56,40 @@ test('admin creates a monthly flight requirement and sees it on the dashboard', 
     await expect(page.getByText(name, { exact: true })).toHaveCount(0)
   }
 })
+
+// Rolling journey: an admin creates a 30-day rolling requirement on the
+// Flight Requirements tab, sees its "N current, M lapsed" counts on the
+// Overview tab and on the dashboard "This Period" tile, then deletes it.
+test('admin creates a rolling flight requirement and sees it on Overview and the dashboard', async ({ page }) => {
+  const name = `E2E rolling ${Date.now()}`
+
+  await openRequirements(page)
+  await page.getByRole('button', { name: 'New requirement', exact: true }).click()
+
+  const form = page.getByRole('form', { name: 'New requirement' })
+  await form.getByLabel('Name', { exact: true }).fill(name)
+  await form.getByLabel('Period', { exact: true }).selectOption('rolling')
+  await form.getByLabel('Window length', { exact: true }).fill('30')
+  await form.getByLabel('Unit', { exact: true }).selectOption('days')
+  await form.getByLabel('Flights', { exact: true }).fill('1')
+  await form.getByRole('button', { name: 'Save requirement' }).click()
+  await expect(form).toBeHidden()
+
+  const row = page.getByRole('listitem').filter({ has: page.getByText(name, { exact: true }) })
+  try {
+    await expect(row).toBeVisible({ timeout: 15_000 })
+
+    await page.getByRole('tab', { name: 'Overview', exact: true }).click()
+    const overview = page.getByRole('region', { name: 'This Period' }).getByRole('listitem', { name })
+    await expect(overview).toContainText(/\d+ current, \d+ lapsed/, { timeout: 15_000 })
+
+    await page.goto('/')
+    const tile = page.getByRole('region', { name: 'This Period' }).getByRole('listitem', { name })
+    await expect(tile).toContainText(/\d+ current, \d+ lapsed/, { timeout: 15_000 })
+  } finally {
+    await openRequirements(page)
+    await page.getByRole('button', { name: `Delete ${name}`, exact: true }).click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click()
+    await expect(page.getByText(name, { exact: true })).toHaveCount(0)
+  }
+})

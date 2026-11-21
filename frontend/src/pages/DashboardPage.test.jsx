@@ -402,6 +402,28 @@ describe('DashboardPage', () => {
       expect(JSON.parse(puts[0].value).order).toContain('this-period')
     })
 
+    it('confirms the unit default with a toast', async () => {
+      mockDashboard(POPULATED)
+      server.use(http.put('/api/settings', () => HttpResponse.json({ ok: true })))
+      const { user } = renderWithProviders(<DashboardPage />, { role: 'admin' })
+      await screen.findByText(/7 active pilots/)
+      await user.click(screen.getByRole('button', { name: 'Edit layout' }))
+      await user.click(screen.getByRole('button', { name: 'Save as unit default' }))
+      expect(await screen.findByText('Saved as the unit default')).toBeInTheDocument()
+    })
+
+    it('tells an admin with their own layout that it still applies to them', async () => {
+      mockDashboard(POPULATED)
+      server.use(http.put('/api/settings', () => HttpResponse.json({ ok: true })))
+      const { user } = renderWithProviders(<DashboardPage />, {
+        user: { id: 1, username: 'a', role: 'admin', dashboard_layout: SAVED },
+      })
+      await screen.findByText(/7 active pilots/)
+      await user.click(screen.getByRole('button', { name: 'Edit layout' }))
+      await user.click(screen.getByRole('button', { name: 'Save as unit default' }))
+      expect(await screen.findByText(/Your own layout still applies to you/)).toBeInTheDocument()
+    })
+
     it('offers no unit default to a pilot', async () => {
       mockDashboard(POPULATED)
       const { user } = renderWithProviders(<DashboardPage />, { role: 'pilot' })

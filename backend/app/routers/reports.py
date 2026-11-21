@@ -719,6 +719,7 @@ def _flight_summary(config: ReportConfig, db: Session):
 
     rows = [_flight_summary_row(f) for f in flights]
     costs = [_flight_cost(f) for f in flights]
+    known = [c for c, _ in costs if c is not None]
 
     return {
         "report_type": "flight_summary",
@@ -727,7 +728,8 @@ def _flight_summary(config: ReportConfig, db: Session):
             "total_flights": len(flights),
             "total_hours": round(total_seconds / 3600, 1),
             # Typed costs plus estimates from aircraft hourly rates.
-            "total_cost": format_cost(sum(c for c, _ in costs if c is not None)),
+            # Blank when no flight has a cost at all.
+            "total_cost": format_cost(sum(known) if known else None),
             "estimated_cost_flights": sum(1 for _, est in costs if est),
             "cost_basis": COST_BASIS,
             "date_range": f"{config.date_from or 'All'} to {config.date_to or 'Present'}",
@@ -825,9 +827,10 @@ def _equipment_utilization(config: ReportConfig, db: Session):
         q = q.filter(Vehicle.id.in_(config.vehicle_ids))
 
     rows = []
-    total_cost = 0.0  # an aircraft with no flights has no cost to add
+    total_cost = None  # stays blank when no flight has a cost
     for r in q.group_by(Vehicle.id).order_by(func.sum(Flight.duration_seconds).desc()).all():
-        total_cost += r.cost or 0
+        if r.cost is not None:
+            total_cost = (total_cost or 0.0) + r.cost
         name = f"{r.manufacturer} {r.model}"
         if r.nickname:
             name += f" ({r.nickname})"
@@ -1722,30 +1725,41 @@ def _annual_personnel_section(db: Session, flights, missions, trainings, pilots_
 
 
 def _annual_fleet_section(flights, vehicles_by_id: dict, active_vehicles: int) -> dict:
-    """Section 4: flights and hours per aircraft that flew in the period."""
+    """Section 4: flights, hours and operating cost per aircraft that flew in
+    the period. Cost follows Equipment Utilization: typed costs, else estimates."""
     vehicle_stats = {}
     for f in flights:
         if f.vehicle_id:
-            s = vehicle_stats.setdefault(f.vehicle_id, {"flights": 0, "secs": 0})
+            s = vehicle_stats.setdefault(f.vehicle_id, {"flights": 0, "secs": 0, "cost": None})
             s["flights"] += 1
             s["secs"] += f.duration_seconds or 0
+            cost, _ = _flight_cost(f)
+            if cost is not None:
+                s["cost"] = (s["cost"] or 0.0) + cost
     rows = []
+    total_cost = None
     for vid, s in vehicle_stats.items():
         v = vehicles_by_id.get(vid)
         if not v:
             continue
+        if s["cost"] is not None:
+            total_cost = (total_cost or 0.0) + s["cost"]
         rows.append({
             "vehicle": f"{v.manufacturer} {v.model}" + (f" ({v.nickname})" if v.nickname else ""),
             "status": v.status,
             "flights": s["flights"],
             "hours": round(s["secs"] / 3600, 1),
+            "cost": format_cost(s["cost"]),
         })
     rows.sort(key=lambda r: r["hours"], reverse=True)
     return {
         "title": "Fleet Utilization",
         "type": "table",
-        "summary": {"active_aircraft": active_vehicles, "aircraft_flown": len(vehicle_stats)},
-        "columns": ["Vehicle", "Status", "Flights", "Hours"],
+        "summary": {
+            "active_aircraft": active_vehicles, "aircraft_flown": len(vehicle_stats),
+            "total_cost": format_cost(total_cost), "cost_basis": COST_BASIS,
+        },
+        "columns": ["Vehicle", "Status", "Flights", "Hours", "Cost ($)"],
         "rows": rows,
     }
 

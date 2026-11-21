@@ -628,6 +628,8 @@ export default function FlightsPage() {
       {canReview && (
         <div className="sticky top-14 lg:top-16 z-30 flex items-center gap-3 flex-wrap bg-card border border-primary/30 rounded-lg px-4 py-2">
           <span className="text-sm font-medium text-foreground">{selectedIds.size} selected</span>
+          {/* Kept in place (only hidden) once rows are ticked, so the bar does not reflow. */}
+          <span className={`text-xs text-muted-foreground ${selectedIds.size > 0 ? 'invisible' : ''}`}>Select flights to use these actions</span>
           {canBulkEdit && <select disabled={bulkControlsOff} title={bulkReason} value="" aria-label="Reassign pilot for selected flights"
             onChange={e => { if (e.target.value) confirmBulkPilot(Number.parseInt(e.target.value, 10)) }}
             className="max-w-64 truncate px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm">

@@ -24,13 +24,13 @@ def _vehicle(db, serial="SN-COST", rate=None, nickname="Cost Bird"):
     return vehicle
 
 
-def _flight(db, vehicle_id, duration_seconds, cost=None):
+def _flight(db, vehicle_id, duration_seconds, cost=None, flight_date=date(2025, 6, 1)):
     pilot = db.query(Pilot).first()
     if pilot is None:
         pilot = Pilot(first_name="Ana", last_name="Alvarez", status="active")
         db.add(pilot)
         db.commit()
-    flight = Flight(date=date(2025, 6, 1), pilot_id=pilot.id, vehicle_id=vehicle_id,
+    flight = Flight(date=flight_date, pilot_id=pilot.id, vehicle_id=vehicle_id,
                     duration_seconds=duration_seconds, operating_cost=cost)
     db.add(flight)
     db.commit()
@@ -170,8 +170,8 @@ def test_setting_the_rate_needs_fleet_manage(client, db, pilot_headers):
 # Reports
 
 
-def _generate(client, headers, report_type):
-    resp = client.post(GENERATE_URL, headers=headers, json={"report_type": report_type})
+def _generate(client, headers, report_type, **config):
+    resp = client.post(GENERATE_URL, headers=headers, json={"report_type": report_type, **config})
     assert resp.status_code == 200, resp.text
     return resp.json()
 
@@ -244,3 +244,128 @@ def test_vehicles_csv_carries_the_rate(client, db, admin_headers):
 
     row = next(csv.DictReader(io.StringIO(resp.text)))
     assert row["Hourly Operating Cost"] == "42.50"
+
+
+def test_a_typed_zero_wins_over_the_estimate(client, db, admin_headers):
+    vehicle = _vehicle(db, rate=60)
+    _flight(db, vehicle.id, 3600, cost=0.0)
+
+    payload = _generate(client, admin_headers, "flight_summary")
+
+    assert payload["rows"][0]["cost"] == "0.00"
+
+
+def test_a_typed_zero_wins_in_equipment_utilization(client, db, admin_headers):
+    vehicle = _vehicle(db, rate=60)
+    _flight(db, vehicle.id, 3600, cost=0.0)
+
+    payload = _generate(client, admin_headers, "equipment_utilization")
+
+    assert payload["summary"]["total_cost"] == "0.00"
+
+
+def test_flight_summary_total_cost_follows_the_vehicle_filter(client, db, admin_headers):
+    _two_flights(db)
+    other = _vehicle(db, serial="SN-OTHER", rate=10, nickname="Other")
+    _flight(db, other.id, 3600)
+
+    payload = _generate(client, admin_headers, "flight_summary", vehicle_ids=[other.id])
+
+    assert payload["summary"]["total_cost"] == "10.00"
+
+
+def test_flight_summary_total_cost_follows_the_date_filter(client, db, admin_headers):
+    vehicle = _vehicle(db, rate=60)
+    _flight(db, vehicle.id, 3600, flight_date=date(2025, 6, 1))
+    _flight(db, vehicle.id, 1800, flight_date=date(2025, 8, 1))
+
+    payload = _generate(client, admin_headers, "flight_summary", date_from="2025-07-01", date_to="2025-12-31")
+
+    assert payload["summary"]["total_cost"] == "30.00"
+
+
+def test_equipment_utilization_total_cost_follows_the_date_filter(client, db, admin_headers):
+    vehicle = _vehicle(db, rate=60)
+    _flight(db, vehicle.id, 3600, flight_date=date(2025, 6, 1))
+    _flight(db, vehicle.id, 1800, flight_date=date(2025, 8, 1))
+
+    payload = _generate(client, admin_headers, "equipment_utilization", date_from="2025-07-01", date_to="2025-12-31")
+
+    assert payload["summary"]["total_cost"] == "30.00"
+
+
+def test_flight_summary_total_cost_is_blank_when_no_flight_has_a_cost(client, db, admin_headers):
+    vehicle = _vehicle(db, rate=None)
+    _flight(db, vehicle.id, 3600)
+
+    payload = _generate(client, admin_headers, "flight_summary")
+
+    assert payload["summary"]["total_cost"] == ""
+
+
+def test_equipment_utilization_total_cost_is_blank_when_no_flight_has_a_cost(client, db, admin_headers):
+    vehicle = _vehicle(db, rate=None)
+    _flight(db, vehicle.id, 3600)
+
+    payload = _generate(client, admin_headers, "equipment_utilization")
+
+    assert payload["summary"]["total_cost"] == ""
+
+
+def test_clearing_the_typed_cost_brings_back_the_estimate(client, db, admin_headers):
+    vehicle = _vehicle(db, rate=60)
+    flight = _flight(db, vehicle.id, 1800, cost=12.0)
+
+    resp = client.patch(f"/api/flights/{flight.id}", headers=admin_headers, json={"operating_cost": None})
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["operating_cost_estimate"] == 30.0
+
+
+def test_clearing_the_typed_cost_leaves_it_empty(client, db, admin_headers):
+    vehicle = _vehicle(db, rate=60)
+    flight = _flight(db, vehicle.id, 1800, cost=12.0)
+
+    resp = client.patch(f"/api/flights/{flight.id}", headers=admin_headers, json={"operating_cost": None})
+
+    assert resp.json()["operating_cost"] is None
+
+
+def _annual_fleet(client, headers):
+    payload = _generate(client, headers, "annual_unit_report", date_from="2025-01-01", date_to="2025-12-31")
+    return next(s for s in payload["sections"] if s["title"] == "Fleet Utilization")
+
+
+def test_annual_fleet_section_costs_each_aircraft(client, db, admin_headers):
+    _two_flights(db)
+
+    section = _annual_fleet(client, admin_headers)
+
+    assert section["rows"][0]["cost"] == "42.00"
+
+
+def test_annual_fleet_section_totals_cost(client, db, admin_headers):
+    _two_flights(db)
+    other = _vehicle(db, serial="SN-OTHER", rate=10, nickname="Other")
+    _flight(db, other.id, 3600)
+
+    section = _annual_fleet(client, admin_headers)
+
+    assert section["summary"]["total_cost"] == "52.00"
+
+
+def test_annual_fleet_section_has_a_cost_column(client, db, admin_headers):
+    _two_flights(db)
+
+    section = _annual_fleet(client, admin_headers)
+
+    assert section["columns"][-1] == "Cost ($)"
+
+
+def test_annual_fleet_section_cost_is_blank_without_any_cost(client, db, admin_headers):
+    vehicle = _vehicle(db, rate=None)
+    _flight(db, vehicle.id, 3600)
+
+    section = _annual_fleet(client, admin_headers)
+
+    assert section["summary"]["total_cost"] == ""

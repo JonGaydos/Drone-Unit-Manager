@@ -391,10 +391,14 @@ export default function CertificationsPage() {
   const bulk = useBulkRenew(reload)
 
   const closeModal = () => { setModal(null); setEditCert(null) }
-  // Bulk renewal lives in the matrix, so leaving it drops the selection.
+  // Bulk renewal lives in the matrix, so leaving it (view or tab) drops the selection.
   const changeView = (next) => {
     if (next !== 'matrix') bulk.clear()
     setView(next)
+  }
+  const changeTab = (next) => {
+    if (next !== 'matrix') bulk.clear()
+    setTab(next)
   }
   // Runs a change, then the follow-up and a reload; a failure shows a toast.
   const run = async (change, after) => {
@@ -467,8 +471,8 @@ export default function CertificationsPage() {
       {error && <div className="bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg p-4 mb-4">{error}</div>}
       {/* Tabs */}
       <div className="flex items-center gap-4 border-b border-border pb-2 overflow-x-auto">
-        <TabButton active={tab === 'matrix'} onClick={() => setTab('matrix')}>Certification Matrix</TabButton>
-        <TabButton active={tab === 'types'} onClick={() => setTab('types')}>Cert Types</TabButton>
+        <TabButton active={tab === 'matrix'} onClick={() => changeTab('matrix')}>Certifications</TabButton>
+        <TabButton active={tab === 'types'} onClick={() => changeTab('types')}>Cert Types</TabButton>
         <div className="flex-1" />
         {can('reports.export') && (
           <button

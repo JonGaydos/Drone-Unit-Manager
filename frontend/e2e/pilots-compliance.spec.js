@@ -20,7 +20,7 @@ import { gotoSection } from './helpers/app.js'
 //     box matches "<first> <last> <email> <badge>", so a unique last name filters
 //     the list to exactly our row.
 //   - Pilot detail: header is a heading with the pilot full_name; the email renders.
-//   - Certifications: the "Certification Matrix" tab is default. Each pilot is a row
+//   - Certifications: the "Certifications" tab is default. Each pilot is a row
 //     (name links to /pilots/:id); each active cert type is a column header. The
 //     seeded cert type is "E2E Part 107"; seeded pilots include "E2E Seedpilot".
 //   - Compliance: heading "Compliance". The seeded EXPIRED certification

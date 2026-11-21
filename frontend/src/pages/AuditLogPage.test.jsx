@@ -260,13 +260,20 @@ describe('AuditLogPage', () => {
       ]))
     })
 
-    it('offers no currency entity type or reminder action', async () => {
+    it('offers no currency entity type', async () => {
       server.use(http.get('/api/audit', () => HttpResponse.json({ total: 0, logs: [] })))
       const { user } = renderWithProviders(<AuditLogPage />, { role: 'admin' })
       await user.click(await screen.findByRole('button', { name: /Filters/ }))
       const optionsOf = label => within(screen.getByLabelText(label)).getAllByRole('option').map(o => o.value)
       expect(optionsOf('Entity Type').filter(v => v.startsWith('currency'))).toEqual([])
-      expect(optionsOf('Action')).not.toContain('send_reminders')
+    })
+
+    it('keeps send_reminders as an action filter for older audit rows', async () => {
+      server.use(http.get('/api/audit', () => HttpResponse.json({ total: 0, logs: [] })))
+      const { user } = renderWithProviders(<AuditLogPage />, { role: 'admin' })
+      await user.click(await screen.findByRole('button', { name: /Filters/ }))
+      const actions = within(screen.getByLabelText('Action')).getAllByRole('option').map(o => o.value)
+      expect(actions).toContain('send_reminders')
     })
 
     it('offers the newer actions and entity types as filters', async () => {
