@@ -416,13 +416,13 @@ function ComplianceTabs({ tabs, active, onSelect }) {
     document.getElementById(`compliance-tab-${tabs[index].id}`)?.focus()
   }
   return (
-    <div role="tablist" aria-label="Compliance" onKeyDown={onKeyDown}
+    <div role="tablist" aria-label="Compliance"
       className="flex items-center gap-1 border-b border-border overflow-x-auto">
       {tabs.map(tab => {
         const selected = tab.id === active
         return (
           <button key={tab.id} id={`compliance-tab-${tab.id}`} type="button" role="tab" aria-selected={selected}
-            aria-controls="compliance-panel" tabIndex={selected ? 0 : -1} onClick={() => onSelect(tab.id)}
+            aria-controls="compliance-panel" tabIndex={selected ? 0 : -1} onClick={() => onSelect(tab.id)} onKeyDown={onKeyDown}
             className={`text-sm font-medium px-3 pb-2 -mb-px border-b-2 whitespace-nowrap transition-colors ${
               selected ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
             {tab.label}

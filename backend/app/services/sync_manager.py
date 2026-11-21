@@ -1181,7 +1181,7 @@ class SyncManager:
                     _store_telemetry_points(flight, telemetry_data, TelemetrySessionLocal, TelemetryPoint)
                 flight.telemetry_synced = True
                 flight.has_telemetry = bool(telemetry_data)
-                fill_track_fields(db, flight)
+                fill_track_fields(flight)
                 # Count only flights that returned points; one with none is
                 # still marked checked so it stops taking a slot.
                 if telemetry_data:

@@ -805,7 +805,7 @@ def import_flight_log(
             raise
 
     from app.services.flight_track import fill_track_fields
-    fill_track_fields(db, flight, telemetry_db)
+    fill_track_fields(flight, telemetry_db)
 
     db.commit()
     db.refresh(flight)

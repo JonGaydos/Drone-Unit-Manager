@@ -676,7 +676,7 @@ def compliance_dashboard(db: DBSession, user: CurrentUser):
     open_items = _open_item_counts(db, today)
 
     # Operating authority (org-level COAs / Part 107 waivers).
-    authorities, expired_authorities, expiring_authorities, grounding_expired, advisory_expired, score_cap_reason = _authority_summary(db, today)
+    authorities, expired_authorities, expiring_authorities, _, advisory_expired, score_cap_reason = _authority_summary(db, today)
 
     # The score and counts are unit-wide. The lists name records, so they follow
     # their features' view permissions.

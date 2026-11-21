@@ -591,7 +591,7 @@ def refresh_flight_from_api(flight_id: int, db: DBSession, admin: AdminUser):
     if telemetry_points > 0:
         flight.telemetry_synced = True
         flight.has_telemetry = True
-        fill_track_fields(db, flight)
+        fill_track_fields(flight)
 
     db.commit()
 

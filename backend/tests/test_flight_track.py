@@ -93,7 +93,8 @@ def test_bad_final_fix_after_a_gap_adds_no_distance():
 
 def test_bad_final_fix_after_a_gap_is_not_the_landing():
     summary = track_summary(_second_track() + [_pt(30.1, -86.0, 320)])
-    assert (summary["landing_lat"], summary["landing_lon"]) == _second_track_end()
+    landing = (summary["landing_lat"], summary["landing_lon"])
+    assert landing == _second_track_end()
 
 
 def _gap_then_real_pair():
@@ -231,7 +232,7 @@ def _flight_with_track(db, telemetry_db, points=None, **fields):
 
 def test_fill_sets_empty_fields(db, telemetry_db):
     flight = _flight_with_track(db, telemetry_db)
-    assert fill_track_fields(db, flight) is True
+    assert fill_track_fields(flight) is True
     assert flight.distance_m == pytest.approx(_square_length(), rel=0.01)
     assert (flight.landing_lat, flight.landing_lon) == (30.0, -86.0)
 
@@ -241,7 +242,7 @@ def test_fill_keeps_typed_values(db, telemetry_db):
                                 landing_lon=-87.5, landing_time=datetime(2026, 1, 1, 10, 30))
     flight.takeoff_time = datetime(2026, 1, 1, 10, 0)
     flight.duration_seconds = 600
-    assert fill_track_fields(db, flight) is False
+    assert fill_track_fields(flight) is False
     assert flight.distance_m == 1234.0
     assert (flight.landing_lat, flight.landing_lon) == (31.5, -87.5)
     assert flight.landing_time == datetime(2026, 1, 1, 10, 30)
@@ -256,7 +257,7 @@ def test_fill_keeps_typed_landing_address(db, telemetry_db, geocoder):
 
 def test_track_without_gps_fix_stays_blank(db, telemetry_db):
     flight = _flight_with_track(db, telemetry_db, points=[_pt(None, None, 0), _pt(500, 500, 1)])
-    assert fill_track_fields(db, flight) is False
+    assert fill_track_fields(flight) is False
     assert (flight.distance_m, flight.landing_lat, flight.landing_lon) == (None, None, None)
 
 
@@ -264,7 +265,7 @@ def test_fill_landing_time_from_takeoff_and_duration(db):
     flight = Flight(takeoff_time=datetime(2026, 1, 1, 10, 0), duration_seconds=900)
     db.add(flight)
     db.commit()
-    assert fill_track_fields(db, flight) is True
+    assert fill_track_fields(flight) is True
     assert flight.landing_time == datetime(2026, 1, 1, 10, 15)
 
 

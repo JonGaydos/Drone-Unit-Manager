@@ -693,6 +693,7 @@ def _flight_summary_row(f) -> dict:
 
 
 COST_BASIS = "Entered costs, else hours x aircraft hourly rate"
+COL_COST = "Cost ($)"
 
 
 def _flight_cost(f) -> tuple[float | None, bool]:
@@ -734,7 +735,7 @@ def _flight_summary(config: ReportConfig, db: Session):
             "cost_basis": COST_BASIS,
             "date_range": f"{config.date_from or 'All'} to {config.date_to or 'Present'}",
         },
-        "columns": ["Date", "Pilot", "Vehicle", "Purpose", "Duration (min)", "Location", "Cost ($)"],
+        "columns": ["Date", "Pilot", "Vehicle", "Purpose", "Duration (min)", "Location", COL_COST],
         "rows": rows,
     }
 
@@ -859,7 +860,7 @@ def _equipment_utilization(config: ReportConfig, db: Session):
             "date_range": f"{config.date_from or 'All'} to {config.date_to or 'Present'}",
             "cost_basis": COST_BASIS,
         },
-        "columns": ["Vehicle", "Serial", "Flights", "Hours", "Cost ($)"],
+        "columns": ["Vehicle", "Serial", "Flights", "Hours", COL_COST],
         "rows": rows,
     }
 
@@ -1724,9 +1725,8 @@ def _annual_personnel_section(db: Session, flights, missions, trainings, pilots_
     }
 
 
-def _annual_fleet_section(flights, vehicles_by_id: dict, active_vehicles: int) -> dict:
-    """Section 4: flights, hours and operating cost per aircraft that flew in
-    the period. Cost follows Equipment Utilization: typed costs, else estimates."""
+def _annual_vehicle_stats(flights) -> dict:
+    """Flights, seconds and summed cost (None when no flight has one) per aircraft."""
     vehicle_stats = {}
     for f in flights:
         if f.vehicle_id:
@@ -1736,6 +1736,13 @@ def _annual_fleet_section(flights, vehicles_by_id: dict, active_vehicles: int) -
             cost, _ = _flight_cost(f)
             if cost is not None:
                 s["cost"] = (s["cost"] or 0.0) + cost
+    return vehicle_stats
+
+
+def _annual_fleet_section(flights, vehicles_by_id: dict, active_vehicles: int) -> dict:
+    """Section 4: flights, hours and operating cost per aircraft that flew in
+    the period. Cost follows Equipment Utilization: typed costs, else estimates."""
+    vehicle_stats = _annual_vehicle_stats(flights)
     rows = []
     total_cost = None
     for vid, s in vehicle_stats.items():
@@ -1759,7 +1766,7 @@ def _annual_fleet_section(flights, vehicles_by_id: dict, active_vehicles: int) -
             "active_aircraft": active_vehicles, "aircraft_flown": len(vehicle_stats),
             "total_cost": format_cost(total_cost), "cost_basis": COST_BASIS,
         },
-        "columns": ["Vehicle", "Status", "Flights", "Hours", "Cost ($)"],
+        "columns": ["Vehicle", "Status", "Flights", "Hours", COL_COST],
         "rows": rows,
     }
 

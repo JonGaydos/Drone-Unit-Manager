@@ -438,7 +438,8 @@ export default function CertificationsPage() {
 
   const handleReorderCertType = (ctId, direction) => {
     const items = reorderedTypes(certTypes, ctId, direction)
-    if (items) run(() => api.patch('/certification-types/reorder', { items }))
+    if (!items) return undefined
+    return run(() => api.patch('/certification-types/reorder', { items }))
   }
 
   const handleDeleteCert = (certId) => requestConfirm({

@@ -241,10 +241,10 @@ def _fill_from_track(flight: Flight, telemetry_db: Session) -> bool:
     return changed
 
 
-def fill_track_fields(db: Session, flight: Flight, telemetry_db: Session | None = None) -> bool:
+def fill_track_fields(flight: Flight, telemetry_db: Session | None = None) -> bool:
     """Fill the flight's empty distance, landing coordinates and landing time.
-    Returns whether anything changed; the caller commits. ``db`` is the
-    flight's session; telemetry is read from ``telemetry_db`` or a new one."""
+    Returns whether anything changed; the caller commits. Telemetry is
+    read from ``telemetry_db`` or a new session."""
     changed = False
     if flight.landing_time is None and flight.takeoff_time and flight.duration_seconds:
         flight.landing_time = flight.takeoff_time + timedelta(seconds=flight.duration_seconds)
@@ -320,7 +320,7 @@ def _fill_all(db: Session, batch_size: int) -> dict:
             return stats
         cursor = batch[-1].id
         with database.TelemetrySessionLocal() as tdb:
-            stats["filled"] += sum(fill_track_fields(db, f, tdb) for f in batch)
+            stats["filled"] += sum(fill_track_fields(f, tdb) for f in batch)
         db.commit()
         _geocode_landings(batch, stats)
         db.commit()

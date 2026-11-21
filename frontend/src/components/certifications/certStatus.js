@@ -153,6 +153,5 @@ export function groupByUrgency(rows, certTypes, status, labels) {
     .flatMap(row => certTypes.map(ct => urgencyItem(row, ct, status, labels)))
     .filter(Boolean)
     .forEach(item => groups[item.group].push(item))
-  Object.values(groups).forEach(list => list.sort(byDateThenPilot))
-  return groups
+  return Object.fromEntries(Object.entries(groups).map(([key, list]) => [key, list.toSorted(byDateThenPilot)]))
 }
