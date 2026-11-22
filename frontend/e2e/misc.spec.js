@@ -69,7 +69,7 @@ test.describe('settings + feature-area walks', () => {
 
   test('calendar: FullCalendar grid renders', async ({ page }) => {
     await goto(page, 'Calendar', /\/calendar(?:$|[/?])/)
-    await expect(page.getByRole('heading', { name: 'Calendar', exact: true })).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByRole('main').getByRole('heading', { name: 'Calendar', exact: true })).toBeVisible({ timeout: 15_000 })
     // FullCalendar mounts its own DOM; assert the calendar root, its title
     // (current month/year) and at least one day cell rendered.
     await expect(page.locator('.fc')).toBeVisible({ timeout: 15_000 })

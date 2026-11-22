@@ -11,7 +11,7 @@ import { api, createPilotRecord, getAdminToken } from './helpers/seed.js'
 async function openRequirements(page) {
   await page.goto('/')
   await page.getByRole('navigation').getByRole('link', { name: 'Compliance', exact: true }).click()
-  await expect(page.getByRole('heading', { level: 1, name: 'Compliance', exact: true })).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByRole('main').getByRole('heading', { level: 1, name: 'Compliance', exact: true })).toBeVisible({ timeout: 15_000 })
   await page.getByRole('tab', { name: 'Flight Requirements', exact: true }).click()
   await expect(page).toHaveURL(/\/compliance\?tab=requirements$/)
 }

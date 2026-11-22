@@ -91,7 +91,7 @@ test.describe('pilots + compliance journey', () => {
     await expect(page.getByRole('link', { name: 'Dashboard', exact: true })).toBeVisible({ timeout: 15_000 })
     await gotoSection(page, 'Compliance')
 
-    await expect(page.getByRole('heading', { level: 1, name: 'Compliance', exact: true })).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByRole('main').getByRole('heading', { level: 1, name: 'Compliance', exact: true })).toBeVisible({ timeout: 15_000 })
 
     // The seeded expired cert drives the red "Expired Certs" stat card and a
     // critical "Expired Certifications" row in "Items Requiring Attention".
