@@ -89,6 +89,17 @@ describe('FlightsPage', () => {
     expect(await screen.findByText('No flights found')).toBeInTheDocument()
   })
 
+  it('spans the empty-state cell across every column', async () => {
+    mockMount({ flights: () => HttpResponse.json({ flights: [], total: 0, total_pages: 1 }) })
+    for (const role of ['supervisor', 'pilot']) {
+      const { unmount } = renderWithProviders(<FlightsPage />, { role })
+      const cell = (await screen.findByText('No flights found')).closest('td')
+      const headers = within(cell.closest('table')).getAllByRole('columnheader')
+      expect(cell.colSpan).toBe(headers.length)
+      unmount()
+    }
+  })
+
   it('shows the error banner when the primary endpoint 500s', async () => {
     mockMount({ flights: () => HttpResponse.json({ detail: 'flights boom' }, { status: 500 }) })
     renderWithProviders(<FlightsPage />, { role: 'admin' })

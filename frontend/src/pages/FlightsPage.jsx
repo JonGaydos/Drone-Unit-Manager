@@ -771,7 +771,7 @@ export default function FlightsPage() {
                 </td>
               </tr>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={canReview ? 11 : 10} className="px-4 py-12 text-center text-muted-foreground">No flights found</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={canReview ? 12 : 11} className="px-4 py-12 text-center text-muted-foreground">No flights found</td></tr>}
           </tbody>
         </table>
         </div>
