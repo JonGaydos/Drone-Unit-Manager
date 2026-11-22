@@ -45,7 +45,7 @@ function FitBounds({ bounds }) {
     const container = map.getContainer()
     let sized = container.clientWidth > 0 && container.clientHeight > 0
     const observer = new ResizeObserver((entries) => {
-      const { width, height } = entries[entries.length - 1].contentRect
+      const { width, height } = entries.at(-1).contentRect
       const nowSized = width > 0 && height > 0
       if (nowSized && !sized) fit()
       sized = nowSized

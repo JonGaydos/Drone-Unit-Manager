@@ -64,9 +64,10 @@ export default function MissedPeriods({ requirements }) {
   const [excusing, setExcusing] = useState(null)
   const canExcuse = can('requirements.excuse')
 
-  const load = useCallback(() => api.get(`/requirements/history${requirementId ? `?requirement_id=${requirementId}` : ''}`)
+  const query = requirementId ? `?requirement_id=${requirementId}` : ''
+  const load = useCallback(() => api.get(`/requirements/history${query}`)
     .then(setRows)
-    .catch(err => toast.error(err.message)), [requirementId, toast])
+    .catch(err => toast.error(err.message)), [query, toast])
   useEffect(() => { load() }, [load])
 
   const send = (period, pilotId, excused, reason) => api.post(`/requirements/${period.requirementId}/excuse`, {
@@ -98,10 +99,10 @@ export default function MissedPeriods({ requirements }) {
           {requirements.filter(req => req.period_type !== 'rolling').map(req => <option key={req.id} value={req.id}>{req.name}</option>)}
         </select>
       </div>
-      {rows && rows.length === 0 && (
+      {rows?.length === 0 && (
         <p className="text-sm text-muted-foreground px-3 py-4 bg-muted/30 rounded-lg text-center">No missed periods.</p>
       )}
-      {rows && rows.length > 0 && <MissedTable rows={rows} actionsFor={canExcuse ? actionsFor : null} />}
+      {rows?.length > 0 && <MissedTable rows={rows} actionsFor={canExcuse ? actionsFor : null} />}
       {excusing && <ExcuseModal period={excusing.period} onSubmit={excuse} onClose={() => setExcusing(null)} />}
     </section>
   )
