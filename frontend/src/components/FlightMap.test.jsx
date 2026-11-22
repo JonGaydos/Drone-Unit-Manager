@@ -102,8 +102,8 @@ describe('FlightLocationsMap fitting', () => {
     const { unmount } = renderMap(
       <FlightLocationsMap
         flights={[
-          { id: 1, takeoff_lat: 30.3, takeoff_lon: -86.1 },
-          { id: 2, takeoff_lat: 35.5, takeoff_lon: -90.3 },
+          { id: 1, takeoff_lat: 45.1, takeoff_lon: -100.1 },
+          { id: 2, takeoff_lat: 45.2, takeoff_lon: -100.2 },
         ]}
       />,
     )

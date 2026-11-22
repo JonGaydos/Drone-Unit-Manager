@@ -12,7 +12,7 @@ a "Roll production back" section for the release before it.
 | Version | Tag | Commit | Image | Extra Parameters |
 | --- | --- | --- | --- | --- |
 | 3.7.1 | `v3.7.1` | set when tagged | `ghcr.io/jongaydos/drone-unit-manager:3.7.1` (digest recorded after the tag build) | `--restart unless-stopped` |
-| 3.7.0 | `v3.7.0` | set when tagged | `ghcr.io/jongaydos/drone-unit-manager:3.7.0` (digest recorded after the tag build) | `--restart unless-stopped` |
+| 3.7.0 | `v3.7.0` | 0c776f4 | `ghcr.io/jongaydos/drone-unit-manager:3.7.0` (digest recorded after the tag build) | `--restart unless-stopped` |
 | 3.6.0 | `v3.6.0` | 0e7dd41 | `ghcr.io/jongaydos/drone-unit-manager@sha256:3bdf543fdb7096c7f1bd602bad6d453fa64f02fa234cd0958e2d70b38fb728ed` | `--restart unless-stopped` |
 | 3.5.0 | `v3.5.0` | 8e7b98b | `ghcr.io/jongaydos/drone-unit-manager@sha256:1bfe877604c0f45708e4c6abce8bcb73945ad162cd5fb6e7d1e59441d18ef0bb` | `--restart unless-stopped` |
 | 3.4.2 | `v3.4.2` | 5b15043 | `ghcr.io/jongaydos/drone-unit-manager@sha256:36c52e7b1d20c14a9cfe76e24631fada57282d8968fcc5d44a9909aed20a712b` | `--restart unless-stopped` |

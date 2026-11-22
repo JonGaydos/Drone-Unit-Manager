@@ -756,7 +756,7 @@
           "Set **Date From** and **Date To** to show a range of dates.",
           "Pick a **Pilot**, a **Vehicle** or a **Purpose**. Under **Purpose**, **No Purpose** shows flights that have none.",
           "Type in **Search flights...** to find a word in the pilot, vehicle, purpose, location, case number or flight ID.",
-          "Click a column heading (**Date**, **Pilot**, **Vehicle**, **Purpose**, **Distance**, **Duration** or **Status**) to sort. Click it again to reverse the order.",
+          "Click a column heading (**Date**, **Pilot**, **Vehicle**, **Purpose**, **Duration**, **Distance** or **Status**) to sort. Click it again to reverse the order.",
           "Use **Previous** and **Next** at the bottom to move between pages."
         ],
         "notes": [
