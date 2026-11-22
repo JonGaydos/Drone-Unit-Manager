@@ -412,6 +412,17 @@ def test_history_excludes_excused_when_asked(client, db, admin_headers):
     assert [(row["period_start"], row["status"]) for row in rows] == [(OCT, "missed")]
 
 
+def test_history_leaves_out_a_requirement_switched_to_rolling(client, db, admin_headers):
+    _pilot(db)
+    req_id = _create(client, admin_headers)["id"]
+    client.get(f"{URL}/status", headers=admin_headers)
+    assert _unit_history(client, admin_headers)
+    db.query(FlightRequirement).filter(FlightRequirement.id == req_id).update(
+        {"period_type": "rolling", "span_length": 30, "span_unit": "days"})
+    db.commit()
+    assert _unit_history(client, admin_headers) == []
+
+
 def test_history_rejects_anonymous(client):
     assert client.get(f"{URL}/history").status_code == 401
 

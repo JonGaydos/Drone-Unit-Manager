@@ -22,6 +22,7 @@ const OFF = row({
   excused_reason: 'Requirement switched off', switched_off: true,
 })
 const REQUIREMENTS = [{ id: 1, name: 'Monthly hour' }, { id: 2, name: 'Night hour' }]
+const ROLLING = { id: 3, name: 'Rolling ninety', period_type: 'rolling' }
 
 function mock(rows = [MISSED, EXCUSED, OFF]) {
   const calls = { history: [], posts: [] }
@@ -95,5 +96,13 @@ describe('MissedPeriods', () => {
     await screen.findByRole('table', { name: 'Past missed periods' })
     await user.selectOptions(screen.getByLabelText('Requirement filter'), 'Night hour')
     await waitFor(() => expect(calls.history).toEqual([null, '2']))
+  })
+
+  it('does not offer a rolling requirement in the filter', async () => {
+    mock()
+    renderWithProviders(<MissedPeriods requirements={[...REQUIREMENTS, ROLLING]} />, { role: 'supervisor' })
+    await screen.findByRole('table', { name: 'Past missed periods' })
+    const options = within(screen.getByLabelText('Requirement filter')).getAllByRole('option').map(o => o.textContent)
+    expect(options).toEqual(['All requirements', 'Monthly hour', 'Night hour'])
   })
 })

@@ -401,7 +401,8 @@ def requirements_history(db: DBSession, user: ViewUser, requirement_id: int | No
         db.query(FlightRequirementResult, FlightRequirement.name, Pilot)
         .join(FlightRequirement, FlightRequirement.id == FlightRequirementResult.requirement_id)
         .join(Pilot, Pilot.id == FlightRequirementResult.pilot_id)
-        .filter(FlightRequirementResult.saved_at.isnot(None), FlightRequirementResult.status.in_(statuses))
+        .filter(FlightRequirementResult.saved_at.isnot(None), FlightRequirementResult.status.in_(statuses),
+                FlightRequirement.period_type != ROLLING)
     )
     if requirement_id is not None:
         query = query.filter(FlightRequirementResult.requirement_id == requirement_id)

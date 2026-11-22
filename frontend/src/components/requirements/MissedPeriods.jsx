@@ -95,7 +95,7 @@ export default function MissedPeriods({ requirements }) {
         <select aria-label="Requirement filter" value={requirementId} onChange={e => setRequirementId(e.target.value)}
           className="px-3 py-1.5 bg-secondary border border-border rounded-lg text-foreground text-sm">
           <option value="">All requirements</option>
-          {requirements.map(req => <option key={req.id} value={req.id}>{req.name}</option>)}
+          {requirements.filter(req => req.period_type !== 'rolling').map(req => <option key={req.id} value={req.id}>{req.name}</option>)}
         </select>
       </div>
       {rows && rows.length === 0 && (
