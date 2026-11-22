@@ -6,6 +6,9 @@ import { renderWithProviders } from '@/test/render'
 import RequirementsTab from './RequirementsTab'
 import { todayLocal } from '@/lib/utils'
 
+/** A name in the requirement list, not in the Past missed periods filter that repeats it. */
+const inList = async (text) => within(await screen.findByRole('region', { name: 'Requirements' })).findByText(text)
+
 const REQ = {
   id: 4, name: 'Quarterly models', description: null, period_type: 'calendar_quarter', recurring: true,
   window_start_day: null, window_end_day: null, span_length: null, span_unit: null, every_months: null,
@@ -35,6 +38,7 @@ function mock({ settings = [{ key: 'org_default_lat', value: '1.5' }, { key: 'or
   }
   server.use(
     http.get('/api/requirements', () => HttpResponse.json(requirements)),
+    http.get('/api/requirements/history', () => HttpResponse.json([])),
     http.get('/api/requirements/templates', () => HttpResponse.json([TEMPLATE])),
     http.get('/api/requirements/models', () => HttpResponse.json([{ name: 'X10', aircraft: 4, retired: 0 }, { name: 'X2E', aircraft: 2, retired: 0 }])),
     http.get('/api/requirements/settings', () => HttpResponse.json({ grace_days: 14, fiscal_year_start_month: 10, emails_enabled: false })),
@@ -60,18 +64,18 @@ describe('RequirementsTab', () => {
   it('lists requirements with period, target and status', async () => {
     mock()
     renderTab()
-    const row = (await screen.findByText('Quarterly models')).closest('li')
+    const row = (await inList('Quarterly models')).closest('li')
     expect(within(row).getByText('Calendar quarter, recurring')).toBeInTheDocument()
     expect(within(row).getByText('15 min')).toBeInTheDocument()
     expect(within(row).getByText('Active')).toBeInTheDocument()
-    const off = screen.getByText('Old monthly').closest('li')
+    const off = (await inList('Old monthly')).closest('li')
     expect(within(off).getByText('Inactive')).toBeInTheDocument()
   })
 
   it('creates a requirement', async () => {
     const calls = mock()
     const { user } = renderTab()
-    await screen.findByText('Quarterly models')
+    await inList('Quarterly models')
     await user.click(screen.getByRole('button', { name: 'New requirement' }))
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Monthly hour' } })
     fireEvent.change(screen.getByLabelText('Hours'), { target: { value: '1' } })
@@ -139,7 +143,7 @@ describe('RequirementsTab', () => {
     unmount()
     mock()
     renderWithProviders(<RequirementsTab />, { role: 'supervisor', permissions: { 'reports.export': 'no' } })
-    await screen.findByText('Quarterly models')
+    await inList('Quarterly models')
     expect(screen.queryByRole('button', { name: /as CSV/ })).toBeNull()
   })
 
@@ -178,7 +182,7 @@ describe('RequirementsTab', () => {
   it('leaves templates and requirement settings to the Setup tab', async () => {
     mock()
     renderTab()
-    await screen.findByText('Quarterly models')
+    await inList('Quarterly models')
     expect(screen.queryByRole('heading', { name: 'Templates' })).toBeNull()
     expect(screen.queryByRole('heading', { name: 'Requirement Settings' })).toBeNull()
   })
@@ -200,7 +204,7 @@ describe('RequirementsTab', () => {
       }],
     })))
     renderTab()
-    const row = (await screen.findByText('Quarterly models')).closest('li')
+    const row = (await inList('Quarterly models')).closest('li')
     expect(within(row).getByText('Rolling 90 days')).toBeInTheDocument()
     expect(await within(row).findByText('1 current, 0 lapsed')).toBeInTheDocument()
     expect(within(row).getByText('lapses on Dec 3, 2026')).toBeInTheDocument()
@@ -225,7 +229,7 @@ describe('RequirementsTab', () => {
   it('disables Night when the unit location is not set', async () => {
     mock({ settings: [{ key: 'org_default_lat', value: '' }, { key: 'org_default_lon', value: '' }] })
     const { user } = renderTab()
-    await screen.findByText('Quarterly models')
+    await inList('Quarterly models')
     await user.click(screen.getByRole('button', { name: 'New requirement' }))
     await waitFor(() => expect(screen.getByRole('radio', { name: /Night/ })).toBeDisabled())
   })

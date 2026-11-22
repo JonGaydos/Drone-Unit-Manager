@@ -358,6 +358,68 @@ def test_flags_carry_the_pilot_name(client, db, admin_headers):
     assert {flag["pilot_name"] for flag in flags} == {"Test Pilot"}
 
 
+def _second_pilot(db):
+    pilot = Pilot(first_name="Other", last_name="Flyer", status="active", created_at=LONG_AGO)
+    db.add(pilot)
+    db.commit()
+    return pilot
+
+
+def _unit_history(client, headers, **params):
+    response = client.get(f"{URL}/history", headers=headers, params=params)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def _met_result(db, req_id, pilot):
+    db.add(FlightRequirementResult(requirement_id=req_id, pilot_id=pilot.id, period_start=date(2026, 8, 1),
+                                   period_end=date(2026, 8, 31), status="met",
+                                   totals={"*": {"minutes": 90, "flights": 2}},
+                                   target_snapshot={"target_minutes": 60}, saved_at=LONG_AGO))
+    db.commit()
+
+
+def test_history_lists_missed_and_excused_across_pilots(client, db, admin_headers):
+    first, second = _pilot(db), _second_pilot(db)
+    req_id = _create(client, admin_headers)["id"]
+    _met_result(db, req_id, first)
+    client.get(f"{URL}/status", headers=admin_headers)  # saves September and October as missed
+    _excuse(client, admin_headers, req_id, second.id, SEP, reason="Injury")
+    rows = _unit_history(client, admin_headers)
+    assert {row["status"] for row in rows} == {"missed", "excused"}
+    assert all("2026-08-01" != row["period_start"] for row in rows)
+    assert [(row["period_start"], row["pilot_name"]) for row in rows] == [
+        (OCT, "Other Flyer"), (OCT, "Test Pilot"), (SEP, "Other Flyer"), (SEP, "Test Pilot")]
+    assert {row["pilot_id"] for row in rows} == {first.id, second.id}
+    assert rows[0]["name"] == "Monthly 1 hr"
+
+
+def test_history_filters_by_requirement(client, db, admin_headers):
+    _pilot(db)
+    first = _create(client, admin_headers)["id"]
+    _create(client, admin_headers, name="Other")
+    rows = _unit_history(client, admin_headers, requirement_id=first)
+    assert {row["requirement_id"] for row in rows} == {first}
+    assert len(rows) == 2
+
+
+def test_history_excludes_excused_when_asked(client, db, admin_headers):
+    pilot = _pilot(db)
+    req_id = _create(client, admin_headers)["id"]
+    client.get(f"{URL}/status", headers=admin_headers)
+    _excuse(client, admin_headers, req_id, pilot.id, SEP)
+    rows = _unit_history(client, admin_headers, include_excused="false")
+    assert [(row["period_start"], row["status"]) for row in rows] == [(OCT, "missed")]
+
+
+def test_history_rejects_anonymous(client):
+    assert client.get(f"{URL}/history").status_code == 401
+
+
+def test_history_allows_viewer(client, viewer_headers):
+    assert client.get(f"{URL}/history", headers=viewer_headers).status_code == 200
+
+
 def test_history_marks_rows_saved_while_switched_off(client, db, admin_headers):
     pilot = _pilot(db)
     req_id = _create(client, admin_headers)["id"]

@@ -317,6 +317,7 @@ EXPECTED_ROUTE_KEYS = {
     "GET /api/requirements/status": {REQUIREMENTS_VIEW},
     "GET /api/requirements/pilots/{pilot_id}": {REQUIREMENTS_VIEW},
     "GET /api/requirements/flags": {REQUIREMENTS_VIEW},
+    "GET /api/requirements/history": {REQUIREMENTS_VIEW},
     "POST /api/requirements/{requirement_id}/excuse": {"requirements.excuse"},
     "POST /api/requirements/{requirement_id}/recalculate": {REQUIREMENTS_MANAGE},
     "DELETE /api/requirements/{requirement_id}/lapses/{lapse_id}": {REQUIREMENTS_MANAGE},

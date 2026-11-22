@@ -295,6 +295,11 @@ class HistoryRowOut(BaseModel):
     switched_off: bool = False  # excused because the requirement was off; cannot be un-excused
 
 
+class UnitHistoryRowOut(HistoryRowOut):
+    pilot_id: int
+    pilot_name: str
+
+
 class PilotRollingOut(RollingProgressOut):
     requirement_id: int
     name: str

@@ -28,7 +28,7 @@ from app.routers.auth import require_permission
 from app.schemas.requirement import (
     ExcuseIn, FlagOut, PilotRequirementsOut, RecalculateIn, RecalculateOut, RequirementDefinition,
     RequirementIn, RequirementOut, RequirementSettings, RequirementUpdate, StatusOut, TemplateIn,
-    TemplateOut, TemplateUpdate,
+    TemplateOut, TemplateUpdate, UnitHistoryRowOut,
 )
 from app.services.fleet_models import fleet_models
 from app.services.local_time import local_today
@@ -367,6 +367,16 @@ def _pilot_lapses(db: Session, pilot_id: int) -> list[dict]:
              "recovered_on": row.recovered_on} for row, name in rows]
 
 
+HISTORY_FIELDS = ("requirement_id", "period_start", "period_end", "status", "totals", "target_snapshot",
+                  "excused", "excused_by_id", "excused_reason", "saved_at")
+UNIT_HISTORY_LIMIT = 500
+
+
+def _history_row(row: FlightRequirementResult, name: str) -> dict:
+    return {**{key: getattr(row, key) for key in HISTORY_FIELDS}, "result_id": row.id, "name": name,
+            "switched_off": switched_off(row)}
+
+
 def _pilot_history(db: Session, pilot_id: int) -> list[dict]:
     rows = (
         db.query(FlightRequirementResult, FlightRequirement.name)
@@ -376,11 +386,30 @@ def _pilot_history(db: Session, pilot_id: int) -> list[dict]:
                   FlightRequirement.name)
         .all()
     )
-    return [{**{key: getattr(row, key) for key in (
-        "requirement_id", "period_start", "period_end", "status", "totals", "target_snapshot",
-        "excused", "excused_by_id", "excused_reason", "saved_at")}, "result_id": row.id, "name": name,
-        "switched_off": switched_off(row)}
-        for row, name in rows]
+    return [_history_row(row, name) for row, name in rows]
+
+
+@router.get("/history", response_model=list[UnitHistoryRowOut], responses=responses(401, 403))
+def requirements_history(db: DBSession, user: ViewUser, requirement_id: int | None = None,
+                         include_excused: bool = True):
+    """Saved results of periodic requirements that were missed, and with
+    `include_excused` those excused, across all pilots: newest period first,
+    then requirement name and pilot name; at most 500 rows."""
+    refresh_requirements(db, local_today(db))
+    statuses = (MISSED, EXCUSED) if include_excused else (MISSED,)
+    query = (
+        db.query(FlightRequirementResult, FlightRequirement.name, Pilot)
+        .join(FlightRequirement, FlightRequirement.id == FlightRequirementResult.requirement_id)
+        .join(Pilot, Pilot.id == FlightRequirementResult.pilot_id)
+        .filter(FlightRequirementResult.saved_at.isnot(None), FlightRequirementResult.status.in_(statuses))
+    )
+    if requirement_id is not None:
+        query = query.filter(FlightRequirementResult.requirement_id == requirement_id)
+    rows = (query.order_by(FlightRequirementResult.period_end.desc(), FlightRequirement.name, Pilot.first_name,
+                           Pilot.last_name, FlightRequirementResult.id)
+            .limit(UNIT_HISTORY_LIMIT).all())
+    return [{**_history_row(row, name), "pilot_id": pilot.id, "pilot_name": pilot.full_name}
+            for row, name, pilot in rows]
 
 
 @router.get("/pilots/{pilot_id}", response_model=PilotRequirementsOut, responses=responses(401, 403, 404))

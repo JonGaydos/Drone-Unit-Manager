@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { api, createPilotRecord, getAdminToken } from './helpers/seed.js'
 
 // Flight requirement journey: an admin opens the Flight Requirements tab of
 // the Compliance page from the sidebar, creates a monthly requirement for all active
@@ -91,5 +92,37 @@ test('admin creates a rolling flight requirement and sees it on Overview and the
     await page.getByRole('button', { name: `Delete ${name}`, exact: true }).click()
     await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click()
     await expect(page.getByText(name, { exact: true })).toHaveCount(0)
+  }
+})
+
+test('admin excuses a past missed period from the Past missed periods list', async ({ page, request }) => {
+  const token = getAdminToken()
+  const stamp = Date.now()
+  const pilot = await createPilotRecord(request, token, { first_name: 'E2E', last_name: `Missed${stamp}` })
+  const name = `E2E missed ${stamp}`
+  const start = new Date()
+  start.setMonth(start.getMonth() - 3, 1)
+  const created = await (await api(request, token).post('/requirements', {
+    name, period_type: 'calendar_month', recurring: true, target_minutes: 60,
+    start_date: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-01`,
+    pilot_ids: [pilot.id],
+  })).json()
+
+  try {
+    await openRequirements(page)
+    const table = page.getByRole('table', { name: 'Past missed periods' })
+    const row = table.getByRole('row').filter({ has: page.getByRole('link', { name: `E2E Missed${stamp}` }) }).first()
+    await expect(row).toContainText('Missed', { timeout: 15_000 })
+
+    await row.getByRole('button', { name: /^Excuse /, exact: false }).click()
+    const modal = page.getByRole('dialog', { name: 'Excuse from requirement' })
+    await modal.getByLabel('Reason (optional)').fill('E2E excusal')
+    await modal.getByRole('button', { name: 'Excuse', exact: true }).click()
+
+    const excused = table.getByRole('row').filter({ hasText: 'Excused: E2E excusal' }).first()
+    await expect(excused).toContainText(`E2E Missed${stamp}`)
+    await expect(excused.getByRole('button', { name: /^Un-excuse / })).toBeVisible()
+  } finally {
+    await api(request, token).patch(`/requirements/${created.id}`, { is_active: false })
   }
 })

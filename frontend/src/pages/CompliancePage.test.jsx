@@ -88,6 +88,7 @@ function mockRequirements({ templates = [] } = {}) {
   server.use(
     http.get('/api/requirements', seen('requirements', [MONTHLY])),
     http.get('/api/requirements/status', seen('status', STATUS)),
+    http.get('/api/requirements/history', seen('history', [])),
     http.get('/api/requirements/templates', seen('templates', templates)),
     http.get('/api/requirements/models', seen('models', [])),
     http.get('/api/requirements/settings', seen('settings', { grace_days: 14, fiscal_year_start_month: 10, emails_enabled: false })),
@@ -299,7 +300,7 @@ describe('CompliancePage', () => {
       expect(tabNames()).toEqual(['Overview', 'Flight Requirements'])
       expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true')
       await user.click(screen.getByRole('tab', { name: 'Flight Requirements' }))
-      const row = (await screen.findByText('Monthly hour')).closest('li')
+      const row = (await within(await screen.findByRole('region', { name: 'Requirements' })).findByText('Monthly hour')).closest('li')
       expect(within(row).getByRole('link', { name: 'Pat Pilot' })).toHaveAttribute('href', '/pilots/1')
       for (const name of [/New requirement/, /^Edit /, /^Switch (on|off) /, /^Delete /]) {
         expect(screen.queryByRole('button', { name })).toBeNull()

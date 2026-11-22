@@ -8,6 +8,7 @@ import { useConfirm } from '@/hooks/useConfirm'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import RequirementForm from './RequirementForm'
 import { SaveTemplateModal } from './TemplatesCard'
+import MissedPeriods from './MissedPeriods'
 import { PendingLines, PeriodCounts, PilotProgressList, RollingCounts, RollingPilotList } from './PeriodProgress'
 import { PERIOD_LABELS, targetText } from './RequirementSummary'
 import { lapseStarts } from './progress'
@@ -299,6 +300,7 @@ export default function RequirementsTab() {
         onNew={() => open('New requirement', newForm())}
         onDownload={can('reports.export') ? download : null}
       />
+      <MissedPeriods requirements={requirements} />
       {templateSource && (
         <SaveTemplateModal requirement={templateSource} onSave={saveTemplate} onClose={() => setTemplateSource(null)} />
       )}

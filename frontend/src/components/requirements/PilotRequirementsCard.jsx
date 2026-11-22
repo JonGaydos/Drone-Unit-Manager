@@ -29,7 +29,7 @@ function periodOf(row) {
   return { requirementId: row.requirement_id, name: row.name, start: row.period_start, end: row.period_end }
 }
 
-function ExcuseButton({ row, onExcuse, onUnexcuse }) {
+export function ExcuseButton({ row, onExcuse, onUnexcuse }) {
   const action = excuseAction(row)
   if (!action) return null
   const period = periodOf(row)
@@ -158,7 +158,7 @@ function CsvLinks({ requirements, onDownload }) {
   )
 }
 
-function ExcuseModal({ period, onSubmit, onClose }) {
+export function ExcuseModal({ period, onSubmit, onClose }) {
   const [reason, setReason] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
