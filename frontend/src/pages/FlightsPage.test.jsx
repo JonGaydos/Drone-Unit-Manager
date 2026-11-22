@@ -133,6 +133,39 @@ describe('FlightsPage', () => {
     expect(lastUrl.searchParams.get('order')).toBe('asc')
   })
 
+  it('shows a sortable Distance column and formats each row distance', async () => {
+    let lastUrl = null
+    mockMount({
+      flights: ({ request }) => {
+        lastUrl = new URL(request.url)
+        return HttpResponse.json({ flights: [{ ...FLIGHTS[0], distance_m: 1234 }, FLIGHTS[1]], total: 2, total_pages: 1 })
+      },
+    })
+    const { user } = renderWithProviders(<FlightsPage />, { role: 'admin' })
+    await screen.findByRole('link', { name: 'Jane Doe' })
+    expect(screen.getByText('1.2 km')).toBeInTheDocument()
+
+    await user.click(screen.getByText('Distance'))
+    await waitFor(() => expect(lastUrl.searchParams.get('sort')).toBe('distance_m'))
+  })
+
+  it('falls back to the landing address when there is no takeoff address', async () => {
+    mockMount({
+      flights: () => HttpResponse.json({
+        flights: [
+          { ...FLIGHTS[0], takeoff_address: null, landing_address: 'Landing Rd' },
+          { ...FLIGHTS[1], takeoff_address: 'Oak Ave', landing_address: 'Other Rd' },
+        ],
+        total: 2, total_pages: 1,
+      }),
+    })
+    renderWithProviders(<FlightsPage />, { role: 'admin' })
+    await screen.findByRole('link', { name: 'Jane Doe' })
+    expect(screen.getByText('Landing Rd')).toBeInTheDocument()
+    expect(screen.getByText('Oak Ave')).toBeInTheDocument()
+    expect(screen.queryByText('Other Rd')).not.toBeInTheDocument()
+  })
+
   it('fires the filtered request with the right query when the status filter changes', async () => {
     // Use a pilot so per-row status badges render as plain text, leaving the
     // status-filter "Reviewed" toggle as the only button with that name.

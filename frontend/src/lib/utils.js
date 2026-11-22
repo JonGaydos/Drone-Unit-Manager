@@ -60,6 +60,17 @@ export function formatDuration(seconds) {
 }
 
 /**
+ * Format a distance in metres: whole metres under 999.5 m, otherwise kilometres.
+ * @param {number|null|undefined} meters - Distance in metres.
+ * @returns {string} Like "640 m" or "1.2 km", or em-dash when missing.
+ */
+export function formatDistance(meters) {
+  if (meters == null) return '—'
+  if (meters < 999.5) return `${Math.round(meters)} m`
+  return `${(meters / 1000).toFixed(1)} km`
+}
+
+/**
  * Convert seconds to decimal hours with one decimal place.
  * @param {number} seconds - Duration in seconds.
  * @returns {string} Hours as a fixed-point string (e.g. "2.5").

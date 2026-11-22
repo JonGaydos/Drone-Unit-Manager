@@ -120,6 +120,7 @@ FLIGHT_SORTS = {
     "vehicle_name": (func.coalesce(Vehicle.nickname, Vehicle.model),),
     "purpose": (Flight.purpose,),
     "duration_seconds": (Flight.duration_seconds,),
+    "distance_m": (Flight.distance_m,),
     "review_status": (Flight.review_status,),
 }
 

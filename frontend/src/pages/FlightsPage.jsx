@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { api } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
-import { changedFields, flightSavedMessage, formatDuration, normalizeDateValue, showPickerSafely, zonedInputToUtcIso } from '@/lib/utils'
+import { changedFields, flightSavedMessage, formatDistance, formatDuration, normalizeDateValue, showPickerSafely, zonedInputToUtcIso } from '@/lib/utils'
 import { ownsFlight } from '@/lib/ownership'
 import { sortByName, sortVehicles, sortPilotsActiveFirst, vehicleDisplayName, telemetryLabel } from '@/lib/formatters'
 import { Plus, Search, CheckCircle, ChevronUp, ChevronDown, Pencil, X, Check, Download, Loader2, Copy, Trash2 } from 'lucide-react'
@@ -678,6 +678,9 @@ export default function FlightsPage() {
               <th className="text-right px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none" onClick={() => toggleSort('duration_seconds')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('duration_seconds'))() } }} tabIndex={0}>
                 Duration<SortIndicator column="duration_seconds" sortKey={sortKey} sortDir={sortDir} />
               </th>
+              <th className="text-right px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none hidden lg:table-cell" onClick={() => toggleSort('distance_m')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('distance_m'))() } }} tabIndex={0}>
+                Distance<SortIndicator column="distance_m" sortKey={sortKey} sortDir={sortDir} />
+              </th>
               <th className="text-right px-4 py-3 font-medium text-muted-foreground hidden lg:table-cell">Cost</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden lg:table-cell">Location</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none" onClick={() => toggleSort('review_status')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); (() => toggleSort('review_status'))() } }} tabIndex={0}>
@@ -711,8 +714,9 @@ export default function FlightsPage() {
                 </td>
                 <td className="px-4 py-3 text-foreground hidden md:table-cell">{f.purpose || <span className="text-amber-400">None</span>}</td>
                 <td className="px-4 py-3 text-right text-foreground">{formatDuration(f.duration_seconds)}</td>
+                <td className="px-4 py-3 text-right text-foreground whitespace-nowrap hidden lg:table-cell">{formatDistance(f.distance_m)}</td>
                 <td className="px-4 py-3 text-right text-foreground whitespace-nowrap hidden lg:table-cell"><OperatingCost flight={f} /></td>
-                <td className="px-4 py-3 text-foreground truncate max-w-[200px] hidden lg:table-cell">{f.takeoff_address || '—'}</td>
+                <td className="px-4 py-3 text-foreground truncate max-w-[200px] hidden lg:table-cell">{f.takeoff_address || f.landing_address || '—'}</td>
                 <td className="px-4 py-3">
                   <div className="flex flex-col gap-0.5 items-start">
                     {(() => {
@@ -861,8 +865,9 @@ function FlightEditRow({ f, editForm, setEditForm, pilots, purposes, onSave, onC
         <input type="number" min="0" value={editForm.duration_seconds} onChange={e => setEditForm({...editForm, duration_seconds: e.target.value})}
           className="w-20 px-2 py-1 bg-secondary border border-border rounded text-foreground text-sm text-right" placeholder="sec" />
       </td>
+      <td className="px-4 py-2 text-right whitespace-nowrap hidden lg:table-cell text-foreground">{formatDistance(f.distance_m)}</td>
       <td className="px-4 py-2 text-right whitespace-nowrap hidden lg:table-cell text-foreground"><OperatingCost flight={f} /></td>
-      <td className="px-4 py-2 hidden lg:table-cell text-foreground">{f.takeoff_address || '—'}</td>
+      <td className="px-4 py-2 hidden lg:table-cell text-foreground">{f.takeoff_address || f.landing_address || '—'}</td>
       <td className="px-4 py-2">
         <div className="flex flex-col gap-0.5 items-start">
           {canReview ? (

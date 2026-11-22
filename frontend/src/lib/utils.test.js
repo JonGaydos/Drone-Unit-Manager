@@ -4,6 +4,7 @@ import { changedFields,
   cn,
   inSequence,
   formatDuration,
+  formatDistance,
   formatHours,
   metersToFeet,
   mpsToMph,
@@ -34,6 +35,24 @@ describe('cn', () => {
 
   it('applies conditional classes from objects', () => {
     expect(cn('base', { active: true, hidden: false })).toBe('base active')
+  })
+})
+
+describe('formatDistance', () => {
+  it('returns em-dash for null/undefined', () => {
+    expect(formatDistance(null)).toBe('—')
+    expect(formatDistance(undefined)).toBe('—')
+  })
+
+  it('shows whole metres under 999.5 m', () => {
+    expect(formatDistance(0)).toBe('0 m')
+    expect(formatDistance(640.4)).toBe('640 m')
+  })
+
+  it('shows kilometres with one decimal from 999.5 m', () => {
+    expect(formatDistance(999.6)).toBe('1.0 km')
+    expect(formatDistance(1234)).toBe('1.2 km')
+    expect(formatDistance(7900)).toBe('7.9 km')
   })
 })
 

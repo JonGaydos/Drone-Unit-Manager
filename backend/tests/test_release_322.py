@@ -138,6 +138,17 @@ def test_sort_by_pilot_name(client, admin_headers, flights):
     assert _ids(resp)[0] == flights[0].id
 
 
+def test_sort_by_distance(client, admin_headers, db):
+    rows = [Flight(date=date(2026, 1, d), purpose="Patrol", distance_m=m) for d, m in ((1, 500), (2, None), (3, 50))]
+    db.add_all(rows)
+    db.commit()
+    far, none, near = rows[0].id, rows[1].id, rows[2].id
+    resp = client.get("/api/flights", params={"sort": "distance_m", "order": "asc"}, headers=admin_headers)
+    assert _ids(resp) == [near, far, none]
+    resp = client.get("/api/flights", params={"sort": "distance_m", "order": "desc"}, headers=admin_headers)
+    assert _ids(resp) == [far, near, none]
+
+
 def test_default_order_is_newest_first(client, admin_headers, flights):
     assert _ids(client.get("/api/flights", headers=admin_headers)) == [f.id for f in reversed(flights)]
 
