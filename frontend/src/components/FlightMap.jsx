@@ -28,11 +28,30 @@ L.Icon.Default.mergeOptions({
 function FitBounds({ bounds }) {
   const map = useMap()
   useEffect(() => {
-    if (bounds?.length > 1) {
-      map.fitBounds(bounds, { padding: [30, 30] })
-    } else if (bounds?.length === 1) {
-      map.setView(bounds[0], 15)
+    const fit = () => {
+      // Recompute the container size first: fitting against a stale (zero)
+      // size leaves the map at world zoom.
+      map.invalidateSize()
+      if (bounds?.length > 1) {
+        map.fitBounds(bounds, { padding: [30, 30] })
+      } else if (bounds?.length === 1) {
+        map.setView(bounds[0], 15)
+      }
     }
+    fit()
+
+    // Cards in a grid may be laid out after mount; refit once the container
+    // goes from no size to a real size.
+    const container = map.getContainer()
+    let sized = container.clientWidth > 0 && container.clientHeight > 0
+    const observer = new ResizeObserver((entries) => {
+      const { width, height } = entries[entries.length - 1].contentRect
+      const nowSized = width > 0 && height > 0
+      if (nowSized && !sized) fit()
+      sized = nowSized
+    })
+    observer.observe(container)
+    return () => observer.disconnect()
   }, [map, bounds])
   return null
 }

@@ -31,7 +31,8 @@ vi.mock('react-leaflet', () => {
   return {
     MapContainer: Stub, TileLayer: () => null, Marker: Stub, Popup: Stub,
     Circle: () => null, Polyline: () => null, Polygon: () => null,
-    useMap: () => ({ fitBounds() {}, setView() {}, getZoom: () => 12, setZoom() {}, on() {}, off() {}, remove() {}, invalidateSize() {} }),
+    // A test can set globalThis.__leafletMap to a spy map to observe useMap() callers.
+    useMap: () => globalThis.__leafletMap ?? ({ fitBounds() {}, setView() {}, getZoom: () => 12, setZoom() {}, on() {}, off() {}, remove() {}, invalidateSize() {}, getContainer: () => document.createElement('div') }),
     useMapEvents: () => ({}),
   }
 })

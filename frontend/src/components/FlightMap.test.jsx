@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 
@@ -71,5 +71,53 @@ describe('FlightLocationsMap', () => {
   it('renders gracefully with no flights prop', () => {
     renderMap(<FlightLocationsMap />)
     expect(screen.getByTestId('leaflet-stub')).toBeInTheDocument()
+  })
+})
+
+describe('FlightLocationsMap fitting', () => {
+  afterEach(() => {
+    delete globalThis.__leafletMap
+    vi.unstubAllGlobals()
+  })
+
+  it('invalidates the map size before fitting, and refits when the container gains a size', () => {
+    const calls = []
+    const container = document.createElement('div')
+    globalThis.__leafletMap = {
+      invalidateSize: vi.fn(() => calls.push('invalidateSize')),
+      fitBounds: vi.fn(() => calls.push('fitBounds')),
+      setView: vi.fn(),
+      getContainer: () => container,
+      getZoom: () => 12, on() {}, off() {},
+    }
+    let resizeCallback
+    const observe = vi.fn()
+    const disconnect = vi.fn()
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(cb) { resizeCallback = cb }
+      observe(el) { observe(el) }
+      disconnect() { disconnect() }
+    })
+
+    const { unmount } = renderMap(
+      <FlightLocationsMap
+        flights={[
+          { id: 1, takeoff_lat: 30.3, takeoff_lon: -86.1 },
+          { id: 2, takeoff_lat: 35.5, takeoff_lon: -90.3 },
+        ]}
+      />,
+    )
+    expect(calls).toEqual(['invalidateSize', 'fitBounds'])
+    expect(observe).toHaveBeenCalledWith(container)
+
+    // Still zero sized: no refit.
+    resizeCallback([{ contentRect: { width: 0, height: 0 } }])
+    expect(globalThis.__leafletMap.fitBounds).toHaveBeenCalledTimes(1)
+
+    resizeCallback([{ contentRect: { width: 600, height: 400 } }])
+    expect(calls).toEqual(['invalidateSize', 'fitBounds', 'invalidateSize', 'fitBounds'])
+
+    unmount()
+    expect(disconnect).toHaveBeenCalled()
   })
 })
