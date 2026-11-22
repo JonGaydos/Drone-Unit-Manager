@@ -4,7 +4,7 @@ import { api, getSection } from '@/api/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { ownsFlight } from '@/lib/ownership'
 import { useToast } from '@/contexts/ToastContext'
-import { formatDuration, normalizeDateValue, metersToFeet, mpsToMph, formatTime, utcIsoToZonedInput, zonedInputToUtcIso, changedFields, flightSavedMessage, showPickerSafely } from '@/lib/utils'
+import { formatDuration, normalizeDateValue, metersToFeet, mpsToMph, formatTime, utcIsoToZonedInput, zonedInputToUtcIso, changedFields, flightSavedMessage, showPickerSafely, roundCoord } from '@/lib/utils'
 import { sortByName, sortVehicles, sortPilotsActiveFirst, vehicleDisplayName, telemetryLabel } from '@/lib/formatters'
 import { ArrowLeft, MapPin, Save, RefreshCw, Loader2, Download } from 'lucide-react'
 import { QuadcopterIcon } from '@/components/icons/QuadcopterIcon'
@@ -133,10 +133,10 @@ function initialEditForm(f) {
     duration_seconds: f.duration_seconds || '',
     takeoff_address: f.takeoff_address || '',
     landing_address: f.landing_address || '',
-    takeoff_lat: f.takeoff_lat ?? '',
-    takeoff_lon: f.takeoff_lon ?? '',
-    landing_lat: f.landing_lat ?? '',
-    landing_lon: f.landing_lon ?? '',
+    takeoff_lat: roundCoord(f.takeoff_lat) ?? '',
+    takeoff_lon: roundCoord(f.takeoff_lon) ?? '',
+    landing_lat: roundCoord(f.landing_lat) ?? '',
+    landing_lon: roundCoord(f.landing_lon) ?? '',
     distance_m: f.distance_m ?? '',
     operating_cost: f.operating_cost ?? '',
     case_number: f.case_number || '',
@@ -157,7 +157,7 @@ const NUMBER_FIELDS = ['takeoff_lat', 'takeoff_lon', 'landing_lat', 'landing_lon
 
 /** "lat, lon", or a dash when either is missing. */
 function coordinates(lat, lon) {
-  return lat == null || lon == null ? '—' : `${lat}, ${lon}`
+  return lat == null || lon == null ? '—' : `${roundCoord(lat)}, ${roundCoord(lon)}`
 }
 
 /** Two number inputs in one cell, for a latitude and longitude pair. */

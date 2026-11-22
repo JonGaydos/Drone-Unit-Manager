@@ -35,21 +35,23 @@ function TypeHeader({ ct, first, last, canManage, onReorder }) {
 function MatrixCell({ row, ct, ctx }) {
   const cell = certCell(row, ct, ctx.labels)
   const id = cell.cert?.id
-  const selectable = ctx.canManage && id && ct.has_expiration
+  const selectable = ctx.canManage && id && ct.has_expiration && cell.cert?.expiration_date
   const onOpen = ctx.canOpen(cell.cert) ? () => ctx.onOpen(row, ct, cell.cert) : undefined
   return (
-    <td className="relative px-3 py-2 text-center border-b border-border/50">
-      {selectable && (
-        <input
-          type="checkbox"
-          checked={ctx.selected.has(id)}
-          onChange={() => ctx.onToggle(id)}
-          className="absolute top-1 left-1 rounded border-border"
-          title="Select for bulk renewal"
-          aria-label="Select certification for bulk renewal"
-        />
-      )}
-      <CertStatusIcon cell={cell} onOpen={onOpen} />
+    <td className="px-3 py-2 text-center border-b border-border/50">
+      <span className="inline-flex items-center justify-center gap-2">
+        {selectable && (
+          <input
+            type="checkbox"
+            checked={ctx.selected.has(id)}
+            onChange={() => ctx.onToggle(id)}
+            className="rounded border-border"
+            title="Select for bulk renewal"
+            aria-label="Select certification for bulk renewal"
+          />
+        )}
+        <CertStatusIcon cell={cell} onOpen={onOpen} />
+      </span>
     </td>
   )
 }

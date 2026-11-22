@@ -117,6 +117,32 @@ describe('CertificationsPage', () => {
     expect(captured).toMatchObject({ pilot_certification_ids: [100], issue_date: '2026-06-01' })
   })
 
+  it('offers bulk renewal only on certs that expire, beside the status icon', async () => {
+    mockMount({
+      certTypes: () => HttpResponse.json([
+        ...CERT_TYPES,
+        { id: 3, name: 'Lifetime', category: 'custom', has_expiration: false, is_active: true },
+      ]),
+      matrix: () => HttpResponse.json({ matrix: [{
+        ...MATRIX[0],
+        certs: {
+          ...MATRIX[0].certs,
+          2: { id: 101, status: 'valid', issue_date: '2024-01-01', expiration_date: null },
+          3: { id: 102, status: 'valid', issue_date: '2024-01-01', expiration_date: null },
+        },
+      }] }),
+    })
+    renderWithProviders(<CertificationsPage />, { role: 'admin' })
+    await screen.findByRole('link', { name: 'Ada Lovelace' })
+    // Only Part 107 has an expiring cert with an expiration date.
+    const boxes = screen.getAllByRole('checkbox', { name: 'Select certification for bulk renewal' })
+    expect(boxes).toHaveLength(1)
+    const group = boxes[0].parentElement
+    expect(group).toHaveClass('inline-flex')
+    expect(boxes[0]).not.toHaveClass('absolute')
+    expect(within(group).getByRole('button', { name: ADA_PART107 })).toBeInTheDocument()
+  })
+
   it('hides supervisor-only controls for a non-supervisor (pilot)', async () => {
     server.use(http.get('/api/auth/me', () => HttpResponse.json(withPermissions({ id: 3, username: 'p', role: 'pilot' }))))
     mockMount()

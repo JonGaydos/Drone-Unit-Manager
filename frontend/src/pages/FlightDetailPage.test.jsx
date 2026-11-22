@@ -188,6 +188,17 @@ describe('FlightDetailPage', () => {
     }))
   })
 
+  it('rounds float noise in coordinates for display and the edit form', async () => {
+    mockMount({ flight: () => HttpResponse.json({
+      ...FLIGHT, landing_lat: 45.123456799999997, landing_lon: -100.98765430000001,
+    }) })
+    const { user } = render('admin')
+    expect(await screen.findByText('45.1234568, -100.9876543')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    expect(screen.getByLabelText('Landing Latitude')).toHaveValue(45.1234568)
+    expect(screen.getByLabelText('Landing Longitude')).toHaveValue(-100.9876543)
+  })
+
   it('keeps the field order and container when switching into edit mode', async () => {
     mockMount()
     const { user } = render('admin')

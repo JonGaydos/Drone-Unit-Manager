@@ -5,6 +5,7 @@ import { changedFields,
   inSequence,
   formatDuration,
   formatDistance,
+  roundCoord,
   formatHours,
   metersToFeet,
   mpsToMph,
@@ -35,6 +36,17 @@ describe('cn', () => {
 
   it('applies conditional classes from objects', () => {
     expect(cn('base', { active: true, hidden: false })).toBe('base active')
+  })
+})
+
+describe('roundCoord', () => {
+  it('strips float noise to 7 decimals', () => {
+    expect(roundCoord(45.123456799999997)).toBe(45.1234568)
+    expect(roundCoord(-100.98765430000001)).toBe(-100.9876543)
+  })
+  it('keeps null and undefined as null', () => {
+    expect(roundCoord(null)).toBeNull()
+    expect(roundCoord(undefined)).toBeNull()
   })
 })
 

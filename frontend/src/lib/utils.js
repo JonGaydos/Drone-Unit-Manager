@@ -71,6 +71,16 @@ export function formatDistance(meters) {
 }
 
 /**
+ * Round a latitude or longitude to 7 decimals, dropping float noise.
+ * @param {number|null|undefined} value - Coordinate in degrees.
+ * @returns {number|null} The rounded value, or null when missing.
+ */
+export function roundCoord(value) {
+  if (value == null) return null
+  return Math.round(value * 1e7) / 1e7
+}
+
+/**
  * Convert seconds to decimal hours with one decimal place.
  * @param {number} seconds - Duration in seconds.
  * @returns {string} Hours as a fixed-point string (e.g. "2.5").

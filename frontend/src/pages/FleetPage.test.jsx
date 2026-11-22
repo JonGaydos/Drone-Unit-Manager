@@ -93,6 +93,38 @@ describe('FleetPage', () => {
     expect(screen.queryByRole('button', { name: /Add Vehicle/ })).toBeNull()
   })
 
+  it('omits the Actions column for a viewer and keeps it for a supervisor', async () => {
+    mockVehicles()
+    const { unmount } = renderWithProviders(<FleetPage />, { role: 'supervisor' })
+    await screen.findByText('Falcon')
+    expect(screen.getByRole('columnheader', { name: 'Actions' })).toBeInTheDocument()
+    unmount()
+
+    server.use(http.get('/api/auth/me', () => HttpResponse.json(withPermissions({ id: 9, username: 'viewer', role: 'viewer' }))))
+    mockVehicles()
+    renderWithProviders(<FleetPage />, { role: 'viewer' })
+    await screen.findByText('Falcon')
+    expect(screen.queryByRole('columnheader', { name: 'Actions' })).toBeNull()
+    const headerCount = screen.getAllByRole('columnheader').length
+    for (const row of screen.getAllByRole('row').slice(1)) {
+      expect(within(row).getAllByRole('cell')).toHaveLength(headerCount)
+    }
+  })
+
+  it('sizes the empty-state cell to the column count with and without Actions', async () => {
+    mockVehicles([])
+    const { unmount } = renderWithProviders(<FleetPage />, { role: 'supervisor' })
+    const manage = (await screen.findByText('No vehicles found')).closest('td')
+    expect(manage).toHaveAttribute('colspan', String(screen.getAllByRole('columnheader').length))
+    unmount()
+
+    server.use(http.get('/api/auth/me', () => HttpResponse.json(withPermissions({ id: 9, username: 'viewer', role: 'viewer' }))))
+    mockVehicles([])
+    renderWithProviders(<FleetPage />, { role: 'viewer' })
+    const view = (await screen.findByText('No vehicles found')).closest('td')
+    expect(view).toHaveAttribute('colspan', String(screen.getAllByRole('columnheader').length))
+  })
+
   it('switches tabs and loads the batteries endpoint', async () => {
     mockVehicles()
     server.use(http.get('/api/batteries', () => HttpResponse.json([

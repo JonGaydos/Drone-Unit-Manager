@@ -148,7 +148,7 @@ function EquipmentTable({ items, columns, canManage, onEdit, onDelete, deleteLab
                 {sortKey === c.key && (sortDir === 'asc' ? <ChevronUp className="w-3 h-3 inline ml-1" /> : <ChevronDown className="w-3 h-3 inline ml-1" />)}
               </th>
             ))}
-            <th className="text-right px-4 py-3 font-medium text-muted-foreground">Actions</th>
+            {canManage && <th className="text-right px-4 py-3 font-medium text-muted-foreground">Actions</th>}
           </tr>
         </thead>
         <tbody>
@@ -159,8 +159,8 @@ function EquipmentTable({ items, columns, canManage, onEdit, onDelete, deleteLab
                   {c.render ? c.render(item) : ((item[c.key] ?? '') === '' ? '—' : item[c.key])}
                 </td>
               ))}
-              <td className="px-4 py-3 text-right">
-                {canManage && (
+              {canManage && (
+                <td className="px-4 py-3 text-right">
                   <div className="flex items-center justify-end gap-1">
                     <button onClick={() => onEdit(item)} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent" aria-label="Edit">
                       <Edit className="w-4 h-4" />
@@ -174,12 +174,12 @@ function EquipmentTable({ items, columns, canManage, onEdit, onDelete, deleteLab
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
-                )}
-              </td>
+                </td>
+              )}
             </tr>
           ))}
           {items.length === 0 && (
-            <tr><td colSpan={columns.length + 1} className="px-4 py-12 text-center text-muted-foreground">{emptyMessage}</td></tr>
+            <tr><td colSpan={columns.length + (canManage ? 1 : 0)} className="px-4 py-12 text-center text-muted-foreground">{emptyMessage}</td></tr>
           )}
         </tbody>
       </table>
