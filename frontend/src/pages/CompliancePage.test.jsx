@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { screen, waitFor, within } from '@testing-library/react'
+import { screen, waitFor, within, fireEvent, createEvent } from '@testing-library/react'
 import { Route, Routes, useLocation } from 'react-router-dom'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
@@ -355,6 +355,26 @@ describe('CompliancePage', () => {
       await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/compliance?tab=setup'))
       await user.click(screen.getByRole('tab', { name: 'Overview' }))
       await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/compliance?tab=overview'))
+    })
+
+    it('moves to the first and last tab with Home and End without scrolling', async () => {
+      mockRequirements()
+      mockMount()
+      renderWithProviders(<CompliancePage />, { role: 'supervisor', route: '/compliance?tab=requirements' })
+      await screen.findByRole('button', { name: 'New requirement' })
+      const middle = screen.getByRole('tab', { name: 'Flight Requirements' })
+      middle.focus()
+      const home = createEvent.keyDown(middle, { key: 'Home' })
+      fireEvent(middle, home)
+      expect(home.defaultPrevented).toBe(true)
+      await waitFor(() => expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true'))
+      expect(screen.getByRole('tab', { name: 'Overview' })).toHaveFocus()
+      const first = screen.getByRole('tab', { name: 'Overview' })
+      const end = createEvent.keyDown(first, { key: 'End' })
+      fireEvent(first, end)
+      expect(end.defaultPrevented).toBe(true)
+      await waitFor(() => expect(screen.getByRole('tab', { name: 'Setup' })).toHaveAttribute('aria-selected', 'true'))
+      expect(screen.getByRole('tab', { name: 'Setup' })).toHaveFocus()
     })
 
     it('opens a template from Setup as a new requirement on the Flight Requirements tab', async () => {

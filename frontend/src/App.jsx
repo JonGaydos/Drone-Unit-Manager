@@ -195,6 +195,7 @@ function AppRoutes() {
           <Route path="/compliance" element={<CompliancePage />} />
           <Route path="/operating-authority" element={<OperatingAuthorityPage />} />
           <Route path="/requirements" element={<LegacyRequirementsRedirect />} />
+          <Route path="/currency/*" element={<LegacyRequirementsRedirect />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/audit-log" element={<AdminRoute view="audit.view"><AuditLogPage /></AdminRoute>} />
           <Route path="/manual" element={<UserManualPage />} />

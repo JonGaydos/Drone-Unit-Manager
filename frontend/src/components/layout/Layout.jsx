@@ -1,7 +1,7 @@
 /**
  * Application shell layout with responsive sidebar, top bar, and page content area.
  */
-import { Outlet, useLocation } from 'react-router-dom'
+import { Outlet, matchPath, useLocation } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
 import { useState, useEffect } from 'react'
@@ -27,6 +27,43 @@ const pageTitles = {
   '/airspace': 'Nearby Aircraft',
   '/audit-log': 'Audit Log',
   '/manual': 'User Manual',
+  '/weather': 'Weather',
+  '/calendar': 'Calendar',
+  '/flight-plans': 'Flight Plans',
+  '/checklists': 'Checklists',
+  '/missions': 'Mission Log',
+  '/training': 'Training Log',
+  '/fleet-health': 'Fleet Health',
+  '/checkouts': 'Checkouts',
+  '/compliance': 'Compliance',
+  '/operating-authority': 'Operating Authority',
+  '/incidents': 'Activity Reports',
+  '/documents': 'Documents',
+}
+
+/** @type {Array<[string, string]>} Detail-page route patterns and their header titles. */
+const detailTitles = [
+  ['/flights/:id', 'Flight Details'],
+  ['/pilots/:id', 'Pilot Details'],
+  ['/fleet/vehicles/:id', 'Vehicle Details'],
+  ['/fleet/batteries/:id', 'Battery Details'],
+  ['/fleet/controllers/:id', 'Controller Details'],
+  ['/fleet/sensors/:id', 'Sensor Details'],
+  ['/fleet/attachments/:id', 'Attachment Details'],
+  ['/fleet/docks/:id', 'Dock Details'],
+  ['/fleet/other/:id', 'Equipment Details'],
+]
+
+/**
+ * Header title for a path: exact matches first, then detail-page patterns.
+ * @param {string} pathname
+ * @returns {string}
+ */
+// eslint-disable-next-line react-refresh/only-export-components -- pure helper, tested directly
+export function pageTitle(pathname) {
+  if (pageTitles[pathname]) return pageTitles[pathname]
+  const detail = detailTitles.find(([pattern]) => matchPath(pattern, pathname))
+  return detail ? detail[1] : 'Drone Unit Manager'
 }
 
 /**
@@ -37,7 +74,7 @@ const pageTitles = {
  */
 export function Layout() {
   const location = useLocation()
-  const title = pageTitles[location.pathname] || 'Drone Unit Manager'
+  const title = pageTitle(location.pathname)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('sidebar-collapsed') === 'true')
   const [mobileOpen, setMobileOpen] = useState(false)
   useViewTransition()

@@ -4,7 +4,7 @@ import { Routes, Route } from 'react-router-dom'
 import { http, HttpResponse } from 'msw'
 import { server } from '@/test/server'
 import { renderWithProviders } from '@/test/render'
-import { Layout } from './Layout'
+import { Layout, pageTitle } from './Layout'
 
 // Layout renders Sidebar (which fetches on mount) + TopBar + the routed
 // Outlet. Mock every endpoint the chrome touches on mount.
@@ -89,5 +89,20 @@ describe('Layout', () => {
     expect(screen.getByRole('banner')).toHaveClass('bg-sidebar', 'border-b')
     const menuBar = screen.getByRole('button', { name: 'Open menu' }).parentElement
     expect(menuBar).toHaveClass('lg:hidden', 'fixed', 'top-0', 'z-40')
+  })
+})
+
+describe('pageTitle', () => {
+  it.each([
+    ['/compliance', 'Compliance'],
+    ['/flights', 'Flights'],
+    ['/fleet', 'Fleet Management'],
+    ['/flights/123', 'Flight Details'],
+    ['/pilots/4', 'Pilot Details'],
+    ['/fleet/vehicles/2', 'Vehicle Details'],
+    ['/fleet/other/9', 'Equipment Details'],
+    ['/nowhere', 'Drone Unit Manager'],
+  ])('names %s as %s', (path, title) => {
+    expect(pageTitle(path)).toBe(title)
   })
 })

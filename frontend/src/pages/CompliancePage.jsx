@@ -407,11 +407,14 @@ export function LegacyRequirementsRedirect() {
 }
 
 function ComplianceTabs({ tabs, active, onSelect }) {
-  // Arrow keys move between tabs, as a tab list does.
+  // Arrow keys move between tabs and Home/End jump to the ends, as a tab list does.
   const onKeyDown = (e) => {
     const step = { ArrowRight: 1, ArrowLeft: -1 }[e.key]
-    if (!step) return
-    const index = (tabs.findIndex(tab => tab.id === active) + step + tabs.length) % tabs.length
+    if (!step && e.key !== 'Home' && e.key !== 'End') return
+    e.preventDefault()
+    let index = 0
+    if (e.key === 'End') index = tabs.length - 1
+    else if (step) index = (tabs.findIndex(tab => tab.id === active) + step + tabs.length) % tabs.length
     onSelect(tabs[index].id)
     document.getElementById(`compliance-tab-${tabs[index].id}`)?.focus()
   }
