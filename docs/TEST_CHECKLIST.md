@@ -359,6 +359,7 @@ Setup: create one login each for Supervisor, Pilot and Viewer (for example `<sup
 | 38. Rolling Requirements and the Compliance Score | | |
 | 39. Flight Requirements | | |
 | 40. Interface Changes in 3.7.0 | | |
+| 41. Staging Fixes in 3.7.1 | | |
 
 ---
 
@@ -543,7 +544,7 @@ Setup: an admin, a supervisor and a pilot login; a few hundred flights, some wit
 - [ ] Filters work in every view; bulk renewal is in the matrix only, and leaving the matrix (view or tab) clears the selection
 
 ### 40.5 Flight distance, landing and cost
-- [ ] After the upgrade, the background fill starts a few minutes after boot and fills distance and landing coordinates for flights with telemetry; landing addresses follow (about 25 minutes of lookups for a large history)
+- [ ] After the upgrade, the background fill starts a few minutes after boot and fills distance and landing coordinates for flights with telemetry; landing addresses follow (about 35 to 40 minutes of lookups for a large history)
 - [ ] A typed distance or landing value is never replaced; flights without telemetry stay blank
 - [ ] A landing point whose lookup finds no address is not looked up again on the next daily run; a failed lookup is retried
 - [ ] A restore started while the background fill runs stops the fill; it finishes on a later run
@@ -551,3 +552,33 @@ Setup: an admin, a supervisor and a pilot login; a few hundred flights, some wit
 - [ ] A new synced flight gets its distance at once and its landing address after the next daily run
 - [ ] The aircraft's Hourly Operating Cost ($) gives each flight without a typed cost an estimate marked (estimated); a typed cost (even 0) wins; clearing it brings the estimate back
 - [ ] Flight Summary, Equipment Utilization and the Annual Unit Report fleet section total the costs (estimates marked (est.)); a total is blank when no flight has a cost
+
+---
+
+## 41. Staging Fixes in 3.7.1
+
+Setup: an admin, a supervisor and a pilot login; flights with and without distance, some with only a landing address; two period requirements with missed periods for several pilots, and one rolling requirement.
+
+### 41.1 Flights list
+- [ ] A Distance column shows meters below 1 km and kilometers with one decimal above; clicking the heading sorts by distance, and again reverses it
+- [ ] Location shows the takeoff address, or the landing address when the takeoff address is empty
+
+### 41.2 Analytics map
+- [ ] The Flight Locations map zooms to fit all markers when the page opens, also when it opens on a hidden or resized tab
+
+### 41.3 Past missed periods
+- [ ] Compliance, Flight Requirements lists Past missed periods across all pilots: requirement, pilot, period, result and status, newest first, up to 500 rows
+- [ ] The requirement filter narrows the list; rolling requirements never appear in it
+- [ ] With the excuse permission, Excuse and Un-excuse change the row's status; without it the buttons do not show
+
+### 41.4 Page header and links
+- [ ] Every page, including detail pages such as Flight Details, shows its name in the page header
+- [ ] An old /currency link opens Compliance, Flight Requirements
+- [ ] Home and End on the Compliance tabs move to the first and last tab
+
+### 41.5 Fleet and certifications
+- [ ] A user who cannot manage the fleet sees no empty Actions column on Fleet
+- [ ] In the certification matrix, the bulk-renewal checkbox sits beside its status icon and shows only on certifications with an expiry date
+
+### 41.6 Flight page
+- [ ] Coordinates on the flight page show rounded to 7 decimals

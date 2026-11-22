@@ -13,6 +13,28 @@ Behind a reverse proxy or tunnel, set `TRUSTED_PROXIES` before upgrading (see
 "Reverse Proxy" in the README). The login lock counts failures per address, so
 without it every visitor shares the proxy's address.
 
+## 3.7.1: what changes on upgrade
+
+3.7.0 was tagged but never deployed, so a 3.6.0 installation upgrades straight
+to 3.7.1 and gets everything under "3.7.0" below as well.
+
+- **No new migration.** 3.7.1 adds nothing beyond migration 0018 from 3.7.0.
+  To go back to 3.6.0, see `ROLLBACK.md`.
+- **Flights list.** A sortable **Distance** column (meters below 1 km,
+  kilometers with one decimal above). **Location** shows the landing address
+  when the takeoff address is empty.
+- **Analytics.** The Flight Locations map zooms to fit all markers.
+- **Compliance.** The Flight Requirements tab has a **Past missed periods**
+  list across all pilots, filterable by requirement, with Excuse and
+  Un-excuse for users with the excuse permission. Rolling requirements are not
+  in it (their lapses stay on the pilot page).
+- **Interface.** The page header shows the page name on every page, including
+  detail pages; old `/currency` links open Compliance, Flight Requirements;
+  Home and End keys work on the Compliance tabs; Fleet has no empty Actions
+  column for users who cannot manage the fleet; the certification matrix puts
+  the bulk-renewal checkbox beside its status icon, only on certifications
+  with an expiry date; coordinates on the flight page show 7 decimals.
+
 ## 3.7.0: what changes on upgrade
 
 - **Migration 0018 runs on start.** It adds the rolling requirement tables
@@ -42,7 +64,7 @@ without it every visitor shares the proxy's address.
 - **Background distance fill.** About four minutes after the first start, a
   background job fills distance, landing coordinates and landing time from
   stored telemetry for existing flights, then looks up landing addresses at
-  one per second (about 25 minutes for a large history). Typed values are
+  one per second (about 35 to 40 minutes for a large history). Typed values are
   never replaced. It then runs daily, so a new flight gets its landing address
   the next day.
 - **Hourly rates to set.** Flight cost estimates need an Hourly Operating Cost

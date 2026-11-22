@@ -11,6 +11,7 @@ a "Roll production back" section for the release before it.
 
 | Version | Tag | Commit | Image | Extra Parameters |
 | --- | --- | --- | --- | --- |
+| 3.7.1 | `v3.7.1` | set when tagged | `ghcr.io/jongaydos/drone-unit-manager:3.7.1` (digest recorded after the tag build) | `--restart unless-stopped` |
 | 3.7.0 | `v3.7.0` | set when tagged | `ghcr.io/jongaydos/drone-unit-manager:3.7.0` (digest recorded after the tag build) | `--restart unless-stopped` |
 | 3.6.0 | `v3.6.0` | 0e7dd41 | `ghcr.io/jongaydos/drone-unit-manager@sha256:3bdf543fdb7096c7f1bd602bad6d453fa64f02fa234cd0958e2d70b38fb728ed` | `--restart unless-stopped` |
 | 3.5.0 | `v3.5.0` | 8e7b98b | `ghcr.io/jongaydos/drone-unit-manager@sha256:1bfe877604c0f45708e4c6abce8bcb73945ad162cd5fb6e7d1e59441d18ef0bb` | `--restart unless-stopped` |
@@ -23,17 +24,21 @@ pushed and the release build has finished. Check it on ghcr.io before changing
 production's Repository; an Apply to a missing tag removes the running container
 and then fails to pull.
 
-## Roll production back to 3.6.0 (from 3.7.0)
+## Roll production back to 3.6.0 (from 3.7.1 or 3.7.0)
+
+3.7.1 adds no migration, so rolling back from 3.7.1 is the same as from 3.7.0.
+3.7.0 was tagged but never ran in production; production upgrades from 3.6.0
+straight to 3.7.1. Every step below applies inside 3.7.1.
 
 3.7.0 adds migration 0018. It drops the currency tables with their rows and
 adds the rolling requirement tables, the per-user layouts and the aircraft
 hourly operating cost. An older image cannot undo it, so run the downgrade
-inside 3.7.0 before switching back:
+inside 3.7.1 (or 3.7.0) before switching back:
 
 1. Take an in-app backup and copy the data folder. The downgrade deletes every
    rolling requirement lapse and excusal, every saved dashboard and analytics
    layout and every hourly operating cost.
-2. With 3.7.0 still running, step the schema back one revision:
+2. With 3.7.1 still running, step the schema back one revision:
 
         docker exec -w /app <container> alembic downgrade 0017_flight_requirements
 
@@ -48,9 +53,9 @@ inside 3.7.0 before switching back:
 
 The downgrade recreates the currency tables empty: currency rules dropped by
 the upgrade do not come back. If you need them, restore the backup made before
-the upgrade to 3.7.0 (anything recorded since is lost), or recreate the rules
+the upgrade to 3.7.1 (anything recorded since is lost), or recreate the rules
 by hand in 3.6.0. Distances, landing locations and landing times filled in by
-3.7.0 stay. To return to 3.7.0, run it again; it applies the migration on start.
+the 3.7 upgrade stay. To return to 3.7.1, run it again; it applies the migration on start.
 
 ## Roll production back to 3.5.0 (from 3.6.0)
 

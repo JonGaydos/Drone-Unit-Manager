@@ -756,17 +756,18 @@
           "Set **Date From** and **Date To** to show a range of dates.",
           "Pick a **Pilot**, a **Vehicle** or a **Purpose**. Under **Purpose**, **No Purpose** shows flights that have none.",
           "Type in **Search flights...** to find a word in the pilot, vehicle, purpose, location, case number or flight ID.",
-          "Click a column heading (**Date**, **Pilot**, **Vehicle**, **Purpose**, **Duration** or **Status**) to sort. Click it again to reverse the order.",
+          "Click a column heading (**Date**, **Pilot**, **Vehicle**, **Purpose**, **Distance**, **Duration** or **Status**) to sort. Click it again to reverse the order.",
           "Use **Previous** and **Next** at the bottom to move between pages."
         ],
         "notes": [
           "Each page holds 100 flights. The line at the bottom, such as \"Showing 1-100 of 250 flights\", tells you where you are.",
           "Filters, search and sorting cover every flight, not only the page on screen. Changing one takes you back to page 1.",
-          "The **Vehicle** and **Purpose** columns are hidden on a narrow screen, and **Cost** and **Location** on a medium one. Open the flight to see them.",
+          "The **Vehicle** and **Purpose** columns are hidden on a narrow screen, and **Distance**, **Cost** and **Location** on a medium one. Open the flight to see them.",
           "Click a flight ID to open the flight, a pilot name to open the pilot, or a vehicle name to open the vehicle.",
           "The small line under the status reads \"Telemetry ✓\" when the flight path is stored, \"Telemetry pending\" while it can still be fetched, and \"No telemetry\" when there is none to fetch. Flights you enter by hand show nothing there. Telemetry means the recorded track of the flight: position, height, speed and battery.",
           "Everyone can see flights by default, including viewers.",
-          "**Cost** shows the cost typed on the flight. Without one it shows an estimate from the aircraft's hourly operating cost, marked **(estimated)**. A dash means there is neither."
+          "**Cost** shows the cost typed on the flight. Without one it shows an estimate from the aircraft's hourly operating cost, marked **(estimated)**. A dash means there is neither.",
+          "**Distance** shows meters below 1 km and kilometers with one decimal above. **Location** shows the takeoff address, or the landing address when the takeoff address is empty."
         ]
       },
       {
@@ -1325,7 +1326,24 @@
           "A one-time requirement has no later period, so its miss clears only by excusal.",
           "A flag never changes whether the pilot is active.",
           "The card also lists flights left out because they have no takeoff time, and flights still awaiting review in the period.",
-          "A rolling requirement is excused until a date instead of for a period. See \"Rolling requirements\"."
+          "A rolling requirement is excused until a date instead of for a period. See \"Rolling requirements\".",
+          "To see every missed period across all pilots in one place, use **Past missed periods** on the **Flight Requirements** tab of **Compliance**. See \"Past missed periods\"."
+        ]
+      },
+      {
+        "id": "past-missed-periods",
+        "title": "Past missed periods",
+        "summary": "The **Past missed periods** list on the **Flight Requirements** tab shows every missed period of every pilot, so a supervisor can excuse several without opening each pilot page.",
+        "steps": [
+          "Open **Compliance** and choose the **Flight Requirements** tab.",
+          "Find **Past missed periods**. Each row shows the **Requirement**, the **Pilot**, the **Period**, the **Result** and the **Status**.",
+          "To look at one requirement, pick it in the filter above the list.",
+          "Click **Excuse** on a row, add a **Reason (optional)** and click **Excuse**. To undo it, click **Un-excuse**."
+        ],
+        "notes": [
+          "The newest periods come first. The list holds up to 500 rows.",
+          "Rolling requirements are not in the list. Their lapses stay on the pilot page. See \"Rolling requirements\".",
+          "**Excuse** and **Un-excuse** need **Flight requirements: Excuse**. Without it the list is read-only."
         ]
       },
       {
