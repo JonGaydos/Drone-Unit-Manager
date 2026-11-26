@@ -32,9 +32,13 @@ WORKDIR /app
 # matplotlib's Agg backend, which need no system graphics libraries.
 # zlib1g is named so the security update is pulled in while the base image
 # still ships an older build (CVE-2026-76844, fixed in Debian's deb13u1).
+# The krb5 libraries (fixed in 1.21.3-5+deb13u2) and libzstd1 (fixed in
+# 1.5.7+dfsg-1+deb13u1) are named for the same reason.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     zlib1g \
+    libgssapi-krb5-2 libk5crypto3 libkrb5-3 libkrb5support0 \
+    libzstd1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
