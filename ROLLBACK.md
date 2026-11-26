@@ -11,6 +11,7 @@ a "Roll production back" section for the release before it.
 
 | Version | Tag | Commit | Image | Extra Parameters |
 | --- | --- | --- | --- | --- |
+| 3.7.2 | `v3.7.2` | set when tagged | `ghcr.io/jongaydos/drone-unit-manager:3.7.2` (digest recorded after the tag build) | `--restart unless-stopped` |
 | 3.7.1 | `v3.7.1` | set when tagged | `ghcr.io/jongaydos/drone-unit-manager:3.7.1` (digest recorded after the tag build) | `--restart unless-stopped` |
 | 3.7.0 | `v3.7.0` | 0c776f4 | `ghcr.io/jongaydos/drone-unit-manager:3.7.0` (digest recorded after the tag build) | `--restart unless-stopped` |
 | 3.6.0 | `v3.6.0` | 0e7dd41 | `ghcr.io/jongaydos/drone-unit-manager@sha256:3bdf543fdb7096c7f1bd602bad6d453fa64f02fa234cd0958e2d70b38fb728ed` | `--restart unless-stopped` |
@@ -23,6 +24,12 @@ A version's image tag (`:3.3.0`) exists only after its `vX.Y.Z` git tag is
 pushed and the release build has finished. Check it on ghcr.io before changing
 production's Repository; an Apply to a missing tag removes the running container
 and then fails to pull.
+
+## Roll production back to 3.7.1 (from 3.7.2)
+
+3.7.2 adds no migration. Set the Repository to
+`ghcr.io/jongaydos/drone-unit-manager:3.7.1` and apply. 3.7.1's public
+`/api/health` reports the version again, so check it says 3.7.1.
 
 ## Roll production back to 3.6.0 (from 3.7.1 or 3.7.0)
 

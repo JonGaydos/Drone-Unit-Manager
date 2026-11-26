@@ -725,10 +725,29 @@ describe('SettingsPage settings fixes', () => {
 
   it('shows the API Documentation card when the server serves the docs', async () => {
     mockMount()
-    server.use(http.get('/api/health', () => HttpResponse.json({ status: 'ok', api_docs: true })))
+    server.use(http.get('/api/health/details', () => HttpResponse.json({ status: 'ok', version: '3.7.1', api_docs: true })))
     renderWithProviders(<SettingsPage />, { role: 'admin' })
     expect(await screen.findByText('API Documentation')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Open API Documentation/ })).toHaveAttribute('href', '/docs')
+  })
+
+  // The public /api/health no longer reports the version, so an admin reads it here.
+  it('shows an admin the version the server runs', async () => {
+    mockMount()
+    server.use(http.get('/api/health/details', () => HttpResponse.json({ status: 'ok', version: '9.8.7', api_docs: false })))
+    renderWithProviders(<SettingsPage />, { role: 'admin' })
+    expect(await screen.findByText('Drone Unit Manager 9.8.7')).toBeInTheDocument()
+  })
+
+  it('does not ask for the admin-only health details for a supervisor', async () => {
+    let asked = false
+    mockMount()
+    server.use(http.get('/api/health/details', () => { asked = true; return HttpResponse.json({}, { status: 403 }) }))
+    renderWithProviders(<SettingsPage />, { role: 'supervisor' })
+    await screen.findByRole('heading', { name: 'Email Digest' })
+    await new Promise(resolve => setTimeout(resolve, 50))
+    expect(asked).toBe(false)
+    expect(screen.queryByText(/^Drone Unit Manager \d/)).toBeNull()
   })
 
   describe('Edit User', () => {

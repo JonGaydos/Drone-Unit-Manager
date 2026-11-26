@@ -360,6 +360,7 @@ Setup: create one login each for Supervisor, Pilot and Viewer (for example `<sup
 | 39. Flight Requirements | | |
 | 40. Interface Changes in 3.7.0 | | |
 | 41. Staging Fixes in 3.7.1 | | |
+| 42. Health Check in 3.7.2 | | |
 
 ---
 
@@ -582,3 +583,18 @@ Setup: an admin, a supervisor and a pilot login; flights with and without distan
 
 ### 41.6 Flight page
 - [ ] Coordinates on the flight page show rounded to 7 decimals
+
+---
+
+## 42. Health Check in 3.7.2
+
+Setup: an admin and a supervisor login.
+
+### 42.1 Public health check
+- [ ] Signed out, `/api/health` returns only `{"status":"ok"}`
+- [ ] The container shows healthy in the Docker tab
+
+### 42.2 Admin health details
+- [ ] Signed out, `/api/health/details` returns 401; as the supervisor (API token or session), 403
+- [ ] As the admin, it returns the version, both databases, warnings and `api_docs`
+- [ ] Settings, General shows the admin "Drone Unit Manager 3.7.2" at the bottom; the supervisor sees no version line

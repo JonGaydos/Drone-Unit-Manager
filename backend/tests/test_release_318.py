@@ -75,12 +75,12 @@ def test_an_unwritable_folder_is_named_not_a_bare_500(client, admin_headers, upl
     assert "not writable" in resp.json()["detail"]
 
 
-def test_health_warns_about_unwritable_upload_folders(client, upload_root, monkeypatch):
+def test_health_warns_about_unwritable_upload_folders(client, admin_headers, upload_root, monkeypatch):
     (upload_root / "documents" / "vehicle").mkdir(parents=True)
     locked = str(upload_root / "documents" / "vehicle")
     real_access = os.access
     monkeypatch.setattr(app.main.os, "access", lambda path, mode: path != locked and real_access(path, mode))
-    body = client.get("/api/health").json()
+    body = client.get("/api/health/details", headers=admin_headers).json()
     assert body["status"] == "ok"
     assert "1 upload folder(s) are not writable by the app; uploads into them will fail" in body["warnings"]
 

@@ -2527,7 +2527,7 @@
           "Choose **Save Settings** at the bottom of the **General** tab to keep changes to the **Organization**, **Weather Thresholds** and similar cards. Some cards have their own save button.",
           "A line saying **Unsaved changes** shows beside **Save Settings** until you save.",
           "Other topics cover the cards that belong to a feature: **Certification Status Labels** under Certifications, **Weather Thresholds** under Weather and **Drone Locations** under Drone Locations.",
-          "If your server has it turned on, everyone sees an **API Documentation** link at the bottom of the **General** tab. It is for people who write programs."
+          "Admins see the version the server runs at the bottom of the **General** tab. If your server has it turned on, admins also see an **API Documentation** link there. It is for people who write programs."
         ]
       },
       {

@@ -34,6 +34,6 @@ export const handlers = [
   http.get('/api/requirements/flags', () => HttpResponse.json({})),
   http.get('/api/requirements/pilots/:id', ({ params }) =>
     HttpResponse.json({ pilot_id: Number(params.id), current: [], pending: [], history: [] })),
-  // Settings reads whether the server serves /docs.
-  http.get('/api/health', () => HttpResponse.json({ status: 'ok', api_docs: false })),
+  // Settings reads the version and whether the server serves /docs (admins only).
+  http.get('/api/health/details', () => HttpResponse.json({ status: 'ok', version: '3.7.1', api_docs: false })),
 ]

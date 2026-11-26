@@ -61,11 +61,13 @@ def test_the_health_endpoint_still_works_with_docs_off(monkeypatch):
         importlib.reload(main)
 
 
-def test_the_health_endpoint_says_whether_the_docs_are_served(monkeypatch):
+def test_the_health_details_say_whether_the_docs_are_served(monkeypatch):
     """Settings shows its API Documentation card only when /docs exists (F-08)."""
+    from app.routers.auth import require_admin
     for enabled in (False, True):
         client, main = _client_with_docs(enabled, monkeypatch)
+        main.app.dependency_overrides[require_admin] = lambda: None
         try:
-            assert client.get("/api/health").json()["api_docs"] is enabled
+            assert client.get("/api/health/details").json()["api_docs"] is enabled
         finally:
             importlib.reload(main)
