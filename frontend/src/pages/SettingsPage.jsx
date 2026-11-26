@@ -124,11 +124,17 @@ function SettingsTabs() {
   const [newUser, setNewUser] = useState({ username: '', password: '', display_name: '', role: 'pilot', pilot_id: '' })
   const [addingUser, setAddingUser] = useState(false)
 
-  // The API docs exist only when the server sets EXPOSE_API_DOCS.
+  // The running version, and whether the API docs exist (only when the server
+  // sets EXPOSE_API_DOCS). Both come from the admin-only health details.
   const [apiDocs, setApiDocs] = useState(false)
+  const [appVersion, setAppVersion] = useState('')
   useEffect(() => {
-    api.get('/health').then(h => setApiDocs(h?.api_docs === true)).catch(() => {})
-  }, [])
+    if (!isAdmin) return
+    api.get('/health/details').then(h => {
+      setApiDocs(h?.api_docs === true)
+      setAppVersion(h?.version || '')
+    }).catch(() => {})
+  }, [isAdmin])
 
   // Logo state
   const [logoUrl, setLogoUrl] = useState(null)
@@ -1237,7 +1243,7 @@ function SettingsTabs() {
       </div>
   )
 
-  const renderApiDocs = () => apiDocs && (
+  const renderApiDocs = () => isAdmin && apiDocs && (
       <div className="bg-card border border-border rounded-xl p-6">
         <h3 className="text-lg font-semibold text-foreground mb-2">API Documentation</h3>
         <p className="text-sm text-muted-foreground mb-3">Browse the interactive API documentation powered by Swagger UI.</p>
@@ -1500,6 +1506,7 @@ function SettingsTabs() {
       {renderSaveButton()}
       {renderApiDocs()}
       {renderSidebarConfig()}
+      {isAdmin && appVersion && <p className="text-xs text-muted-foreground">Drone Unit Manager {appVersion}</p>}
 
       </div>
       )}

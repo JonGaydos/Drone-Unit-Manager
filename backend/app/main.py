@@ -33,6 +33,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.body_limit import BodySizeLimitMiddleware
 from app.constants import APP_TITLE, APP_VERSION
 from app.config import settings
+from app.deps import AdminUser
 from app.responses import responses
 from app.database import SessionLocal
 import app.models as _models  # noqa: F401 - Import all models to register them with SQLAlchemy
@@ -323,10 +324,9 @@ def _safe_health_warnings(db) -> list[str]:
         return ["Could not read the backup and sync status"]
 
 
-@app.get("/api/health")
-def health_check():
-    """Both databases, plus warnings for a stopped scheduler, a stale backup
-    or sync, or upload folders the app cannot write into.
+def _health(detailed: bool):
+    """Both databases, and for an admin the version and warnings for a stopped
+    scheduler, a stale backup or sync, or upload folders the app cannot write into.
 
     503 only when a database is unreachable: the container's HEALTHCHECK
     restarts on failure, and an old backup is a reason to look, not to
@@ -339,19 +339,32 @@ def health_check():
     try:
         db.execute(text("SELECT 1"))
         tdb.execute(text("SELECT 1"))
+        if not detailed:
+            return {"status": "ok"}
         return {"status": "ok", "app": APP_TITLE, "version": APP_VERSION, "database": "connected",
                 "telemetry_database": "connected", "warnings": _safe_health_warnings(db),
                 # Whether /docs is served, so Settings links to it only when it exists.
                 "api_docs": _docs_on}
     except Exception:
         logger.exception("Health check failed")
-        return JSONResponse(
-            status_code=503,
-            content={"status": "unhealthy", "app": APP_TITLE, "database": "disconnected"},
-        )
+        return JSONResponse(status_code=503, content={"status": "unhealthy"})
     finally:
         db.close()
         tdb.close()
+
+
+@app.get("/api/health")
+def health_check():
+    """Up or down, for the container HEALTHCHECK and uptime monitors. Public,
+    so it says nothing else: the services the app uses and whether backups or
+    syncs are stale are for admins, at /api/health/details."""
+    return _health(detailed=False)
+
+
+@app.get("/api/health/details", responses=responses(401, 403))
+def health_details(_admin: AdminUser):
+    """The version, both databases, warnings, and whether the API docs are served."""
+    return _health(detailed=True)
 
 
 # Serve frontend static files in production (Docker)

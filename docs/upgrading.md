@@ -13,6 +13,21 @@ Behind a reverse proxy or tunnel, set `TRUSTED_PROXIES` before upgrading (see
 "Reverse Proxy" in the README). The login lock counts failures per address, so
 without it every visitor shares the proxy's address.
 
+## 3.7.2: what changes on upgrade
+
+- **No new migration.** To go back to 3.7.1, change the Repository tag.
+- **Public health check says only up or down.** `/api/health` returns
+  `{"status":"ok"}`, or `{"status":"unhealthy"}` with HTTP 503 when a database
+  cannot be reached. It no longer shows the version, the databases, backup and
+  sync warnings or whether the API docs are served: an unauthenticated visitor
+  could read them. The Docker health check and uptime monitors that check the
+  status code are unaffected.
+- **Admin health details.** `/api/health/details` returns the full report for
+  an admin login or admin API token. Settings, General shows admins the
+  version at the bottom; use it instead of curl to tell production from
+  staging.
+- **API Documentation card.** Shown to admins only, when the docs are on.
+
 ## 3.7.1: what changes on upgrade
 
 3.7.0 was tagged but never deployed, so a 3.6.0 installation upgrades straight
@@ -220,6 +235,11 @@ should print the uid the data directory is owned by, and
 curl -s http://<host>:<port>/api/health
 ```
 
-should return `{"status":"ok",...}` with a `database` of `connected`. A container
-that starts but reports the database as unavailable is usually a data directory
-the process can read but cannot write.
+should return `{"status":"ok"}`. A container that starts but returns
+`{"status":"unhealthy"}` (HTTP 503) cannot reach a database, which is usually a
+data directory the process can read but cannot write.
+
+The public endpoint says only up or down. To confirm the version and see
+warnings (stale backup or sync, stopped scheduler, unwritable upload folders),
+sign in as an admin: Settings, General shows the version at the bottom, and
+`/api/health/details` returns the full report.

@@ -97,7 +97,6 @@ jobs:
             done
             echo "health: $(cat /tmp/health.json)"
             grep -q '"status":"ok"' /tmp/health.json
-            grep -q '"database":"connected"' /tmp/health.json
             # The app (PID 1 once the entrypoint has exec'd) must never be root.
             test "$(docker exec dum-smoke stat -c %u /proc/1)" != '0'
             docker rm -f dum-smoke

@@ -176,8 +176,8 @@ def test_same_task_on_a_second_aircraft_still_raises_its_alert(db):
 
 # 5. Health ------------------------------------------------------------------------------
 
-def test_health_checks_both_databases_and_lists_warnings(client):
-    body = client.get("/api/health").json()
+def test_health_checks_both_databases_and_lists_warnings(client, admin_headers):
+    body = client.get("/api/health/details", headers=admin_headers).json()
     assert body["status"] == "ok"
     assert body["telemetry_database"] == "connected"
     assert "The background scheduler is not running" in body["warnings"]
