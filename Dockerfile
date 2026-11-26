@@ -36,9 +36,12 @@ WORKDIR /app
 # 1.5.7+dfsg-1+deb13u1) are named for the same reason.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
-    zlib1g \
-    libgssapi-krb5-2 libk5crypto3 libkrb5-3 libkrb5support0 \
+    libgssapi-krb5-2 \
+    libk5crypto3 \
+    libkrb5-3 \
+    libkrb5support0 \
     libzstd1 \
+    zlib1g \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies

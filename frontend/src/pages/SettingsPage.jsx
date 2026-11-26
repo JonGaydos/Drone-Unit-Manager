@@ -1243,7 +1243,7 @@ function SettingsTabs() {
       </div>
   )
 
-  const renderApiDocs = () => apiDocs && (
+  const renderApiDocs = () => isAdmin && apiDocs && (
       <div className="bg-card border border-border rounded-xl p-6">
         <h3 className="text-lg font-semibold text-foreground mb-2">API Documentation</h3>
         <p className="text-sm text-muted-foreground mb-3">Browse the interactive API documentation powered by Swagger UI.</p>
@@ -1506,7 +1506,7 @@ function SettingsTabs() {
       {renderSaveButton()}
       {renderApiDocs()}
       {renderSidebarConfig()}
-      {appVersion && <p className="text-xs text-muted-foreground">Drone Unit Manager {appVersion}</p>}
+      {isAdmin && appVersion && <p className="text-xs text-muted-foreground">Drone Unit Manager {appVersion}</p>}
 
       </div>
       )}
